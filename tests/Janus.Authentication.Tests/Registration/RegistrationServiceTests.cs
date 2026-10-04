@@ -259,7 +259,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = await StartedAsync();
 
         Assert.Equal(
-            ErrorCodes.AffirmationRequired,
+            ErrorCodes.RegistrationIncomplete,
             Refused(await Service.StageAsync(
                 session,
                 IdentifierKind.Email,
@@ -1904,7 +1904,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = await StartedAsync();
 
         Assert.Equal(
-            ErrorCodes.AffirmationRequired,
+            ErrorCodes.RegistrationIncomplete,
             Refused(await Service.StageAsync(
                 session,
                 IdentifierKind.Email,
@@ -2141,7 +2141,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId unanswered = await StartedAsync();
 
         Assert.Equal(
-            ErrorCodes.AffirmationRequired,
+            ErrorCodes.RegistrationIncomplete,
             Refused(await Service.StageAsync(
                 unanswered,
                 IdentifierKind.Email,

@@ -393,10 +393,11 @@ internal sealed class RegistrationService(
         }
 
         // No identifier field is reached before the age screen is answered
-        // (REG-PROF-002 AC1).
+        // (REG-PROF-002 AC1): the step is asked for before the one it follows, which
+        // chapter 09 section 2 answers as every step out of its order.
         if (!live.AgeAnswered)
         {
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.AffirmationRequired));
+            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.RegistrationIncomplete));
         }
 
         RegistrationStep collecting =

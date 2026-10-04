@@ -36,6 +36,88 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
     public EndpointDeclarationTests() => Flow.Prepare(_deployment);
 
     /// <summary>
+    /// CONV-DESIGN-006 AC3: every library endpoint carries a declaration, one that
+    /// answers no code of its own included, so the contract file is generated from what
+    /// each declares and from nothing a handler happens to answer.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AC3_EveryEndpointCarriesADeclaration()
+    {
+        Assert.All(
+            _deployment.Endpoints.OfType<RouteEndpoint>(),
+            endpoint => Assert.True(
+                EndpointDeclaration.Of(endpoint) is not null,
+                $"{endpoint.RoutePattern.RawText} declares nothing."));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-006 AC3: an endpoint declares the codes the text of its section gives
+    /// the routes that text governs. Chapter 09 section 8 gives every route under
+    /// <c>/admin</c> the missing permission, and every route whose path names an
+    /// organization the organization the deployment does not hold; section 2 gives each
+    /// step endpoint of a registration the step that is not the session's.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AC3_AnEndpointDeclaresWhatItsSectionGivesIt()
+    {
+        string[] steps =
+        [
+            "PUT /register/age",
+            "PUT /register/email",
+            "PUT /register/phone",
+            "POST /register/phone/skip",
+            "POST /register/identifiers",
+            "PUT /register/identifiers/{id}",
+            "DELETE /register/identifiers/{id}",
+            "POST /register/confirm",
+            "PUT /register/security",
+            "POST /register/terms",
+        ];
+        RouteEndpoint[] mounted = [.. _deployment.Endpoints.OfType<RouteEndpoint>()];
+
+        foreach (RouteEndpoint endpoint in mounted)
+        {
+            string route = endpoint.RoutePattern.RawText!;
+            IReadOnlyList<ErrorCode> declared = EndpointDeclaration.Of(endpoint)!.Codes;
+
+            if (route.StartsWith("/admin/", StringComparison.Ordinal))
+            {
+                Assert.True(declared.Contains(ErrorCodes.Denied), $"{route} does not declare {ErrorCodes.Denied}.");
+            }
+
+            if (route.StartsWith("/admin/organizations/{id}", StringComparison.Ordinal))
+            {
+                Assert.True(
+                    declared.Contains(ErrorCodes.OrganizationNotFound),
+                    $"{route} does not declare {ErrorCodes.OrganizationNotFound}.");
+            }
+        }
+
+        foreach (string step in steps)
+        {
+            RouteEndpoint endpoint = Assert.Single(mounted, candidate => Named(candidate) == step);
+
+            Assert.Contains(ErrorCodes.RegistrationIncomplete, EndpointDeclaration.Of(endpoint)!.Codes);
+        }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-006: an endpoint declares a code once.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AnEndpointDeclaresEachCodeOnce()
+    {
+        Assert.All(
+            _deployment.Endpoints.OfType<RouteEndpoint>(),
+            endpoint =>
+            {
+                IReadOnlyList<ErrorCode> declared = EndpointDeclaration.Of(endpoint)?.Codes ?? [];
+
+                Assert.Equal(declared.Distinct(), declared);
+            });
+    }
+
+    /// <summary>
     /// CONV-DESIGN-006 AC5: each handler's typed route and query parameters equal those
     /// its endpoint declares, by name and type and in the handler's order, and no
     /// handler takes one as a bare <see cref="Guid"/>.
@@ -144,6 +226,11 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync() => _deployment.DisposeAsync();
+
+    private static string Named(RouteEndpoint endpoint) =>
+        endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]
+        + " "
+        + endpoint.RoutePattern.RawText!.TrimEnd('/');
 
     private static IReadOnlyList<DeclaredValue> Declared(Endpoint endpoint) =>
         EndpointDeclaration.Of(endpoint)?.Values ?? [];

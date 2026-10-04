@@ -81,6 +81,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /account/link/apple",
         "POST /account/link/google",
         "POST /account/mail/apppasswords/",
+        "POST /account/recoverycodes",
         "POST /admin/accounts/{subject}/delete/cancel",
         "POST /admin/accounts/{subject}/reactivate",
         "POST /admin/accounts/{subject}/restriction/lift",

@@ -46,24 +46,93 @@ internal static class RegistrationEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/register");
 
-        _ = group.MapPost("/", BeginAsync);
-        _ = group.MapGet("/", StateAsync);
-        _ = group.MapPut("/age", AgeAsync);
-        _ = group.MapPut("/email", EmailAsync);
-        _ = group.MapPut("/phone", PhoneAsync);
-        _ = group.MapPost("/phone/skip", SkipPhoneAsync);
-        _ = group.MapPost("/identifiers", AddAsync);
+        _ = group.MapPost("/", BeginAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RegistrationSignedIn, ErrorCodes.InvitationExpired,
+                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.Throttled))
+            .Produces<RegistrationStateView>(StatusCodes.Status201Created);
+        _ = group.MapGet("/", StateAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPut("/age", AgeAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.ProfileUnderage))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPut("/email", EmailAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
+        _ = group.MapPut("/phone", PhoneAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/phone/skip", SkipPhoneAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPost("/identifiers", AddAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapPut("/identifiers/{id}", ChangeAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierLocked, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                .Binding<IdentifierId>("id"))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapDelete("/identifiers/{id}", DiscardAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
-        _ = group.MapPost("/confirm", ConfirmAsync);
-        _ = group.MapPut("/security", SecurityAsync);
-        _ = group.MapPost("/terms", TermsAsync);
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierLastOfKind)
+                .Binding<IdentifierId>("id"))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPost("/confirm", ConfirmAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPut("/security", SecurityAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.SessionExpired,
+                    ErrorCodes.RegistrationIncomplete, ErrorCodes.PasswordBlocklisted,
+                    ErrorCodes.PasswordTooShort, ErrorCodes.PasswordTooLong))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPost("/terms", TermsAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.AffirmationRequired,
+                    ErrorCodes.PurposeNoConsent))
+            .Produces(StatusCodes.Status201Created);
         _ = group.MapPost("/verify/{id}", VerifyAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
-        _ = group.MapGet("/events", EventsAsync);
-        _ = group.MapPost("/abandon", AbandonAsync);
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                .Binding<IdentifierId>("id"))
+            .Produces<LinkLandingView>()
+            .Produces(StatusCodes.Status204NoContent);
+        _ = group.MapGet("/events", EventsAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound))
+            .Produces<string>(StatusCodes.Status200OK, "text/event-stream");
+        _ = group.MapPost("/abandon", AbandonAsync)
+            .Declares(EndpointDeclaration.Answering())
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

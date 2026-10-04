@@ -35,11 +35,22 @@ internal static class ErasureEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/admin/erasures");
 
-        _ = SessionRequired.On(group.MapGet("/", ListAsync));
+        _ = SessionRequired.On(group.MapGet("/", ListAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<ErasureProgressView>>();
         _ = SessionRequired.On(group.MapGet("/{id}", ReadAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<ErasureId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.ErasureNotFound)
+                .Binding<ErasureId>("id"))
+            .Produces<ErasureProgressView>();
         _ = SessionRequired.On(group.MapPost("/{id}/complete", CompleteAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<ErasureId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.ErasureNotFound, ErrorCodes.ErasureNotFailed)
+                .Binding<ErasureId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

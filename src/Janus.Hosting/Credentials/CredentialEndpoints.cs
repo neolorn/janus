@@ -36,20 +36,68 @@ internal static class CredentialEndpoints
 
         RouteGroupBuilder account = endpoints.MapGroup("/account");
 
-        _ = account.MapPost("/password", SetPasswordAsync);
+        _ = account.MapPost("/password", SetPasswordAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.PasswordBlocklisted, ErrorCodes.PasswordTooShort,
+                    ErrorCodes.PasswordTooLong))
+            .Produces(StatusCodes.Status204NoContent);
         _ = account.MapDelete("/credentials/{id}", RemoveAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.CredentialLastSecondFactor,
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted)
+                .Binding<AuthenticatorId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = account.MapPost("/credentials/{id}/upgrade", UpgradeAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
-        _ = account.MapPost("/factors/totp/begin", BeginGeneratorAsync);
-        _ = account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync);
-        _ = account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync);
-        _ = account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync);
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.CredentialNotFound,
+                    ErrorCodes.CredentialNotUpgradable)
+                .Binding<AuthenticatorId>("id"))
+            .Produces<CredentialCeremonyView>();
+        _ = account.MapPost("/factors/totp/begin", BeginGeneratorAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
+            .Produces<GeneratorEnrolmentView>();
+        _ = account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
+            .Produces<EnrolledCredentialView>();
+        _ = SessionRequired.On(account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.FactorPasswordRequired))
+            .Produces<RecoveryCodesView>();
+        _ = account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.FactorNotEnrolled))
+            .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder ceremonies = endpoints.MapGroup("/auth/webauthn/register");
 
-        _ = ceremonies.MapPost("/begin", BeginKeyAsync);
-        _ = ceremonies.MapPost("/complete", CompleteKeyAsync);
+        _ = ceremonies.MapPost("/begin", BeginKeyAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
+                    ErrorCodes.CredentialLabelInvalid))
+            .Produces<CredentialCeremonyView>();
+        _ = ceremonies.MapPost("/complete", CompleteKeyAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
+                    ErrorCodes.CredentialLabelInvalid))
+            .Produces<EnrolledCredentialView>();
 
         return endpoints;
     }
@@ -238,14 +286,17 @@ internal static class CredentialEndpoints
 
     // AUTH-FACT-009: the whole previous set stops validating, and the new one is
     // shown once.
+    // AUTH-RECOV-002: the enrolment session is not among those the set is generated
+    // under, so only the holder of a session asks here.
     private static async Task<IResult> GenerateRecoveryCodesAsync(
         ICredentials credentials,
         RequestSession browser,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(browser);
 
-        return Asking(browser) is not CredentialAuthority authority
+        return Holding(browser) is not CredentialAuthority authority
             ? Nobody()
             : Answers.Of(
                 await credentials.GenerateRecoveryCodesAsync(authority, cancellationToken)
@@ -321,15 +372,16 @@ internal static class CredentialEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (browser.Context is AccessContext holder && browser.Live is Session live)
-        {
-            return CredentialAuthority.Of(holder, live.Id);
-        }
-
-        return browser.FirstContact?.Enrolment is EnrolmentSessionId opened
-            ? CredentialAuthority.Of(opened)
-            : null;
+        return Holding(browser)
+            ?? (browser.FirstContact?.Enrolment is EnrolmentSessionId opened
+                ? CredentialAuthority.Of(opened)
+                : null);
     }
+
+    private static CredentialAuthority? Holding(RequestSession browser) =>
+        browser.Context is AccessContext holder && browser.Live is Session live
+            ? CredentialAuthority.Of(holder, live.Id)
+            : null;
 
     // API-CONV-003: nobody is asking, which is what 401 is for and what nothing else
     // is for.

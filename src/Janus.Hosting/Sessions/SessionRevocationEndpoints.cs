@@ -33,8 +33,17 @@ internal static class SessionRevocationEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/{subject}/sessions/revoke", RevokeAccountAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/sessions/revoke-all", RevokeEveryAsync));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/sessions/revoke-all", RevokeEveryAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

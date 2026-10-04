@@ -40,32 +40,84 @@ internal static class PrivacyEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/privacy");
 
-        _ = group.MapGet("/notice", NoticeAsync);
+        _ = group.MapGet("/notice", NoticeAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.DocumentNotFound))
+            .Produces<DocumentVersionView>();
         _ = group.MapGet("/documents/{document}", DocumentAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<DocumentName>("document"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.DocumentNotFound)
+                .Binding<DocumentName>("document"))
+            .Produces<DocumentVersionView>();
 
-        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync));
-        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync));
-        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync));
+        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<ConsentView>>();
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNoConsent))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PurposeNoConsent))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync));
-        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync));
-        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync));
+        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<ObjectionView>>();
+        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNotObjectable))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PurposeNotObjectable))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync));
-        _ = SessionRequired.On(group.MapGet("/export", ExportAsync));
+        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
+        _ = SessionRequired.On(group.MapGet("/export", ExportAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Throttled))
+            .Produces<ExportView>()
+            .Produces<PortableExportView>();
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.RequestMalformed, ErrorCodes.Denied))
+            .Produces<ProcessingRegisterView>();
+        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted))
+            .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
 
-        _ = SessionRequired.On(queue.MapGet("/", QueueAsync));
-        _ = SessionRequired.On(queue.MapPost("/", EnterAsync));
+        _ = SessionRequired.On(queue.MapGet("/", QueueAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<PrivacyRequestView>>();
+        _ = SessionRequired.On(queue.MapPost("/", EnterAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.RequestReceivedFuture, ErrorCodes.RequestInvalid))
+            .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(queue.MapPost("/{request}/fulfil", FulfilAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<PrivacyRequestId>("request"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.RequestNotFound, ErrorCodes.RequestDecided)
+                .Binding<PrivacyRequestId>("request"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(queue.MapPost("/{request}/refuse", RefuseAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<PrivacyRequestId>("request"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestNotFound,
+                    ErrorCodes.RequestDecided)
+                .Binding<PrivacyRequestId>("request"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -176,7 +228,9 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (Asked(body.Type) is not PrivacyRequestType type)
+        // 09 section 7: erasure is not a request type on this endpoint, so a body naming
+        // it is not the shape the endpoint takes (API-CONV-003).
+        if (Asked(body.Type) is not PrivacyRequestType type || type is PrivacyRequestType.Erasure)
         {
             return Answers.Malformed("type");
         }

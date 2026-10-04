@@ -15950,6 +15950,8 @@ permissions.
 *Chapter text that should change.* REF-001 AC2 could say the bump is judged at the
 release commit, against the previous release, by the contract files.
 
+**Superseded by D-166.**
+
 ---
 
 ## 383. Every path of the library is a security path for a catch, and a catch ends the operation

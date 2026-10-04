@@ -37,9 +37,22 @@ internal static class ConfigurationEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/config/{key}", ReadAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<ConfigurationKey>("key"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<ConfigurationKey>("key"))
+            .Produces<ConfiguredSettingView>();
         _ = SessionRequired.On(endpoints.MapPut("/admin/config/{key}", ChangeAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<ConfigurationKey>("key"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationChangeSuperseded,
+                    ErrorCodes.ConfigurationValueBelowFloor, ErrorCodes.ConfigurationValueAboveCeiling,
+                    ErrorCodes.ConfigurationValueNotAllowed, ErrorCodes.ConfigurationKeyProtected,
+                    ErrorCodes.ConfigurationLastDestination,
+                    ErrorCodes.ConfigurationChangeReasonRequired)
+                .Binding<ConfigurationKey>("key"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

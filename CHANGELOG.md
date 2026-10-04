@@ -3002,3 +3002,21 @@ against the public contract of LIB-API-001.
   verification. A code presented after the attempt cap is now answered
   `auth.code.expired` where it was answered `auth.code.invalid`. A code outstanding
   when this version is deployed no longer verifies: a resend replaces it.
+- `GET /register/events` answers a browser that carries no registration session 404
+  `authz.resource.notfound`, with the body every refusal carries, where it answered a
+  404 with no body.
+- An email or a phone offered to a registration before its age step is answered is
+  refused 409 `identity.registration.incomplete`, as every step asked for before the
+  one it follows is, where it was refused 422 `identity.affirmation.required`, which is
+  the terms step's alone.
+- `POST /account/recoverycodes` answers only the holder of a session: a browser holding
+  an enrolment session and no other is refused 401 `auth.session.expired`, where it
+  was answered as the account, or 422 `auth.enrolment.tokeninvalid` once the enrolment
+  had ended.
+- `POST /privacy/requests` refuses a body whose `type` is `erasure` 400
+  `api.request.malformed` naming `type`, where it was refused 403 `authz.denied`.
+- Every endpoint carries, as endpoint metadata, each answer it produces: the status and,
+  where it writes a body, the body's type and content type, beside the codes it declares.
+- `derivation.materialised.driftcheck` is a key of the configuration: it is validated at
+  startup, read and set through `GET` and `PUT /admin/config/{key}` and the command line, and
+  listed with the others, where the drift check read it and nothing else knew it.

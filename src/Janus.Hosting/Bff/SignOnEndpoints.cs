@@ -30,8 +30,12 @@ internal static class SignOnEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = endpoints.MapGet(SignOn.StartPath, StartAsync);
-        _ = endpoints.MapGet(SignOn.ReturnPath, ReturnAsync);
+        _ = endpoints.MapGet(SignOn.StartPath, StartAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid))
+            .Produces(StatusCodes.Status302Found);
+        _ = endpoints.MapGet(SignOn.ReturnPath, ReturnAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid))
+            .Produces(StatusCodes.Status302Found);
 
         return endpoints;
     }

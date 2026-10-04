@@ -284,6 +284,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status401Unauthorized, state.Status);
         Assert.Equal(StatusCodes.Status401Unauthorized, age.Status);
         Assert.Equal(StatusCodes.Status404NotFound, stream.Status);
+        Assert.Equal(ErrorCodes.ResourceNotFound.ToString(), stream.Text("code"));
 
         Assert.Equal(
             StatusCodes.Status200OK,
@@ -598,6 +599,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer carried = await browser.SendAsync("GET", "/register", token: false);
 
         Assert.Equal(StatusCodes.Status404NotFound, claimed.Status);
+        Assert.Equal(ErrorCodes.ResourceNotFound.ToString(), claimed.Text("code"));
         Assert.Equal(StatusCodes.Status200OK, carried.Status);
     }
 

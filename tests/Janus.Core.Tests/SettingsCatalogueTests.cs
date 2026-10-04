@@ -144,6 +144,32 @@ public sealed class SettingsCatalogueTests
     }
 
     /// <summary>
+    /// REF-001 AC1: a live row of a key table of chapter 10 section 4 naming a key the
+    /// catalogue does not hold fails here. The fields of section 4.1a are no keys, and
+    /// their table is no key table; a struck row, and one whose cell after the key opens
+    /// "Retired" or "Withdrawn", is not live; a key written with a placeholder names a
+    /// family, which the catalogue holds where it holds the family or any key of it.
+    /// </summary>
+    [Fact]
+    public void REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource()
+    {
+        string placeholder = ReferenceRows.Family(string.Empty)[1..];
+        HashSet<string> declared =
+        [
+            .. Settings.All.Select(setting => setting.Key.ToString()),
+            .. Settings.Families.Select(family => ReferenceRows.Family(family.Prefix)),
+        ];
+
+        Assert.DoesNotContain(
+            ReferenceRows.ChapterKeys,
+            row => !declared.Contains(row)
+                && !(row.Contains(placeholder, StringComparison.Ordinal)
+                    && declared.Any(key => key.StartsWith(
+                        row[..row.IndexOf(placeholder, StringComparison.Ordinal)],
+                        StringComparison.Ordinal))));
+    }
+
+    /// <summary>
     /// The chapter 10 section 4 direction rule: a key bounded only above loosens
     /// upward, a key bounded only below loosens downward, and a key bounded at
     /// neither end loosens on any change.
