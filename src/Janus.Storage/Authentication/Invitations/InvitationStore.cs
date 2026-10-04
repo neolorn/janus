@@ -23,7 +23,7 @@ namespace Janus.Storage.Authentication.Invitations;
 /// Implements IDN-LIFE-009a, REG-INV-001, REG-MAIL-001, PRIV-RIGHT-005a and
 /// CONV-DESIGN-003. What the invitation binds belongs to nobody who holds an account,
 /// so it is under a key of the row's own, wrapped under the deployment's data key, and
-/// forgetting it clears the document and the key together.
+/// forgetting it clears the document and erases the key together.
 /// </remarks>
 internal sealed class InvitationStore(
     StoreContext context,
@@ -159,7 +159,7 @@ internal sealed class InvitationStore(
             .Where(invitation => invitation.ExpiresAt <= now && invitation.EncryptedIdentifiers != null)
             .ExecuteUpdateAsync(
                 forgotten => forgotten
-                    .SetProperty(invitation => invitation.WrappedKey, (byte[]?)null)
+                    .SetProperty(invitation => invitation.WrappedKey, PersonalFieldCipher.ErasedKey())
                     .SetProperty(invitation => invitation.EncryptedIdentifiers, (byte[]?)null),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -181,7 +181,7 @@ internal sealed class InvitationStore(
     {
         if (invitation.Identifiers is null)
         {
-            record.WrappedKey = null;
+            record.WrappedKey = PersonalFieldCipher.ErasedKey();
             record.EncryptedIdentifiers = null;
         }
         else if (record.EncryptedIdentifiers is null)
@@ -274,9 +274,7 @@ internal sealed class InvitationStore(
             return null;
         }
 
-        byte[] dataKey = PersonalFieldCipher.Unwrap(
-            record.WrappedKey ?? throw new InvalidOperationException("The invitation has no key."),
-            deploymentKey);
+        byte[] dataKey = PersonalFieldCipher.Unwrap(record.WrappedKey, deploymentKey);
 
         try
         {

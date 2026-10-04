@@ -303,8 +303,8 @@ internal sealed class SubjectEraser(
         }
 
         // PRIV-RIGHT-005a: what an invitation attached to the subject still binds is
-        // their addresses, held under a key of the invitation's own, so the document and
-        // its key are forgotten here rather than when the invitation expires.
+        // their addresses, held under a key of the invitation's own, so the document is
+        // forgotten and its key erased here rather than when the invitation expires.
         List<InvitationRecord> invitations = await context.Invitations
             .Where(invitation => invitation.Invitee == subject && invitation.EncryptedIdentifiers != null)
             .ToListAsync(cancellationToken)
@@ -312,7 +312,8 @@ internal sealed class SubjectEraser(
 
         foreach (InvitationRecord invitation in invitations)
         {
-            invitation.WrappedKey = null;
+            // The erased value of a wrapped key held with no marker: 32 zero bytes alone.
+            invitation.WrappedKey = new byte[PersonalDataFormat.DataKeyLength];
             invitation.EncryptedIdentifiers = null;
         }
     }

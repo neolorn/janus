@@ -11,7 +11,10 @@ using Janus.Core;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authorization.Roles;
+using Janus.Storage.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Xunit;
 
@@ -108,8 +111,9 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
-    /// REG-INV-001: a revoked invitation forgets what it bound: the document and the
-    /// key that read it are gone from the row, and what stays is who invited into what.
+    /// REG-INV-001: a revoked invitation forgets what it bound: the document is gone
+    /// from the row and the key that read it is erased, and what stays is who invited
+    /// into what.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -134,7 +138,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
         Invitation read = (await Store(reading).FindAsync(issued.Id, TestContext.Current.CancellationToken))!;
 
         Assert.Null(row.EncryptedIdentifiers);
-        Assert.Null(row.WrappedKey);
+        Assert.Equal(new byte[32], row.WrappedKey);
         Assert.Null(read.Identifiers);
         Assert.Equal(Noon.AddHours(1), read.RevokedAt);
         Assert.Equal(issued.Inviter, read.Inviter);
@@ -160,11 +164,123 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
         InvitationRecord row = await RowAsync(issued.Id);
 
         Assert.Null(row.EncryptedIdentifiers);
-        Assert.Null(row.WrappedKey);
+        Assert.Equal(new byte[32], row.WrappedKey);
         Assert.Equal(issued.Token, row.Token);
         Assert.Equal(issued.Mailbox?.Value, row.Mailbox);
         Assert.Equal((issued.Inviter, issued.Organization), (row.Inviter, row.Organization));
         Assert.Equal(0, await SweptAsync(issued.ExpiresAt.AddDays(1)));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC14: an invitation revoked, acknowledged or swept after expiry
+    /// holds no identifier and, in place of its wrapped key, the 32 zero bytes of an
+    /// erased key; one that stands keeps what it binds under its key until then.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC14_AnInvitationRevokedAcknowledgedOrSweptHoldsNoIdentifierAndTheErasedKeyAsync()
+    {
+        SubjectId invitee = await _deployment.AccountAsync(Noon);
+        Invitation revoked = await IssuedAsync(Fresh("revoked"));
+        Invitation acknowledged = await IssuedAsync(Fresh("acknowledged"));
+        Invitation swept = await IssuedAsync(Fresh("swept"));
+
+        await ChangeAsync(revoked.Id, held => held.Revoke(Noon.AddHours(1)));
+        await ChangeAsync(acknowledged.Id, held => held.AttachTo(invitee, Noon.AddHours(1)));
+        await ChangeAsync(acknowledged.Id, held => held.Acknowledge(Noon.AddHours(2)));
+
+        InvitationRecord standing = await RowAsync(swept.Id);
+
+        Assert.NotNull(standing.EncryptedIdentifiers);
+        Assert.False(PersonalFieldCipher.IsErased(standing.WrappedKey));
+
+        Assert.True(await SweptAsync(swept.ExpiresAt) >= 1);
+
+        Assert.All(
+            [await RowAsync(revoked.Id), await RowAsync(acknowledged.Id), await RowAsync(swept.Id)],
+            row =>
+            {
+                Assert.Null(row.EncryptedIdentifiers);
+                Assert.Equal(new byte[32], row.WrappedKey);
+            });
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Null((await Store(reading).FindAsync(swept.Id, TestContext.Current.CancellationToken))?.Identifiers);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC14 (D-187): an invitation forgotten while a forgotten key was
+    /// stored as nothing holds the erased key once the migration has run, a standing one
+    /// keeps its key, and no row holds an absent key after it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC14_AnInvitationForgottenBeforeTheErasedKeyHoldsItOnceMigratedAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("invitation_key");
+        var forgotten = Guid.CreateVersion7();
+        var standing = Guid.CreateVersion7();
+        string erasing;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            erasing = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(HoldAnInvitationsErasedKey), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, erasing) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        var values = new
+        {
+            forgotten,
+            standing,
+            inviter = Subjects.New().Value,
+            organization = Guid.CreateVersion7(),
+            at = Noon,
+        };
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@inviter, 'active', @at);
+            INSERT INTO identity.organizations (id, name, canonical_name, created_at)
+            VALUES (@organization, 'Invitation keys', 'invitation keys', @at);
+            INSERT INTO identity.invitations
+                (id, organization, inviter, token, wrapped_key, enc_identifiers, roles, documents,
+                 issued_at, expires_at, revoked_at)
+            VALUES
+                (@forgotten, @organization, @inviter, '\x01', NULL, NULL, '{}', '[]', @at, @at, @at),
+                (@standing, @organization, @inviter, '\x02', '\x0a0b', '\x0c', '{}', '[]', @at, @at, NULL);
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(erasing, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            new byte[32],
+            await connection.QuerySingleAsync<byte[]>(
+                "SELECT wrapped_key FROM identity.invitations WHERE id = @forgotten", values));
+        Assert.Equal(
+            [0x0a, 0x0b],
+            await connection.QuerySingleAsync<byte[]>(
+                "SELECT wrapped_key FROM identity.invitations WHERE id = @standing", values));
+        await Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync(
+            "UPDATE identity.invitations SET wrapped_key = NULL, enc_identifiers = NULL WHERE id = @standing",
+            values));
+        await Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync(
+            "UPDATE identity.invitations SET enc_identifiers = NULL WHERE id = @standing",
+            values));
     }
 
     /// <summary>

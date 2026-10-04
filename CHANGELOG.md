@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An invitation that is revoked, acknowledged, found expired by the sweep or attached to
+  a subject who is erased holds, in place of its wrapped key, the 32 zero bytes of an
+  erased key and no longer an absent one, so one erased value stands wherever a wrapped
+  key is held; what it bound is cleared as before. `invitations.wrapped_key` is now
+  required, `ck_invitations_key` holds the bound identifiers absent exactly where the
+  key is the erased one, and a migration gives the erased key to every invitation
+  already forgotten.
 - The organizational security measures of the records of processing are spelled
   `organizational` wherever the library names them: the answer of `GET /admin/ropa`
   carries `organizationalSecurityMeasures`, as the request of
