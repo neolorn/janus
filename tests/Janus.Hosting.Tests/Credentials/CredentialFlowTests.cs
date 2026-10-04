@@ -475,6 +475,91 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-002 and chapter 09 section 6: removing a credential and upgrading a
+    /// key are not among the routes the enrolment session reaches, and each refuses it
+    /// as a missing permission is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheEnrolmentSessionIsDeniedRemovalAndUpgradeAsync()
+    {
+        _ = await SignedInAsync();
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer removal = await browser.SendAsync("DELETE", "/account/credentials/" + Guid.NewGuid());
+        Answer upgrade = await browser.SendAsync("POST", "/account/credentials/" + Guid.NewGuid() + "/upgrade");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, removal.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), removal.Text("code"));
+        Assert.Equal(StatusCodes.Status403Forbidden, upgrade.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), upgrade.Text("code"));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 and chapter 09 section 3: an enrolment session that has ended is
+    /// answered as a session that has ended, with no details, at the routes it reached
+    /// and at those it never did.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredWithNoDetailsAsync()
+    {
+        _ = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        await LinkedAsync(subject, mailboxLost: true);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        string identifier = "/account/identifiers/" + (await EmailAsync(subject)).Value;
+        _ = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        Answer[] ended =
+        [
+            await browser.SendAsync("POST", "/account/password", ("password", Replacement)),
+            await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label)),
+            await browser.SendAsync("POST", "/account/recoverycodes/exported"),
+            await browser.SendAsync("PUT", identifier + "/replace", ("value", Replaced)),
+            await browser.SendAsync("POST", identifier + "/verify", ("code", "000000")),
+            await browser.SendAsync("DELETE", "/account/credentials/" + Guid.NewGuid()),
+            await browser.SendAsync("POST", "/account/credentials/" + Guid.NewGuid() + "/upgrade"),
+        ];
+
+        Assert.All(
+            ended,
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status401Unauthorized, answer.Status);
+                Assert.Equal(ErrorCodes.SessionExpired.ToString(), answer.Text("code"));
+                Assert.Empty(answer.Json().GetProperty("details").EnumerateObject());
+            });
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC4 and chapter 09 section 6: the report of an export is one of
+    /// the routes the enrolment session reaches, and the account reads when it was
+    /// made.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_TheEnrolmentSessionReportsAnExportAsync()
+    {
+        Browser holder = await SignedInAsync();
+        _ = await holder.SendAsync("POST", "/account/recoverycodes");
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer reported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        Assert.Equal(StatusCodes.Status204NoContent, reported.Status);
+        Assert.Equal(
+            _deployment.Clock.GetUtcNow(),
+            (await holder.SendAsync("GET", "/account"))
+                .Json().GetProperty("recoveryCodes").GetProperty("exportedAt").GetDateTimeOffset());
+    }
+
+    /// <summary>
     /// D-148: a browser that never opened an enrolment session reaches none of these,
     /// so the endpoints answer nobody rather than guessing whose account it is.
     /// </summary>

@@ -140,7 +140,7 @@ internal sealed class CredentialService(
 
         if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
         {
-            failure = Error.From(ErrorCodes.EnrolmentTokenInvalid);
+            failure = Error.From(ErrorCodes.SessionExpired);
         }
         else
         {
@@ -220,7 +220,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -335,7 +335,7 @@ internal sealed class CredentialService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.SessionExpired));
         }
 
         // D-166 X3: a second step is enrolled under the lock on the account's row, which
@@ -522,7 +522,7 @@ internal sealed class CredentialService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.SessionExpired));
         }
 
         // D-166 X3: a second step is enrolled under the lock on the account's row, which
@@ -568,7 +568,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, StepUpAction.RecoveryCodesGenerate, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.RecoveryCodesGenerate, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -637,57 +637,24 @@ internal sealed class CredentialService(
 
         // CONV-DESIGN-002: the set is the caller's own, so the gate step is that the
         // context names an account, and the set is read for that account alone.
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        // IDN-ACCT-007: the report changes the set's record, so a restricted account is
-        // refused it as it is any other change. No step-up is asked.
-        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
-            is Error restricted)
-        {
-            return Result.Failure(restricted);
-        }
-
-        if (!await codes.IssuedAsync(subject, cancellationToken).ConfigureAwait(false))
-        {
-            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
-        }
-
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
-        }
-
-        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
-        // acting account's row held before any other lock, so a restriction committed since
-        // the gate step refuses the report before anything is written.
-        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
-            is Error since)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(since);
-        }
-
-        Error? failure = null;
-
-        bool written = (await codes.ExportedAsync(subject, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref failure));
-
-        // CONV-DESIGN-003: a report that changed nothing, an earlier one standing, is a
-        // success that wrote nothing, and commits nothing.
-        if (failure is not null || !written)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return failure is null ? Result.Success() : Result.Failure(failure);
-        }
-
-        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return context.Effective is SubjectId subject
+            ? await ExportReportedAsync(context, subject, cancellationToken).ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> MarkRecoveryCodesExportedAsync(
+        EnrolmentSessionId enrolment,
+        CancellationToken cancellationToken) =>
+
+        // Chapter 09 POST /enrol/begin, D-188: the report is one of the operations an
+        // enrolment session reaches, for the account it was opened for and no other,
+        // and one that has ended is a session that has ended.
+        await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            is EnrolmentSession opened
+            ? await ExportReportedAsync(AccessContext.Of(opened.Subject), opened.Subject, cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.SessionExpired));
 
     /// <inheritdoc/>
     public async ValueTask<Result> RemoveAsync(
@@ -700,7 +667,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, StepUpAction.FactorRemove, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.FactorRemove, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -932,17 +899,12 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, StepUpAction.ProviderUnlink, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.ProviderUnlink, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure(failure);
-        }
-
-        if (acting.Session is null)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
@@ -1052,17 +1014,12 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, StepUpAction.ProviderLink, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.ProviderLink, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure<Acting>(failure);
-        }
-
-        if (acting.Session is null)
-        {
-            return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
         }
 
         if (!IsProvider(provider))
@@ -1114,10 +1071,12 @@ internal sealed class CredentialService(
             : null;
     }
 
-    // Who is acting, and under what: a session the gates apply to, or the enrolment
+    // Who is acting, and under what, in an operation chapter 09 names for the enrolment
+    // session (POST /enrol/begin): a session the gates apply to, or the enrolment
     // session an approved recovery opened, which is read afresh so that one that has
-    // run out reaches nothing (D-147). The action is the operation's, whose refusal to
-    // the break-glass session is part of this gate step (OPS-BOOT-002, D-179).
+    // ended is answered as a session that has ended and reaches nothing (D-147, D-188).
+    // The action is the operation's, whose refusal to the break-glass session is part
+    // of this gate step (OPS-BOOT-002, D-179).
     private async ValueTask<Result<Acting>> ActingAsync(
         CredentialAuthority authority,
         StepUpAction action,
@@ -1137,9 +1096,39 @@ internal sealed class CredentialService(
                     Session: null,
                     opened,
                     AccessContext.Of(enrolment.Subject)))
-                : Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+                : Result.Failure<Acting>(Error.From(ErrorCodes.SessionExpired));
         }
 
+        return await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Who is acting in an operation the enrolment session does not reach (chapter 09
+    // POST /enrol/begin, D-188): a session, and no other authority. An enrolment session
+    // that stands is refused as a missing permission is, and one that has ended as a
+    // session that has ended, before anything of the account is read.
+    private async ValueTask<Result<Acting>> HoldingAsync(
+        CredentialAuthority authority,
+        StepUpAction action,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Enrolment is EnrolmentSessionId opened)
+        {
+            return Result.Failure<Acting>(Error.From(
+                await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false) is null
+                    ? ErrorCodes.SessionExpired
+                    : ErrorCodes.Denied));
+        }
+
+        return await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<Result<Acting>> SignedInAsync(
+        CredentialAuthority authority,
+        StepUpAction action,
+        CancellationToken cancellationToken)
+    {
         if (authority.Context is not { Effective: SubjectId subject } held || authority.Session is not SessionId live)
         {
             return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
@@ -1158,9 +1147,64 @@ internal sealed class CredentialService(
             : Result.Success(new Acting(subject, live, Enrolment: null, held));
     }
 
+    // AUTH-FACT-008, IDN-ACCT-007: the report of an export, whoever made it. It asks no
+    // step-up, and it asks the gate about the restriction under a session and under an
+    // enrolment session alike, since the report is a change to the set's record that
+    // the restriction's exemptions do not name.
+    private async ValueTask<Result> ExportReportedAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
+        if (!await codes.IssuedAsync(subject, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the report before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        Error? failure = null;
+
+        bool written = (await codes.ExportedAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref failure));
+
+        // CONV-DESIGN-003: a report that changed nothing, an earlier one standing, is a
+        // success that wrote nothing, and commits nothing.
+        if (failure is not null || !written)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return failure is null ? Result.Success() : Result.Failure(failure);
+        }
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     // AUTHZ-GATE-006, D-183: the restriction asked again inside the unit of work, where
-    // the gate judges it with the account's row held. An enrolment session is not asked
-    // about the restriction, there as at the gate step (IDN-ACCT-007).
+    // the gate judges it with the account's row held. An enrolment session that sets or
+    // enrols a credential is not asked about the restriction, there as at the gate step
+    // (IDN-ACCT-007).
     private async ValueTask<Error?> RestrictedSinceAsync(Acting acting, CancellationToken cancellationToken) =>
         acting.Session is null
             ? null

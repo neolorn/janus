@@ -10,6 +10,18 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An enrolment session reaches the routes `POST /enrol/begin` lists and no other
+  credential route: `DELETE /account/credentials/{id}` and
+  `POST /account/credentials/{id}/upgrade` refuse it 403 `authz.denied`, as do
+  `ICredentials.RemoveAsync`, `UpgradeKeyAsync`, `GenerateRecoveryCodesAsync`,
+  `LinkableAsync` and `UnlinkAsync`. `POST /account/recoverycodes/exported` now
+  admits it, through the new overload
+  `ICredentials.MarkRecoveryCodesExportedAsync(EnrolmentSessionId, CancellationToken)`,
+  and asks the gate for the restriction there too. An enrolment session that has
+  ended is answered 401 `auth.session.expired` with no details wherever it is
+  presented, where the credential and identifier routes answered 422
+  `auth.enrolment.tokeninvalid`; that code is now the link token's at
+  `POST /enrol/begin` alone.
 - `POST /account/recoverycodes/exported` and
   `ICredentials.MarkRecoveryCodesExportedAsync` refuse a restricted account 403
   `authz.restricted`, as every other change to its credentials is refused; no step-up
