@@ -14,6 +14,8 @@ namespace Janus.Authentication.Tests.Mailboxes;
 /// </summary>
 internal sealed class MailboxStoreInMemory : IMailboxStore
 {
+    private readonly Dictionary<MailboxId, DateTimeOffset> _claims = [];
+
     /// <summary>
     /// Every mailbox, as the rows hold them.
     /// </summary>
@@ -40,6 +42,19 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
     /// The outstanding push's key each change carried onto the row, in order.
     /// </summary>
     public List<Guid?> Keys { get; } = [];
+
+    /// <summary>
+    /// The mailboxes a claim is held on, each with when that claim times out.
+    /// </summary>
+    public IReadOnlyDictionary<MailboxId, DateTimeOffset> Claims => _claims;
+
+    /// <summary>
+    /// Stands in for another pass that takes the row over, as one would once the claim
+    /// on it had timed out.
+    /// </summary>
+    /// <param name="mailbox">The row.</param>
+    /// <param name="until">When the other pass's claim times out.</param>
+    public void TakeOver(MailboxId mailbox, DateTimeOffset until) => _claims[mailbox] = until;
 
     // A mailbox whose holder was erased has nothing left that reads its address, and
     // one whose removal the server confirmed is a mailbox no more.
@@ -99,4 +114,68 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<DateTimeOffset?> ClaimAsync(
+        MailboxId mailbox,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (!Held.Exists(held => held.Id == mailbox)
+            || (_claims.TryGetValue(mailbox, out DateTimeOffset until) && until > now))
+        {
+            return ValueTask.FromResult<DateTimeOffset?>(null);
+        }
+
+        _claims[mailbox] = now + timeout;
+
+        return ValueTask.FromResult<DateTimeOffset?>(now + timeout);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<MailboxStanding?> StandingAsync(MailboxId mailbox, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            Readable.FirstOrDefault(held => held.Id == mailbox) is Mailbox found
+                ? new MailboxStanding(found, found.Holder is SubjectId holder && Standing.Contains(holder))
+                : null);
+
+    /// <inheritdoc/>
+    public ValueTask<bool> AttemptAsync(Mailbox mailbox, DateTimeOffset claim, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        if (!Holds(mailbox.Id, claim))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        Recorded++;
+        Keys.Add(mailbox.PendingKey);
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> RecordAsync(Mailbox mailbox, DateTimeOffset claim, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        if (!Holds(mailbox.Id, claim))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        Recorded++;
+        Keys.Add(mailbox.PendingKey);
+
+        return ValueTask.FromResult(_claims.Remove(mailbox.Id));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> ReleaseAsync(MailboxId mailbox, DateTimeOffset claim, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Holds(mailbox, claim) && _claims.Remove(mailbox));
+
+    private bool Holds(MailboxId mailbox, DateTimeOffset claim) =>
+        _claims.TryGetValue(mailbox, out DateTimeOffset until) && until == claim;
 }

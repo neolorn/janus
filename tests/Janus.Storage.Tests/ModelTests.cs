@@ -471,6 +471,7 @@ public sealed class ModelTests
             "mailboxes.attempted",
             "mailboxes.attempts",
             "mailboxes.canonicalisation_version",
+            "mailboxes.claimed_until",
             "mailboxes.enc_canonical",
             "mailboxes.failed_at",
             "mailboxes.fingerprint",

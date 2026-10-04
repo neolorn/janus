@@ -10,6 +10,7 @@ using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace Janus.Storage.Authentication.Mailboxes;
 
@@ -34,7 +35,10 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// wait for its removal, but is found by its identifier alone (D-178). Once the server
 /// confirms the removal of a reservation nobody took, its key is overwritten and its
 /// fingerprint neutralised, and the row stays with nothing left of the address
-/// (PRIV-RIGHT-005a).
+/// (PRIV-RIGHT-005a). A push is carried under a claim: one conditional update marks the
+/// row claimed until an instant, and what the pass made of the push is written by one
+/// update conditional on that instant, so two passes over the same mailboxes make each
+/// push once (CONV-DESIGN-003).
 /// </remarks>
 internal sealed class MailboxStore(
     StoreContext context,
@@ -58,23 +62,7 @@ internal sealed class MailboxStore(
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken)
     {
-        var rows = await Readable()
-            .OrderBy(mailbox => mailbox.ReservedAt)
-            .Select(mailbox => new
-            {
-                Row = mailbox,
-                // IDN-ACCT-007, INT-MAIL-006a: a restriction the person asked for does
-                // not cut them off from their mail, so a restricted holder stands.
-                Stands = mailbox.Holder != null
-                    && context.Accounts.Any(account =>
-                        account.Subject == mailbox.Holder
-                        && (account.State == AccountState.Active || account.State == AccountState.Restricted))
-                    && context.Memberships.Any(membership =>
-                        membership.Subject == mailbox.Holder
-                        && membership.EndedAt == null
-                        && context.Organizations.Any(organization =>
-                            organization.Id == membership.Organization && organization.IsAdministrative)),
-            })
+        List<Standing> rows = await Standings(Readable().OrderBy(mailbox => mailbox.ReservedAt))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -159,6 +147,111 @@ internal sealed class MailboxStore(
         await CarryAsync(mailbox, record, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<DateTimeOffset?> ClaimAsync(
+        MailboxId mailbox,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.Mailboxes
+            .Where(row => row.Id == mailbox.Value && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return claimed == 1 ? until : null;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<MailboxStanding?> StandingAsync(MailboxId mailbox, CancellationToken cancellationToken)
+    {
+        // The context may track the row as an earlier read of the pass left it, so the
+        // row is read past it: what is decided on is what the database holds now.
+        Standing? row = await Standings(Readable().AsNoTracking().Where(held => held.Id == mailbox.Value))
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return row is null
+            ? null
+            : new MailboxStanding(await ReadAsync(row.Row, cancellationToken).ConfigureAwait(false), row.Stands);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> AttemptAsync(
+        Mailbox mailbox,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        return await context.Mailboxes
+            .Where(row => row.Id == mailbox.Id.Value && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(row => Pushing(row, mailbox), cancellationToken)
+            .ConfigureAwait(false) == 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> RecordAsync(
+        Mailbox mailbox,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        return await context.Mailboxes
+            .Where(row => row.Id == mailbox.Id.Value && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(
+                row =>
+                {
+                    Pushing(row, mailbox);
+
+                    row.SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null);
+
+                    // PRIV-RIGHT-005a AC19, D-178: nothing about a person outlives an
+                    // invitation that led nowhere, so the address of a released
+                    // reservation goes with its removal.
+                    if (IsForgotten(mailbox))
+                    {
+                        row.SetProperty(one => one.WrappedKey, PersonalFieldCipher.ErasedKey());
+                        row.SetProperty(one => one.Fingerprint, Janus.Storage.Fingerprint.Neutralised());
+                    }
+                },
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReleaseAsync(
+        MailboxId mailbox,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken) =>
+        await context.Mailboxes
+            .Where(row => row.Id == mailbox.Value && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
+
+    // What a pass writes of a mailbox: its outstanding push and how far that push has
+    // got. Who holds the mailbox and what it is owed are the operations' to write, and
+    // a pass that read them earlier never writes them back.
+    private static void Pushing(UpdateSettersBuilder<MailboxRecord> row, Mailbox mailbox) =>
+        row.SetProperty(one => one.Pushed, mailbox.Pushed)
+            .SetProperty(one => one.Pending, mailbox.Pending)
+            .SetProperty(one => one.PendingKey, mailbox.PendingKey)
+            .SetProperty(one => one.Attempts, mailbox.Attempts)
+            .SetProperty(one => one.NextAttemptAt, mailbox.NextAttemptAt)
+            .SetProperty(one => one.FailedAt, mailbox.FailedAt)
+            .SetProperty(one => one.Attempted, mailbox.Attempted);
+
+    // A reservation nobody took, released, whose removal the server has confirmed.
+    private static bool IsForgotten(Mailbox mailbox) =>
+        mailbox is { IsReleased: true, Pushed: MailboxState.Removed, Pending: null };
+
     // The address is written again whenever it passes from one key to another: to the
     // holder's when a membership attaches, to a fresh key of the row's own when a
     // retired address is reserved for someone else.
@@ -207,7 +300,7 @@ internal sealed class MailboxStore(
 
         // PRIV-RIGHT-005a AC19, D-178: nothing about a person outlives an invitation that
         // led nowhere, so the address of a released reservation goes with its removal.
-        if (mailbox is { IsReleased: true, Pushed: MailboxState.Removed, Pending: null })
+        if (IsForgotten(mailbox))
         {
             record.WrappedKey = PersonalFieldCipher.ErasedKey();
             record.Fingerprint = Janus.Storage.Fingerprint.Neutralised();
@@ -289,6 +382,22 @@ internal sealed class MailboxStore(
         return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
+    // IDN-ACCT-007, INT-MAIL-006a: whether each row's holder stands, read in the query
+    // that reads the row. A restriction the person asked for does not cut them off from
+    // their mail, so a restricted holder stands.
+    private IQueryable<Standing> Standings(IQueryable<MailboxRecord> rows) =>
+        rows.Select(mailbox => new Standing(
+            mailbox,
+            mailbox.Holder != null
+                && context.Accounts.Any(account =>
+                    account.Subject == mailbox.Holder
+                    && (account.State == AccountState.Active || account.State == AccountState.Restricted))
+                && context.Memberships.Any(membership =>
+                    membership.Subject == mailbox.Holder
+                    && membership.EndedAt == null
+                    && context.Organizations.Any(organization =>
+                        organization.Id == membership.Organization && organization.IsAdministrative))));
+
     // A row whose holder was erased has nothing left that reads its address, and one
     // whose removal the server confirmed is a mailbox no more; a released reservation's
     // is forgotten then too.
@@ -312,4 +421,6 @@ internal sealed class MailboxStore(
 
     private IReadOnlyList<byte[]> Candidates(EmailAddress address) =>
         Janus.Storage.Fingerprint.Candidates(Encoding.UTF8.GetBytes(address.Value), ring);
+
+    private sealed record Standing(MailboxRecord Row, bool Stands);
 }

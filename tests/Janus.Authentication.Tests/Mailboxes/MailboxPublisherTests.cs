@@ -131,7 +131,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
 
         _ = await PassAsync();
 
-        Assert.Equal((1, _server.Received[0].Key), written);
+        Assert.Equal((2, _server.Received[0].Key), written);
     }
 
     /// <summary>
@@ -231,7 +231,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
         Assert.Equal("disabled", raised.Details["state"].GetString());
         Assert.Equal(Noon, reserved.FailedAt);
         Assert.Equal(1, reserved.Attempts);
-        Assert.Equal(committed + 2, _work.Committed);
+        Assert.Equal(committed + 3, _work.Committed);
 
         _clock.Advance(TimeSpan.FromHours(1));
         _ = await PassAsync();
@@ -317,7 +317,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromHours(1));
         _ = await PassAsync();
 
-        Assert.Equal(new List<(int, int, int)> { (1, 1, 1), (2, 3, 3) }, seen);
+        Assert.Equal(new List<(int, int, int)> { (1, 1, 2), (2, 3, 5) }, seen);
     }
 
     /// <summary>
@@ -450,8 +450,103 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.SystemFault, passed.Match(_ => (Error?)null, error => error)?.Code);
         Assert.False(_work.Open);
-        Assert.Equal(1, _work.Committed);
+        Assert.Equal(2, _work.Committed);
         Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: a mailbox another pass holds is that
+    /// pass's: this one pushes nothing of it and writes nothing, and once that claim has
+    /// timed out the next pass makes the push and gives its own claim up.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AMailboxAnotherPassHoldsIsNotPushedAsync()
+    {
+        Mailbox reserved = await ReservedAsync();
+        TimeSpan timeout = Settings.OutboxClaimTimeout.Default;
+
+        _mailboxes.TakeOver(reserved.Id, _clock.GetUtcNow() + timeout);
+
+        Assert.Equal(0, await PassAsync());
+        Assert.Empty(_server.Received);
+        Assert.Equal(0, _mailboxes.Recorded);
+
+        _clock.Advance(timeout);
+
+        Assert.Equal(1, await PassAsync());
+        Assert.Single(_server.Received);
+        Assert.Empty(_mailboxes.Claims);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: an outcome whose claim was taken over while the push was
+    /// with the server is not recorded: the attempt counted before it left stands, and
+    /// the outcome, its alert with it, is the other pass's to write.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnOutcomeWhoseClaimWasTakenOverIsNotRecordedAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
+
+        Mailbox reserved = await ReservedAsync();
+        DateTimeOffset later = _clock.GetUtcNow() + Settings.OutboxClaimTimeout.Default + TimeSpan.FromMinutes(1);
+
+        _server.Unreachable = true;
+        _server.Receiving = _ => _mailboxes.TakeOver(reserved.Id, later);
+
+        Assert.Equal(0, await PassAsync());
+
+        Assert.Single(_server.Received);
+        Assert.Equal(1, _mailboxes.Recorded);
+        Assert.Empty(_events.Of<AlertRaised>());
+        Assert.Equal(later, _mailboxes.Claims[reserved.Id]);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003: a push still with the server when its claim times out is
+    /// abandoned as a failed attempt: the attempt stays counted, the next is scheduled
+    /// under the backoff, the claim is given up and the pass goes on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_APushAbandonedAtItsClaimsTimeoutIsAFailedAttemptAsync()
+    {
+        Mailbox reserved = await ReservedAsync();
+
+        _server.Abandoned = true;
+
+        Assert.Equal(0, await PassAsync());
+
+        Assert.Equal(1, reserved.Attempts);
+        Assert.NotNull(reserved.NextAttemptAt);
+        Assert.Null(reserved.FailedAt);
+        Assert.Empty(_mailboxes.Claims);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003: a pass reads the mailboxes without a lock and claims only one it
+    /// has something to do for, so a push marked failed, which is not due within the
+    /// day, costs no claim and no write.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AMailboxWithNothingDueIsNotClaimedAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
+        _ = await ReservedAsync();
+
+        _server.Unreachable = true;
+
+        _ = await PassAsync();
+
+        int begun = _work.Opened;
+
+        Assert.Equal(0, await PassAsync());
+        Assert.Equal(begun, _work.Opened);
+        Assert.Single(_server.Received);
     }
 
     private MailboxPublisher Built(IMailServer? server) =>

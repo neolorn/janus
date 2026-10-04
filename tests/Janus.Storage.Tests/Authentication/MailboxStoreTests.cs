@@ -37,6 +37,8 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
 
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(2);
+
     private readonly Deployment _deployment = new(database);
 
     /// <inheritdoc/>
@@ -415,6 +417,194 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
 
         Assert.Null(await Store(reading).FindAsync(released.Id, TestContext.Current.CancellationToken));
         Assert.Empty(await Store(reading).AllAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: of several passes that reach one mailbox at
+    /// once, each on a connection of its own, one claims its push. While the claim
+    /// stands no pass takes the row; one that has timed out is taken over; and an
+    /// attempt or an outcome whose claim was taken over changes nothing. An attempt
+    /// written under the claim leaves the claim standing, and an outcome gives it up.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AMailboxPushIsClaimedByOnePassAsync()
+    {
+        var mailbox = Mailbox.Reserved(Parsed("claimed@example.test"), Noon);
+
+        await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
+
+        DateTimeOffset?[] claims = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => ClaimedAsync(mailbox.Id, Noon)));
+
+        DateTimeOffset claim = Assert.Single(claims, one => one is not null)!.Value;
+
+        Assert.Equal(Noon + Timeout, claim);
+        Assert.Null(await ClaimedAsync(mailbox.Id, Noon + Timeout - TimeSpan.FromSeconds(1)));
+
+        DateTimeOffset taken = await ClaimedAsync(mailbox.Id, Noon + Timeout)
+            ?? throw new Xunit.Sdk.XunitException("The claim was not taken over.");
+
+        MailboxPush push = mailbox.Due(stands: false, Noon)!;
+
+        mailbox.Attempting();
+
+        Assert.False(await UnderAsync(store => store.AttemptAsync(mailbox, claim, TestContext.Current.CancellationToken)));
+        Assert.False(await UnderAsync(store => store.RecordAsync(mailbox, claim, TestContext.Current.CancellationToken)));
+        Assert.False(await UnderAsync(store => store.ReleaseAsync(mailbox.Id, claim, TestContext.Current.CancellationToken)));
+
+        Mailbox untouched = await StandingAsync(mailbox.Id);
+
+        Assert.Null(untouched.PendingKey);
+        Assert.Equal(0, untouched.Attempts);
+        Assert.False(untouched.Attempted);
+
+        Assert.True(await UnderAsync(store => store.AttemptAsync(mailbox, taken, TestContext.Current.CancellationToken)));
+        Assert.Null(await ClaimedAsync(mailbox.Id, Noon + Timeout));
+
+        Mailbox attempted = await StandingAsync(mailbox.Id);
+
+        Assert.Equal(push.Key, attempted.PendingKey);
+        Assert.Equal(MailboxState.Disabled, attempted.Pending);
+        Assert.Equal(1, attempted.Attempts);
+        Assert.True(attempted.Attempted);
+
+        mailbox.Confirmed();
+
+        Assert.True(await UnderAsync(store => store.RecordAsync(mailbox, taken, TestContext.Current.CancellationToken)));
+        Assert.False(await UnderAsync(store => store.RecordAsync(mailbox, taken, TestContext.Current.CancellationToken)));
+
+        Mailbox confirmed = await StandingAsync(mailbox.Id);
+
+        Assert.Equal(MailboxState.Disabled, confirmed.Pushed);
+        Assert.Null(confirmed.Pending);
+        Assert.Equal(0, confirmed.Attempts);
+
+        DateTimeOffset again = await ClaimedAsync(mailbox.Id, Noon + Timeout)
+            ?? throw new Xunit.Sdk.XunitException("The claim was not given up with the outcome.");
+
+        Assert.True(await UnderAsync(store => store.ReleaseAsync(mailbox.Id, again, TestContext.Current.CancellationToken)));
+        Assert.NotNull(await ClaimedAsync(mailbox.Id, Noon + Timeout));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INT-MAIL-006a: a pass decides on the row as it stands once
+    /// claimed, read past what its context tracked earlier, and its outcome writes the
+    /// push alone: a holder an operation attached meanwhile is not written back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnOutcomeWritesThePushAndNothingElseAsync()
+    {
+        OrganizationId administrative = await AdministrativeAsync();
+        SubjectId holder = await _deployment.AccountAsync(Noon);
+
+        _ = await MemberAsync(holder, administrative);
+
+        var reserved = Mailbox.Reserved(Parsed("attached@example.test"), Noon);
+
+        await WrittenAsync(store => store.AddAsync(reserved, TestContext.Current.CancellationToken));
+
+        await using StoreContext passing = database.Context();
+        MailboxStore pass = Store(passing);
+
+        Mailbox stale = Assert.Single(await pass.AllAsync(TestContext.Current.CancellationToken)).Mailbox;
+
+        _ = stale.Due(stands: false, Noon);
+        stale.Attempting();
+        stale.Confirmed();
+
+        await WrittenAsync(async store =>
+        {
+            Mailbox attaching = await store.FindAsync(reserved.Id, TestContext.Current.CancellationToken)
+                ?? throw new Xunit.Sdk.XunitException("The mailbox was not read.");
+
+            attaching.Hold(holder);
+            await store.RecordAsync(attaching, TestContext.Current.CancellationToken);
+        });
+
+        DateTimeOffset claim = await pass.ClaimAsync(reserved.Id, Noon, Timeout, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The mailbox was not claimed.");
+
+        MailboxStanding standing = await pass.StandingAsync(reserved.Id, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The mailbox was not read under its claim.");
+
+        Assert.Equal(holder, standing.Mailbox.Holder);
+        Assert.True(standing.Stands);
+
+        Assert.True(await pass.RecordAsync(stale, claim, TestContext.Current.CancellationToken));
+
+        Mailbox held = await HeldByAsync(holder)
+            ?? throw new Xunit.Sdk.XunitException("The holder was written back.");
+
+        Assert.Equal(reserved.Id, held.Id);
+        Assert.Equal(MailboxState.Disabled, held.Pushed);
+        Assert.Equal(Parsed("attached@example.test"), held.Address);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC19, CONV-DESIGN-003 AC9: a released reservation whose removal a
+    /// pass confirms under its claim forgets its address in that one update, and one
+    /// whose claim was taken over keeps it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC19_ARemovalConfirmedUnderAClaimForgetsTheAddressAsync()
+    {
+        var released = Mailbox.Reserved(Parsed("unclaimed@example.test"), Noon);
+
+        await WrittenAsync(store => store.AddAsync(released, TestContext.Current.CancellationToken));
+
+        _ = released.Due(stands: false, Noon);
+        released.Attempting();
+        released.Confirmed();
+        released.Release(Noon.AddHours(1));
+
+        await WrittenAsync(store => store.RecordAsync(released, TestContext.Current.CancellationToken));
+
+        DateTimeOffset claim = await ClaimedAsync(released.Id, Noon.AddHours(1))
+            ?? throw new Xunit.Sdk.XunitException("The mailbox was not claimed.");
+
+        _ = released.Due(stands: false, Noon.AddHours(1));
+        released.Attempting();
+        released.Confirmed();
+
+        Assert.False(await UnderAsync(store => store.RecordAsync(released, claim.AddSeconds(1), TestContext.Current.CancellationToken)));
+        Assert.False(Janus.Storage.Fingerprint.IsNeutralised(await FingerprintAsync(released.Id)));
+
+        Assert.True(await UnderAsync(store => store.RecordAsync(released, claim, TestContext.Current.CancellationToken)));
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        (byte[] Fingerprint, byte[] WrappedKey) row = await connection.QuerySingleAsync<(byte[], byte[])>(
+            "SELECT fingerprint, wrapped_key FROM identity.mailboxes WHERE id = @id",
+            new { id = released.Id.Value });
+
+        Assert.True(Janus.Storage.Fingerprint.IsNeutralised(row.Fingerprint));
+        Assert.All(row.WrappedKey, value => Assert.Equal(0, value));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Null(await Store(reading).StandingAsync(released.Id, TestContext.Current.CancellationToken));
+    }
+
+    // A claim as a pass takes it: one conditional update, committed on its own.
+    private Task<DateTimeOffset?> ClaimedAsync(MailboxId mailbox, DateTimeOffset now) =>
+        UnderAsync(store => store.ClaimAsync(mailbox, now, Timeout, TestContext.Current.CancellationToken));
+
+    // One statement of a pass, on a connection of its own.
+    private async Task<TValue> UnderAsync<TValue>(Func<MailboxStore, ValueTask<TValue>> written)
+    {
+        await using StoreContext context = database.Context();
+
+        return await written(Store(context));
+    }
+
+    private async Task<Mailbox> StandingAsync(MailboxId mailbox)
+    {
+        await using StoreContext reading = database.Context();
+
+        return (await Store(reading).StandingAsync(mailbox, TestContext.Current.CancellationToken))?.Mailbox
+            ?? throw new Xunit.Sdk.XunitException("The mailbox was not read.");
     }
 
     // A mailbox held and retired, then replaced by a new reservation at its address, as

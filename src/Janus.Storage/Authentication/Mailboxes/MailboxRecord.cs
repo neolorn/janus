@@ -101,4 +101,10 @@ internal sealed class MailboxRecord
     /// The <c>attempted</c> column.
     /// </summary>
     public bool Attempted { get; set; }
+
+    /// <summary>
+    /// The <c>claimed_until</c> column: when the claim of the pass that holds the row's
+    /// push times out, or nothing where no pass holds it (CONV-DESIGN-003).
+    /// </summary>
+    public DateTimeOffset? ClaimedUntil { get; set; }
 }
