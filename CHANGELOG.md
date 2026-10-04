@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A fault of the library's own in a send's immediate attempt after the commit (a
+  setting that does not read, the database failing at the claim or at the outcome) is
+  logged and left to the publisher's next pass. The operation answers what it
+  committed instead of `system.fault`.
 - A suspension, a revocation of an invitation, and a request or a cancellation of an
   organization's deletion that another caller made first answer as before and roll
   their transaction back.

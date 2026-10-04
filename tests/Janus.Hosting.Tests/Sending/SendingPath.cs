@@ -7,6 +7,8 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Sending;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Janus.Hosting.Tests.Sending;
 
@@ -62,6 +64,12 @@ internal sealed class SendingPath(
     public IAlertChannels Alerts { get; set; } = events;
 
     /// <summary>
+    /// Where the publisher logs a fault of its immediate attempt, nowhere unless a test
+    /// reads it.
+    /// </summary>
+    public ILogger<SendPublisher> Log { get; set; } = NullLogger<SendPublisher>.Instance;
+
+    /// <summary>
     /// What judges and counts a send.
     /// </summary>
     public SendAdmission Admission =>
@@ -85,7 +93,8 @@ internal sealed class SendingPath(
             Alerts,
             work,
             clock,
-            randomness);
+            randomness,
+            Log);
 
     /// <summary>
     /// The governed send every area undertakes a message through.

@@ -18,6 +18,8 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Sending;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Sending;
@@ -72,6 +74,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     private INotificationHandler? _replaced;
 
+    private ILogger<SendPublisher> _log = NullLogger<SendPublisher>.Instance;
+
     /// <summary>
     /// A deployment that has named the one key with no default, administered by
     /// whoever edits it here.
@@ -96,6 +100,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             Signals = new PhoneSignals(_provider, _signals, _work, _clock),
             Replaced = _replaced,
             Alerts = _events,
+            Log = _log,
         };
 
     private RestrictionAdministration Administration =>
@@ -1382,6 +1387,51 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Single(_outbox.Claimed);
     }
 
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC12, CONV-ERR-003 AC2: a fault of the library's own in the
+    /// immediate attempt after the commit, here the outbox failing at the claim, is
+    /// logged and goes no further. The send answers as it committed, its row and its
+    /// count stay as written, and the next pass that finds the row due and unclaimed
+    /// carries it.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC12_AFaultInTheImmediateAttemptLeavesTheAnswerAndTheRowAsync()
+    {
+        var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
+
+        using var logs = new LogsInMemory();
+        using ILoggerFactory logging = LoggerFactory.Create(builder => builder.AddProvider(logs));
+
+        _log = logging.CreateLogger<SendPublisher>();
+        _outbox.Claiming = _ =>
+        {
+            _outbox.Claiming = null;
+
+            throw new InvalidOperationException("The claim was not written.");
+        };
+
+        SendReference answered = await SentAsync(Mailed());
+
+        SendDelivery held = Assert.Single(_outbox.Waiting);
+
+        Assert.Equal(answered, held.Reference);
+        Assert.Equal(0, held.Attempts);
+        Assert.Single(_ledger.Sends(key));
+        Assert.Empty(_mail.Taken);
+        Assert.False(_work.Open);
+
+        string line = Assert.Single(logs.Lines, written => written.Contains(typeof(SendPublisher).FullName!, StringComparison.Ordinal));
+
+        Assert.Contains(typeof(InvalidOperationException).FullName!, line, StringComparison.Ordinal);
+        Assert.DoesNotContain("The claim was not written.", line, StringComparison.Ordinal);
+
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Single(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+    }
     /// <summary>
     /// PRIV-RIGHT-005a, AUTH-ABUSE-004 AC16: a message whose row's key erasure has
     /// overwritten is never read and never handed to the handler. The pass that meets it
