@@ -151,7 +151,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // An action bound to a consent-based purpose, on a sensitive type, which asks the
     // written consent of the record's data subject against the document the purpose
     // names. The caller holds the grant in every case, so what decides is the consent,
-    // and the lists admit the record where the check does and nowhere else
+    // and the lists admit the record where the check does and nowhere else. A subject
+    // holds a record a grant, so the cases include a live record beside an ended one and
+    // a subject whose every record is ended, where the latest says which refusal it is
     // (AUTHZ-TEST-001 AC1, AUTHZ-GATE-002 AC4, PRIV-SENS-002 AC1, PRIV-CONS-007 AC5).
     private static readonly (string Scenario, Decided Decided)[] Consents =
     [
@@ -160,6 +162,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a consent that was withdrawn", Decided.ConsentRequired),
         ("a consent that was superseded", Decided.ConsentSuperseded),
         ("a consent given again after one was withdrawn", Decided.Allowed),
+        ("a live consent standing beside one that was superseded", Decided.Allowed),
+        ("every consent to the purpose withdrawn or superseded", Decided.ConsentRequired),
         ("a written consent against another document", Decided.ConsentSuperseded),
         ("an ordinary consent where the purpose asks a written one", Decided.ConsentWrittenRequired),
         ("a consent to another purpose", Decided.ConsentRequired),
@@ -1335,6 +1339,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 await EndedAsync(subject, withdrawn: true);
                 await ConsentedAsync(subject);
                 break;
+            case "a live consent standing beside one that was superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                await ConsentedAsync(subject, after: TimeSpan.FromHours(2));
+                break;
+            case "every consent to the purpose withdrawn or superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                await ConsentedAsync(subject, after: TimeSpan.FromHours(2));
+                await EndedAsync(subject, withdrawn: true, after: TimeSpan.FromHours(3));
+                break;
             case "a written consent against another document":
                 await ConsentedAsync(subject, document: "newsletter-terms");
                 break;
@@ -1366,12 +1381,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             : capability.Can.Contains(HostPermissions.Recommend) ? Decided.Allowed : Decided.Denied;
 
     // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
-    // sensitive type, recorded for its data subject.
+    // sensitive type, recorded for its data subject. A case that gives a second consent
+    // gives it later than the first, so which of the two is the latest is not left to
+    // their identifiers.
     private async Task ConsentedAsync(
         SubjectId subject,
         string purpose = "recommendations",
         string document = "privacy-notice",
-        ConsentKind kind = ConsentKind.Written)
+        ConsentKind kind = ConsentKind.Written,
+        TimeSpan after = default)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1388,7 +1406,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 "1",
                 ConsentMechanism.Dashboard,
                 kind,
-                Deployment.Noon,
+                Deployment.Noon + after,
                 WithdrawnAt: null,
                 SupersededAt: null),
             cancellationToken);
@@ -1396,8 +1414,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     // PRIV-CONS-004, PRIV-CONS-007: the subject's live consent to the purpose, stamped
-    // withdrawn or superseded.
-    private async Task EndedAsync(SubjectId subject, bool withdrawn)
+    // withdrawn or superseded, an hour after the first consent where the case names no
+    // other instant.
+    private async Task EndedAsync(SubjectId subject, bool withdrawn, TimeSpan? after = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1405,7 +1424,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         IConsentStore store = scope.ServiceProvider.GetRequiredService<IConsentStore>();
-        DateTimeOffset at = Deployment.Noon.AddHours(1);
+        DateTimeOffset at = Deployment.Noon + (after ?? TimeSpan.FromHours(1));
 
         await work.BeginAsync(cancellationToken);
 
