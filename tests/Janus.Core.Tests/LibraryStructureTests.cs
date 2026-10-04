@@ -57,7 +57,7 @@ public sealed class LibraryStructureTests
         ["Janus.Conformance"] = ["Janus.Core", "Janus.Hosting"],
         ["Janus.Analyzers"] = [],
         ["Janus.UnicodeTables"] = [],
-        ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Storage"],
+        ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
     };
 
     // CONV-LAYOUT-001: the library is under src and the generators are under tools,
