@@ -178,6 +178,16 @@ against the public contract of LIB-API-001.
   UseSTD3ASCIIRules, CheckHyphens, CheckBidi, CheckJoiners and VerifyDnsLength set and
   invalid Punycode refused, in lower case. The form does not depend on the ICU of the
   machine.
+- The Public Suffix List's rules, and the hosts of `webauthn.origins` and
+  `webauthn.relatedorigins` and the identifier of `webauthn.rpid` judged against them,
+  are compared in that ASCII form and no longer in the machine's, so a deployment's
+  registrable domain is the same on every machine. A rule of the list the conversion
+  refuses is set aside when the list is read. An origin whose host, or an identifier,
+  the conversion refuses (an underscore, a hyphen first or last or in the third and
+  fourth places, an empty label) stops the start with `model.startup.rpid`, where the
+  machine's mapping admitted some of them. The labels a related-origins allowlist is
+  counted by are compared in their ASCII form, so one name written in Unicode and in
+  its ASCII form counts once.
 - A refused factor's record, the delay's counts and a trusted device's failure are
   committed in one transaction, and none stands where one cannot be written. A wrong
   sign-in code or new-device code commits its count on the code, or the code's removal

@@ -107,6 +107,15 @@ internal sealed class RelyingParty
                 "they share no domain for an identifier to sit over");
         }
 
+        if (!PublicSuffixList.Reads(resolved))
+        {
+            throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "rpid",
+                resolved,
+                "it has no ASCII form and so no registrable domain");
+        }
+
         if (PublicSuffixList.Shipped.IsSuffix(resolved))
         {
             throw Refused(
@@ -191,14 +200,27 @@ internal sealed class RelyingParty
     public bool Binds(string recorded) =>
         string.Equals(Id, recorded, StringComparison.OrdinalIgnoreCase);
 
-    private static string Host(string origin) =>
-        Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) && parsed.Host.Length > 0
+    // A host the suffix list cannot read has no registrable domain, so no identifier
+    // sits over it and no label of it can be counted.
+    private static string Host(string origin)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) || parsed.Host.Length == 0)
+        {
+            throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "origin",
+                origin,
+                "it is not an absolute origin with a host");
+        }
+
+        return PublicSuffixList.Reads(parsed.Host)
             ? parsed.Host
             : throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "origin",
                 origin,
-                "it is not an absolute origin with a host");
+                "its host has no ASCII form and so no registrable domain");
+    }
 
     private static string[] Labels(string host) => host.Split('.');
 
