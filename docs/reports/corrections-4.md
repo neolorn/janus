@@ -1253,6 +1253,20 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 - No changelog line: nothing a reader of the package sees changes. No ledger line is owed.
 - Parked: question 83 and the test of criterion 7's third clause (question 128).
 
+### `part/idna`, merged as `3c299d13`: question 68, D-166 209 (2)
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| `IdnaMappingTable.txt` and `IdnaTestV2.txt` of Unicode 17.0.0 vendored under `tools/Janus.UnicodeTables/ucd`; the committed blobs hash to the published SHA-256 values (`87f05505dc026fdb2bff16132bdc68a8014675836882a9a2b1844540ad3be382`, `beb5d0be20e896189b03209a82fdc34f06351502bbd4b8e2523583fc2954d9cf`) | `4970fa4b` | REG-DOM-001, CONV-LAYOUT-001 | `sha256sum` over the working files after the merge |
+| The conversion: the generator reads the mapping table and writes `IdnaStatus.cs` and `IdnaTables.cs`; `Punycode` (RFC 3492) and `Idna` (UTS #46 ToASCII, nontransitional, the five checks set, IgnoreInvalidPunycode not); `CanonicalForm.TryDomainToAscii` (question 129); `NOTICE` names the two files | `121c66a8` | REG-DOM-001, IDN-ACCT-004 | `IdnaTests.REG_DOM_001_AC13_TheConversionRefusesWhatItsChecksRefuse`, `IdnaTests.REG_DOM_001_AC13_ALabelUnderTheAcePrefixReadsInLowerCase`, `IdnaTests.REG_DOM_001_AC13_EveryLineOfTheConformanceFileIsAnsweredAsItsAsciiColumnGives` (6391 lines), `PunycodeTests.TryEncode_ASampleOfTheStandard_GivesItsEncoding`, `PunycodeTests.TryDecode_ASampleOfTheStandard_GivesItsLabel`, `PunycodeTests.TryDecode_WhatIsNoEncoding_IsRefused` |
+| `DomainName` takes the ASCII form from the library; the two labels and the 236 octets are judged on the converted name | `e7ef179e` | REG-DOM-001 | `DomainNameTests.REG_DOM_001_AC13_TheCanonicalFormIsAppliedBeforeTheConversion`, `DomainNameTests.TryRead_ADomainEnteredInAnyOfItsForms_ReadsAsItsAsciiForm`, `DomainNameTests.TryRead_WhatIsNoDomainALockCanList_IsRefused`, `DomainNameTests.TryRead_TheLengthBound_IsJudgedOnTheConvertedName`, `DomainNameTests.TryReadOf_AnAddress_ReadsItsDomainAsAListedDomainIsRead`, `OrganizationDomainEndpointTests` (20) |
+
+- REG-DOM-001 criterion 13, "the same whatever ICU the machine holds": no test decides it. `DomainName`, `Idna`, `Punycode` and what they call use no `System.Globalization` type and no `string.Normalize`, and the conformance file holds the answers.
+- A domain written with U+3002 as its separator now reads as its dotted form, since the labels are counted after the conversion.
+- Ledger: entry 209 holds "Superseded by D-166" already; no line is written.
+- The Unicode tables regenerate without a diff. The pinned scanner over the history with the part's commits (1106 commits): no finding.
+- The version of `IdnaTestV2.txt` is checked by no code; the generator checks the mapping table's.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1283,7 +1297,7 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 | Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: D-187 answers question 98; not yet built |
 | Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: D-187 answers questions 118 and 117; not yet built |
 | The reverse direction of the REF-001 tests | Question 25's "each direction" | Nothing: D-187 answers question 89; not yet built |
-| 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Nothing: D-187 answers question 68; not yet built |
+| 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Nothing: built (`part/idna`) |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
 - `30b1c4bc` carries only the changelog line of 323; its code and tests are in `5db004f4`. The two are one change split in two commits.
@@ -1411,6 +1425,8 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 | `BrowserProfileLog.BodyUnreadable`, its message (`28c53a12`) | It said "request body" where the stage now also answers a route or query value | CONV-DESIGN-006 | The message reads "A request could not be bound at {Member}"; the event's identifier and level are unchanged |
 | `EndpointDeclarationTests` (the merge of `part/endpoints`) | One line wrote the product name as text, which CONV-NAME-001 criterion 2 refuses | CONV-NAME-001 | The name is read from a namespace, as `KeyMaterialTests` reads it; test only |
 | Fakes and fixtures for question 62 (`c269fb1a`, `ca559838`, `be484f95`, `804b666e`, `94e4ad4e`) | No fixture could commit a restriction between the gate step and the first write; two fixtures called a service with no grant, which the ask inside the unit of work now refuses; one hook of `InvitationServiceTests` ran twice now that the row is held twice | AUTHZ-GATE-006 criterion 3; CONV-TEST-007; the working guide's section 3, test infrastructure | The fakes of the unit of work and of the gate let a restriction be committed meanwhile; the fixtures grant what the route's gate step already requires; the hook fires once. No assertion weakened, no runtime code |
+| `tools/Janus.UnicodeTables/ucd/` (`4970fa4b`) | CONV-LAYOUT-001 and IDN-ACCT-004 say the IDNA files are carried beside the Unicode Character Database files and name no directory | IDN-ACCT-004 | The two files sit in the directory that holds the Unicode Character Database files, which `NOTICE` names |
+| `src/Janus.Core/Unicode/Punycode.cs` (`121c66a8`) | `LibraryStructureTests.CONV_CODE_007_AC1_NoHashTokenOrCodeIsComparedButInConstantTime` reads a variable named `code` compared by `!=` as a secret | CONV-CODE-007 criterion 1 | The loop variable is named `point`; a code point is no secret and the test is untouched |
 
 ## 4. Open questions
 
@@ -3255,6 +3271,28 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The factories must work from `IAccessGate`, and the members they need exist on `AccessGate` alone. Reaching them is a change to the public `IAccessGate`, a new type, or `AccessGate` named in `Janus.Hosting`; no chapter states which.
 - **A second site of the same shape.** The factory of `MailServerTokens` in `HostingRegistration.cs` asks for `OidcService`, which implements `IOidc`, for `OidcService.MintAsync`, which `IOidc` does not declare. `AuthorizationIssue`, `TokenIssue` and `TokenReuse` take `OidcService` by constructor.
 - **Parked.** All of question 83 (the move of `AccessGate` and `IAccessGate`, the two factories, the seam test) and the tests of criterion 7's third and fourth clauses. With question 82 built, what `AddJanus` registers of other projects' types is `SendingValidation`, `AuthorizationDeclaration`, `DeclaredProcessing` and `AccessGate`.
+- **Answer:** pending.
+
+**129. Tier 2. IDN-ACCT-004 and LIB-API-001: the public member through which `DomainName` reaches the conversion.**
+
+- **Item.** Question 68.
+- **What the code needs.** `DomainName` is in `Janus.Authentication`; the tables and the conversion are in `Janus.Core`, which grants an area no internals (CONV-LAYOUT-002). The conversion needs a public member of `Janus.Core`.
+- **What the specification says.** IDN-ACCT-004: the public types are `CanonicalForm`, `Precis` and `ScriptMixing`; the ASCII form of a domain is the library's own in the same way. It names no member.
+- **Readings.**
+  1. A member on one of the three named types. Built: `CanonicalForm.TryDomainToAscii(string, out string)`, with its public surface line and changelog line.
+  2. A fourth public type for the conversion, against the sentence that lists three.
+- **Parked.** Nothing: reading 1 is built, since the item cannot exist without a public member. A change of name or type moves one member, its surface line and two call sites.
+- **Answer:** pending.
+
+**130. Tier 2. AUTH-FACT-010 and D-154: `PublicSuffixList` still takes a host's ASCII form from the machine.**
+
+- **Item.** Observed with question 68; outside 209 (2), which names `DomainName`.
+- **What the code does.** `PublicSuffixList.Normal` (`src/Janus.Authentication/Factors/PublicSuffixList.cs`) calls `IdnMapping.GetAscii`, without the STD3 rules.
+- **What the specification says.** D-154 sets the machine's ICU aside for canonical forms; IDN-ACCT-004 gives the library's own conversion for a domain's ASCII form (REG-DOM-001). AUTH-FACT-010 does not say which conversion the suffix list compares under.
+- **Readings.**
+  1. It stays: the suffix list is no domain lock.
+  2. It takes the library's conversion, with the checks REG-DOM-001 names or without the STD3 rules.
+- **Parked.** That line, left as it is.
 - **Answer:** pending.
 
 ## 5. Gate result
