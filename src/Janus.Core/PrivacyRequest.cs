@@ -8,7 +8,7 @@ namespace Janus.Core;
 /// <param name="Id">What the request is held under.</param>
 /// <param name="Subject">Whose request it is.</param>
 /// <param name="Type">What it asks for.</param>
-/// <param name="Detail">What the subject or the human entering it wrote.</param>
+/// <param name="Detail">What the subject or the human entering it wrote, where either wrote any.</param>
 /// <param name="ReceivedAt">
 /// The calendar date the request reached the company, in
 /// <c>privacy.calendar.timezone</c>. The decision clock runs from the end of it.
@@ -34,7 +34,7 @@ public sealed record PrivacyRequest(
     PrivacyRequestId Id,
     SubjectId Subject,
     PrivacyRequestType Type,
-    string Detail,
+    string? Detail,
     DateOnly ReceivedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset ReceiptSentAt,

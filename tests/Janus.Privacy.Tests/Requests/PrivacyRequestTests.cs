@@ -811,6 +811,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     /// <param name="length">How many of it.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
+    [InlineData("d", 0)]
     [InlineData(" ", 2)]
     [InlineData("d", 1025)]
     public async Task API_CONV_002_AnEntryWithABlankOrOverlongDetailIsMalformedAsync(string character, int length)
@@ -860,6 +861,25 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
             "reason",
             refused.Match(() => null, error => error.Details["member"].GetString()));
         Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: an entry that gives no detail records none,
+    /// never an empty text.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task API_CONV_002_AnEntryWithNoDetailRecordsNoneAsync()
+    {
+        PrivacyRequestEntry entry = Entry(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        Result<PrivacyRequestReceipt> entered = await Requests.EnterAsync(
+            AccessContext.Of(Mona),
+            entry with { Detail = null },
+            CancellationToken.None);
+
+        Assert.True(entered.Match(_ => true, _ => false));
+        Assert.Null(Assert.Single(_requests.Queue).Detail);
     }
 
     private static PrivacyRequestEntry Entry(PrivacyRequestType type, DateOnly receivedAt) =>

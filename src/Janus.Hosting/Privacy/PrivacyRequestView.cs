@@ -24,7 +24,7 @@ internal sealed record PrivacyRequestView(
     Guid RequestId,
     Guid Subject,
     PrivacyRequestType Type,
-    string Detail,
+    string? Detail,
     DateOnly ReceivedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset ReceiptSentAt,

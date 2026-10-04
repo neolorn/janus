@@ -801,7 +801,7 @@ table privacy_requests
   column id uuid not null
   column subject uuid not null
   column type text not null
-  column detail text not null
+  column detail text
   column received_at date not null
   column created_at timestamp with time zone not null
   column decision_due timestamp with time zone not null

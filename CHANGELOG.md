@@ -1504,7 +1504,10 @@ against the public contract of LIB-API-001.
   recorded fulfilled against that window, as one found already deleting is, rather
   than refused `identity.account.stateconflict`.
 - A privacy request entered out of band refuses a `detail` given blank or past 1024
-  characters after trimming, and keeps one within the bound trimmed.
+  characters after trimming, and keeps one within the bound trimmed. An absent or
+  `null` `detail` records none: `PrivacyRequestEntry.Detail` and
+  `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
+  takes null, and an empty text is never stored for none.
 - A maintenance log entry's `note`, where one is given, is 1 to 1024 characters after
   trimming, refused `api.request.malformed` otherwise, and kept trimmed.
 - A recovery approval refuses a reason or a `channelUsed` past 1024 characters after

@@ -125,11 +125,11 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(denied);
         }
 
-        // 09 section 8a: an entry's detail is optional, empty where none was given,
-        // and one given is held to the bound of API-CONV-002.
-        string detail = entry.Detail.Trim();
+        // 09 section 8a: an entry's detail is optional, none where none was given, and
+        // one given is held to the bound of API-CONV-002, a blank one included.
+        string? detail = Stated(entry.Detail);
 
-        if (entry.Detail.Length > 0 && Stated(detail) is null)
+        if (entry.Detail is not null && detail is null)
         {
             return Result.Failure<PrivacyRequestReceipt>(Malformed("detail"));
         }

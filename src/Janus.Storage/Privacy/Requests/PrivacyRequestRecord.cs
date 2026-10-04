@@ -21,8 +21,8 @@ internal sealed class PrivacyRequestRecord
     /// <summary>The <c>type</c> column.</summary>
     public PrivacyRequestType Type { get; set; }
 
-    /// <summary>The <c>detail</c> column: what the request said.</summary>
-    public string Detail { get; set; } = string.Empty;
+    /// <summary>The <c>detail</c> column: what the request said, null where it said none.</summary>
+    public string? Detail { get; set; }
 
     /// <summary>The <c>received_at</c> column, a calendar date in the deployment zone.</summary>
     public DateOnly ReceivedAt { get; set; }
