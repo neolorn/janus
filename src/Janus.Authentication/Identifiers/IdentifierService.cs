@@ -24,6 +24,7 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="codes">Where the code that verifies a staged value is issued and answered.</param>
 /// <param name="sending">The one path every message takes.</param>
 /// <param name="restrictions">What an ask that sends nothing is counted against.</param>
+/// <param name="throttle">The delay every code and press is held to, and what a refused one is counted against.</param>
 /// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="notices">What keeps a holder from being told twice in a window.</param>
 /// <param name="sessions">Where the account's sessions are read and ended.</param>
@@ -49,6 +50,7 @@ internal sealed class IdentifierService(
     VerificationCodes codes,
     IGovernedSend sending,
     ISendingRestrictions restrictions,
+    ThrottleService throttle,
     LandingLinks landing,
     INoticeLedger notices,
     ISessionStore sessions,
@@ -269,6 +271,25 @@ internal sealed class IdentifierService(
     {
         DateTimeOffset now = time.GetUtcNow();
 
+        // A code that names no verification of the account's is refused before the unit
+        // of work begins, as a registration refuses one that names no identifier of its
+        // session, and it names no identifier to hold or count.
+        if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false)
+                is not PendingVerification listed
+            || listed.Subject != subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+        }
+
+        // REG-SESS-003 AC6, AUTH-ABUSE-001 (D-188): a try is held to the delay the source
+        // and the identifier have earned, and every refused one is counted towards it.
+        var attempt = new ThrottleAttempt(source, throttle.Identify(listed.Staged.Canonical, usernames: false));
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure(delayed);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -296,7 +317,7 @@ internal sealed class IdentifierService(
             .FindForUpdateAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
 
-        if (waiting is null || waiting.Subject != subject || waiting.Staged.IsVerified)
+        if (waiting is null || waiting.Subject != subject)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -304,6 +325,12 @@ internal sealed class IdentifierService(
         }
 
         StagedIdentity staged = waiting.Staged;
+
+        if (staged.IsVerified)
+        {
+            return Result.Failure(
+                await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false));
+        }
 
         // AUTH-FACT-004: the try is read, compared and counted on the verification-code
         // record under its lock.
@@ -313,17 +340,17 @@ internal sealed class IdentifierService(
 
         if (presented.Match(() => (Error?)null, error => error) is Error refused)
         {
-            if (refused.Code != ErrorCodes.CodeInvalid)
+            if (refused.Code != ErrorCodes.CodeInvalid && refused.Code != ErrorCodes.CodeExpired)
             {
                 await work.RollbackAsync().ConfigureAwait(false);
 
                 return Result.Failure(refused);
             }
 
-            // AUTH-FACT-004, CONV-DESIGN-003: the wrong try is counted on the code's
-            // record whatever the outcome, so this refusal commits the count alone.
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(refused), Result.Failure);
+            // AUTH-FACT-004, AUTH-ABUSE-001, CONV-DESIGN-003: the wrong try is counted on
+            // the code's record, and the refused one against the source and the
+            // identifier, whatever the outcome, so this refusal commits the counts alone.
+            return Result.Failure(await CountedAsync(attempt, refused, cancellationToken).ConfigureAwait(false));
         }
 
         staged.Verify(now);
@@ -358,10 +385,28 @@ internal sealed class IdentifierService(
         ArgumentNullException.ThrowIfNull(linkToken);
         ArgumentNullException.ThrowIfNull(source);
 
+        // REG-SESS-003, AUTH-ABUSE-001 (D-188): a token names no identifier until it
+        // opens something, so every press is first held to the delay of the source that
+        // presents it; a token merely opened is held to none and counts nothing.
+        var pressing = new ThrottleAttempt(source, Identifier: null);
+
+        if (press && await DelayedAsync(pressing, cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<LinkLanding>(delayed);
+        }
+
         if (await WaitingAsync(linkToken, cancellationToken).ConfigureAwait(false)
             is not (PendingVerification waiting, byte[] fingerprint))
         {
-            return Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
+            // REG-IDENT-007 AC6: a pressed token that opens nothing (swept, abandoned or
+            // never issued) is counted against that source alone, and the count is the
+            // one write the refusal keeps.
+            return press
+                ? (await throttle.FailedAsync(pressing, cancellationToken).ConfigureAwait(false))
+                    .Match(
+                        () => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeExpired)),
+                        Result.Failure<LinkLanding>)
+                : Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -387,13 +432,13 @@ internal sealed class IdentifierService(
 
             // D-166 X3: the confirmation is written on the verification as read under its
             // lock, so a code proved at the same moment is seen and the change is applied
-            // by whichever of the two comes second; one settled meanwhile has no row.
+            // by whichever of the two comes second; one settled, swept or abandoned
+            // meanwhile has no row, and the press then opens nothing.
             if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
                 is not PendingVerification confirming)
             {
-                await work.RollbackAsync().ConfigureAwait(false);
-
-                return Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
+                return Result.Failure<LinkLanding>(
+                    await CountedAsync(pressing, Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false));
             }
 
             waiting = confirming;
@@ -467,14 +512,13 @@ internal sealed class IdentifierService(
         // D-166 X3: as for the displaced address's confirmation; a press that finds the
         // value proved meanwhile changes nothing, as the press would have before it.
         if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
-            is not PendingVerification pressing)
+            is not PendingVerification locked)
         {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
+            return Result.Failure<LinkLanding>(
+                await CountedAsync(pressing, Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false));
         }
 
-        waiting = pressing;
+        waiting = locked;
         staged = waiting.Staged;
 
         if (staged.IsVerified)
@@ -1204,6 +1248,43 @@ internal sealed class IdentifierService(
         asking is null
             ? null
             : await restriction.RefusedAsync(asking, cancellationToken).ConfigureAwait(false);
+
+    private async ValueTask<Error?> DelayedAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan delay = (await throttle.DelayAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        return delay > TimeSpan.Zero ? Error.Throttled(time.GetUtcNow() + delay) : null;
+    }
+
+    // AUTH-ABUSE-001, CONV-DESIGN-003: the count of a refused code, or of a pressed
+    // token that opens nothing, stands whatever the outcome. The caller's unit of work
+    // is open and has written nothing else that the refusal does not keep; the count
+    // joins it and the refusal commits it. What comes back is the refusal as it was
+    // decided, unless the count or its commit failed.
+    private async ValueTask<Error> CountedAsync(
+        ThrottleAttempt attempt,
+        Error refusal,
+        CancellationToken cancellationToken)
+    {
+        if ((await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error uncounted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return uncounted;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => refusal, error => error);
+    }
 
     // REG-IDENT-005: only an identifier the account holds and has proved is promoted,
     // and the personal email stays non-primary for the whole membership (REG-MAIL-001).

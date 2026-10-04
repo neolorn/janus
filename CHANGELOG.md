@@ -49,6 +49,14 @@ against the public contract of LIB-API-001.
   `identity.identifier.maximum` and writes nothing where the account's verified
   identifiers already fill the kind; the add stays listed until it is swept or
   abandoned.
+- `POST /account/identifiers/{id}/verify` counts and throttles its codes and presses
+  as `POST /register/verify/{id}` does. A refused code is counted against the request's
+  source and the identifier, an expired or capped one included, and a further code is
+  answered 429 `auth.throttled` with `retryAt` while that delay stands. Every press is
+  first held to the delay of its source. A pressed token that opens nothing (swept,
+  abandoned, settled or never issued) answers 422 `auth.code.expired`, where it
+  answered `auth.code.invalid`, and is counted against the source alone; one merely
+  opened counts nothing.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

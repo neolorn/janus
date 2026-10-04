@@ -484,6 +484,42 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC6, REG-SESS-003 AC6: a pressed token that opens nothing answers
+    /// 422 <c>auth.code.expired</c> and is counted against the request's source; while
+    /// that source's delay stands the press answers 429 <c>auth.throttled</c> with
+    /// <c>retryAt</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC6_APressedTokenThatOpensNothingAnswersExpiredThenThrottledAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string path = "/account/identifiers/" + Guid.CreateVersion7() + "/verify";
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            Answer gone = await browser.SendAsync(
+                "POST",
+                path,
+                ("linkToken", "a-token-no-verification-sent"),
+                ("press", true));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, gone.Status);
+            Assert.Equal(ErrorCodes.CodeExpired.ToString(), gone.Text("code"));
+        }
+
+        Answer held = await browser.SendAsync(
+            "POST",
+            path,
+            ("linkToken", "a-token-no-verification-sent"),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, held.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), held.Text("code"));
+        Assert.True(held.Json().GetProperty("details").TryGetProperty("retryAt", out _));
+    }
+
+    /// <summary>
     /// REG-IDENT-006 (D-187): a removal naming a pending add answers 204 and ends its
     /// pending verification, so the account lists it no longer; nothing is reserved and
     /// no undo is sent.
