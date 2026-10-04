@@ -111,15 +111,45 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
-    public ValueTask<bool> IsReservedAsync(
+    public ValueTask<SubjectId?> ReservedToAsync(
         IdentifierKind kind,
         string canonical,
         DateTimeOffset now,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_givenUp.Values.Any(given =>
-            given.Kind == kind
-            && string.Equals(given.Canonical, canonical, StringComparison.Ordinal)
-            && given.ExpiresAt > now));
+        CancellationToken cancellationToken)
+    {
+        foreach (GivenUpIdentifier given in _givenUp.Values)
+        {
+            if (given.Kind == kind
+                && string.Equals(given.Canonical, canonical, StringComparison.Ordinal)
+                && given.ExpiresAt > now)
+            {
+                return ValueTask.FromResult<SubjectId?>(given.Subject);
+            }
+        }
+
+        return ValueTask.FromResult<SubjectId?>(null);
+    }
+
+    /// <summary>
+    /// Every value an operation locked, in the order it asked for them.
+    /// </summary>
+    public List<(IdentifierKind Kind, string Canonical)> Locked { get; } = [];
+
+    /// <summary>
+    /// What another transaction committed on a value while this one waited for its
+    /// lock, applied as the lock is taken.
+    /// </summary>
+    public Func<IReadOnlyList<(IdentifierKind Kind, string Canonical)>, ValueTask>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken)
+    {
+        Locked.AddRange(values);
+
+        return Locking?.Invoke(values) ?? ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public ValueTask<bool> IsHeldAsync(
@@ -256,6 +286,8 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsPersonal: false,
             at));
 
+        EndReservation(subject, IdentifierKind.Email, canonical);
+
         return ValueTask.CompletedTask;
     }
 
@@ -324,6 +356,10 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         Replace(subject, id, identifier => identifier with { IsVerified = true, VerifiedAt = at });
         Settle(subject, id);
 
+        HeldIdentifier proved = Required(subject, id);
+
+        EndReservation(subject, proved.Kind, proved.Canonical);
+
         return ValueTask.CompletedTask;
     }
 
@@ -356,6 +392,8 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         CancellationToken cancellationToken)
     {
         HeldIdentifier displaced = Required(subject, id);
+
+        EndReservation(subject, displaced.Kind, canonical);
 
         _givenUp[id] = new GivenUpIdentifier(
             id,
@@ -543,6 +581,24 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         }
 
         return all;
+    }
+
+    // REG-IDENT-006: a write of a value to the account it is reserved to ends the
+    // reservation, so its undo answers to nothing.
+    private void EndReservation(SubjectId subject, IdentifierKind kind, string canonical)
+    {
+        foreach (IdentifierId ended in _givenUp.Values
+            .Where(given =>
+                given.Subject == subject
+                && given.Kind == kind
+                && string.Equals(given.Canonical, canonical, StringComparison.Ordinal))
+            .Select(given => given.Id)
+            .ToList())
+        {
+            _ = _givenUp.Remove(ended);
+            _ = _undo.Remove(ended);
+            _ = _proved.Remove(ended);
+        }
     }
 
     private HeldIdentifier Required(SubjectId subject, IdentifierId id) =>

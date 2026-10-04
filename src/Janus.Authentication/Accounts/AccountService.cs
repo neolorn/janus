@@ -825,6 +825,13 @@ internal sealed class AccountService(
             return waiting;
         }
 
+        // REG-IDENT-009, CONV-DESIGN-003: taken or held is judged under the username's
+        // lock, so of two choices of one free name the second finds it taken, and a choice
+        // made while the name's erasure commits finds it held.
+        await identifiers
+            .LockValuesAsync([(IdentifierKind.Username, username.Value)], cancellationToken)
+            .ConfigureAwait(false);
+
         if (await identifiers
                 .OwnerAsync(IdentifierKind.Username, username.Value, cancellationToken)
                 .ConfigureAwait(false) is not null

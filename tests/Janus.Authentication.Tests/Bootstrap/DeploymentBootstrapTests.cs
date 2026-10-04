@@ -102,6 +102,27 @@ public sealed class DeploymentBootstrapTests : IAsyncDisposable
         Assert.Empty(_seed.Accounts);
     }
 
+    /// <summary>
+    /// REG-SESS-005, CONV-DESIGN-003: the bootstrap writes the administrator's address
+    /// and number, and the canary's address, under the lock of each, all of them asked
+    /// for at once so they are taken in one order.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_005_TheBootstrapLocksEveryValueItWritesAsync()
+    {
+        Result<BootstrapEnrolment> stood = await RunAsync(new DateOnly(1990, 1, 1));
+
+        Assert.True(stood.Match(_ => true, _ => false));
+        Assert.Equal(
+            [
+                (IdentifierKind.Email, "administrator@example.test"),
+                (IdentifierKind.Phone, "+441632960011"),
+                (IdentifierKind.Email, "canary@restore-test.invalid"),
+            ],
+            _identifiers.Locked);
+    }
+
     private static ErrorCode Refused<TValue>(Result<TValue> outcome) =>
         outcome.Match<ErrorCode>(
             _ => throw new Xunit.Sdk.XunitException("The operation was admitted."),

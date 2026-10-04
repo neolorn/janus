@@ -1341,6 +1341,31 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-005 AC6: an address another account's add took while the terms step
+    /// waited for the value's lock is judged held under that lock, so the step ends the
+    /// session, is answered as an expired one, and creates no account.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_005_AC6_AnAddressTakenWhileTheTermsStepWaitedForItsLockEndsTheSessionAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Locking = values =>
+        {
+            _directory.Locking = null;
+            _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refused(await AcceptedAsync(session)));
+        Assert.Contains((IdentifierKind.Email, Address), _directory.Locked);
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
     /// REG-SESS-005 AC2: what reaches the holder carries neither the code nor the
     /// link, so the deployment's template has nothing to put either in.
     /// </summary>

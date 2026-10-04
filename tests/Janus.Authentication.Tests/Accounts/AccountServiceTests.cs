@@ -403,6 +403,67 @@ public sealed class AccountServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-009 AC5: two choices of one free username made at once are judged one
+    /// after the other under the name's lock, so the second finds the name on the
+    /// first's account and is answered as taken.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_009_AC5_ANameChosenWhileTheChoiceWaitedForItsLockIsAnsweredTakenAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        var other = SubjectId.New(_randomness);
+
+        _identifiers.Locking = values =>
+        {
+            _identifiers.Locking = null;
+            _ = _identifiers.Verified(other, IdentifierKind.Username, Chosen);
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal([(IdentifierKind.Username, Chosen)], _identifiers.Locked);
+        Assert.Null(await UsernameAsync());
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// REG-IDENT-009 AC5: a choice of a username made while that username's erasure
+    /// commits is judged under the name's lock once the erasure has written its hold,
+    /// and is answered as taken.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_009_AC5_ANameHeldWhileTheChoiceWaitedForItsLockIsAnsweredTakenAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+
+        _identifiers.Locking = values =>
+        {
+            _identifiers.Locking = null;
+            _identifiers.Holds(Chosen, Noon + Settings.RetentionConsent.Default);
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+        Assert.Null(await UsernameAsync());
+    }
+
+    /// <summary>
     /// REG-IDENT-009, D-178: a username taken, or a change inside the cooling-off
     /// window, is told before the step-up is asked, so a session whose proof is no
     /// longer recent hears the refusal the change meets, and a change none refuses is

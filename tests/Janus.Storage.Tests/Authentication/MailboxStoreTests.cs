@@ -9,6 +9,7 @@ using Janus.Core;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Settings;
@@ -356,7 +357,8 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
                     erasing,
                     new SessionStore(erasing, _deployment.Ring, _deployment.Randomness),
                     new ConfigurationStore(erasing, new DataConnections(erasing)),
-                    new DataConnections(erasing))
+                    new DataConnections(erasing),
+                    new IdentifierStore(erasing, _deployment.Ring, _deployment.Randomness))
                 .EraseAsync(replaced.Holder!.Value, ErasureReason.ErasureRequest, Noon.AddDays(3), TestContext.Current.CancellationToken);
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
             await work.CommitAsync(TestContext.Current.CancellationToken);
