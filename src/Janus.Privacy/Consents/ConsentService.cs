@@ -107,11 +107,15 @@ internal sealed class ConsentService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        Result<bool> begun = await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if (begun.Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
+
+        // D-188: the registration calls this joined, the endpoint as the outermost.
+        bool outermost = begun.Match(level => level, _ => false);
 
         await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -178,6 +182,17 @@ internal sealed class ConsentService(
 
         if (!added)
         {
+            // CONV-DESIGN-003: a record written meanwhile is the consent this asks for. A
+            // success that wrote nothing rolls back only where this level is the
+            // outermost; one that joined another operation's commits, so the whole is not
+            // marked, and so does one that ended a record.
+            if (outermost && !ended)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Success();
+            }
+
             return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 

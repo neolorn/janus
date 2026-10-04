@@ -785,6 +785,51 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10: a grant that began the outermost unit of work and met a
+    /// record written meanwhile succeeds having written nothing, so its unit of work is
+    /// rolled back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnOutermostGrantThatAddsNothingIsRolledBackAsync()
+    {
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _consents.Keep(Ahmed, Live(Recommendations, ConsentService.Notice, ConsentKind.Written));
+        };
+
+        bool granted = await GrantAsync(Recommendations);
+
+        Assert.True(granted);
+        Assert.Equal((1, 0, 1, false), (_work.Opened, _work.Committed, _work.RolledBack, _work.Open));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: the same grant made inside a unit of work another operation
+    /// opened ends its level with a commit, so the whole is not marked and the outer
+    /// operation commits what it wrote.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AJoinedGrantThatAddsNothingCommitsItsLevelAsync()
+    {
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _consents.Keep(Ahmed, Live(Recommendations, ConsentService.Notice, ConsentKind.Written));
+        };
+        Assert.True((await _work.BeginAsync(CancellationToken.None)).Match(outermost => outermost, _ => false));
+
+        bool granted = await GrantAsync(Recommendations);
+
+        Assert.True(granted);
+        Assert.Equal((2, 1, 0, true), (_work.Opened, _work.Committed, _work.RolledBack, _work.Open));
+        Assert.True((await _work.CommitAsync(CancellationToken.None)).Match(() => true, _ => false));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// PRIV-CONS-001 AC6: a grant over a live record recorded against another document
     /// than the one its purpose now names stamps it superseded and adds one record, in
     /// one transaction, raising <c>superseded</c> and then <c>granted</c>; named

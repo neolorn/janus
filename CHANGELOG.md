@@ -10,9 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IConsents.GrantAsync` that finds the consent recorded meanwhile, and so writes
+  nothing, rolls its transaction back where it opened it and commits its level where it
+  joined a unit of work the caller opened, so a caller's own unit of work is never
+  marked by it.
 - `IUnitOfWork.BeginAsync` answers `Result<bool>`: whether the level it opened is the
-  outermost, or one that joined a unit of work another operation opened. A caller that
-  only passed its failure up reads it as before.
+  outermost, or one that joined a unit of work another operation opened.
 - The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
   applied, once every verification-code record it holds is spent or past
   `code.verification.lifetime`: the new address's code and, where the old address must
