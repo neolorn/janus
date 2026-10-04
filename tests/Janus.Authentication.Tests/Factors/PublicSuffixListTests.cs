@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -15,6 +16,11 @@ namespace Janus.Authentication.Tests.Factors;
 [Trait("kind", "unit")]
 public sealed class PublicSuffixListTests
 {
+    // The pin of AUTH-FACT-010: every rule of the shipped list the conversion sets
+    // aside, as the list writes it and in the list's order. It is reviewed and updated
+    // with the list at each release (CONV-VCS-005), and the list shipped sets none aside.
+    private static readonly string[] SetAsidePin = [];
+
     /// <summary>
     /// AUTH-FACT-010: the list travels unmodified, its header and its date included, with
     /// both its ICANN and its private sections.
@@ -124,10 +130,11 @@ public sealed class PublicSuffixListTests
 
     /// <summary>
     /// AUTH-FACT-010: a rule whose label the conversion refuses is set aside when the
-    /// list is read, whichever kind of rule it is, and the list holds how many were.
+    /// list is read, whichever kind of rule it is, and the list holds each as it was
+    /// written.
     /// </summary>
     [Fact]
-    public void AUTH_FACT_010_ARuleTheConversionRefusesIsSetAsideAndCounted()
+    public void AUTH_FACT_010_ARuleTheConversionRefusesIsSetAsideAndNamed()
     {
         using var list = new MemoryStream(Encoding.UTF8.GetBytes(string.Join(
             '\n',
@@ -142,12 +149,36 @@ public sealed class PublicSuffixListTests
 
         var read = PublicSuffixList.Read(list);
 
-        Assert.Equal(3, read.SetAside);
+        Assert.Equal(["held_back.example", "*.ab--c.example", "!-kept.wild.example"], read.SetAside);
         Assert.True(read.IsSuffix("example"));
         Assert.True(read.IsSuffix("any.wild.example"));
         Assert.True(read.IsSuffix("xn--55qx5d.example"));
         Assert.False(read.IsSuffix("any.c.example"));
         Assert.Equal("shop", read.Label("shop.example"));
+    }
+
+    /// <summary>
+    /// CONV-VCS-005 AC4: the pin of the suffix rules set aside matches the list drawn
+    /// for the release, rule for rule and by name.
+    /// </summary>
+    [Fact]
+    public void CONV_VCS_005_AC4_ThePinMatchesTheRulesTheShippedListSetsAside() =>
+        Assert.Equal(SetAsidePin, PublicSuffixList.Shipped.SetAside);
+
+    /// <summary>
+    /// AUTH-FACT-010 AC4: a list that sets aside one rule more than a pin holds, or one
+    /// fewer, or another rule in the place of one, does not match that pin.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC4_AListThatSetsAsideOneRuleMoreOrOneFewerDoesNotMatchThePin()
+    {
+        string[] pin = ["held_back.example", "*.ab--c.example"];
+
+        Assert.Equal(pin, SetAsideOf("example", "held_back.example", "*.ab--c.example"));
+        Assert.NotEqual(pin, SetAsideOf("example", "held_back.example", "*.ab--c.example", "!-kept.example"));
+        Assert.NotEqual(pin, SetAsideOf("example", "held_back.example"));
+        Assert.NotEqual(pin, SetAsideOf("example", "held_back.example", "*.ab--d.example"));
+        Assert.NotEqual(SetAsidePin, SetAsideOf("example", "held_back.example"));
     }
 
     /// <summary>
@@ -166,6 +197,13 @@ public sealed class PublicSuffixListTests
             .Where(file => Regex.IsMatch(File.ReadAllText(file), @"\b" + machine + @"\b"))];
 
         Assert.Empty(naming);
+    }
+
+    private static IReadOnlyList<string> SetAsideOf(params string[] rules)
+    {
+        using var list = new MemoryStream(Encoding.UTF8.GetBytes(string.Join('\n', rules) + "\n"));
+
+        return PublicSuffixList.Read(list).SetAside;
     }
 
     private static string Root()
