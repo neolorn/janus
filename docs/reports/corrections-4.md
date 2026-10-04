@@ -1225,6 +1225,22 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
 
 `IdnaTestV2.txt` of Unicode 17.0.0 is downloaded from `https://www.unicode.org/Public/17.0.0/idna/`, the directory of `IdnaMappingTable.txt`. Its header names version 17.0.0 (dated 2025-05-01). SHA-256 `beb5d0be20e896189b03209a82fdc34f06351502bbd4b8e2523583fc2954d9cf`. Both files stay outside the repository until question 68 is built.
 
+### `part/unit-sends`, merged as `e80fbec2`: questions 75, 80 and 88
+
+The cross-area answers of D-186 ran in worktrees of their own (`part/units-of-work`, `part/unit-sends`, `part/registrations`), not directly on `corrections-4`: the sites split by file. Each merged before the parts of the owner's split were cut, but for `part/idna`, which shares no file with them and ran beside them.
+
+Every site questions 75, 80 and 88 name already undertook its send through `IGovernedSend.UndertakeAsync` inside its caller's unit of work, from the governed send of questions 27, 38 and 63. `INotificationHandler.SendAsync` is called by `SendPublisher` alone.
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 75: a reminder whose every send is refused rolls back; `remindedAt` is set where a send is admitted or no channel can be reached | `31a99788` | AUTH-FACT-008, CONV-DESIGN-003 | `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_AReminderWhoseEverySendIsRefusedIsRolledBackAsync`, `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_AReminderOneChannelAdmitsIsRecordedAndCommittedAsync`, `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_ASetWhoseEveryNoticeIsRefusedStaysOwedAsync`, `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_ASetNoChannelCanReachIsClosedAsync` |
+| Question 88: `DeadlineSweep.ReachedAsync` rolls back for a request decided meanwhile and for one the pass changes nothing of; a lapse whose notice is refused commits | `aaf71677` | CONV-DESIGN-003, AUTH-ABUSE-004 | `DeadlineSweepTests.CONV_DESIGN_003_AC10_ARequestDecidedMeanwhileRollsThePassBackAsync`, `DeadlineSweepTests.CONV_DESIGN_003_AC10_ARequestThePassChangesNothingOfRollsBackAsync`, `DeadlineSweepTests.AUTH_ABUSE_004_AC18_ALapseWhoseNoticeIsRefusedIsRecordedAndCommittedAsync` |
+| Questions 80 and 88: a refused notice fails no operation (tests only; the code was at the rule) | `ee7ce682` | AUTH-ABUSE-004 | `ProviderEventTests.AUTH_ABUSE_004_AC18_AnEventWhoseNoticeIsRefusedIsTakenAndCommittedAsync`, `AccountLifecycleTests.AUTH_ABUSE_004_AC18_ADeactivationWhoseNoticeIsRefusedIsCommittedAsync`, `AccountLifecycleTests.AUTH_ABUSE_004_AC18_ADeletionWhoseNoticeIsRefusedIsCommittedAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_APromotionWhoseNoticeIsRefusedIsCommittedAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_ABackupChangeWhoseNoticeIsRefusedIsCommittedAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_ARemovalWhoseNoticesAreRefusedIsCommittedAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_AnUndoWhoseNoticeIsRefusedIsCommittedAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_AnAdditionWhoseNoticeIsRefusedIsStagedAndCommittedAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_AnAdditionOfAHeldValueWhoseNoticeIsRefusedIsAnsweredAlikeAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_ASwapWhoseNoticeIsRefusedIsAppliedAndCommittedAsync`, `InvitationServiceTests.AUTH_ABUSE_004_AC18_AnAcknowledgementWhoseNoticeIsRefusedIsCommittedAsync`, `InvitationServiceTests.AUTH_ABUSE_004_AC18_AMembershipEndWhoseNoticeIsRefusedIsCommittedAsync`, `AppPasswordsTests.AUTH_ABUSE_004_AC18_AnAppPasswordWhoseNoticeIsRefusedIsAuditedAndCommittedAsync` |
+
+- No changelog line: the two rollbacks replace a commit of nothing. No ledger line is owed (119, 227 and 322 hold theirs).
+- Left to later work: `IdentifierService.AddAsync` and `ReplaceAsync` commit a success that wrote nothing for a reserved value or a holder already told (question 115 rebuilds the path); `PhoneSignals.ConsiderAsync` is asked inside the caller's unit of work (question 70).
+- Parked: question 127.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1250,7 +1266,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
 | The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Nothing: D-187 answers question 94; not yet built |
 | Question 22: the audit record of a grant the drift check writes | No audit action for it | Nothing: D-187 answers question 101; not yet built |
 | Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Nothing: D-187 answers questions 82 to 86; not yet built |
-| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | Nothing: D-186 answers questions 69 to 81, 87 and 88; not yet built |
+| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | The sends of 75, 80 and 88: built (`part/unit-sends`). The rest: D-186, not yet built |
 | Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: D-187 answers question 113; not yet built |
 | Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: D-187 answers question 98; not yet built |
 | Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: D-187 answers questions 118 and 117; not yet built |
@@ -3207,6 +3223,17 @@ part of 389 (3) and waits with 389 on question 48.
 - **Why it is a question.** The working guide lets an allow-list entry be written alone only where the flagged value is text of the specification; a migration's identifier is not, and any other finding is Tier 3. The finding is in the history, so a change of the line at the head does not clear it.
 - **Parked.** The finding stands; no allow-list entry is written and no commit is rewritten. The secret-scanning job will fail on the push until it is settled.
 - **Answer:** D-185. The entry is written in `5b8ae475` and the constants are renamed in `602ab667`; no commit is rewritten.
+
+**127. Tier 2. REG-SESS-005 and AUTH-ABUSE-004: whether a holder's notice that is refused spends the window.**
+
+- **Item.** `IdentifierService.TellHolderAsync`, reached at an add or a replace of a value an account holds (question 80).
+- **What the code does.** `INoticeLedger.FirstAsync` records the notice for `abuse.nonexistent.window`, then the send is undertaken. Where the send is refused the operation goes on and commits, so the mark stands and the holder is not told for the rest of the window. `NonExistenceNotice` rolls back at a refusal, which this operation cannot.
+- **What the specification says.** REG-SESS-005: the owner is notified once per `abuse.nonexistent.window`. AUTH-ABUSE-004: a refused notice fails nothing. Neither says whether a refused notice spends the window.
+- **Readings.**
+  1. The mark stands: one attempt per window. Nothing changes.
+  2. A refused notice leaves the window unmarked: the mark is written only once the send is admitted.
+- **Parked.** That site, left as it is.
+- **Answer:** pending.
 
 ## 5. Gate result
 
