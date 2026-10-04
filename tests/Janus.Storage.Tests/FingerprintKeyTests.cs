@@ -18,6 +18,7 @@ using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Xunit;
 
@@ -49,8 +50,9 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
         2,
         new Dictionary<int, ReadOnlyMemory<byte>> { [1] = First, [2] = Second });
 
-    // Every store of the library that computes a fingerprint on a live write, as the
-    // first test drives each; the rotation's store is driven by the command's test.
+    // Every store of the library that computes a fingerprint on a live write, and the
+    // lock a value is judged under, as the first test drives each; the rotation's store
+    // is driven by the command's test.
     private static readonly Type[] Driven =
     [
         typeof(IdentifierStore),
@@ -60,6 +62,7 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
         typeof(NoticeLedger),
         typeof(RegistrationSourceLedger),
         typeof(SendLedger),
+        typeof(ValueLock),
     ];
 
     private readonly Deployment _deployment = new(database);
@@ -144,6 +147,16 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
         set.Add(Identifier.Email(IdentifierId.New(TimeProvider.System), subject, email, email.Value, Noon), maximum: 5);
         set.Add(Identifier.Phone(IdentifierId.New(TimeProvider.System), subject, phone, phone.Value, Noon), maximum: 5);
         set.Add(Identifier.Username(IdentifierId.New(TimeProvider.System), subject, username, Noon), maximum: 5);
+
+        // The lock keys a value by its fingerprint under every version held and writes
+        // no column.
+        await using (IDbContextTransaction locking = await context.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await identifiers.LockValuesAsync(
+                [(IdentifierKind.Email, email.Value), (IdentifierKind.Phone, phone.Value), (IdentifierKind.Username, username.Value)],
+                cancellationToken);
+            await locking.CommitAsync(cancellationToken);
+        }
 
         await identifiers.RecordAsync(set, cancellationToken);
         await new MailboxStore(context, _deployment.DataKey(context), ring, _deployment.Randomness)
