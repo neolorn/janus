@@ -20,11 +20,11 @@ namespace Janus.Authentication.Factors;
 /// <param name="work">The one transaction each reminder is recorded and written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements AUTH-FACT-008 AC5 and INF-BG-001. A set is marked reminded in the
-/// transaction that writes its notices (D-022), and only where a channel took the
-/// reminder or the account holds none a reminder can reach, so a pass that fails or
-/// whose every notice is refused leaves the set owed its reminder, and a pass that
-/// succeeds is never repeated for the same set.
+/// Implements AUTH-FACT-008 AC5, CONV-DESIGN-003 and INF-BG-001. A set is marked
+/// reminded in the transaction that writes its notices (D-022), and only where a
+/// channel's send was admitted or the account holds no channel a reminder can reach. A
+/// reminder whose every send is refused wrote nothing and rolls back, so the set stays
+/// owed its reminder, and a pass that succeeds is never repeated for the same set.
 /// </remarks>
 internal sealed class RecoveryCodeReminders(
     IRecoveryCodeStore sets,
@@ -136,18 +136,23 @@ internal sealed class RecoveryCodeReminders(
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         (int reached, int told) = await TellAsync(subject, cancellationToken).ConfigureAwait(false);
-        bool closed = told > 0 || reached == 0;
 
-        if (closed)
+        // AUTH-FACT-008, CONV-DESIGN-003: a reminder whose every send is refused wrote
+        // nothing, so it rolls back and the set stays owed.
+        if (told == 0 && reached > 0)
         {
-            held.Reminded(now);
-            await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return 0;
         }
+
+        held.Reminded(now);
+        await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
 
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        return closed ? 1 : 0;
+        return 1;
     }
 
     // Every channel of the security-notice set hears of it; a channel that refuses

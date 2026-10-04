@@ -188,6 +188,54 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC5, CONV-DESIGN-003 AC10: a reminder whose every send is refused
+    /// wrote nothing, so its unit of work is rolled back and nothing is committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_AReminderWhoseEverySendIsRefusedIsRolledBackAsync()
+    {
+        SubjectId subject = Held();
+
+        await IssuedAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _clock.Advance(Year);
+
+        Assert.Equal(0, await RemindedAsync());
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5, AUTH-ABUSE-004 AC18: a reminder one channel refuses and
+    /// another admits is recorded once its one send is admitted, and commits.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_AReminderOneChannelAdmitsIsRecordedAndCommittedAsync()
+    {
+        SubjectId subject = Held();
+
+        await IssuedAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _notifications.RefusedChannel = SendKind.Sms;
+        _clock.Advance(Year);
+
+        Assert.Equal(1, await RemindedAsync());
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(SendKind.Email, Assert.Single(_notifications.Carried).Kind);
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+    }
+
+    /// <summary>
     /// AUTH-FACT-008 AC5: a set whose account holds no channel a reminder can reach is
     /// closed as reminded, since no later pass could reach it either.
     /// </summary>
