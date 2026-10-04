@@ -26,6 +26,7 @@ using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
+using Janus.Authorization;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
@@ -120,25 +121,11 @@ public static class HostingRegistration
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddStorageArea(connectionString);
-        services.AddSingleton(AuthorizationModel.Of(declaration));
+        services.AddAuthorizationArea(declaration);
 
-        // AUTHZ-GROUP-002: one set per operation, which is what makes ten checks in one
-        // request resolve membership once.
-        services.AddScoped<SubjectSets>();
-
-        // LIB-HOST-004: the assurance provider is the host's to supply, and a host
-        // that supplies none is one where nothing reports what a session has proved
-        // other than the library's own session, which is judged where it carries the
-        // request (AUTH-STEP-002).
+        // AUTH-STEP-002: the library's own session is judged where it carries the
+        // request.
         services.AddScoped<ISessionGates, RequestGates>();
-        services.AddScoped(services => new StepUpGates(
-            services.GetRequiredService<ISessionGates>(),
-            services.GetService<IAssuranceProvider>(),
-            services.GetRequiredService<TimeProvider>()));
-
-        // OPS-ALERT-006: an export is gated, limited and recorded inside the gate, so no
-        // host path exercises one around it.
-        services.AddScoped<ExportOperations>();
 
         // API-CONV-002: a body the reader could not parse is answered by the library
         // with a code and a correlation identifier, so the reader raises the failure
@@ -458,10 +445,7 @@ public static class HostingRegistration
         services.AddSingleton(provider =>
             provider.GetRequiredService<AuthorizationModel>().Processing);
 
-        services.AddScoped<Derivations>();
-        services.AddScoped<ReverseLookup>();
         services.AddScoped<IAccessAlerts, AccessAlerts>();
-        services.AddScoped<DenialSpikes>();
 
         // BFF-ERR-003: what the gate concealed is answered by stage 11 of the same
         // request, so the two share one holder.
@@ -479,18 +463,6 @@ public static class HostingRegistration
         // row for is refused by the gate, which its operations ask through a port.
         services.AddScoped<IUnscopedRefusal>(provider =>
             new GatedUnscopedRefusal(provider.GetRequiredService<AccessGate>().RefuseUnscopedAsync));
-
-        // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
-        // ancestry the gate reads is written from that and nothing else.
-        services.AddScoped<IResources, ResourceService>();
-
-        // OPS-ALERT-005: the host says how many records a filtered query of its own
-        // returned, and the library counts them against the person given them.
-        services.AddScoped<ReadVolume>();
-        services.AddScoped<IReadVolume>(provider => provider.GetRequiredService<ReadVolume>());
-        services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
-        services.AddScoped<IGrants, GrantService>();
-        services.AddScoped<IRoles, RoleService>();
         services.AddScoped<IOrganizations, OrganizationService>();
 
         // REG-DOM-001, LIB-EXT-001: the resolver is the deployment's and may be absent,
@@ -593,9 +565,6 @@ public static class HostingRegistration
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IInvitations>(provider => provider.GetRequiredService<InvitationService>());
-        services.AddScoped<IGroups, GroupService>();
-        services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
-        services.AddScoped<ModelValidation>();
         services.AddScoped<RedirectValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
