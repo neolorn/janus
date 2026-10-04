@@ -275,5 +275,6 @@ public sealed partial class RegistrationServiceTests
             subject,
             ProvidedAddress.Of(provider, email, verified, hostedDomain),
             CredentialLabel.Of(Browser),
+            Source,
             TestContext.Current.CancellationToken);
 }

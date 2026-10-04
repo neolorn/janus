@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -576,6 +577,51 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, press.Status);
         Assert.True(Proved(await browser.SendAsync("GET", "/register")));
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6, REG-SESS-001 AC2: a press of a link token that opens nothing,
+    /// from a browser holding no registration session, is taken without that session's
+    /// cookie, answered 422 <c>auth.code.expired</c> and counted against the source of
+    /// the request, so that source's presses are refused 429 <c>auth.throttled</c>
+    /// with <c>retryAt</c> once its delay stands, and another source's are not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_003_AC6_APressedTokenThatOpensNothingIsCountedOverTheWireAsync()
+    {
+        var pressing = IPAddress.Parse("2001:db8:1:1::9");
+        var browser = new Browser(_deployment);
+        string identifier = Guid.CreateVersion7().ToString();
+
+        _ = await browser.SendAsync("GET", "/auth/session", source: pressing);
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            Answer gone = await PressedAsync(browser, pressing);
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, gone.Status);
+            Assert.Equal(ErrorCodes.CodeExpired.ToString(), gone.Text("code"));
+        }
+
+        Answer held = await PressedAsync(browser, IPAddress.Parse("2001:db8:1:1::a"));
+        Answer elsewhere = await PressedAsync(browser, IPAddress.Parse("2001:db8:1:2::9"));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, held.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), held.Text("code"));
+        Assert.Equal(
+            _deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default,
+            held.Json().GetProperty("details").GetProperty("retryAt").GetDateTimeOffset());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, elsewhere.Status);
+
+        Task<Answer> PressedAsync(Browser from, IPAddress source) =>
+            from.SendAsync(
+                source,
+                "pressed",
+                "POST",
+                "/register/verify/" + identifier,
+                ("linkToken", "a-token-no-registration-sent"),
+                ("press", true));
     }
 
     // Whether the one staged identifier stands verified.

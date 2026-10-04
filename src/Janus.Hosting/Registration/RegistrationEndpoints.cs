@@ -179,15 +179,17 @@ internal static class RegistrationEndpoints
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken) =>
-        StageAsync(request, IdentifierKind.Email, registration, browser, cancellationToken);
+        StageAsync(request, IdentifierKind.Email, registration, browser, context, cancellationToken);
 
     private static Task<IResult> PhoneAsync(
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken) =>
-        StageAsync(request, IdentifierKind.Phone, registration, browser, cancellationToken);
+        StageAsync(request, IdentifierKind.Phone, registration, browser, context, cancellationToken);
 
     private static async Task<IResult> SkipPhoneAsync(
         IRegistration registration,
@@ -207,6 +209,7 @@ internal static class RegistrationEndpoints
         AddIdentifierRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -221,7 +224,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .AddAsync(session, request.Kind, value, cancellationToken)
+                    .AddAsync(session, request.Kind, value, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }
@@ -231,6 +234,7 @@ internal static class RegistrationEndpoints
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -245,7 +249,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .ChangeAsync(session, id, value, cancellationToken)
+                    .ChangeAsync(session, id, value, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }
@@ -395,6 +399,7 @@ internal static class RegistrationEndpoints
         VerifyRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -406,7 +411,12 @@ internal static class RegistrationEndpoints
         {
             return Answers.Of(
                 await registration
-                    .LandAsync(Carried(browser), token, request.Press, cancellationToken)
+                    .LandAsync(
+                        Carried(browser),
+                        token,
+                        request.Press,
+                        RequestOrigin.Source(context.Request),
+                        cancellationToken)
                     .ConfigureAwait(false),
                 Landed);
         }
@@ -420,7 +430,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("code")
             : Answers.Of(
                 await registration
-                    .VerifyAsync(session, id, code, cancellationToken)
+                    .VerifyAsync(session, id, code, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 _ => Nothing);
     }
@@ -465,6 +475,7 @@ internal static class RegistrationEndpoints
         IdentifierKind kind,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -480,7 +491,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .StageAsync(session, kind, value, cancellationToken)
+                    .StageAsync(session, kind, value, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }

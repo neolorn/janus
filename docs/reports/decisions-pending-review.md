@@ -17589,6 +17589,8 @@ first read.
   factor whether or not an account holds it.
 - OPS-SEC-003 AC6 could list sign-ins in progress among what a retirement forgets.
 
+**Superseded by D-166.**
+
 ---
 
 ## 420. A success clears the account's count only

@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every count and delay of a registration uses the source of the request in hand, never
+  the address its begin arrived on: `IRegistration.StageAsync`, `AddAsync`,
+  `ChangeAsync`, `VerifyAsync` and `LandAsync` take that source, and the address given
+  to `BeginAsync` is the whole address the session holds. A pressed registration link
+  token that opens nothing is held to its source's delay, counted against that source
+  alone and answered `auth.code.expired` (`auth.throttled` with `retryAt` while the
+  delay stands), also from a browser holding no registration session; one merely
+  opened counts nothing.
 - A source, for every count the library keeps per source, is the address the connection
   arrived on with an IPv4-mapped IPv6 address read as its IPv4 address and any other
   IPv6 address counted by its /64, so one host no longer holds a budget for each
