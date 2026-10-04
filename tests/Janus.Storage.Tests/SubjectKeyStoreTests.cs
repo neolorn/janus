@@ -68,6 +68,41 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// OPS-SEC-001 AC2 (D-183): the versions the start holds the secret source to are
+    /// those the keys that are not erased stand under; an erased key's version is not
+    /// among them.
+    /// </summary>
+    [Fact]
+    public async Task OPS_SEC_001_AC2_TheVersionsReadAreThoseOfTheKeysThatAreNotErasedAsync()
+    {
+        SubjectId live = Subjects.New();
+        SubjectId gone = Subjects.New();
+
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+
+        await WriteAsync(live, dataKey, OneVersion(7001));
+        await WriteAsync(gone, dataKey, OneVersion(7002));
+
+        await using (StoreContext erasing = database.Context())
+        {
+            SubjectKey key = await ReadAsync(erasing, gone);
+            key.Erase();
+
+            await Store(erasing).RecordWrappingAsync(key, TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlySet<int> versions = await Store(reading)
+            .WrappingVersionsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains(7001, versions);
+        Assert.DoesNotContain(7002, versions);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC9: overwriting the wrapped key leaves every field encrypted
     /// under it unrecoverable, wherever the field is held and without the application
     /// that holds it doing anything.

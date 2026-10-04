@@ -103,8 +103,12 @@ internal static class PersonalFieldCipher
     /// <param name="ring">The key ring the version is borrowed from.</param>
     /// <returns>The plaintext data key, to be cleared after use.</returns>
     /// <exception cref="CryptographicException">
-    /// The key has been erased, it names a scheme this version does not read, or it is
-    /// wrapped under a version the deployment no longer holds.
+    /// The key has been erased, or it names a scheme this version does not read.
+    /// </exception>
+    /// <exception cref="CodedFault">
+    /// The key is wrapped under a version the application does not hold, which is a
+    /// broken invariant and no refusal: the fault carries
+    /// <c>model.startup.secretunavailable</c> with the key and the version.
     /// </exception>
     public static byte[] Unwrap(
         byte formatMarker,
@@ -124,11 +128,13 @@ internal static class PersonalFieldCipher
             throw new CryptographicException("The subject's key names a scheme this version does not read.");
         }
 
+        // OPS-SEC-003 AC3 (D-183): the erased value is read before the version is asked
+        // for, and a version the ring does not hold is thrown with the ring's own answer.
         return ring
             .BorrowKeyEncryptionKey(keyVersion, key => Unwrap(wrappedKey.Span, key.Span))
             .Match(
                 dataKey => dataKey,
-                _ => throw new CryptographicException("The subject's key is wrapped under a retired version."));
+                unheld => throw new CodedFault(unheld));
     }
 
     /// <summary>

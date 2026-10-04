@@ -1508,6 +1508,14 @@ against the public contract of LIB-API-001.
   `null` `detail` records none: `PrivacyRequestEntry.Detail` and
   `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
   takes null, and an empty text is never stored for none.
+- A value wrapped under a key-encryption key version the application does not hold
+  fails to unwrap as a fault carrying `model.startup.secretunavailable`,
+  `details.key` `keyEncryptionKeys` and `details.version`: a request is answered
+  `system.fault` and the log names the code, the key and the version; a job fails its
+  run; a command exits 1 with the code. The erased value is read first, so an erased
+  key is no fault. The start is refused with the same code, naming the lowest such
+  version, where a subject key that is not erased stands under a version the secret
+  source does not supply.
 - `PUT /admin/compliance/assessments` reads the measures as
   `organizationalSecurityMeasures`, and holds `dataOwner` and it to the bound of free
   text: each is trimmed, refused 400 `api.request.malformed` naming the member where

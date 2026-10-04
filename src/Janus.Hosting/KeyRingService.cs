@@ -10,6 +10,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Mailboxes;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -118,6 +119,8 @@ internal sealed class KeyRingService(
     /// </exception>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        await HeldAsync(cancellationToken).ConfigureAwait(false);
+
         // CONV-DESIGN-007 AC5: the host's mail server where it registered one, the
         // adapter's key then not read.
         if (host is not null)
@@ -191,6 +194,33 @@ internal sealed class KeyRingService(
         ring.Clear();
 
         return Task.CompletedTask;
+    }
+
+    // OPS-SEC-001 AC2 (D-183): a subject key that is not erased and stands under a
+    // version the source did not supply could never be unwrapped, so the start is
+    // refused naming the lowest such version, before a request meets it as a fault.
+    private async ValueTask HeldAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlySet<int> versions;
+
+        await using (AsyncServiceScope scope = scopes.CreateAsyncScope())
+        {
+            versions = await scope.ServiceProvider
+                .GetRequiredService<ISubjectKeyStore>()
+                .WrappingVersionsAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        foreach (int version in versions.Order())
+        {
+            if (ring.BorrowKeyEncryptionKey(version, _ => true)
+                .Match<Error?>(_ => null, unheld => unheld) is Error unheld)
+            {
+                throw new StartupException(
+                    "A subject key stands under a key-encryption key version the secret source does not supply.",
+                    unheld);
+            }
+        }
     }
 
     private static TValue Missing<TValue>(string key) =>

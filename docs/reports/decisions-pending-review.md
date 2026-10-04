@@ -12418,6 +12418,8 @@ and that retirement is the operator's removal once the command records it; chapt
 could list the four `ops.keyrotation` actions and the `key-rotation` operation; the
 runbook's section 9 could give the order above.
 
+**Superseded by D-166.**
+
 ---
 
 ## 318. What the fingerprint key's rotation computes again, and what it keeps until the previous version retires

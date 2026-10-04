@@ -12,6 +12,8 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Tests.Authorization;
+using Janus.Privacy.SubjectKeys;
+using Janus.Privacy.Tests.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
@@ -136,6 +138,48 @@ public sealed class KeyMaterialTests
                 .SelectMany(constructor => constructor.GetParameters()),
             parameter => parameter.ParameterType == typeof(KeyEncryptionKeys)
                 || parameter.ParameterType == typeof(FingerprintKeys));
+    }
+
+    /// <summary>
+    /// OPS-SEC-001 AC2 (D-183): where a subject key that is not erased stands under a
+    /// key-encryption key version the source does not supply, the start is refused naming
+    /// the lowest such version; an erased key under such a version refuses nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_AC2_StartupFailsNamedWhereALiveSubjectKeyStandsUnderAVersionTheSourceLacksAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var keys = new SubjectKeyStoreInMemory();
+        var erased = SubjectKey.Wrapped(new SubjectKeyId(Guid.NewGuid()), 1, new byte[40]);
+
+        erased.Erase();
+        keys.Hold(erased);
+        keys.Hold(SubjectKey.Wrapped(new SubjectKeyId(Guid.NewGuid()), 4, new byte[40]));
+        keys.Hold(SubjectKey.Wrapped(new SubjectKeyId(Guid.NewGuid()), 3, new byte[40]));
+        keys.Hold(SubjectKey.Wrapped(new SubjectKeyId(Guid.NewGuid()), 5, new byte[40]));
+
+        await using ServiceProvider deployed = Registered(new SecretSourceInMemory(None)
+        {
+            KeyEncryptionKeys = new KeyEncryptionKeys(5, new Dictionary<int, ReadOnlyMemory<byte>>
+            {
+                [5] = new byte[32],
+            }),
+        })
+            .AddSingleton<ISubjectKeyStore>(keys)
+            .BuildServiceProvider();
+
+        KeyRingService service = deployed.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+
+        await service.StartingAsync(cancellationToken);
+
+        Error? refused = (await Assert.ThrowsAsync<StartupException>(
+                async () => await service.StartAsync(cancellationToken)))
+            .Failure;
+
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused?.Code);
+        Assert.Equal("keyEncryptionKeys", refused?.Details["key"].GetString());
+        Assert.Equal(3, refused?.Details["version"].GetInt32());
     }
 
     /// <summary>

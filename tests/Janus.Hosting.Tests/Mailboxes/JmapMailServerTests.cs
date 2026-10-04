@@ -601,6 +601,8 @@ public sealed class JmapMailServerTests : IDisposable
 
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<ISecretSource>(secrets);
+        services.AddSingleton<Janus.Privacy.SubjectKeys.ISubjectKeyStore>(
+            new Janus.Privacy.Tests.SubjectKeys.SubjectKeyStoreInMemory());
         services.AddCoreArea();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel).ConfigurePrimaryHttpMessageHandler(() => _server);

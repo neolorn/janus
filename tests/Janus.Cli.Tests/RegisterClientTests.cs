@@ -145,6 +145,37 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
             await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM identity.oidc_clients WHERE client_id = 'plain'"));
     }
 
+    /// <summary>
+    /// OPS-SEC-003 AC3 (D-183): a command that meets a value wrapped under a
+    /// key-encryption key version its document does not hold ends with exit code 1 and the
+    /// code, the key and the version on standard error, and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC3_AValueUnderAVersionTheDocumentLacksEndsTheCommandWithTheCodeAsync()
+    {
+        JsonObject lacking = Invocation.Keys(deployment.ConnectionString);
+
+        lacking["keyEncryptionKeys"] = new JsonObject
+        {
+            ["current"] = 2,
+            ["versions"] = new JsonObject { ["2"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) },
+        };
+
+        Invocation run = await Invocation.PipedAsync(Arguments("unheld", "protocol", Redirect), lacking);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal(
+            """{"code":"model.startup.secretunavailable","details":{"key":"keyEncryptionKeys","version":1}}""",
+            run.Error.Trim());
+        Assert.Equal(
+            0,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*)::int FROM identity.oidc_clients WHERE client_id = 'unheld'"));
+    }
+
     private static IReadOnlyList<string> Arguments(string client, string kind, string redirect) =>
     [
         "register-client",
