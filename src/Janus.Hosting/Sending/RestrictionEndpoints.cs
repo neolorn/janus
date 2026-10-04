@@ -42,26 +42,30 @@ internal static class RestrictionEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/admin/restrictions");
 
         _ = SessionRequired.On(group.MapGet("/", AllAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<RestrictionView>>();
         _ = SessionRequired.On(group.MapGet("/{name}", ReadAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.RestrictionNotFound)
-                .Binding<RestrictionName>("name"));
+                .Binding<RestrictionName>("name"))
+            .Produces<RestrictionView>();
         _ = SessionRequired.On(group.MapPut("/{name}", EditAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationValueNotAllowed,
                     ErrorCodes.ConfigurationChangeReasonRequired)
-                .Binding<RestrictionName>("name"));
+                .Binding<RestrictionName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapDelete("/{name}", DeleteAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.RestrictionNotFound,
                     ErrorCodes.ConfigurationChangeReasonRequired)
-                .Binding<RestrictionName>("name"));
+                .Binding<RestrictionName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/{name}/grant", GrantAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -69,7 +73,8 @@ internal static class RestrictionEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.RestrictionNotFound,
                     ErrorCodes.ConfigurationChangeReasonRequired,
                     ErrorCodes.ConfigurationValueNotAllowed)
-                .Binding<RestrictionName>("name"));
+                .Binding<RestrictionName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

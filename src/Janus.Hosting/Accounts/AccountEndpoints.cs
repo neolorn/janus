@@ -47,31 +47,38 @@ internal static class AccountEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/account");
 
         _ = SessionRequired.On(group.MapGet("/", ReadAsync))
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<AccountView>();
         _ = SessionRequired.On(group.MapPut("/profile", EditProfileAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
                     ErrorCodes.UsernameTaken, ErrorCodes.UsernameReserved,
                     ErrorCodes.UsernameCoolingOff, ErrorCodes.IdentifierMixedScript,
-                    ErrorCodes.ProfileInvalid, ErrorCodes.ProfileNotAccepted));
+                    ErrorCodes.ProfileInvalid, ErrorCodes.ProfileNotAccepted))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.PhotoNotFound));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PhotoNotFound))
+            .Produces<byte[]>(StatusCodes.Status200OK, StoredPhoto);
         _ = SessionRequired.On(group.MapPut("/photo", SetPhotoAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Restricted, ErrorCodes.PhotoNotEnabled, ErrorCodes.PhotoInvalid,
-                    ErrorCodes.PhotoTooLarge));
+                    ErrorCodes.PhotoTooLarge))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapDelete("/photo", RemovePhotoAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapGet("/preferences", ReadPreferencesAsync))
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<PreferencesView>();
         _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Restricted, ErrorCodes.PreferenceUndeclared,
                     ErrorCodes.PreferenceWrongType, ErrorCodes.PreferenceTooLarge,
-                    ErrorCodes.PreferenceAdministratorOnly));
+                    ErrorCodes.PreferenceAdministratorOnly))
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapPost("/identifiers", AddIdentifierAsync))
             .Declares(EndpointDeclaration
@@ -79,31 +86,38 @@ internal static class AccountEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierMixedScript,
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.IdentifierInvalid,
-                    ErrorCodes.SmsBalanceFloor, ErrorCodes.RestrictionExceeded));
+                    ErrorCodes.SmsBalanceFloor, ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.CodeInvalid,
                     ErrorCodes.CodeExpired, ErrorCodes.Throttled)
-                .Binding<IdentifierId>("id"));
+                .Binding<IdentifierId>("id"))
+            .Produces<IdentifierLandingView>()
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/identifiers/{id}/primary", MakePrimaryAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Restricted, ErrorCodes.IdentifierUnverified)
-                .Binding<IdentifierId>("id"));
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPut("/identifiers/backup", SetBackupAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.IdentifierUnverified));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.IdentifierUnverified))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapDelete("/identifiers/{id}", RemoveIdentifierAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.IdentifierPrimary,
                     ErrorCodes.IdentifierLastOfKind)
-                .Binding<IdentifierId>("id"));
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = group.MapPost("/identifiers/{id}/undo", UndoIdentifierAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.ChangeWindowElapsed)
-                .Binding<IdentifierId>("id"));
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync)
             .Declares(EndpointDeclaration
                 .Answering(
@@ -111,53 +125,66 @@ internal static class AccountEndpoints
                     ErrorCodes.Denied, ErrorCodes.ChangePending, ErrorCodes.IdentifierMixedScript,
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.SmsBalanceFloor,
                     ErrorCodes.RestrictionExceeded)
-                .Binding<IdentifierId>("id"));
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/identifiers/{id}/abandon", AbandonIdentifierAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted).Binding<IdentifierId>("id"));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted).Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapGet("/credentials", ListCredentialsAsync))
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<CredentialView>>();
         _ = SessionRequired.On(group.MapPatch("/credentials/{id}", LabelCredentialAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Restricted, ErrorCodes.CredentialNotFound,
                     ErrorCodes.CredentialLabelInvalid)
-                .Binding<AuthenticatorId>("id"));
+                .Binding<AuthenticatorId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPut("/secondstep/preferred", PreferSecondStepAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.RequestInvalid));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapGet("/sessions", ListSessionsAsync))
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<SessionView>>();
         _ = SessionRequired.On(group.MapDelete("/sessions/{id}", EndSessionAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound).Binding<SessionId>("id"));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound).Binding<SessionId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied));
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied))
+            .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/reactivate", ReactivateAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.AccountAdministrativelySuspended,
-                    ErrorCodes.ReactivationTokenInvalid));
+                    ErrorCodes.ReactivationTokenInvalid))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/delete", DeleteAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied));
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied))
+            .Produces<DeletionView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/delete/cancel", CancelDeletionAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed));
+                    ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed))
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapGet("/invitation", ReadInvitationAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.InvitationNotFound));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.InvitationNotFound))
+            .Produces<AttachedInvitationView>();
         _ = SessionRequired.On(group.MapPost("/invitation/acknowledge", AcknowledgeInvitationAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
                     ErrorCodes.InvitationNotFound, ErrorCodes.MembershipLimitReached,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.InvitationExpired,
-                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.IdentifierDomainNotAllowed));
+                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.IdentifierDomainNotAllowed))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

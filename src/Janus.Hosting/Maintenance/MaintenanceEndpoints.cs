@@ -35,17 +35,21 @@ internal static class MaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/licences", LicencesAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<LicencesView>();
         _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/licences", ReplaceAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid));
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/maintenance", LogAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<MaintenanceLogView>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/compliance/maintenance", RecordAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid));
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Produces<MaintenanceEntryView>(StatusCodes.Status201Created);
 
         return endpoints;
     }

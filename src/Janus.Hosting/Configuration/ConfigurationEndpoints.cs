@@ -40,7 +40,8 @@ internal static class ConfigurationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied)
-                .Binding<ConfigurationKey>("key"));
+                .Binding<ConfigurationKey>("key"))
+            .Produces<ConfiguredSettingView>();
         _ = SessionRequired.On(endpoints.MapPut("/admin/config/{key}", ChangeAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -50,7 +51,8 @@ internal static class ConfigurationEndpoints
                     ErrorCodes.ConfigurationValueNotAllowed, ErrorCodes.ConfigurationKeyProtected,
                     ErrorCodes.ConfigurationLastDestination,
                     ErrorCodes.ConfigurationChangeReasonRequired)
-                .Binding<ConfigurationKey>("key"));
+                .Binding<ConfigurationKey>("key"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

@@ -61,7 +61,8 @@ internal static class ProviderSignInEndpoints
                     string? returnTo,
                     CancellationToken cancellationToken) =>
                     signIn.StartAsync(context, provider, intent, returnTo, cancellationToken))
-                .Declares(EndpointDeclaration.Answering());
+                .Declares(EndpointDeclaration.Answering())
+                .Produces(StatusCodes.Status302Found);
 
             _ = endpoints.MapGet(
                 Start + route + Returned,
@@ -72,14 +73,16 @@ internal static class ProviderSignInEndpoints
                     string? error,
                     CancellationToken cancellationToken) =>
                     signIn.ReturnAsync(context, provider, code, state, error, cancellationToken))
-                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid));
+                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid))
+                .Produces(StatusCodes.Status302Found);
 
             _ = endpoints.MapMethods(
                 Return + route + Returned,
                 [HttpMethods.Get, HttpMethods.Post],
                 (HttpContext context, CancellationToken cancellationToken) =>
                     ForwardAsync(context, route, cancellationToken))
-                .Declares(EndpointDeclaration.Answering());
+                .Declares(EndpointDeclaration.Answering())
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = SessionRequired.On(endpoints.MapPost(
                 Link + route,
@@ -88,7 +91,8 @@ internal static class ProviderSignInEndpoints
                 .Declares(EndpointDeclaration.Answering(
                     ErrorCodes.StepUpRequired,
                     ErrorCodes.Restricted,
-                    ErrorCodes.Denied));
+                    ErrorCodes.Denied))
+                .Produces(StatusCodes.Status204NoContent);
 
             _ = SessionRequired.On(endpoints.MapDelete(
                 Link + route,
@@ -101,7 +105,8 @@ internal static class ProviderSignInEndpoints
                     ErrorCodes.StepUpRequired,
                     ErrorCodes.Restricted,
                     ErrorCodes.CredentialNotFound,
-                    ErrorCodes.LinkLastCredential));
+                    ErrorCodes.LinkLastCredential))
+                .Produces(StatusCodes.Status204NoContent);
         }
 
         return endpoints;

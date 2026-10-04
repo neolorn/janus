@@ -36,11 +36,14 @@ internal static class WellKnownEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/.well-known");
 
         _ = group.MapGet("/change-password", ChangePassword)
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces(StatusCodes.Status302Found);
         _ = group.MapGet("/passkey-endpoints", PasskeyEndpoints)
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<PasskeyEndpointsView>();
         _ = group.MapGet("/webauthn", RelatedOriginsAsync)
-            .Declares(EndpointDeclaration.Answering());
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<string>(StatusCodes.Status200OK, "application/json");
 
         return endpoints;
     }

@@ -40,29 +40,34 @@ internal static class GroupEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied)
-                .Binding<OrganizationId>("organization"));
+                .Binding<OrganizationId>("organization"))
+            .Produces<IReadOnlyList<GroupView>>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/groups", CreateAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted));
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted))
+            .Produces<CreatedGroupView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}", RemoveAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.GroupInUse)
-                .Binding<GroupId>("id"));
+                .Binding<GroupId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id}/members", AddMemberAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
-                .Binding<GroupId>("id"));
+                .Binding<GroupId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}/members", RemoveMemberAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
-                .Binding<GroupId>("id"));
+                .Binding<GroupId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

@@ -41,21 +41,25 @@ internal static class RecoveryEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/recovery");
 
         _ = group.MapPost("/begin", BeginAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/complete", CompleteAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired));
+                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.LossReportNotPermitted, ErrorCodes.LossReportPending));
+                    ErrorCodes.LossReportNotPermitted, ErrorCodes.LossReportPending))
+            .Produces<LossReportedView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.LossReportNotPermitted,
                     ErrorCodes.LossReportPending)
-                .Binding<AuthenticatorId>("id"));
+                .Binding<AuthenticatorId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync))
             .Declares(EndpointDeclaration
@@ -63,11 +67,13 @@ internal static class RecoveryEndpoints
                     ErrorCodes.Denied, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
                     ErrorCodes.RecoverySelfApproval, ErrorCodes.SmsBalanceFloor, ErrorCodes.Throttled,
-                    ErrorCodes.RestrictionExceeded));
+                    ErrorCodes.RestrictionExceeded))
+            .Produces<ApprovedRecoveryView>();
         _ = endpoints.MapPost("/enrol/begin", EnrolAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid));
+                    ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid))
+            .Produces<EnrolmentSessionView>();
 
         return endpoints;
     }

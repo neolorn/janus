@@ -2988,3 +2988,5 @@ against the public contract of LIB-API-001.
   had ended.
 - `POST /privacy/requests` refuses a body whose `type` is `erasure` 400
   `api.request.malformed` naming `type`, where it was refused 403 `authz.denied`.
+- Every endpoint carries, as endpoint metadata, each answer it produces: the status and,
+  where it writes a body, the body's type and content type, beside the codes it declares.

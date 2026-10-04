@@ -69,6 +69,22 @@ internal sealed class ProviderEventIntake(
     }.ToFrozenDictionary();
 
     /// <summary>
+    /// The status a provider's delivery is answered with once it is taken, which is the
+    /// provider's own convention and part of the endpoint's contract (LIB-API-001).
+    /// </summary>
+    /// <param name="provider">Which social provider's route.</param>
+    /// <returns>The status.</returns>
+    public static int Taken(Factor provider) => Deliveries[provider].Answer;
+
+    /// <summary>
+    /// Whether a provider delivers as RFC 8935 does, and so is refused in that
+    /// standard's shape.
+    /// </summary>
+    /// <param name="provider">Which social provider's route.</param>
+    /// <returns>Whether it pushes its events.</returns>
+    public static bool Pushes(Factor provider) => Deliveries[provider].Pushed;
+
+    /// <summary>
     /// Takes one delivery.
     /// </summary>
     /// <param name="context">The request.</param>

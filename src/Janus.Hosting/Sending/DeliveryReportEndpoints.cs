@@ -35,7 +35,8 @@ internal static class DeliveryReportEndpoints
         _ = endpoints.MapGet("/callbacks/sms/dlr", ReportAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.CallbackInProgress, ErrorCodes.CallbackRejected));
+                    ErrorCodes.CallbackInProgress, ErrorCodes.CallbackRejected))
+            .Produces(StatusCodes.Status200OK);
 
         return endpoints;
     }

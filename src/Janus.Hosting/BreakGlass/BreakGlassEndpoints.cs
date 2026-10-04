@@ -38,13 +38,16 @@ internal static class BreakGlassEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.BreakGlassConsumed,
-                    ErrorCodes.BreakGlassInvalid, ErrorCodes.Throttled));
+                    ErrorCodes.BreakGlassInvalid, ErrorCodes.Throttled))
+            .Produces(StatusCodes.Status200OK);
         _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired));
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired))
+            .Produces<GeneratedBreakGlassView>();
         _ = SessionRequired.On(endpoints.MapGet("/admin/break-glass", StandingAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<BreakGlassStandingView>();
 
         return endpoints;
     }

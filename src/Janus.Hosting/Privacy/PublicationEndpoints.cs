@@ -40,13 +40,15 @@ internal static class PublicationEndpoints
         _ = SessionRequired.On(endpoints.MapPost("/admin/notices", PublishNoticeAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.NoticeGoverningTextMissing));
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.NoticeGoverningTextMissing))
+            .Produces<DocumentVersionView>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/documents/{document}/versions", PublishAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.NoticeGoverningTextMissing)
-                .Binding<DocumentName>("document"));
+                .Binding<DocumentName>("document"))
+            .Produces<DocumentVersionView>();
         _ = SessionRequired.On(endpoints.MapPut(
             "/admin/documents/{document}/versions/{version}/translations/{language}",
             TranslateAsync))
@@ -54,7 +56,8 @@ internal static class PublicationEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.DocumentNotFound)
-                .Binding<DocumentName>("document"));
+                .Binding<DocumentName>("document"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

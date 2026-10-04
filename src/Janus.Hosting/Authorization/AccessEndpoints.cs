@@ -35,7 +35,8 @@ internal static class AccessEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied)
                 .Binding<ResourceType>("resourceType")
-                .Binding<ResourceId>("resourceId"));
+                .Binding<ResourceId>("resourceId"))
+            .Produces<ResourceAccessView>();
 
         return endpoints;
     }

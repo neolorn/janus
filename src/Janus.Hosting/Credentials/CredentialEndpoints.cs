@@ -41,37 +41,44 @@ internal static class CredentialEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.PasswordBlocklisted, ErrorCodes.PasswordTooShort,
-                    ErrorCodes.PasswordTooLong));
+                    ErrorCodes.PasswordTooLong))
+            .Produces(StatusCodes.Status204NoContent);
         _ = account.MapDelete("/credentials/{id}", RemoveAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.CredentialLastSecondFactor,
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted)
-                .Binding<AuthenticatorId>("id"));
+                .Binding<AuthenticatorId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = account.MapPost("/credentials/{id}/upgrade", UpgradeAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.CredentialNotFound,
                     ErrorCodes.CredentialNotUpgradable)
-                .Binding<AuthenticatorId>("id"));
+                .Binding<AuthenticatorId>("id"))
+            .Produces<CredentialCeremonyView>();
         _ = account.MapPost("/factors/totp/begin", BeginGeneratorAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
-                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired));
+                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
+            .Produces<GeneratorEnrolmentView>();
         _ = account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
-                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired));
+                    ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
+            .Produces<EnrolledCredentialView>();
         _ = SessionRequired.On(account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
-                    ErrorCodes.FactorPasswordRequired));
+                    ErrorCodes.FactorPasswordRequired))
+            .Produces<RecoveryCodesView>();
         _ = account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.FactorNotEnrolled));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.FactorNotEnrolled))
+            .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder ceremonies = endpoints.MapGroup("/auth/webauthn/register");
 
@@ -81,14 +88,16 @@ internal static class CredentialEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
-                    ErrorCodes.CredentialLabelInvalid));
+                    ErrorCodes.CredentialLabelInvalid))
+            .Produces<CredentialCeremonyView>();
         _ = ceremonies.MapPost("/complete", CompleteKeyAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
-                    ErrorCodes.CredentialLabelInvalid));
+                    ErrorCodes.CredentialLabelInvalid))
+            .Produces<EnrolledCredentialView>();
 
         return endpoints;
     }

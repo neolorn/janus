@@ -33,12 +33,14 @@ internal static class ExplanationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied)
-                .Binding<AuditRecordId>("correlationId"));
+                .Binding<AuditRecordId>("correlationId"))
+            .Produces<ExplanationView>();
         _ = SessionRequired.On(endpoints.MapGet("/account/explanations/{correlationId}", ResolveOwnAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied)
-                .Binding<AuditRecordId>("correlationId"));
+                .Binding<AuditRecordId>("correlationId"))
+            .Produces<ExplanationView>();
 
         return endpoints;
     }

@@ -37,11 +37,13 @@ internal static class SessionRevocationEndpoints
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
                     ErrorCodes.AccountNotFound)
-                .Binding<SubjectId>("subject"));
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/sessions/revoke-all", RevokeEveryAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired));
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

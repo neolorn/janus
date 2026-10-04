@@ -46,26 +46,30 @@ internal static class OrganizationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.IdentifierMixedScript));
+                    ErrorCodes.IdentifierMixedScript))
+            .Produces<CreatedOrganizationView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete", RequestDeletionAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.OrganizationProtected)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete/cancel", CancelDeletionAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.OrganizationProtected, ErrorCodes.DeletionWindowElapsed)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/policy", PolicyAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationPolicyView>();
         _ = SessionRequired.On(endpoints.MapPut("/admin/organizations/{id}/policy", ReplacePolicyAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -74,12 +78,14 @@ internal static class OrganizationEndpoints
                     ErrorCodes.ConfigurationChangeReasonRequired,
                     ErrorCodes.ConfigurationPolicyBelowSystem, ErrorCodes.ConfigurationValueBelowFloor,
                     ErrorCodes.ConfigurationValueNotAllowed)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/domains", DomainsAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces<IReadOnlyList<OrganizationDomainView>>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/domains", AddDomainAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -87,7 +93,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.ConfigurationChangeReasonRequired,
                     ErrorCodes.ConfigurationValueNotAllowed)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationDomainView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapPost(
             "/admin/organizations/{id}/domains/{domain}/verify",
             VerifyDomainAsync))
@@ -97,7 +104,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.DomainNotFound, ErrorCodes.DomainUnverified,
                     ErrorCodes.ConfigurationChangeReasonRequired)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationDomainView>();
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id}/domains/{domain}",
             RemoveDomainAsync))
@@ -106,7 +114,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.ConfigurationChangeReasonRequired)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/invitations", InviteAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -117,7 +126,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.IdentifierMixedScript, ErrorCodes.IdentifierInvalid,
                     ErrorCodes.GrantUnresolved, ErrorCodes.RequestInvalid,
                     ErrorCodes.RestrictionExceeded)
-                .Binding<OrganizationId>("id"));
+                .Binding<OrganizationId>("id"))
+            .Produces<IssuedInvitationView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id}/invitations/{invitationId}",
             RevokeInvitationAsync))
@@ -126,7 +136,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.OrganizationNotFound,
                     ErrorCodes.InvitationNotFound, ErrorCodes.InvitationExpired)
                 .Binding<OrganizationId>("id")
-                .Binding<InvitationId>("invitationId"));
+                .Binding<InvitationId>("invitationId"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id}/memberships/{subject}",
             EndMembershipAsync))
@@ -135,7 +146,8 @@ internal static class OrganizationEndpoints
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.OrganizationNotFound,
                     ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound)
                 .Binding<OrganizationId>("id")
-                .Binding<SubjectId>("subject"));
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

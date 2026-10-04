@@ -39,18 +39,22 @@ internal static class RoleEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/roles", AllAsync))
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<RoleView>>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/roles", DefineAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired));
+                    ErrorCodes.StepUpRequired))
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/roles/{name}", RemoveAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse)
-                .Binding<RoleName>("name"));
+                .Binding<RoleName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }

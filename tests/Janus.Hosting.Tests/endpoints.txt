@@ -1,0 +1,1794 @@
+GET /.well-known/change-password
+  302
+GET /.well-known/passkey-endpoints
+  200
+    application/json
+      enroll: string
+      manage: string
+GET /.well-known/webauthn
+  200
+    application/json
+      : string
+GET /account
+  200
+    application/json
+      state: AccountState
+      identifiers.emails[].id: string
+      identifiers.emails[].value: string
+      identifiers.emails[].verified: boolean
+      identifiers.emails[].primary: boolean
+      identifiers.emails[].locked: boolean
+      identifiers.phones[].id: string
+      identifiers.phones[].value: string
+      identifiers.phones[].verified: boolean
+      identifiers.phones[].primary: boolean
+      identifiers.phones[].locked: boolean
+      identifiers.username: string
+      identifiers.backup.emails: string
+      identifiers.backup.phones: string
+      credentials[].id: string
+      credentials[].kind: Factor
+      credentials[].label: string
+      credentials[].state: AuthenticatorState
+      credentials[].invalidatesAt: DateTimeOffset?
+      credentials[].backupEligible: boolean?
+      credentials[].backupState: boolean?
+      credentials[].addedAt: DateTimeOffset
+      credentials[].lastUsedAt: DateTimeOffset?
+      secondStep.preferred: string
+      recoveryCodes.remaining: number
+      recoveryCodes.generatedAt: DateTimeOffset
+      recoveryCodes.viewedAt: DateTimeOffset?
+      recoveryCodes.exportedAt: DateTimeOffset?
+      recoveryCodes.remindedAt: DateTimeOffset?
+      profile.displayName: string
+      profile.legalName: string
+      profile.dateOfBirth: DateOnly?
+      profile.photo: DateTimeOffset?
+      preferences.language: string
+      preferences.timeZone: string
+      preferences.declared{}: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+GET /account/credentials
+  200
+    application/json
+      [].id: string
+      [].kind: Factor
+      [].label: string
+      [].state: AuthenticatorState
+      [].invalidatesAt: DateTimeOffset?
+      [].backupEligible: boolean?
+      [].backupState: boolean?
+      [].addedAt: DateTimeOffset
+      [].lastUsedAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+DELETE /account/credentials/{id}
+  202 auth.credential.lastsecondfactor
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+PATCH /account/credentials/{id}
+  request application/json
+    label: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  404 auth.credential.notfound
+  422 auth.credential.labelinvalid
+POST /account/credentials/{id}/upgrade
+  200
+    application/json
+      relyingPartyId: string
+      user.id: string
+      user.name: string
+      user.displayName: string
+      algorithms[]: number
+      discoverableCredential: boolean
+      challenge: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 auth.credential.notfound
+  409 auth.credential.notupgradable
+POST /account/deactivate
+  202
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+POST /account/delete
+  202
+    application/json
+      erasesAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+POST /account/delete/cancel
+  request application/json
+    linkToken: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  409 identity.takedown.active
+  422 identity.deletion.windowelapsed
+GET /account/devices
+  200
+    application/json
+      [].id: string
+      [].kind: DeviceKind
+      [].label: string
+      [].createdAt: DateTimeOffset
+      [].lastUsedAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+DELETE /account/devices/{id}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 authz.resource.notfound
+GET /account/explanations/{correlationId}
+  200
+    application/json
+      outcome: AccessOutcome
+      permission: string
+      principal.acting: Guid?
+      principal.effective: Guid?
+      principal.name: string
+      principal.reason: string
+      grant.id: Guid?
+      grant.kind: GrantKind
+      grant.subjectType: SubjectType
+      grant.subjectId: Guid
+      grant.role: string
+      grant.deny: boolean
+      grant.inheritedFrom.resourceType: string
+      grant.inheritedFrom.resourceId: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /account/factors/totp/begin
+  request application/json
+    label: string
+  200
+    application/json
+      id: Guid
+      secret: string
+      uri: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+POST /account/factors/totp/confirm
+  request application/json
+    credentialId: string
+    code: string
+  200
+    application/json
+      id: Guid
+      secondCredential: CredentialRedundancy?
+      recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+POST /account/identifiers
+  request application/json
+    kind: IdentifierKind
+    value: string
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 identity.identifier.maximum
+  422 identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript integration.sms.balancefloor
+  429 auth.restriction.exceeded
+PUT /account/identifiers/backup
+  request application/json
+    kind: IdentifierKind
+    setting: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  409 identity.identifier.unverified
+DELETE /account/identifiers/{id}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  409 identity.identifier.lastofkind identity.identifier.primary
+POST /account/identifiers/{id}/abandon
+  request application/json
+    linkToken: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid authz.restricted
+POST /account/identifiers/{id}/primary
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  409 identity.identifier.unverified
+PUT /account/identifiers/{id}/replace
+  request application/json
+    value: string
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 identity.change.pending
+  422 identity.identifier.domainnotallowed identity.identifier.mixedscript integration.sms.balancefloor
+  429 auth.restriction.exceeded
+POST /account/identifiers/{id}/undo
+  request application/json
+    linkToken: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 identity.change.windowelapsed
+POST /account/identifiers/{id}/verify
+  request application/json
+    code: string
+    linkToken: string
+    press: boolean
+  200
+    application/json
+      sameBrowser: boolean
+      code: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  422 auth.code.expired auth.code.invalid
+  429 auth.throttled
+GET /account/invitation
+  200
+    application/json
+      id: Guid
+      organization: Guid
+      organizationName: string
+      invitedBy: string
+      roles[]: string
+      documents[].document: string
+      documents[].version: string
+      expiresAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.invitation.notfound
+POST /account/invitation/acknowledge
+  request application/json
+    invitationId: Guid?
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 identity.invitation.notfound
+  409 identity.identifier.maximum identity.membership.limitreached
+  422 identity.identifier.domainnotallowed identity.invitation.expired identity.invitation.identifiermismatch
+DELETE /account/link/apple
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 auth.credential.notfound
+  409 identity.link.lastcredential
+POST /account/link/apple
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+DELETE /account/link/google
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  404 auth.credential.notfound
+  409 identity.link.lastcredential
+POST /account/link/google
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+GET /account/mail/apppasswords
+  200
+    application/json
+      [].id: string
+      [].label: string
+      [].createdAt: DateTimeOffset
+      [].expiresAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.mailbox.notfound
+POST /account/mail/apppasswords
+  request application/json
+    label: string
+    expiresAt: DateTimeOffset?
+  200
+    application/json
+      id: string
+      secret: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.mailbox.notfound
+  422 auth.credential.labelinvalid
+DELETE /account/mail/apppasswords/{id}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required
+  404 auth.credential.notfound identity.mailbox.notfound
+POST /account/password
+  request application/json
+    password: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  422 auth.password.blocklisted auth.password.toolong auth.password.tooshort
+DELETE /account/photo
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+GET /account/photo
+  200
+    image/jpeg
+      : number[]
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 identity.photo.notfound
+PUT /account/photo
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted identity.photo.notenabled
+  422 identity.photo.invalid identity.photo.toolarge
+GET /account/preferences
+  200
+    application/json
+      language: string
+      timeZone: string
+      declared{}: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+PUT /account/preferences
+  request application/json
+    language: string
+    timeZone: string
+    declared{}: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  422 identity.preference.administratoronly identity.preference.toolarge identity.preference.undeclared identity.preference.wrongtype
+PUT /account/profile
+  request application/json
+    displayName: string
+    legalName: string
+    username: string
+    dateOfBirth: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 identity.username.coolingoff identity.username.reserved identity.username.taken
+  422 identity.identifier.mixedscript identity.profile.invalid identity.profile.notaccepted
+POST /account/reactivate
+  request application/json
+    linkToken: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  409 identity.account.adminsuspended
+  422 identity.reactivation.tokeninvalid
+POST /account/recoverycodes
+  200
+    application/json
+      codes[]: string
+      generatedAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+POST /account/recoverycodes/exported
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 auth.factor.notenrolled
+PUT /account/secondstep/preferred
+  request application/json
+    method: Guid?
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.restricted
+  422 api.request.invalid
+GET /account/sessions
+  200
+    application/json
+      [].id: string
+      [].signedInAt: DateTimeOffset
+      [].lastUsedAt: DateTimeOffset
+      [].device.browser: string
+      [].device.os: string
+      [].location.city: string
+      [].location.country: string
+      [].current: boolean
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+DELETE /account/sessions/{id}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  404 authz.resource.notfound
+GET /admin/access
+  200
+    application/json
+      resource.resourceType: string
+      resource.resourceId: string
+      grants[].id: Guid?
+      grants[].kind: GrantKind
+      grants[].subjectType: SubjectType
+      grants[].subjectId: Guid
+      grants[].role: string
+      grants[].deny: boolean
+      grants[].inheritedFrom.resourceType: string
+      grants[].inheritedFrom.resourceId: string
+      partial: boolean
+      unevaluated[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/accounts/{subject}/delete/cancel
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound
+  409 identity.account.stateconflict identity.takedown.active
+  422 identity.deletion.windowelapsed
+GET /admin/accounts/{subject}/photo
+  200
+    image/jpeg
+      : number[]
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.photo.notfound
+POST /admin/accounts/{subject}/reactivate
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound
+  409 identity.account.stateconflict
+POST /admin/accounts/{subject}/restriction/lift
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound
+  409 identity.account.stateconflict
+POST /admin/accounts/{subject}/sessions/revoke
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound
+POST /admin/accounts/{subject}/suspend
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound
+  409 identity.account.stateconflict
+GET /admin/accounts/{subject}/takedown
+  200
+    application/json
+      takedownId: Guid
+      subject: Guid
+      triggeredAt: DateTimeOffset
+      erasureDue: DateTimeOffset?
+      reversed: boolean
+      status: ErasureStatus
+      attempts: number
+      subscribers[].name: string
+      subscribers[].required: boolean
+      subscribers[].confirmedAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.takedown.notfound
+POST /admin/accounts/{subject}/takedown
+  request application/json
+    trigger: TakedownTrigger?
+    reason: string
+  202
+    application/json
+      takedownId: Guid
+      erasureDue: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound
+  409 identity.account.stateconflict identity.takedown.active
+POST /admin/accounts/{subject}/takedown/reverse
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.account.notfound identity.takedown.notfound
+  422 identity.takedown.windowelapsed
+GET /admin/audit
+  200
+    application/json
+      [].id: Guid
+      [].category: AuditCategory
+      [].action: string
+      [].occurredAt: DateTimeOffset
+      [].acting: Guid
+      [].effective: Guid
+      [].organization: Guid?
+      [].details{}: JsonElement
+      [].breakGlassReason: string
+      [].principal: string
+      [].principalReason: string
+      [].subject: Guid?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+GET /admin/break-glass
+  200
+    application/json
+      standing: boolean
+      issuedAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/break-glass/generate
+  200
+    application/json
+      credential: string
+      address: string
+      issuedAt: DateTimeOffset
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+PUT /admin/compliance/assessments
+  request application/json
+    dataOwner: string
+    organizationalSecurityMeasures: string
+    assessmentLinks[]: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+GET /admin/compliance/licences
+  200
+    application/json
+      licences[].id: Guid
+      licences[].kind: string
+      licences[].name: string
+      licences[].expiresAt: DateTimeOffset
+      licences[].renewedAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+PUT /admin/compliance/licences
+  request application/json
+    [].id: Guid?
+    [].kind: string
+    [].name: string
+    [].expiresAt: DateTimeOffset?
+    [].renewedAt: DateTimeOffset?
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  422 api.request.invalid
+GET /admin/compliance/maintenance
+  200
+    application/json
+      entries[].task: string
+      entries[].performedAt: DateTimeOffset
+      entries[].actor: Guid
+      entries[].note: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/compliance/maintenance
+  request application/json
+    task: string
+    performedAt: DateTimeOffset?
+    note: string
+  201
+    application/json
+      task: string
+      performedAt: DateTimeOffset
+      actor: Guid
+      note: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  422 api.request.invalid
+GET /admin/config/{key}
+  200
+    application/json
+      key: string
+      value: JsonElement
+      default: JsonElement?
+      protected: boolean
+      direction: SettingDirection
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+PUT /admin/config/{key}
+  request application/json
+    value: JsonElement?
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 config.change.superseded
+  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.lastdestination config.value.notallowed
+POST /admin/documents/{document}/versions
+  request application/json
+    text: string
+    governingLanguage: string
+    translations[].language: string
+    translations[].text: string
+    material: boolean?
+  200
+    application/json
+      document: string
+      version: string
+      governingLanguage: string
+      text: string
+      translations[].language: string
+      translations[].text: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  422 privacy.notice.governingtextmissing
+PUT /admin/documents/{document}/versions/{version}/translations/{language}
+  request application/json
+    language: string
+    text: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  404 privacy.document.notfound
+GET /admin/erasures
+  200
+    application/json
+      [].id: Guid
+      [].subject: Guid
+      [].reason: ErasureReason
+      [].status: ErasureStatus
+      [].attempts: number
+      [].subscribers[].name: string
+      [].subscribers[].required: boolean
+      [].subscribers[].confirmedAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+GET /admin/erasures/{id}
+  200
+    application/json
+      id: Guid
+      subject: Guid
+      reason: ErasureReason
+      status: ErasureStatus
+      attempts: number
+      subscribers[].name: string
+      subscribers[].required: boolean
+      subscribers[].confirmedAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 privacy.erasure.notfound
+POST /admin/erasures/{id}/complete
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 privacy.erasure.notfound
+  409 privacy.erasure.notfailed
+GET /admin/explanations/{correlationId}
+  200
+    application/json
+      outcome: AccessOutcome
+      permission: string
+      principal.acting: Guid?
+      principal.effective: Guid?
+      principal.name: string
+      principal.reason: string
+      grant.id: Guid?
+      grant.kind: GrantKind
+      grant.subjectType: SubjectType
+      grant.subjectId: Guid
+      grant.role: string
+      grant.deny: boolean
+      grant.inheritedFrom.resourceType: string
+      grant.inheritedFrom.resourceId: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+GET /admin/grants
+  200
+    application/json
+      [].id: Guid
+      [].kind: GrantKind
+      [].subjectType: SubjectType
+      [].subjectId: Guid
+      [].resourceType: string
+      [].resourceId: string
+      [].role: string
+      [].deny: boolean
+      [].expiresAt: DateTimeOffset?
+      [].grantedBy: Guid
+      [].grantedAt: DateTimeOffset
+      [].reason: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/grants
+  request application/json
+    subjectType: SubjectType?
+    subjectId: Guid?
+    resourceType: string
+    resourceId: string
+    role: string
+    deny: boolean?
+    expiresAt: DateTimeOffset?
+    reason: string
+  201
+    application/json
+      id: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 authz.grant.duplicate authz.grant.expired
+  422 authz.grant.reasonrequired authz.grant.unresolved
+DELETE /admin/grants/{id}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 authz.grant.notfound
+  422 authz.grant.reasonrequired
+GET /admin/groups
+  200
+    application/json
+      [].id: Guid
+      [].name: string
+      [].members[].subjectType: SubjectType
+      [].members[].subjectId: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/groups
+  request application/json
+    organization: Guid?
+    name: string
+    reason: string
+  201
+    application/json
+      id: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+DELETE /admin/groups/{id}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  409 authz.group.inuse
+DELETE /admin/groups/{id}/members
+  request application/json
+    subjectType: SubjectType?
+    subjectId: Guid?
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 authz.group.cycle
+  422 api.request.invalid
+POST /admin/groups/{id}/members
+  request application/json
+    subjectType: SubjectType?
+    subjectId: Guid?
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 authz.group.cycle
+  422 api.request.invalid
+POST /admin/notices
+  request application/json
+    text: string
+    governingLanguage: string
+    translations[].language: string
+    translations[].text: string
+    material: boolean?
+  200
+    application/json
+      document: string
+      version: string
+      governingLanguage: string
+      text: string
+      translations[].language: string
+      translations[].text: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  422 privacy.notice.governingtextmissing
+POST /admin/organizations
+  request application/json
+    name: string
+    reason: string
+  201
+    application/json
+      id: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  422 identity.identifier.mixedscript
+POST /admin/organizations/{id}/delete
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.organization.notfound
+  409 identity.organization.protected
+POST /admin/organizations/{id}/delete/cancel
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.organization.notfound
+  409 identity.organization.protected
+  422 identity.deletion.windowelapsed
+GET /admin/organizations/{id}/domains
+  200
+    application/json
+      [].domain: string
+      [].recordName: string
+      [].recordValue: string
+      [].addedAt: DateTimeOffset
+      [].verifiedAt: DateTimeOffset?
+      [].checkedAt: DateTimeOffset?
+      [].lastCheckPassed: boolean?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
+POST /admin/organizations/{id}/domains
+  request application/json
+    domain: string
+    reason: string
+  201
+    application/json
+      domain: string
+      recordName: string
+      recordValue: string
+      addedAt: DateTimeOffset
+      verifiedAt: DateTimeOffset?
+      checkedAt: DateTimeOffset?
+      lastCheckPassed: boolean?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.organization.notfound
+  422 config.change.reasonrequired config.value.notallowed
+DELETE /admin/organizations/{id}/domains/{domain}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.organization.notfound
+  422 config.change.reasonrequired
+POST /admin/organizations/{id}/domains/{domain}/verify
+  request application/json
+    reason: string
+  200
+    application/json
+      domain: string
+      recordName: string
+      recordValue: string
+      addedAt: DateTimeOffset
+      verifiedAt: DateTimeOffset?
+      checkedAt: DateTimeOffset?
+      lastCheckPassed: boolean?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.domain.notfound identity.organization.notfound
+  422 config.change.reasonrequired identity.domain.unverified
+POST /admin/organizations/{id}/invitations
+  request application/json
+    email: string
+    phone: string
+    corporateEmail: string
+    roles[]: string
+    documents[]: string
+    formerMailbox: FormerMailbox?
+    reason: string
+  201
+    application/json
+      id: Guid
+      expiresAt: DateTimeOffset
+      token: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.organization.notfound
+  409 identity.invitation.mailboxheld identity.mailbox.taken
+  422 api.request.invalid authz.grant.unresolved identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.invitation.addressrequired
+  429 auth.restriction.exceeded
+DELETE /admin/organizations/{id}/invitations/{invitationId}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  404 identity.invitation.notfound identity.organization.notfound
+  422 identity.invitation.expired
+DELETE /admin/organizations/{id}/memberships/{subject}
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.membership.notfound identity.organization.notfound
+GET /admin/organizations/{id}/policy
+  200
+    application/json
+      requiredAssurance.value: JsonElement
+      requiredAssurance.overridden: boolean
+      loginFactors.value: JsonElement
+      loginFactors.overridden: boolean
+      gates{}.value: JsonElement
+      gates{}.overridden: boolean
+      credentialRedundancy.value: JsonElement
+      credentialRedundancy.overridden: boolean
+      selfServiceRecovery.value: JsonElement
+      selfServiceRecovery.overridden: boolean
+      photos.value: JsonElement
+      photos.overridden: boolean
+      emailDomains.value: JsonElement
+      emailDomains.overridden: boolean
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
+PUT /admin/organizations/{id}/policy
+  request application/json
+    : JsonElement
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 identity.organization.notfound
+  422 config.change.reasonrequired config.policy.belowsystem config.value.belowfloor config.value.notallowed
+GET /admin/privacy/requests
+  200
+    application/json
+      [].requestId: Guid
+      [].subject: Guid
+      [].type: PrivacyRequestType
+      [].detail: string
+      [].receivedAt: DateOnly
+      [].createdAt: DateTimeOffset
+      [].receiptSentAt: DateTimeOffset?
+      [].decisionDue: DateTimeOffset
+      [].status: PrivacyRequestStatus
+      [].decidedAt: DateTimeOffset?
+      [].decisionReason: string
+      [].channel: string
+      [].identityConfirmation: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/privacy/requests
+  request application/json
+    subject: string
+    type: string
+    detail: string
+    receivedAt: string
+    channel: string
+    identityConfirmation: string
+  202
+    application/json
+      requestId: Guid
+      receiptSentAt: DateTimeOffset?
+      decisionDue: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  422 api.request.invalid privacy.request.receivedfuture
+POST /admin/privacy/requests/{request}/fulfil
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 privacy.request.notfound
+  409 privacy.request.decided
+POST /admin/privacy/requests/{request}/refuse
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  404 privacy.request.notfound
+  409 privacy.request.decided
+POST /admin/recovery/approve
+  request application/json
+    subject: string
+    reason: string
+    channelUsed: string
+  200
+    application/json
+      enrolmentLinkExpiresAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  422 auth.recovery.channelnotonaccount auth.recovery.reasonrequired auth.recovery.selfapproval integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+GET /admin/restrictions
+  200
+    application/json
+      [].name: string
+      [].key: string
+      [].purpose: string
+      [].channel: string
+      [].buckets[].max: number
+      [].buckets[].interval: string
+      [].buckets[].window: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+DELETE /admin/restrictions/{name}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 auth.restriction.notfound
+  422 config.change.reasonrequired
+GET /admin/restrictions/{name}
+  200
+    application/json
+      name: string
+      key: string
+      purpose: string
+      channel: string
+      buckets[].max: number
+      buckets[].interval: string
+      buckets[].window: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 auth.restriction.notfound
+PUT /admin/restrictions/{name}
+  request application/json
+    key: string
+    purpose: string
+    channel: string
+    buckets[].max: number?
+    buckets[].interval: string
+    buckets[].window: string
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  422 config.change.reasonrequired config.value.notallowed
+POST /admin/restrictions/{name}/grant
+  request application/json
+    keyValue: string
+    credit: number?
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 auth.restriction.notfound
+  422 config.change.reasonrequired config.value.notallowed
+GET /admin/roles
+  200
+    application/json
+      [].name: string
+      [].permissions[]: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/roles
+  request application/json
+    name: string
+    permissions[]: string
+    reason: string
+  201
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+DELETE /admin/roles/{name}
+  request application/json
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  404 authz.role.notfound
+  409 authz.role.inuse
+GET /admin/ropa
+  200
+    application/json
+      generatedAt: DateTimeOffset
+      hostingEnvironment: string
+      hostingLocation: HostingLocation
+      crossBorderBasis: string
+      dataOwner: string
+      organizationalSecurityMeasures: string
+      assessmentLinks[]: string
+      records[].purpose: string
+      records[].dataCategories[]: string
+      records[].subjectCategories[]: string
+      records[].lawfulBasis: string
+      records[].nonSensitive: boolean
+      records[].sensitive: boolean
+      records[].children: boolean
+      records[].sensitiveCategories[]: string
+      records[].retention[]: string
+      records[].recipients[]: string
+      records[].disposalMeasures[]: string
+      records[].rolesWithAccess[]: string
+      records[].technicalSecurityMeasures[]: string
+      records[].assessment: string
+      recipients[].name: string
+      recipients[].characterisation: RecipientCharacterisation
+      recipients[].dataReceived[]: string
+      recipients[].location: HostingLocation
+      recipients[].agreementReference: string
+      recipients[].crossBorderBasis: string
+      recipients[].callback: boolean
+      flags[].finding: RegisterFinding
+      flags[].subject: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/sessions/revoke-all
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+POST /auth/begin
+  request application/json
+    identifier: string
+  200
+    application/json
+      challengeId: string
+      available[]: Factor
+      webAuthn.relyingPartyId: string
+      webAuthn.challenge: string
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+POST /auth/break-glass
+  request application/json
+    credential: string
+    reason: string
+  200
+  400 api.request.malformed
+  409 auth.breakglass.consumed
+  422 auth.breakglass.invalid
+  429 auth.throttled
+POST /auth/device/verify
+  request application/json
+    challengeId: string
+    code: string
+  200
+    application/json
+      status: SignInStatus
+      assuranceLevel: AssuranceLevel
+      phishingResistant: boolean
+      required[]: Factor
+      trustDeviceOffered: boolean
+      policyRequirement.field: PolicyField
+      policyRequirement.value: string
+      policyRequirement.deadline: DateTimeOffset
+      passwordChangeRequired: boolean
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 auth.code.expired auth.code.invalid
+  429 auth.restriction.exceeded
+POST /auth/email-otp
+  request application/json
+    identifier: string
+  202
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  429 auth.restriction.exceeded auth.throttled
+POST /auth/factor
+  request application/json
+    challengeId: string
+    factor: Factor
+    value: string
+    linkToken: string
+    assertion.credentialId: string
+    assertion.clientDataJson: string
+    assertion.authenticatorData: string
+    assertion.signature: string
+    assertion.userHandle: string
+    trustDevice: boolean
+    press: boolean
+  200
+    application/json
+      status: SignInStatus
+      assuranceLevel: AssuranceLevel
+      phishingResistant: boolean
+      required[]: Factor
+      trustDeviceOffered: boolean
+      policyRequirement.field: PolicyField
+      policyRequirement.value: string
+      policyRequirement.deadline: DateTimeOffset
+      passwordChangeRequired: boolean
+    application/json
+      sameBrowser: boolean
+      code: string
+  202
+  400 api.request.malformed
+  403 auth.policy.graceexpired auth.session.csrfinvalid
+  422 auth.code.expired auth.code.invalid auth.factor.notpermitted auth.factor.rejected identity.identifier.domainnotallowed integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+POST /auth/link
+  request application/json
+    identifier: string
+  202
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  429 auth.restriction.exceeded auth.throttled
+POST /auth/link/abandon
+  request application/json
+    linkToken: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+POST /auth/logout
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+GET /auth/providers/apple
+  302
+  403 auth.session.csrfinvalid
+GET /auth/providers/apple/return
+  302
+  403 auth.session.csrfinvalid
+GET /auth/providers/google
+  302
+  403 auth.session.csrfinvalid
+GET /auth/providers/google/return
+  302
+  403 auth.session.csrfinvalid
+GET /auth/session
+  200
+    application/json
+      subject: string
+      assuranceLevel: AssuranceLevel
+      phishingResistant: boolean
+      lastStrongAuthAt: DateTimeOffset
+      expiresAt: DateTimeOffset
+      landing: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+GET /auth/signon
+  302
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+GET /auth/signon/return
+  302
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+POST /auth/step-up
+  request application/json
+    challengeId: string
+    factor: Factor
+    value: string
+    linkToken: string
+    assertion.credentialId: string
+    assertion.clientDataJson: string
+    assertion.authenticatorData: string
+    assertion.signature: string
+    assertion.userHandle: string
+    trustDevice: boolean
+    press: boolean
+  200
+    application/json
+      status: SignInStatus
+      assuranceLevel: AssuranceLevel
+      phishingResistant: boolean
+      required[]: Factor
+      trustDeviceOffered: boolean
+      policyRequirement.field: PolicyField
+      policyRequirement.value: string
+      policyRequirement.deadline: DateTimeOffset
+      passwordChangeRequired: boolean
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required
+  422 auth.code.expired auth.code.invalid auth.factor.notpermitted auth.factor.rejected integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+POST /auth/webauthn/register/begin
+  request application/json
+    kind: Factor?
+  200
+    application/json
+      relyingPartyId: string
+      user.id: string
+      user.name: string
+      user.displayName: string
+      algorithms[]: number
+      discoverableCredential: boolean
+      challenge: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+  422 auth.credential.labelinvalid auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
+POST /auth/webauthn/register/complete
+  request application/json
+    credential.credentialId: string
+    credential.clientDataJson: string
+    credential.authenticatorData: string
+    credential.publicKey: string
+    credential.algorithm: number
+    label: string
+  200
+    application/json
+      id: Guid
+      secondCredential: CredentialRedundancy?
+      recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+  422 auth.credential.labelinvalid auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
+POST /callbacks/providers/apple
+  200
+  403 authz.denied
+  409 integration.callback.inprogress
+  422 integration.callback.rejected
+  429 integration.callback.rejected
+  500 system.fault
+GET /callbacks/providers/apple/return
+  303
+POST /callbacks/providers/apple/return
+  303
+POST /callbacks/providers/google
+  202
+  400
+    application/json
+      err: string
+      description: string
+  403 authz.denied
+  409 integration.callback.inprogress
+  422 integration.callback.rejected
+  429 integration.callback.rejected
+  500 system.fault
+GET /callbacks/providers/google/return
+  303
+POST /callbacks/providers/google/return
+  303
+GET /callbacks/sms/dlr
+  200
+  403 authz.denied
+  409 integration.callback.inprogress
+  422 integration.callback.rejected
+  429 integration.callback.rejected
+POST /enrol/begin
+  request application/json
+    token: string
+  200
+    application/json
+      expiresAt: DateTimeOffset
+      mailboxLost: boolean
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 auth.enrolment.tokeninvalid auth.recovery.tokenexpired
+GET /privacy/consents
+  200
+    application/json
+      [].purpose: string
+      [].document: string
+      [].noticeVersion: string
+      [].mechanism: ConsentMechanism
+      [].grantedAt: DateTimeOffset
+      [].withdrawnAt: DateTimeOffset?
+      [].supersededAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+POST /privacy/consents/{purpose}/grant
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 privacy.notice.unpublished
+  422 privacy.purpose.noconsent
+POST /privacy/consents/{purpose}/withdraw
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 privacy.purpose.noconsent
+GET /privacy/documents/{document}
+  200
+    application/json
+      document: string
+      version: string
+      governingLanguage: string
+      text: string
+      translations[].language: string
+      translations[].text: string
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  404 privacy.document.notfound
+GET /privacy/export
+  200
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      sections[].name: string
+      sections[].records[]{}: string
+    application/json
+      subject: string
+      assembledAt: DateTimeOffset
+      values{}: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required
+  429 auth.throttled
+GET /privacy/notice
+  200
+    application/json
+      document: string
+      version: string
+      governingLanguage: string
+      text: string
+      translations[].language: string
+      translations[].text: string
+  403 auth.session.csrfinvalid
+  404 privacy.document.notfound
+GET /privacy/objections
+  200
+    application/json
+      [].purpose: string
+      [].document: string
+      [].noticeVersion: string
+      [].mechanism: ConsentMechanism
+      [].recordedAt: DateTimeOffset
+      [].withdrawnAt: DateTimeOffset?
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+DELETE /privacy/objections/{purpose}
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 privacy.purpose.notobjectable
+POST /privacy/objections/{purpose}
+  204
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 privacy.notice.unpublished
+  422 privacy.purpose.notobjectable
+POST /privacy/requests
+  request application/json
+    type: string
+    detail: string
+  202
+    application/json
+      requestId: Guid
+      receiptSentAt: DateTimeOffset?
+      decisionDue: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+POST /recovery/begin
+  request application/json
+    identifier: string
+  202
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  429 auth.restriction.exceeded auth.throttled
+POST /recovery/complete
+  request application/json
+    token: string
+    password: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  422 auth.recovery.tokenexpired auth.recovery.tokeninvalid
+POST /recovery/report-loss
+  request application/json
+    credentialId: string
+  202
+    application/json
+      invalidatesAt: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 auth.lossreport.notpermitted auth.lossreport.pending
+POST /recovery/report-loss/{id}/cancel
+  request application/json
+    token: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 auth.lossreport.notpermitted auth.lossreport.pending
+GET /register
+  200
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+POST /register
+  request application/json
+    clientId: string
+    invitationToken: string
+  201
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+  409 identity.registration.signedin
+  422 identity.invitation.expired identity.invitation.identifiermismatch
+  429 auth.throttled
+POST /register/abandon
+  request application/json
+    linkToken: string
+  204
+  400 api.request.malformed
+  403 auth.session.csrfinvalid
+PUT /register/age
+  request application/json
+    dateOfBirth: DateOnly?
+  200
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete
+  422 identity.profile.underage
+POST /register/confirm
+  200
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete
+PUT /register/email
+  request application/json
+    value: string
+  202
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete
+  429 auth.restriction.exceeded auth.throttled
+GET /register/events
+  200
+    text/event-stream
+      : string
+  403 auth.session.csrfinvalid
+  404 authz.resource.notfound
+POST /register/identifiers
+  request application/json
+    kind: IdentifierKind
+    value: string
+  202
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.identifier.maximum identity.registration.incomplete
+  422 identity.identifier.domainnotallowed integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+DELETE /register/identifiers/{id}
+  200
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.identifier.lastofkind identity.registration.incomplete
+PUT /register/identifiers/{id}
+  request application/json
+    value: string
+  202
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.identifier.locked identity.registration.incomplete
+  422 identity.identifier.domainnotallowed integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+PUT /register/phone
+  request application/json
+    value: string
+  202
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete
+  422 integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+POST /register/phone/skip
+  200
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete
+PUT /register/security
+  request application/json
+    password: string
+    secondStep: string
+  200
+    application/json
+      step: RegistrationStep
+      expiresAt: DateTimeOffset
+      identifiers[].id: string
+      identifiers[].kind: IdentifierKind
+      identifiers[].value: string
+      identifiers[].verified: boolean
+      identifiers[].locked: boolean
+      security.password: boolean
+      security.secondStep[]: Factor
+      security.recoveryCodes[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete
+  422 auth.password.blocklisted auth.password.toolong auth.password.tooshort
+POST /register/terms
+  request application/json
+    termsVersion: string
+    noticeVersion: string
+    consents{}: boolean
+  201
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  409 identity.registration.incomplete privacy.notice.unpublished
+  422 identity.affirmation.required privacy.purpose.noconsent
+POST /register/verify/{id}
+  request application/json
+    code: string
+    linkToken: string
+    press: boolean
+  200
+    application/json
+      sameBrowser: boolean
+      code: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid
+  422 auth.code.expired auth.code.invalid integration.sms.balancefloor
+  429 auth.restriction.exceeded auth.throttled
+pipeline
+  Concealment
+  ErrorTranslation
+  MalformedRequest
+  ResourceIsolation
+  CustomRequestHeader
+  OriginValidation
+  SourceRateLimiting
+  SessionResolution
+  FirstContact
+  SynchronizerToken
+  SessionRequirement
+  Authentication
+  404 authz.resource.notfound
+  429 auth.throttled
+  500 system.fault
