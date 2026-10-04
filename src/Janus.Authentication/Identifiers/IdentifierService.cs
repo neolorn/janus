@@ -271,18 +271,29 @@ internal sealed class IdentifierService(
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        // A code that names no verification of the account's is refused before the unit
-        // of work begins, as a registration refuses one that names no identifier of its
-        // session, and it names no identifier to hold or count.
+        // REG-SESS-003, AUTH-ABUSE-001 (D-189): every code is first held to the delay of
+        // the source that presents it, before the verification it names is looked for.
+        var presenting = new ThrottleAttempt(source, Identifier: null);
+
+        if (await DelayedAsync(presenting, cancellationToken).ConfigureAwait(false) is Error held)
+        {
+            return Result.Failure(held);
+        }
+
+        // A code that names no verification of the account's names no identifier, as one
+        // at a registration that names no identifier of its session: it is answered as a
+        // wrong code and counted against the source alone, and the count is the one
+        // write the refusal keeps.
         if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false)
                 is not PendingVerification listed
             || listed.Subject != subject)
         {
-            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+            return (await throttle.FailedAsync(presenting, cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.CodeInvalid)), Result.Failure);
         }
 
         // REG-SESS-003 AC6, AUTH-ABUSE-001 (D-188): a try is held to the delay the source
-        // and the identifier have earned, and every refused one is counted towards it.
+        // and the identifier have earned, and a wrong one is counted towards both.
         var attempt = new ThrottleAttempt(source, throttle.Identify(listed.Staged.Canonical, usernames: false));
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
@@ -317,11 +328,12 @@ internal sealed class IdentifierService(
             .FindForUpdateAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
 
+        // A verification gone since it was found names nothing either, so its code is
+        // counted against the source alone and that count is committed alone.
         if (waiting is null || waiting.Subject != subject)
         {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+            return Result.Failure(
+                await CountedAsync(presenting, Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false));
         }
 
         StagedIdentity staged = waiting.Staged;
@@ -348,9 +360,15 @@ internal sealed class IdentifierService(
             }
 
             // AUTH-FACT-004, AUTH-ABUSE-001, CONV-DESIGN-003: the wrong try is counted on
-            // the code's record, and the refused one against the source and the
-            // identifier, whatever the outcome, so this refusal commits the counts alone.
-            return Result.Failure(await CountedAsync(attempt, refused, cancellationToken).ConfigureAwait(false));
+            // the code's record and against the source and the identifier, and a code
+            // past its lifetime or its attempt cap against the source alone, whatever the
+            // outcome, so this refusal commits the counts alone.
+            return Result.Failure(
+                await CountedAsync(
+                        refused.Code == ErrorCodes.CodeInvalid ? attempt : presenting,
+                        refused,
+                        cancellationToken)
+                    .ConfigureAwait(false));
         }
 
         staged.Verify(now);
@@ -445,16 +463,24 @@ internal sealed class IdentifierService(
 
             // REG-IDENT-007, D-187: the confirmation answers from a record of its own,
             // read under its lock after the verification's. A press past its lifetime
-            // changes nothing, so its unit of work is rolled back (CONV-DESIGN-003).
+            // changes nothing on that record or the verification; it is counted against
+            // its source alone, and the count is the one write the refusal commits
+            // (AUTH-ABUSE-001, CONV-DESIGN-003, D-189).
             Result pressed = await codes
                 .PressAsync(PendingVerification.ConfirmationHolder(waiting.Identifier), cancellationToken)
                 .ConfigureAwait(false);
 
             if (pressed.Match(() => (Error?)null, error => error) is Error lapsed)
             {
-                await work.RollbackAsync().ConfigureAwait(false);
+                if (lapsed.Code != ErrorCodes.CodeExpired)
+                {
+                    await work.RollbackAsync().ConfigureAwait(false);
 
-                return Result.Failure<LinkLanding>(lapsed);
+                    return Result.Failure<LinkLanding>(lapsed);
+                }
+
+                return Result.Failure<LinkLanding>(
+                    await CountedAsync(pressing, lapsed, cancellationToken).ConfigureAwait(false));
             }
 
             waiting.ConfirmOld(now);

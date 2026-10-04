@@ -16,11 +16,18 @@ namespace Janus.Authentication.Tests.Sending;
 internal sealed class ThrottleLedgerInMemory : IThrottleLedger
 {
     private readonly Dictionary<(ThrottleScope Scope, string Key), ThrottleCounter> _counters = [];
+    private readonly List<(ThrottleScope Scope, string Key)> _failures = [];
 
     /// <summary>
     /// The scopes a counter stands for.
     /// </summary>
     public IReadOnlyCollection<(ThrottleScope Scope, string Key)> Counted => _counters.Keys;
+
+    /// <summary>
+    /// Every failure counted, in the order it was counted, so a test can read what
+    /// one refusal was counted against and what it was not.
+    /// </summary>
+    public IReadOnlyList<(ThrottleScope Scope, string Key)> Failures => _failures;
 
     /// <summary>
     /// Gets or sets what another transaction commits while this one waits for a
@@ -55,6 +62,7 @@ internal sealed class ThrottleLedgerInMemory : IThrottleLedger
         CancellationToken cancellationToken)
     {
         _counters[(scope, key)] = new ThrottleCounter(standing + 1, at);
+        _failures.Add((scope, key));
 
         return ValueTask.CompletedTask;
     }

@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /register/verify/{id}` and `POST /account/identifiers/{id}/verify` hold every
+  code and every press to the delay of the request's source first, the press that
+  opens a verification included, where a registration link's press that would verify
+  was held to none. A wrong code is counted against the source and the identifier; a
+  code past its lifetime or its attempt cap is now counted against the source alone.
+  A code whose `{id}` names nothing the session or the account holds is answered 422
+  `auth.code.invalid`, held to that delay and counted against the source, where the
+  registration route answered `identity.registration.incomplete` and neither route
+  counted it. A displaced address's confirmation pressed past its lifetime is still
+  422 `auth.code.expired` and is now counted against the source.
 - An identifier replaced twice within `identifier.change.coolingoff` keeps both
   displaced values reserved, each behind a removal of its own, and each undo link
   restores its own value, where the second replace overwrote the first removal and

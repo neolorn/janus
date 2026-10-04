@@ -659,13 +659,26 @@ internal sealed class RegistrationService(
             return (Gone(), false);
         }
 
-        if (live.Identity(identifier) is not StagedIdentity staged)
+        // REG-SESS-003 AC6 (D-189): every code is first held to the delay of the source
+        // that presents it, before the identifier it names is looked for.
+        var presenting = new ThrottleAttempt(source, Identifier: null);
+
+        if (await DelayedAsync(presenting, cancellationToken).ConfigureAwait(false) is Error held)
         {
-            return (OutOfStep(), false);
+            return (Result.Failure<RegistrationState>(held), false);
         }
 
-        // REG-SESS-003 AC6: a try is held to the delay the source and the identifier have
-        // earned, and every refused one is counted towards it.
+        // A code for an identifier the session does not hold names nothing to count
+        // against, so it is answered as a wrong code and counted against the source
+        // alone.
+        if (live.Identity(identifier) is not StagedIdentity staged)
+        {
+            return await CountedAsync(presenting, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // A try is held to the delay the source and the identifier have earned, and a
+        // wrong one is counted towards both.
         ThrottleAttempt attempt = Attempt(source, staged.Canonical);
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
@@ -688,9 +701,13 @@ internal sealed class RegistrationService(
 
         if (presented.Match(() => (Error?)null, error => error) is Error refused)
         {
-            return refused.Code == ErrorCodes.CodeInvalid || refused.Code == ErrorCodes.CodeExpired
+            // A wrong code is counted against the source and the identifier; one past
+            // its lifetime or its attempt cap against the source alone.
+            return refused.Code == ErrorCodes.CodeInvalid
                 ? await CountedAsync(attempt, refused, cancellationToken).ConfigureAwait(false)
-                : (Result.Failure<RegistrationState>(refused), false);
+                : refused.Code == ErrorCodes.CodeExpired
+                    ? await CountedAsync(presenting, refused, cancellationToken).ConfigureAwait(false)
+                    : (Result.Failure<RegistrationState>(refused), false);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -723,6 +740,17 @@ internal sealed class RegistrationService(
         ArgumentNullException.ThrowIfNull(linkToken);
         ArgumentNullException.ThrowIfNull(source);
 
+        // REG-SESS-003 (D-189): a token names no identifier until it opens something, so
+        // every press is first held to the delay of the source that presents it, the
+        // press that opens a verification included; a token merely opened is held to
+        // none and counts nothing.
+        var pressing = new ThrottleAttempt(source, Identifier: null);
+
+        if (press && await DelayedAsync(pressing, cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<LinkLanding>(delayed);
+        }
+
         byte[] fingerprint = OpaqueToken.Of(linkToken).Fingerprint();
 
         RegistrationSession? sender =
@@ -735,10 +763,10 @@ internal sealed class RegistrationService(
             || Sent(sender, fingerprint) is not StagedIdentity staged)
         {
             // REG-SESS-003 AC6: a pressed token that opens nothing names no identifier,
-            // so it is held to the delay of the source that presents it and counted
-            // against that source alone; one merely opened counts nothing.
+            // so it is counted against the source that presents it alone; one merely
+            // opened counts nothing.
             return press
-                ? await GoneAsync(source, cancellationToken).ConfigureAwait(false)
+                ? await GoneAsync(pressing, cancellationToken).ConfigureAwait(false)
                 : Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
         }
 
@@ -1859,20 +1887,13 @@ internal sealed class RegistrationService(
     // AUTH-ABUSE-001, CONV-DESIGN-003: the count of a pressed token that opens nothing
     // stands whatever the outcome, and the refusal writes nothing else; the throttle's
     // own unit of work is the outermost here, since nothing was begun for the press.
-    private async ValueTask<Result<LinkLanding>> GoneAsync(string source, CancellationToken cancellationToken)
-    {
-        var attempt = new ThrottleAttempt(source, Identifier: null);
-
-        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
-        {
-            return Result.Failure<LinkLanding>(delayed);
-        }
-
-        return (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+    private async ValueTask<Result<LinkLanding>> GoneAsync(
+        ThrottleAttempt pressing,
+        CancellationToken cancellationToken) =>
+        (await throttle.FailedAsync(pressing, cancellationToken).ConfigureAwait(false))
             .Match(
                 () => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeExpired)),
                 Result.Failure<LinkLanding>);
-    }
 
     // The refusal is counted against the delay after it is decided, and answers as it
     // was decided unless the count itself failed. AUTH-ABUSE-001, CONV-DESIGN-003: the

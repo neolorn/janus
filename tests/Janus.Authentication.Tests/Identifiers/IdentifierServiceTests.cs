@@ -1987,13 +1987,14 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-007 AC6: a confirmation pressed after
+    /// REG-IDENT-007 AC6 (D-189): a confirmation pressed after
     /// <c>code.verification.lifetime</c> from its send changes nothing and is answered
-    /// <c>auth.code.expired</c>; the identifier stays as it stood and the unit of work
-    /// is rolled back.
+    /// <c>auth.code.expired</c>; the identifier, the verification and the confirmation's
+    /// record stay as they stood, and the press is counted against its source alone,
+    /// that count the one write the refusal commits.
     /// </summary>
     [Fact]
-    public async Task REG_IDENT_007_AC6_AConfirmationPressedPastItsLifetimeChangesNothingAsync()
+    public async Task REG_IDENT_007_AC6_AConfirmationPressedPastItsLifetimeIsCountedAndChangesNothingAsync()
     {
         _configuration.Set(Settings.IdentifiersEmailMax, 1);
 
@@ -2025,11 +2026,13 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
         Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
         Assert.Null(Waiting(email).OldConfirmedAt);
         Assert.NotNull(Waiting(email).OldLink);
+        Assert.Equal(0, Confirmation(email).Attempts);
     }
 
     /// <summary>
@@ -3179,8 +3182,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5, AUTH-ABUSE-001: a code presented after it expired counts no
-    /// try on its record and is counted against the source and the identifier, and that
+    /// CONV-DESIGN-003 AC5, AUTH-ABUSE-001 (D-189): a code presented after it expired
+    /// counts no try on its record and is counted against the source alone, and that
     /// count is committed alone, with no rollback.
     /// </summary>
     [Fact]
@@ -3207,8 +3210,70 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(1, _work.OutermostCommitted);
         Assert.Equal(0, _work.RolledBack);
         Assert.DoesNotContain(_codes.All, held => held.Attempts > 0);
-        Assert.Equal(2, _throttle.Counted.Count);
-        Assert.Contains((ThrottleScope.Source, Source), _throttle.Counted);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6, AUTH-ABUSE-001 (D-189): a code presented past its attempt cap
+    /// is counted against the source alone, so the identifier is counted for the wrong
+    /// codes that reached the cap and for nothing after them.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = Code(second);
+        string wrong = code == "000000" ? "000001" : "000000";
+        SessionId browser = Stepped();
+
+        for (int tried = 0; tried < Settings.CodeVerificationAttempts.Default; tried++)
+        {
+            Waited();
+            _ = Refused(await Service.VerifyAsync(Acting, browser, second, wrong, Source, TestContext.Current.CancellationToken));
+        }
+
+        int counted = _throttle.Failures.Count;
+        Waited();
+        ErrorCode refused = Refused(await Service.VerifyAsync(Acting, browser, second, code, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.Equal(2 * Settings.CodeVerificationAttempts.Default, counted);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures.Skip(counted));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-ABUSE-001 (D-189): a code whose pending verification is
+    /// gone under the lock names nothing the account holds: it is answered
+    /// <c>auth.code.invalid</c> and counted against the source alone, and that count is
+    /// committed alone, with no rollback.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACodeForAVerificationGoneMeanwhileCommitsItsCountAloneAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = Code(second);
+        _pending.Locking = identifier =>
+            _ = _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask();
+        _work.Reset();
+
+        ErrorCode refused = Refused(await Service.VerifyAsync(
+            Acting,
+            Stepped(),
+            second,
+            code,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, refused);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+        Assert.DoesNotContain(await HeldAsync(), identifier => identifier.Canonical == Second);
     }
 
     /// <summary>
@@ -3400,28 +3465,70 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 AC6: a code that names no verification of the account's names no
-    /// identifier: it is refused before any unit of work begins and counts nothing, as a
-    /// registration refuses a code for an identifier its session does not hold.
+    /// REG-SESS-003 AC6 (D-189): a code that names no verification of the account's
+    /// names no identifier: it is answered <c>auth.code.invalid</c> and counted against
+    /// the source alone, as a registration counts a code for an identifier its session
+    /// does not hold, that count the one write the refusal commits; while that source's
+    /// delay stands a further code is refused with the instant it lifts.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_AC6_ACodeThatNamesNoVerificationOfTheAccountCountsNothingAsync()
+    public async Task REG_SESS_003_AC6_ACodeThatNamesNoVerificationOfTheAccountIsCountedAgainstItsSourceAsync()
     {
         IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId browser = Stepped();
         _work.Reset();
 
-        Assert.Equal(
-            ErrorCodes.CodeInvalid,
-            Refused(await Service.VerifyAsync(
-                Acting,
-                Stepped(),
-                primary,
-                "000000",
-                Source,
-                TestContext.Current.CancellationToken)));
+        ErrorCode first = Refused(await Service.VerifyAsync(Acting, browser, primary, "000000", Source, TestContext.Current.CancellationToken));
+        int committed = _work.OutermostCommitted;
+        int rolledBack = _work.RolledBack;
 
-        Assert.Equal(0, _work.Opened);
-        Assert.Empty(_throttle.Counted);
+        for (int tried = 1; tried < Settings.AbuseThrottleThreshold.Default; tried++)
+        {
+            _ = Refused(await Service.VerifyAsync(Acting, browser, primary, "000000", Source, TestContext.Current.CancellationToken));
+        }
+
+        Error held = (await Service.VerifyAsync(Acting, browser, primary, "000000", Source, TestContext.Current.CancellationToken))
+            .Match(() => throw new InvalidOperationException("The code was accepted."), error => error);
+
+        Assert.Equal(ErrorCodes.CodeInvalid, first);
+        Assert.Equal(1, committed);
+        Assert.Equal(0, rolledBack);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code that names another account's pending
+    /// verification names none of the account's: it is answered and counted as one that
+    /// names nothing, and the other account's verification is left as it stood.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodeForAnotherAccountsVerificationIsCountedAgainstItsSourceAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = Code(second);
+        var other = SubjectId.New(_randomness);
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        ErrorCode refused = Refused(await Service.VerifyAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            second,
+            code,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, refused);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+        Assert.Equal(0, Outstanding(second).Attempts);
+        Assert.False(Named(await HeldAsync(), Second).IsVerified);
     }
 
     /// <summary>
