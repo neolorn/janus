@@ -898,6 +898,74 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-DOM-001, AUTH-FACT-004: at a step-up a right email code sent to an address the
+    /// domain lock now refuses is answered <c>identity.identifier.domainnotallowed</c>.
+    /// The lock is judged after the code against the address the code was sent to, the
+    /// spend is committed alone, no failure is counted, no refused step-up factor is
+    /// recorded, and the session is not raised.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesIsSpentAndCountsNoFailureAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.EmailCode);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+        string right = Code();
+        LockedElsewhere(subject);
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.EmailCode) { Value = right },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, refused);
+        Assert.False(_work.Open);
+        Assert.Equal((1, 1, 0), (_work.Opened, _work.OutermostCommitted, _work.RolledBack));
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.Null((await _live.FindAsync(session, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// REG-DOM-001, AUTH-FACT-004: at a step-up the lock is judged after the code, so a
+    /// wrong email code presented under a lock is refused as a wrong code is anywhere, a
+    /// refused step-up factor recorded, and learns nothing of the lock.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AWrongEmailCodeAtAStepUpUnderADomainLockLearnsNothingOfTheLockAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.EmailCode);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+        string right = Code();
+        LockedElsewhere(subject);
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.EmailCode) { Value = Other(right) },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, refused);
+        Assert.Equal(
+            1,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+        Assert.Equal([Factor.EmailCode], _audit.StepUpsFailed.Select(failed => failed.Presented));
+    }
+
+    /// <summary>
     /// AUTH-FACT-004: the domain lock is judged after the code, never before it, so a
     /// wrong code presented under a lock is told what a wrong code is told anywhere and
     /// learns nothing of the lock.

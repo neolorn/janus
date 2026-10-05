@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/step-up` declares 422 `identity.identifier.domainnotallowed`, which it
+  answers where a right `emailCode` code was sent to an address a domain lock now
+  refuses: the lock is judged after the code, the code is spent, and no failed attempt
+  is counted or recorded.
 - `POST /recovery/report-loss` on an authenticator already suspended, by a loss report
   or by a removal that would lower reachable assurance, answers 409
   `auth.lossreport.pending` carrying `details.invalidatesAt`, the end of the window it

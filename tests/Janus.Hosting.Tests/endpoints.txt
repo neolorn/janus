@@ -1323,7 +1323,7 @@ POST /auth/step-up
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
-  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired integration.sms.balancefloor
+  422 auth.code.expired auth.code.invalid auth.code.replayed auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.countermismatch auth.webauthn.rpidchanged auth.webauthn.userverificationrequired identity.identifier.domainnotallowed integration.sms.balancefloor
   429 auth.restriction.exceeded auth.throttled
 POST /auth/webauthn/register/begin
   request application/json
