@@ -1790,6 +1790,20 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no truth-table row. `endpoints.txt`: the provider start's `error` line gains the three codes; `POST /account/link/{provider}` gains `422 auth.factor.notpermitted`. `CHANGELOG.md` conflicted at the merge; both sides are kept.
 - Questions 231 to 235.
 
+### `part/factors` (D-194), merged as `48f657b9`: question 229
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 229: at a sign-in, where a second step was accepted before any first factor, `required` names the first factors of the challenge's `available`, on the presenting call and on an ask after it; after a first factor it names the second steps left, as before | `eb5fbe31` | AUTH-FACT-002 | `AuthenticationServiceTests.PresentAsync_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync`, `SignInFlowTests.PostFactor_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskAfterASecondStepAcceptedFirstNamesTheFirstFactorsAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskWithOnlyASecondStepAcceptedFirstIsNotRefusedAsync`, `AuthenticationServiceTests.PresentAsync_AFirstFactorAccepted_RequiresTheSecondStepsLeftAndNoFactorAcceptedAsync` |
+
+- The tests were written first. Four failed: the presenting call named the generated code just accepted, and the ask after it named the second steps left or was refused `auth.factor.rejected`. The test of the usual order passed before and after.
+- Two tests of `6ee4cb51` asserted the earlier rule for a second step accepted first; they are renamed and assert the rule as it now reads.
+- Whether and how a second step presented before a first factor is accepted, counted or throttled is unchanged.
+- Where the policy enables no first factor, the list is empty and the presenting call is refused 422 `auth.factor.rejected`; `POST /auth/begin` answers an empty `available` in such a deployment.
+- A second step presented first on an account holding `phoneCode` no longer asks the phone signal at that call, since `phoneCode` is not among what the answer names.
+- No migration, no public surface line, no change to `endpoints.txt`, no truth-table row.
+- Questions 236 to 238.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4817,7 +4831,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. A presenting call at a sign-in leaves out the factors already accepted. A sign-in then left with none wanted and below its level has no answer the chapter gives.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-194.
 
 **230. Tier 2. CONV-VCS-004: a commit that only takes lines out of a watched file.**
 
@@ -4827,7 +4841,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is: no row is owed where the judgement did not change, and the check is read over the range.
   2. Every commit that touches a watched file carries a change to the table.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-194.
 
 **231. Tier 3. `09` `GET /auth/providers/{provider}`: a return to link after the session ended.**
 
@@ -4836,7 +4850,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the specification says.** `09` lists `auth.session.expired` for the continuation to link, and D-193 has the return ask again "since the step-up may have aged or the session ended meanwhile". `09` also gives 403 "where no attempt is bound to the browser".
 - **The contradiction.** The two sentences give one request two answers.
 - **Parked.** The ended session at a link's return. The rest of question 221 is built.
-- **Answer:** pending.
+- **Answer:** D-194.
 
 **232. Tier 2. CONV-DESIGN-006 criterion 4: "nor answers by its mounting" on a redirect.**
 
@@ -4846,7 +4860,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The mounting's codes are allowed in `error` too.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-194.
 
 **233. Tier 2. BFF-SESS-006: a 4xx of the authentication application that names no `error`.**
 
@@ -4857,7 +4871,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. Every 4xx is a refusal.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-194.
 
 **234. Tier 2. BFF-SESS-006, BFF-LOG-001: the code a sign-on's derivation was refused with.**
 
@@ -4867,7 +4881,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. A new log entry carries the code.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-194.
 
 **235. Tier 2. CONV-DESIGN-004 criterion 2: the exemption of a navigation handler's values.**
 
@@ -4877,6 +4891,35 @@ part of 389 (3) and waits with 389 on question 48.
 - **Readings.**
   1. As it is: nothing is exempted because nothing is refused.
   2. The scan names navigation handlers and skips their values, which needs it to know which members they are.
+- **Parked.** Reading 2.
+- **Answer:** D-194.
+
+**236. Tier 3. `09` `POST /auth/factor` and AUTH-FACT-002: a `phoneCode` ask after a second step was accepted and before any first factor.**
+
+- **Item.** Question 229.
+- **What the code does.** An ask is answered 202, nothing sent, only where nothing at all has been accepted on the challenge. With a second step accepted and no first factor, the ask goes on: it reads the account's credentials, answers 422 `auth.credential.suspended` for a suspended number, asks the phone signal, and sends the code where the signal does not answer `risk`; where it does, 200 with the first factors of `available` (question 229). The condition is as it was before this round.
+- **What the specification says.** `09` and AUTH-FACT-002: "An ask before a first factor sends nothing and is answered 202, whatever the account holds". `09`, as D-194 reads, gives `required` for "where a second step was accepted before any first factor".
+- **The contradiction.** Such an ask is before a first factor, so 202 and nothing told, and is also the case the rule of `required` was built for at an ask, 200 and a code sent where the signal is clear.
+- **Parked.** The condition under which an ask is before a first factor. If such an ask is 202, the ask's branch of question 229 and its two tests fall with it.
+- **Answer:** pending.
+
+**237. Tier 2. `09` `POST /auth/factor`: the challenge's `available` read at the later call.**
+
+- **Item.** Question 229.
+- **What the code does.** The challenge's record does not hold `available`. `required` reads it again from `policy.default` at the call, by the one method `POST /auth/begin` uses. A policy changed between the two calls gives `required` as the policy then reads.
+- **Readings.**
+  1. As built.
+  2. The challenge holds the `available` it was begun with, which needs a column and a migration.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**238. Tier 2. AUTH-FACT-002b criterion 6 against `09` `POST /auth/factor`: restricted first factors in `required`.**
+
+- **Item.** Question 229.
+- **What the code does.** `required` is exactly the first factors of `available`: with `phoneLink` enabled it names `phoneLink`, at an ask whose number answered `risk` too. `09` names `phoneCode` alone as withheld at the ask.
+- **Readings.**
+  1. As built.
+  2. The restricted entries are withheld from that list too where the signal answered `risk`.
 - **Parked.** Reading 2.
 - **Answer:** pending.
 
