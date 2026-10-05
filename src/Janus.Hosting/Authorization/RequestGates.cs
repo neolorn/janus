@@ -92,7 +92,7 @@ internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : 
 
         // Chapter 09, POST /auth/step-up: the refusal carries what the gate costs and
         // what the person can present, as a gate on the library's own surface does.
-        // AUTH-SESS-009: what the session attained up to its last downgrade is not
+        // AUTH-SESS-009: what the session last reached up to its last downgrade is not
         // counted, and the gate says where that alone keeps it unmet.
         judged = (await guard
                 .ChallengeAsync(live.Subject, live.Id, gate, cancellationToken)

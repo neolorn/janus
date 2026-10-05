@@ -144,9 +144,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     [
         ("a report that meets the gate", Decided.Allowed),
         ("a report below the level the gate asks", Decided.StepUpRequired),
+        ("a report that last reached the gate's level before its maximum age, and a lower one within it", Decided.StepUpRequired),
+        ("a report that last reached a level above the gate's within its maximum age", Decided.Allowed),
         ("a report that was not phishing-resistant, at a gate asking it", Decided.StepUpRequired),
+        ("a report that last reached phishing resistance before the gate's maximum age", Decided.StepUpRequired),
         ("a report older than the gate's maximum age", Decided.StepUpRequired),
         ("a report made at an instant after now", Decided.StepUpRequired),
+        ("a report that meets the gate, one of whose other instants is after now", Decided.StepUpRequired),
         ("a provider that fails to report", Decided.StepUpRequired),
         ("no provider", Decided.StepUpUnavailable),
     ];
@@ -1619,19 +1623,28 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // case has it fail.
     private static AttainedAssurance? Reported(string scenario)
     {
+        DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
+        DateTimeOffset aged = Deployment.Noon - TimeSpan.FromMinutes(6);
+        DateTimeOffset ahead = Deployment.Noon + TimeSpan.FromMinutes(1);
+
         var met = new AttainedAssurance(
-            AssuranceLevel.Aal2,
-            PhishingResistant: true,
-            Deployment.Noon - TimeSpan.FromMinutes(1),
+            Aal1At: recent,
+            Aal2At: recent,
+            Aal3At: null,
+            PhishingResistantAt: recent,
             AssuranceLevel.Aal2);
 
         return scenario switch
         {
             "a report that meets the gate" => met,
-            "a report below the level the gate asks" => met with { Level = AssuranceLevel.Aal1 },
-            "a report that was not phishing-resistant, at a gate asking it" => met with { PhishingResistant = false },
-            "a report older than the gate's maximum age" => met with { AttainedAt = Deployment.Noon - TimeSpan.FromMinutes(6) },
-            "a report made at an instant after now" => met with { AttainedAt = Deployment.Noon + TimeSpan.FromMinutes(1) },
+            "a report below the level the gate asks" => met with { Aal2At = null },
+            "a report that last reached the gate's level before its maximum age, and a lower one within it" => met with { Aal2At = aged },
+            "a report that last reached a level above the gate's within its maximum age" => met with { Aal2At = aged, Aal3At = recent },
+            "a report that was not phishing-resistant, at a gate asking it" => met with { PhishingResistantAt = null },
+            "a report that last reached phishing resistance before the gate's maximum age" => met with { PhishingResistantAt = aged },
+            "a report older than the gate's maximum age" => met with { Aal1At = aged, Aal2At = aged, PhishingResistantAt = aged },
+            "a report made at an instant after now" => met with { Aal1At = ahead, Aal2At = ahead, PhishingResistantAt = ahead },
+            "a report that meets the gate, one of whose other instants is after now" => met with { Aal3At = ahead },
             "a provider that fails to report" => null,
             _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "The table has no such case."),
         };

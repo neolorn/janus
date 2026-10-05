@@ -55,6 +55,15 @@ against the public contract of LIB-API-001.
   last reached, and null where the session never reached it, where it answered the
   instant of the last presentation whatever it reached; `assuranceLevel` is the
   highest level the session has reached. `SessionDetail.LastStrongAuthAt` is nullable.
+- `AttainedAssurance` reports `Aal1At`, `Aal2At`, `Aal3At` and `PhishingResistantAt`,
+  each the instant it was last reached and null where it never was, beside
+  `Reachable`, in place of `Level`, `PhishingResistant` and `AttainedAt`. A gate is
+  judged from a host's report as it is from a session: it is met only where the
+  provider answers, no instant is after now, a level at or above the gate's was last
+  reached within its maximum age, and phishing resistance too where the gate asks for
+  it. A report meets an `aal2` gate only where its `Aal2At` or `Aal3At` lies within
+  the gate's maximum age, whatever its `Aal1At`. An `IAssuranceProvider` written
+  against the earlier members reports the instants in their place.
 - `PUT /account/identifiers/{id}/replace` naming the value already staged is a
   resend only from the session that staged it (the browser that staged it, or the
   enrolment session that did). From any other session of the account it stages

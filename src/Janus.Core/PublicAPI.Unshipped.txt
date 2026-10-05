@@ -201,15 +201,17 @@ Janus.Core.AttachedInvitation.Roles.get -> System.Collections.Generic.IReadOnlyL
 Janus.Core.AttachedInvitation.Roles.init -> void
 Janus.Core.AttainedAssurance
 Janus.Core.AttainedAssurance.<Clone>$() -> Janus.Core.AttainedAssurance!
-Janus.Core.AttainedAssurance.AttainedAssurance(Janus.Core.AssuranceLevel Level, bool PhishingResistant, System.DateTimeOffset AttainedAt, Janus.Core.AssuranceLevel Reachable) -> void
-Janus.Core.AttainedAssurance.AttainedAt.get -> System.DateTimeOffset
-Janus.Core.AttainedAssurance.AttainedAt.init -> void
-Janus.Core.AttainedAssurance.Deconstruct(out Janus.Core.AssuranceLevel Level, out bool PhishingResistant, out System.DateTimeOffset AttainedAt, out Janus.Core.AssuranceLevel Reachable) -> void
+Janus.Core.AttainedAssurance.Aal1At.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.Aal1At.init -> void
+Janus.Core.AttainedAssurance.Aal2At.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.Aal2At.init -> void
+Janus.Core.AttainedAssurance.Aal3At.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.Aal3At.init -> void
+Janus.Core.AttainedAssurance.AttainedAssurance(System.DateTimeOffset? Aal1At, System.DateTimeOffset? Aal2At, System.DateTimeOffset? Aal3At, System.DateTimeOffset? PhishingResistantAt, Janus.Core.AssuranceLevel Reachable) -> void
+Janus.Core.AttainedAssurance.Deconstruct(out System.DateTimeOffset? Aal1At, out System.DateTimeOffset? Aal2At, out System.DateTimeOffset? Aal3At, out System.DateTimeOffset? PhishingResistantAt, out Janus.Core.AssuranceLevel Reachable) -> void
 Janus.Core.AttainedAssurance.Equals(Janus.Core.AttainedAssurance? other) -> bool
-Janus.Core.AttainedAssurance.Level.get -> Janus.Core.AssuranceLevel
-Janus.Core.AttainedAssurance.Level.init -> void
-Janus.Core.AttainedAssurance.PhishingResistant.get -> bool
-Janus.Core.AttainedAssurance.PhishingResistant.init -> void
+Janus.Core.AttainedAssurance.PhishingResistantAt.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.PhishingResistantAt.init -> void
 Janus.Core.AttainedAssurance.Reachable.get -> Janus.Core.AssuranceLevel
 Janus.Core.AttainedAssurance.Reachable.init -> void
 Janus.Core.AuditAction

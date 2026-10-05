@@ -140,7 +140,7 @@ internal static class StepUp
         }
 
         // AUTH-SESS-009, AUTHZ-GATE-005: a gate the session would meet but for proof it
-        // attained up to its last downgrade asks the person to authenticate again.
+        // last reached up to its last downgrade asks the person to authenticate again.
         bool downgraded = Proved(session, gate, required, phishingResistant, now, sinceDowngrade: false);
 
         IReadOnlyList<IReadOnlyList<Factor>> offered =

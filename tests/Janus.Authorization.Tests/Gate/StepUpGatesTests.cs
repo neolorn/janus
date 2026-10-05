@@ -168,7 +168,7 @@ public sealed class StepUpGatesTests
 
         Error refused = Assert.IsType<Error>(await RefusalAsync(Reporting(
             sessions,
-            Reported(AssuranceLevel.Aal2) with { AttainedAt = TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(10) })));
+            Reported(AssuranceLevel.Aal2, TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(10)))));
 
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
         Assert.Equal(
@@ -184,7 +184,8 @@ public sealed class StepUpGatesTests
 
     /// <summary>
     /// LIB-HOST-004 AC3: a gate asking for phishing resistance is not met by a proof the
-    /// provider reports was not phishing-resistant, whatever level it reached.
+    /// provider reports never reached phishing resistance, whatever level it reached, nor
+    /// by one that last reached it before the gate's maximum age.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -194,17 +195,24 @@ public sealed class StepUpGatesTests
 
         sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)));
 
-        Error refused = Assert.IsType<Error>(await RefusalAsync(Reporting(sessions, Reported(AssuranceLevel.Aal2))));
+        AttainedAssurance read = Reported(AssuranceLevel.Aal2);
+
+        Error refused = Assert.IsType<Error>(await RefusalAsync(Reporting(sessions, read)));
 
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
         Assert.True(refused.Details["required"].GetProperty("phishingResistant").GetBoolean());
         Assert.Null(await OutstandingAsync(
-            Reporting(sessions, Reported(AssuranceLevel.Aal2) with { PhishingResistant = true }),
+            Reporting(sessions, read with { PhishingResistantAt = read.Aal2At }),
             Bound));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            await OutstandingAsync(
+                Reporting(sessions, read with { PhishingResistantAt = read.Aal2At - TimeSpan.FromMinutes(10) }),
+                Bound));
     }
 
     /// <summary>
-    /// LIB-HOST-004 AC4: a report whose instant is after now, whose level or reachable
+    /// LIB-HOST-004 AC4: a report any of whose instants is after now, whose reachable
     /// assurance is not a level of chapter 10 section 5.4, or that the provider fails to
     /// give, meets no gate and is refused with the gate, the outcome <c>present</c> and
     /// no options.
@@ -217,11 +225,15 @@ public sealed class StepUpGatesTests
 
         sessions.Costs(Gate, new Core.Gate(GateLevel.Reachable, PhishingResistant: false, TimeSpan.FromMinutes(5)));
 
+        DateTimeOffset ahead = TimeProvider.System.GetUtcNow() + TimeSpan.FromMinutes(1);
         AttainedAssurance read = Reported(AssuranceLevel.Aal2);
         AttainedAssurance?[] unread =
         [
-            read with { AttainedAt = TimeProvider.System.GetUtcNow() + TimeSpan.FromMinutes(1) },
-            read with { Level = (AssuranceLevel)4 },
+            read with { Aal1At = ahead },
+            read with { Aal2At = ahead },
+            read with { Aal3At = ahead },
+            read with { PhishingResistantAt = ahead },
+            read with { Reachable = (AssuranceLevel)4 },
             read with { Reachable = (AssuranceLevel)(-1) },
             null,
         ];
@@ -240,6 +252,42 @@ public sealed class StepUpGatesTests
             Assert.Equal(0, refused.Details["options"].GetArrayLength());
             Assert.Equal(JsonValueKind.Null, refused.Details["pendingUntil"].ValueKind);
         }
+    }
+
+    /// <summary>
+    /// LIB-HOST-004 AC4: a report meets an <c>aal2</c> gate only where its <c>Aal2At</c>
+    /// or its <c>Aal3At</c> lies within the gate's maximum age, whatever its
+    /// <c>Aal1At</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AC4_AReportMeetsAnAal2GateOnlyWhereAal2OrAal3WasReachedWithinItsMaximumAgeAsync()
+    {
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        DateTimeOffset recent = TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(1);
+        DateTimeOffset aged = TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(10);
+        var renewedBelow = new AttainedAssurance(
+            Aal1At: recent,
+            Aal2At: aged,
+            Aal3At: null,
+            PhishingResistantAt: null,
+            AssuranceLevel.Aal2);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(Reporting(sessions, renewedBelow), Bound));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            await OutstandingAsync(Reporting(sessions, renewedBelow with { Aal2At = null }), Bound));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            await OutstandingAsync(Reporting(sessions, renewedBelow with { Aal3At = aged }), Bound));
+        Assert.Null(await OutstandingAsync(Reporting(sessions, renewedBelow with { Aal2At = recent }), Bound));
+        Assert.Null(await OutstandingAsync(Reporting(sessions, renewedBelow with { Aal3At = recent }), Bound));
+        Assert.Null(await OutstandingAsync(
+            Reporting(sessions, renewedBelow with { Aal1At = null, Aal2At = null, Aal3At = recent }),
+            Bound));
     }
 
     /// <summary>
@@ -265,7 +313,17 @@ public sealed class StepUpGatesTests
 
     // What a host reports of a proof made a minute ago, reaching no further than it.
     private static AttainedAssurance Reported(AssuranceLevel level) =>
-        new(level, PhishingResistant: false, TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(1), level);
+        Reported(level, TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(1));
+
+    // A proof reaches its level and every lower one, as a presentation does
+    // (AUTH-SESS-001), and no phishing resistance.
+    private static AttainedAssurance Reported(AssuranceLevel level, DateTimeOffset at) =>
+        new(
+            Aal1At: level >= AssuranceLevel.Aal1 ? at : null,
+            Aal2At: level >= AssuranceLevel.Aal2 ? at : null,
+            Aal3At: level >= AssuranceLevel.Aal3 ? at : null,
+            PhishingResistantAt: null,
+            level);
 
     private static StepUpGates Reporting(SessionGatesInMemory sessions, AttainedAssurance? attained) =>
         new(sessions, new AssuranceProviderInMemory(attained), TimeProvider.System);

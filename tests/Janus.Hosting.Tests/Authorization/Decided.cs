@@ -46,7 +46,7 @@ public enum Decided
 
     /// <summary>
     /// The action is refused for step-up, and its capability asks the caller to
-    /// authenticate again: the session would meet the gate but for proof attained before
+    /// authenticate again: the session would meet the gate but for proof last reached before
     /// its last downgrade (<c>reauthenticate</c>).
     /// </summary>
     ReauthenticationRequired,
