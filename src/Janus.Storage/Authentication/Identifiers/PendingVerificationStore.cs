@@ -120,11 +120,7 @@ internal sealed class PendingVerificationStore(
         {
             Identifier = pending.Identifier,
             Subject = pending.Subject,
-            Browser = pending.Browser,
-            Enrolment = pending.Enrolment,
             IsReplacement = pending.IsReplacement,
-            OldMustConfirm = pending.OldMustConfirm,
-            StagedAt = pending.StagedAt,
         };
 
         await CarryAsync(record, pending, cancellationToken).ConfigureAwait(false);
@@ -252,6 +248,13 @@ internal sealed class PendingVerificationStore(
         PendingVerification pending,
         CancellationToken cancellationToken)
     {
+        // REG-IDENT-007 (D-190): a replace staged afresh is carried onto the row of the
+        // staging before it, so the session it is staged for, whether the displaced
+        // address must confirm and when it was staged are written at every carry.
+        record.Browser = pending.Browser;
+        record.Enrolment = pending.Enrolment;
+        record.OldMustConfirm = pending.OldMustConfirm;
+        record.StagedAt = pending.StagedAt;
         record.OldConfirmedAt = pending.OldConfirmedAt;
         record.OldLink = pending.OldLink;
         record.Link = pending.Staged.Link;

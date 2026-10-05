@@ -147,7 +147,9 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts a removed identifier back from the undo link its message carried.
+    /// Puts a removed identifier back from the undo link its message carried. The undo
+    /// completes under no session, so every session of the account ends with it
+    /// (IDN-LIFE-008).
     /// </summary>
     /// <param name="linkToken">The token the undo link carried.</param>
     /// <param name="source">The address the request came from.</param>
@@ -202,8 +204,9 @@ public interface IIdentifiers
     /// What a verification link does where the browser that opened it holds an
     /// enrolment session. The session reaches the pending verification of the replace
     /// it staged and no other: a press of a token that names any other is refused as
-    /// one that opens nothing. Everything else is answered as a browser that holds no
-    /// session is answered.
+    /// one that opens nothing, and a press of the link of the replace it staged proves
+    /// the new value, as a press in the browser that staged any change does.
+    /// Everything else is answered as a browser that holds no session is answered.
     /// </summary>
     /// <param name="enrolment">The enrolment session the browser opened.</param>
     /// <param name="linkToken">The token the message carried.</param>

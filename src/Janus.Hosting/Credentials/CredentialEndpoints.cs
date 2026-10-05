@@ -78,7 +78,9 @@ internal static class CredentialEndpoints
             .Produces<RecoveryCodesView>();
         _ = EnrolmentRoute.On(account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync))
             .Declares(EndpointDeclaration
-                .Answering(ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.FactorNotEnrolled))
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.FactorNotEnrolled))
             .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder ceremonies = endpoints.MapGroup("/auth/webauthn/register");

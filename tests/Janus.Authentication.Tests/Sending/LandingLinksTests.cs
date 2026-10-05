@@ -48,6 +48,24 @@ public sealed class LandingLinksTests
     }
 
     /// <summary>
+    /// API-LAND-001 AC4 (D-190): the <c>identifier</c> link of a replace an enrolment
+    /// session staged is the one exception to the kind deciding the application: it
+    /// carries the declared origin of the authentication application, where that
+    /// session is held, and is otherwise the link every other is.
+    /// </summary>
+    [Fact]
+    public void API_LAND_001_AC4_TheIdentifierLinkOfAnEnrolmentSessionsReplaceLandsOnAuthentication()
+    {
+        string token = OpaqueToken.Draw(Randomness).Value;
+
+        string link = Landing.Links.OfEnrolmentReplace(token);
+
+        Assert.Equal(Landing.Origins.Authentication + "/link#identifier." + token, link);
+        Assert.Equal(Landing.Origins.Account + "/link#identifier." + token, Landing.Links.Of(LinkKind.Identifier, token));
+        Assert.True(link.Length <= LandingLinks.Widest(Landing.Origins));
+    }
+
+    /// <summary>
     /// INT-SMS-003: a link is measured at the longer declared origin, the widest kind and
     /// a drawn token, so no link the library sends is wider than the budget allowed for.
     /// </summary>

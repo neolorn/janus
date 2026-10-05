@@ -556,27 +556,40 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-008 AC4 and chapter 09 section 6: the report of an export is one of
-    /// the routes the enrolment session reaches, and the account reads when it was
-    /// made.
+    /// AUTH-RECOV-006 AC6 and chapter 09 sections 3 and 6, D-190: in an enrolment
+    /// session whose second step has shown no codes, the report of an export is refused
+    /// 403 <c>authz.denied</c>, for a restricted account too, the set the account holds
+    /// stays unexported and the session stays open on its routes.
     /// </summary>
+    /// <param name="restricted">Whether the account's processing is restricted.</param>
     /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task AUTH_FACT_008_AC4_TheEnrolmentSessionReportsAnExportAsync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_RECOV_006_AC6_AReportBeforeTheSecondStepShowedCodesIsDeniedAsync(bool restricted)
     {
         Browser holder = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
         _ = await holder.SendAsync("POST", "/account/recoverycodes");
-        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+        await LinkedAsync(subject);
         Browser browser = await ArrivedAsync();
         _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        if (restricted)
+        {
+            _deployment.Restriction.Restrict(subject);
+        }
 
-        Answer reported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer refused = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer standing = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label));
+        _deployment.Restriction.Lift(subject);
 
-        Assert.Equal(StatusCodes.Status204NoContent, reported.Status);
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, standing.Status);
         Assert.Equal(
-            _deployment.Clock.GetUtcNow(),
+            JsonValueKind.Null,
             (await holder.SendAsync("GET", "/account"))
-                .Json().GetProperty("recoveryCodes").GetProperty("exportedAt").GetDateTimeOffset());
+                .Json().GetProperty("recoveryCodes").GetProperty("exportedAt").ValueKind);
     }
 
     /// <summary>
@@ -710,6 +723,41 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
         Assert.Contains(
             standing.All,
+            identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC10 and API-LAND-001 AC4 (D-190): the link of the replace an
+    /// enrolment session staged lands on the authentication application, where that
+    /// session is held, and a press of it under that session answers 204 and replaces
+    /// the address, the displaced one never asked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_APressOfTheLinkInTheEnrolmentSessionVerifiesTheReplaceAsync()
+    {
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _ = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        await LinkedAsync(subject, mailboxLost: true);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        IdentifierId held = await EmailAsync(subject);
+        _ = await browser.SendAsync("PUT", "/account/identifiers/" + held.Value + "/replace", ("value", Replaced));
+
+        Answer pressed = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + held.Value + "/verify",
+            ("linkToken", Flow.Token(_deployment, IdentifierKind.Email)),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
+        Assert.Contains(
+            _deployment.Mail.Taken,
+            sent => sent.Body.Contains(" https://identity.example.test/link#identifier.", StringComparison.Ordinal));
+        Assert.Contains(
+            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
             identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
         Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
     }

@@ -38,6 +38,25 @@ internal sealed class LandingLinks(LandingOrigins origins)
     }
 
     /// <summary>
+    /// The address the <c>identifier</c> link of a replace an enrolment session staged
+    /// opens: the one link whose application its kind does not decide, since it lands
+    /// on the authentication application, where that session is held (D-190).
+    /// </summary>
+    /// <param name="token">The token it carries.</param>
+    /// <returns>The address.</returns>
+    /// <exception cref="ArgumentNullException">The token is absent.</exception>
+    public string OfEnrolmentReplace([NeverLogged] string token)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+
+        return origins.Authentication
+            + Path
+            + WrittenName.Of(LinkKind.Identifier)
+            + "."
+            + token;
+    }
+
+    /// <summary>
     /// The widest address a link can be under these origins: the longer origin, the
     /// widest kind and a drawn token, one token size serving every link.
     /// </summary>

@@ -1893,6 +1893,70 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-008 AC4 (D-190): the undo of a removal completes under no session, so
+    /// it ends every session of the account, the one that made the removal and one
+    /// opened since included.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AC4_AnUndoOfARemovalEndsEverySessionAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId removing = Stepped();
+        Accepted(await Service.RemoveAsync(Acting, removing, second, Source, TestContext.Current.CancellationToken));
+        SessionId since = Stepped();
+
+        Accepted(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        Assert.True(Named(await HeldAsync(), Second).IsVerified);
+        Assert.NotNull((await _sessions.FindAsync(removing, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(since, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC11 (D-190): the undo of a replace, which moves the value back
+    /// onto the identifier that stands and displaces what it holds, ends every session
+    /// of the account too, the one the replace completed under included.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC11_AnUndoOfAReplaceEndsEverySessionAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        SessionId completing = Stepped();
+        await ReplacingAsync(email, completing, Second);
+        await VerifiedAsync(email, completing);
+        SessionId since = Stepped();
+        string undo = _notifications.Texts.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+        Assert.NotNull((await _sessions.FindAsync(completing, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(since, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-008 (D-190): an undo that is refused, its window having ended, changes
+    /// nothing and ends no session.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AnUndoRefusedPastItsWindowEndsNoSessionAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId removing = Stepped();
+        Accepted(await Service.RemoveAsync(Acting, removing, second, Source, TestContext.Current.CancellationToken));
+        _clock.Advance(Settings.IdentifierChangeCoolingOff.Default);
+
+        ErrorCode refused = Refused(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.ChangeWindowElapsed, refused);
+        Assert.Null((await _sessions.FindAsync(removing, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC5, AUTH-ABUSE-004 AC15: the confirmation asked of the displaced
     /// address goes under the purpose of the new address's code, since the person
     /// making the change asked for it and it is no notice.
@@ -3023,9 +3087,10 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-007 AC3 (D-189): the replace an enrolment session stages keeps which
-    /// session staged it, and a press of its link from that session shows the code and
-    /// proves nothing, as from any browser that holds no session (REG-SESS-003).
+    /// REG-IDENT-007 AC3 (D-189, D-190): the replace an enrolment session stages keeps
+    /// which session staged it and no browser, so a press of its link from a browser
+    /// holding a session of the account, or none, shows the code and proves nothing
+    /// (REG-SESS-003).
     /// </summary>
     [Fact]
     public async Task REG_IDENT_007_AC3_AReplaceKeepsTheEnrolmentSessionThatStagedItAsync()
@@ -3041,12 +3106,76 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
         string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
 
-        LinkLanding landed = (await Service.LandAsync(opened, link, press: true, Source, TestContext.Current.CancellationToken))
-            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+        LinkLanding[] landed =
+        [
+            Landed(await Service.LandAsync(Stepped(), link, press: true, Source, TestContext.Current.CancellationToken)),
+            Landed(await Service.LandAsync(session: null, link, press: true, Source, TestContext.Current.CancellationToken)),
+        ];
 
         Assert.Equal(opened, Waiting(email).Enrolment);
-        Assert.False(landed.Verified);
-        Assert.Equal(Code(email), landed.Code);
+        Assert.Null(Waiting(email).Browser);
+        Assert.All(landed, landing => Assert.Equal((false, false, Code(email)), (landing.Verified, landing.SameBrowser, landing.Code)));
+        Assert.False(Waiting(email).Staged.IsVerified);
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC10, API-LAND-001 AC4 (D-190): the new address's link of a replace
+    /// an enrolment session staged lands on the authentication application, where that
+    /// session is held; the link of a replace a session staged, as of an add, still
+    /// lands on the account application.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_TheLinkOfAnEnrolmentSessionsReplaceLandsOnTheAuthenticationApplicationAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await ReplacingAsync(email, Stepped(), Second);
+        string fromSession = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Values["link"];
+        Accepted(await Service.AbandonAsync(Landing.Token(fromSession), TestContext.Current.CancellationToken));
+
+        Accepted(await Service.ReplaceAsync(
+            Enrolling(mailboxLost: true),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string fromEnrolment = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Values["link"];
+        Assert.StartsWith(Landing.Origins.Account + "/link#identifier.", fromSession, StringComparison.Ordinal);
+        Assert.StartsWith(Landing.Origins.Authentication + "/link#identifier.", fromEnrolment, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC10 (D-190): a press of that link in the browser holding the
+    /// enrolment session that staged the replace verifies it, as a press in the browser
+    /// that staged any replace does: merely opened it changes nothing and says it is
+    /// the same browser; pressed, the swap applies on the new address alone, the code
+    /// that would have proved it is ended, and every session of the account ends,
+    /// since the swap completes under none (IDN-LIFE-008).
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_APressInTheEnrolmentSessionThatStagedTheReplaceVerifiesItAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId elsewhere = Stepped();
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+
+        LinkLanding open = Landed(await Service.LandAsync(opened, link, press: false, Source, TestContext.Current.CancellationToken));
+        bool unproved = !Waiting(email).Staged.IsVerified;
+        LinkLanding pressed = Landed(await Service.LandAsync(opened, link, press: true, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(new LinkLanding(Verified: false, SameBrowser: true, Code: null), open);
+        Assert.True(unproved);
+        Assert.Equal(new LinkLanding(Verified: true, SameBrowser: true, Code: null), pressed);
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
+        Assert.DoesNotContain(_notifications.Mail, sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+        Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
         Assert.Empty(_throttle.Failures);
     }
 
@@ -3727,6 +3856,244 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(1, Sent(MessageKind.VerificationLink));
         Assert.Equal(1, Sent(MessageKind.IdentifierChangeConfirm));
         Assert.Equal(code, Code(email));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC9 (D-190): a repeated replace naming the staged value from another
+    /// session stages it afresh for that session, each new record a send. The links sent
+    /// before it open nothing, the code that answers is the one sent last, and a press
+    /// of the new link proves the value only in the asking session's browser.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC9_ARepeatedReplaceFromAnotherSessionStagesItAfreshForThatSessionAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        SessionId asking = Stepped();
+        await ReplacingAsync(email, staging, Second);
+        string before = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        string confirming = _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token();
+        _work.Reset();
+
+        await ReplacingAsync(email, asking, Second);
+
+        OutboundMessage sent = _notifications.Mail.Last(message => message.Message is MessageKind.VerificationLink);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(asking, Assert.Single(_pending.All).Browser);
+        Assert.Equal((2, 2), (Sent(MessageKind.VerificationLink), Sent(MessageKind.IdentifierChangeConfirm)));
+        Assert.Equal(sent.Values["code"], Code(email));
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.LandAsync(staging, before, press: true, Source, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.LandAsync(session: null, confirming, press: true, Source, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            new LinkLanding(Verified: false, SameBrowser: false, Code(email)),
+            Landed(await Service.LandAsync(staging, sent.Token(), press: true, Source, TestContext.Current.CancellationToken)));
+        Assert.True(Landed(await Service.LandAsync(asking, sent.Token(), press: true, Source, TestContext.Current.CancellationToken)).Verified);
+        Assert.True(Waiting(email).Staged.IsVerified);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC9 (D-190): a replace staged afresh keeps nothing the staging
+    /// before it had proved. Whether the displaced address had confirmed or the new one
+    /// had verified, both are asked again and neither stands as answered.
+    /// </summary>
+    /// <param name="confirmed">
+    /// Whether the displaced address confirmed before the repeat, where otherwise the
+    /// new address verified before it.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task REG_IDENT_007_AC9_AReplaceStagedAfreshKeepsNothingProvedBeforeItAsync(bool confirmed)
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        SessionId asking = Stepped();
+        await ReplacingAsync(email, staging, Second);
+        if (confirmed)
+        {
+            Accepted(await Service.LandAsync(
+                session: null,
+                _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token(),
+                press: true,
+                Source,
+                TestContext.Current.CancellationToken));
+        }
+        else
+        {
+            await VerifiedAsync(email, staging);
+        }
+
+        await ReplacingAsync(email, asking, Second);
+
+        Assert.Equal((2, 2), (Sent(MessageKind.VerificationLink), Sent(MessageKind.IdentifierChangeConfirm)));
+        Assert.Equal(asking, Waiting(email).Browser);
+        Assert.Null(Waiting(email).OldConfirmedAt);
+        Assert.False(Waiting(email).Staged.IsVerified);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC9, AUTH-ABUSE-004 (D-190): a replace staged afresh is a send the
+    /// restrictions count, and one they refuse is refused as a first send is: its unit
+    /// of work is rolled back and the staging before it stands with the records it had.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC9_AReplaceStagedAfreshTheRestrictionsRefuseLeavesTheStagingBeforeItAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        SessionId asking = Stepped();
+        await ReplacingAsync(email, staging, Second);
+        string code = Code(email);
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        _work.Reset();
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        ErrorCode refused = Refused(await Service.ReplaceAsync(
+            Acting,
+            asking,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, refused);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal((1, 1), (Sent(MessageKind.VerificationLink), Sent(MessageKind.IdentifierChangeConfirm)));
+        Assert.Equal(staging, Waiting(email).Browser);
+        Assert.Equal(code, Code(email));
+        Assert.True(Landed(await Service.LandAsync(staging, link, press: false, Source, TestContext.Current.CancellationToken)).SameBrowser);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC9 (D-190): an enrolment session opened for a lost mailbox that
+    /// repeats a replace a session staged stages it afresh for itself: the displaced
+    /// address is no longer asked, the confirmation it was sent opens nothing, and the
+    /// new address's code presented in that enrolment session applies the swap.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC9_AnEnrolmentSessionStagesAfreshAReplaceASessionStagedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await ReplacingAsync(email, Stepped(), Second);
+        string confirming = _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token();
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+
+        PendingVerification waiting = Waiting(email);
+        Assert.Equal((null, opened, false, null), (waiting.Browser, waiting.Enrolment, waiting.OldMustConfirm, waiting.OldLink));
+        Assert.Equal((2, 1), (Sent(MessageKind.VerificationLink), Sent(MessageKind.IdentifierChangeConfirm)));
+        Assert.DoesNotContain(
+            _codes.All,
+            held => held.Holder.AsSpan().SequenceEqual(PendingVerification.ConfirmationHolder(email)));
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.LandAsync(session: null, confirming, press: true, Source, TestContext.Current.CancellationToken)));
+        Accepted(await Service.VerifyAsync(opened, email, Code(email), Source, TestContext.Current.CancellationToken));
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.Empty(_pending.All);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 (D-190): a replace an enrolment session staged before the session
+    /// that staged it was kept names none, so the first time that session repeats it
+    /// the replace is staged afresh for it, and a repeat after that is a resend.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC9_AReplaceThatKeptNoEnrolmentSessionIsStagedAfreshWhenItIsRepeatedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+        DateTimeOffset earlier = _clock.GetUtcNow() - TimeSpan.FromMinutes(5);
+        await _pending.AddAsync(
+            PendingVerification.ToReplace(
+                _person,
+                browser: null,
+                enrolment: null,
+                StagedIdentity.Of(email, IdentifierKind.Email, Second, Second),
+                oldMustConfirm: false,
+                earlier),
+            TestContext.Current.CancellationToken);
+
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+        PendingVerification afresh = Waiting(email);
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal((opened, _clock.GetUtcNow()), (afresh.Enrolment, afresh.StagedAt));
+        Assert.Equal(opened, Waiting(email).Enrolment);
+        Assert.Equal(2, Sent(MessageKind.VerificationLink));
+        Assert.True(Landed(await Service.LandAsync(
+            opened,
+            _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token(),
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken)).Verified);
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC9 (D-190): a link is judged again on the row as its lock is
+    /// taken, so a press that finds the replace staged afresh for another session
+    /// meanwhile opens nothing: the new address's link and the displaced address's
+    /// confirmation are each answered <c>auth.code.expired</c> and counted against
+    /// the source, and the replace as staged afresh proves nothing by them.
+    /// </summary>
+    /// <param name="confirmation">
+    /// Whether the link pressed is the displaced address's confirmation, where
+    /// otherwise it is the new address's link pressed in the browser that staged it.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task REG_IDENT_007_AC9_APressThatFindsTheReplaceStagedAfreshMeanwhileOpensNothingAsync(bool confirmation)
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        SessionId asking = Stepped();
+        await ReplacingAsync(email, staging, Second);
+        MessageKind pressed = confirmation ? MessageKind.IdentifierChangeConfirm : MessageKind.VerificationLink;
+        string link = _notifications.Mail.Last(sent => sent.Message == pressed).Token();
+        _pending.Locking = identifier =>
+        {
+            _pending.Locking = null;
+            var afresh = PendingVerification.ToReplace(
+                _person,
+                asking,
+                enrolment: null,
+                StagedIdentity.Of(identifier, IdentifierKind.Email, Second, Second),
+                oldMustConfirm: true,
+                _clock.GetUtcNow());
+            afresh.AskedOld(OpaqueToken.Draw(_randomness).Fingerprint());
+            afresh.Staged.Linked(OpaqueToken.Draw(_randomness).Fingerprint());
+            _pending.RecordAsync(afresh, TestContext.Current.CancellationToken).AsTask().GetAwaiter().GetResult();
+        };
+
+        ErrorCode refused = Refused(await Service.LandAsync(
+            confirmation ? null : staging,
+            link,
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.False(_work.Open);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures);
+        Assert.Equal(asking, Waiting(email).Browser);
+        Assert.False(Waiting(email).Staged.IsVerified);
+        Assert.Null(Waiting(email).OldConfirmedAt);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
     }
 
     /// <summary>
@@ -4548,6 +4915,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private static HeldIdentifier Named(IEnumerable<HeldIdentifier> all, string canonical) =>
         all.Single(identifier =>
             string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+    private static LinkLanding Landed(Result<LinkLanding> outcome) =>
+        outcome.Match(landing => landing, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
     private static void Accepted<TValue>(Result<TValue> outcome) =>
         _ = outcome.Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));

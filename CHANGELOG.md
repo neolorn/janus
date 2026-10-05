@@ -40,6 +40,35 @@ against the public contract of LIB-API-001.
   200 `factorRequired`, with the factors still to present, until what was accepted
   reaches the strictest of the gates of the policy in force, and 200 `complete` then,
   where the first accepted factor ended the challenge before.
+- `PUT /account/identifiers/{id}/replace` naming the value already staged is a
+  resend only from the session that staged it (the browser that staged it, or the
+  enrolment session that did). From any other session of the account it stages
+  the replace afresh for the asking session, where it sent the earlier staging's
+  records again: the code, the link and the old address's confirmation sent
+  before it answer nothing (a press of either link is answered 422
+  `auth.code.expired`), what they had proved is forgotten, a press of the new
+  link verifies only in the asking session's browser, and each new record is a
+  send the restrictions count and refuse with 429 `auth.restriction.exceeded`,
+  which leaves the earlier staging as it stood. A replace an enrolment session
+  staged before the session that staged it was kept is staged afresh the first
+  time that session repeats it.
+- The verification link of a replace an enrolment session staged opens on the
+  authentication application's landing origin, where that session is held, and a
+  press of it there (`POST /account/identifiers/{id}/verify` with `linkToken` and
+  `press`, `IIdentifiers.LandAsync` with the enrolment session) proves the new
+  address and applies the replace, where it showed the code and proved nothing.
+  Every other identifier link still opens on the account application's origin, so
+  a frontend serves the `identifier` kind of `/link` on both applications.
+- `POST /account/identifiers/{id}/undo` ends every session of the account, whether
+  the undo restores a removed identifier or moves a replaced value back, where it
+  ended none: an undo completes under no session. A browser that held a session is
+  answered 401 `auth.session.expired` from then on and signs in again.
+- In an enrolment session whose second step has shown no recovery codes,
+  `POST /account/recoverycodes/exported` records nothing and answers 403
+  `authz.denied`, before any other refusal and before the restriction is asked,
+  where it set `exportedAt` on the set the account already held. In process
+  `ICredentials.MarkRecoveryCodesExportedAsync(EnrolmentSessionId, ...)` refuses the
+  same way.
 - A factor refused 422 `auth.credential.suspended` at a sign-in or a step-up is a
   failed attempt: it is counted against the source and the account and recorded as
   every other refusal of a presented factor is.
