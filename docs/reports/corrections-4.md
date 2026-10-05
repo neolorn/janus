@@ -1667,6 +1667,22 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - At the merge `CHANGELOG.md` conflicted; the lines of both sides are kept.
 - No migration, no public surface addition, no path of the truth-table change check.
 
+### `part/factors` (D-191), merged as `fce99648`: questions 208 to 210, and the tests of questions 199 and 202
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 209: a right code of a second step the library texts is judged, after it is spent, against the credential it was sent for; where that credential was removed or invalidated it is refused 422 `auth.factor.rejected`, the spend committed with the failed attempt's record and count; where it is suspended, `auth.credential.suspended` as before | `0d08dc4a` | AUTH-FACT-004 | `AuthenticationServiceTests.AUTH_FACT_004_AC7_ARightTextCodeWhoseCredentialIsGoneIsSpentRefusedAndCountedAtAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC7_ARightTextCodeWhoseCredentialWasRemovedIsSpentRefusedAndCountedAtASignInAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC7_ACredentialEnrolledAfterATextCodeWasSentDoesNotAnswerForTheOneRemovedAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ATextCodeOfANumberSuspendedSinceIsSpentAndRefusedSuspendedAsync` |
+| Question 208: a linked social credential that is suspended, on a window or held after its provider's event, is refused `auth.credential.suspended` once its provider vouches, a failed attempt recorded and counted; the round trip returns the browser with `error=auth.credential.suspended` | `495c2fcd` | AUTH-RECOV-007, IDN-LIFE-012a | `AuthenticationServiceTests.AUTH_RECOV_007_AC9_ASuspendedSocialCredentialIsRefusedSuspendedOnceItsProviderVouchesAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_ASuspendedSocialCredentialOfAnAccountNotActiveIsRefusedAsAnActiveOneIsAsync`, `ProviderSignInTests.AUTH_RECOV_007_AC9_ASuspendedSocialCredentialReturnsTheBrowserSuspendedOnceItsProviderVouchesAsync` |
+| Question 210: the counter is checked where the counter presented or the one stored is above zero, and a counter not above the stored one is refused `auth.webauthn.countermismatch`; a suspended key goes through the same check first | `aaa8b274` | AUTH-FACT-014, AUTH-RECOV-007 | `WebAuthnServiceTests.AUTH_FACT_014_AC3_ACounterOfNoughtAgainstAStoredCounterIsRejectedAndAuditedAsync`, `WebAuthnServiceTests.AUTH_FACT_014_AC3_AFirstCounterAboveNoughtIsRecordedAndTheSameOneAgainIsRejectedAsync`, `WebAuthnServiceTests.AUTH_RECOV_007_AC9_ASuspendedKeyWhoseCounterDidNotAdvanceIsRefusedACounterMismatchAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC9_ASuspendedPasskeyWhoseCounterDidNotAdvanceIsRefusedACounterMismatchAsync`, `WebAuthnServiceTests.AUTH_FACT_014_AC3_ACounterStandingStillIsRejectedAsync` |
+| Question 199's check, now REG-IDENT-007 criterion 11: its test is renamed for the criterion, body unchanged | `a2838b7e` | REG-IDENT-007 | `IdentifierServiceTests.REG_IDENT_007_AC11_APressThatLocksTheReplaceAfterARestagingIsJudgedAgainAndProvesNothingAsync` (was `REG_IDENT_007_AC9_APressThatFindsTheReplaceStagedAfreshMeanwhileOpensNothingAsync`) |
+| Question 202: the first read a process makes that fails is held under each criterion; no product code changed | `970ca8e1` | AUTH-ABUSE-008, INT-GEN-006 | `DatacenterRangesTests.AUTH_ABUSE_008_AC6_TheFirstReadAProcessMakesThatFailsIsRaisedAsARefreshThatFailsAsync`, `LocationDatabaseTests.INT_GEN_006_AC2_TheFirstReadAProcessMakesThatFailsSurfacesAsADegradationAsync`; the job's failed read was held already by `DatacenterRangesTests.AUTH_ABUSE_008_AC6_AFailedRefreshIsRaisedAndKeepsTheCopyHeldUntilItIsStaleAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_ARefreshWhoseFileIsRefusedWholeIsRaisedAndKeepsTheCopyHeldAsync` and `LocationDatabaseTests.INT_GEN_006_AC2_AFailedRefreshSurfacesAsADegradationAsync` |
+
+- Question 209's tests were written first and failed: a right code was accepted, at a step-up and at a sign-in's second step, with its credential removed or invalidated. The lead is confirmed.
+- Question 208's suspended cases failed before the change (`auth.factor.rejected`). On an account that is not active or is restricted the answer stays `auth.factor.rejected`, as for an identity linked to nothing and an invalidated credential.
+- Question 210: the test of an equal counter above zero existed (`AUTH_FACT_014_AC3_ACounterStandingStillIsRejectedAsync`) and passed before any change. The check ran only where both counters were above zero: a counter of zero presented against a stored counter above zero was accepted. The tests of that case failed before the change; it is now refused.
+- No migration, no public surface line, no change to `endpoints.txt`, no path of the truth-table change check.
+- Questions 211 and 212.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4497,6 +4513,24 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** A suspended key runs every check an active one does, the counter included: one whose counter did not advance is refused `auth.webauthn.countermismatch` and audited as an active key's is, and only one that passes every check is told it is suspended.
 - **Parked.** Refusing as suspended before the counter is judged.
 - **Answer:** D-191.
+
+**211. Tier 3. AUTH-FACT-004 criterion 7: which credential a delivered code was sent for.**
+
+- **Item.** Question 209.
+- **The gap.** The pending code's row names no credential, and a number is tied to no credential row. The criterion speaks of "the credential it was sent for".
+- **What the code does.** It is taken to be a credential of the code's factor that the account held when the code was sent (added not after the code was issued). One enrolled after the code went out does not answer for the one removed. No column and no migration were added. The judgement reaches the delivered second steps the library sends, which is `phoneCode` alone.
+- **Parked.** Naming the credential on the pending code's row.
+- **Answer:** pending.
+
+**212. Tier 2. `09` `GET /auth/providers/{provider}`: where the round trip's codes are declared.**
+
+- **Item.** Question 208.
+- **What the code does.** The round trip's routes declare only what they answer in a body (`auth.session.csrfinvalid`). The codes carried in the redirect's `error` member (`auth.factor.rejected`, `auth.throttled`, `auth.factor.notpermitted` and the others) are declared on no route and stand in no line of `endpoints.txt`, so `auth.credential.suspended` was declared nowhere either.
+- **Readings.**
+  1. As it is: the endpoint contract covers what a route answers in a body.
+  2. The codes a redirect carries are declared on the return routes and held by the contract test.
+- **Parked.** Reading 2.
+- **Answer:** pending.
 
 ## 5. Gate result
 
