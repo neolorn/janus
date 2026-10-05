@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -623,6 +624,113 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         Assert.Empty(deployment.SessionAudit.Failed);
         Assert.Empty(deployment.Raised.Waiting);
         Assert.DoesNotContain((LogLevel.Error, 21), deployment.ProviderLog.Entries);
+    }
+
+    /// <summary>
+    /// BFF-CSRF-005a AC1 and chapter 09: a start to sign in from a browser that
+    /// carries no pre-authentication session is issued one, and the attempt is bound to
+    /// it: the browser is sent to the provider, and the return it then makes is judged
+    /// against what was bound.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_CSRF_005a_AC1_AStartToSignInWithNoPreAuthenticationSessionIsIssuedOneAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        var browser = new Browser(_deployment);
+        Answer started = await browser.SendAsync("GET", Start("google", "signin"));
+
+        Assert.StartsWith(SocialProvidersInMemory.GoogleAuthorization + "?", Where(started), StringComparison.Ordinal);
+        Assert.Contains(
+            started.SetCookie,
+            written => written.StartsWith(BrowserCookies.PreAuthentication + "=", StringComparison.Ordinal));
+        Assert.Equal(1, _deployment.ProviderAttempts.Count);
+
+        Answer landed = await ReturnedAsync(browser, "google", Where(started), new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(Page, landed.Location);
+    }
+
+    /// <summary>
+    /// Chapter 09: the start of a round trip returns the browser with the code of what
+    /// refused it and binds nothing. An intent that is absent or not one of the three is
+    /// a malformed request, carried in <c>error</c> and never answered as a body
+    /// (CONV-DESIGN-006 AC5); a registration with no registration session, and a link
+    /// with no session, find the session expired.
+    /// </summary>
+    /// <param name="query">The query the start is asked with, before its return address.</param>
+    /// <param name="code">The code the browser is returned with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("", "api.request.malformed")]
+    [InlineData("intent=", "api.request.malformed")]
+    [InlineData("intent=unlink", "api.request.malformed")]
+    [InlineData("intent=SignIn", "api.request.malformed")]
+    [InlineData("intent=register", "auth.session.expired")]
+    [InlineData("intent=link", "auth.session.expired")]
+    public async Task CONV_DESIGN_006_AC5_ARefusedStartReturnsTheBrowserWithItsCodeAsync(string query, string code)
+    {
+        Answer refused = await new Browser(_deployment).SendAsync(
+            "GET",
+            "/auth/providers/google?" + query + "&returnTo=" + Uri.EscapeDataString(Page));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + code, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+    }
+
+    /// <summary>
+    /// Chapter 09: a registration started at a provider from a browser that holds a
+    /// session is returned with the code of that, and nothing is bound.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_ARegistrationFromASignedInBrowserIsNotStartedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer refused = await browser.SendAsync("GET", Start("google", "register"));
+
+        Assert.Equal(Page + "?error=" + ErrorCodes.RegistrationSignedIn, refused.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC4 and BFF-ABUSE-001: a send a restriction refuses on the return of
+    /// a round trip returns the browser with its code and, beside it, the instant the
+    /// restriction lifts, as a throttled refusal does, and nothing else of the
+    /// refusal's details.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC4_ASendARestrictionRefusesCarriesItsInstantAsync()
+    {
+        _ = await ProvidedAsync(await AgedAsync(), "apple", new ProviderPerson(AppleSubject, Flow.Address, "true"));
+
+        Answer refused = await ProvidedAsync(
+            await AgedAsync(),
+            "apple",
+            new ProviderPerson("another.apple.subject", Flow.Address, "true"));
+
+        string[] carried = Where(refused)["/register?".Length..].Split('&');
+
+        Assert.StartsWith("/register?", Where(refused), StringComparison.Ordinal);
+        Assert.Equal(2, carried.Length);
+        Assert.Equal("error=" + ErrorCodes.RestrictionExceeded, carried[0]);
+        Assert.StartsWith("retryAt=", carried[1], StringComparison.Ordinal);
+        Assert.True(
+            DateTimeOffset.TryParse(
+                Uri.UnescapeDataString(carried[1]["retryAt=".Length..]),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out DateTimeOffset lifts));
+        Assert.Equal(TimeSpan.Zero, lifts.Offset);
+        Assert.True(lifts > _deployment.Clock.GetUtcNow());
+        _ = Assert.Single(_deployment.Mail.Taken);
     }
 
     /// <summary>
