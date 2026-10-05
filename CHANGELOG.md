@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/step-up` asked for a text code and answered 200, the number's signal
+  having withheld the code, reports in `assuranceLevel` and `phishingResistant` what
+  the factors accepted on the challenge reach together, `delegated` and not
+  phishing-resistant where none was accepted, as every other 200 of a step-up does. It
+  reported what the session had attained. Whether the session already meets the gate,
+  and so whether `required` is empty, is still judged from the session.
 - A session another application establishes from the session record takes the instant
   the record last reached each assurance level and phishing resistance, and the
   record's last downgrade, where it took the instant it was established as the
