@@ -1700,6 +1700,17 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Of the integration classes the part ran, six were run at its third commit only, not at its first.
 - Questions 213 to 217.
 
+### `part/codes` (D-192), merged as `f0469de1`: question 211
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 211: a `phoneCode` code's record names, from its issue, the credential it is issued for, and a right code is judged against that credential alone: removed or invalidated since, it is refused 422 `auth.factor.rejected`, counted, recorded and spent, whatever other credential of the factor the account holds; suspended, `auth.credential.suspended` | `38b7a80c` | AUTH-FACT-004, AUTH-RECOV-007 | `AuthenticationServiceTests.AUTH_FACT_004_AC7_AnotherCredentialHeldWhenATextCodeWasSentDoesNotAnswerForItsOwnAtAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC7_AnotherCredentialHeldWhenATextCodeWasSentDoesNotAnswerForItsOwnAtASignInAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ATextCodeWhoseOwnCredentialIsSuspendedIsRefusedSuspendedAtAStepUpWhateverElseIsHeldAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ATextCodeWhoseOwnCredentialIsSuspendedIsRefusedSuspendedAtASignInWhateverElseIsHeldAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC7_ARightTextCodeIsRefusedOnceTheCredentialItsRecordNamesIsGoneWhateverOtherIsActiveAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC7_ARightTextCodeIsAcceptedWhileTheCredentialItsRecordNamesStandsWhateverOtherIsGoneAsync`, `PendingSignInTests.AUTH_FACT_004_AC7_ASecondStepCodeNamesFromItsIssueTheCredentialItIsIssuedFor`, `PendingSignInStoreTests.AUTH_FACT_004_AC7_ASecondStepCodeIsReadBackNamingTheCredentialItWasIssuedForAsync`, `PendingSignInStoreTests.AUTH_FACT_004_OnlyASecondStepCodeNamesACredentialAndEveryOneDoesAsync`, `PendingSignInStoreTests.AUTH_FACT_004_ASecondStepCodePendingWhenItsRecordGainsACredentialIsRemovedAndEveryOtherStaysAsync`; the four tests of `0d08dc4a` stand unchanged |
+
+- The tests were written first, with a second credential of the factor held from before the code was sent, and failed: at a step-up and at a sign-in's second step, with the code's own credential removed, invalidated or suspended, the right code was accepted.
+- Migration `20261005140909_NameTheCredentialASecondStepCodeIsIssuedFor`: one hand-written `DELETE` of every pending `phoneCode` code, then the column `signin_links.credential` (uuid, null for every other entry) and the check `ck_signin_links_credential` (a row names a credential exactly where its factor is `phoneCode`). No foreign key: the row outlives a removed credential, so the right code is refused and not lost. Its `Down` drops the check and the column. The snapshot merged without a conflict; the model holds no pending change after the merge.
+- No public surface line, no change to `endpoints.txt`, no path of the truth-table change check.
+- Question 218.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4537,7 +4548,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** The pending code's row names no credential, and a number is tied to no credential row. The criterion speaks of "the credential it was sent for".
 - **What the code does.** It is taken to be a credential of the code's factor that the account held when the code was sent (added not after the code was issued). One enrolled after the code went out does not answer for the one removed. No column and no migration were added. The judgement reaches the delivered second steps the library sends, which is `phoneCode` alone.
 - **Parked.** Naming the credential on the pending code's row.
-- **Answer:** pending.
+- **Answer:** D-192.
 
 **212. Tier 2. `09` `GET /auth/providers/{provider}`: where the round trip's codes are declared.**
 
@@ -4547,7 +4558,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is: the endpoint contract covers what a route answers in a body.
   2. The codes a redirect carries are declared on the return routes and held by the contract test.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-192.
 
 **213. Tier 3. AUTH-SESS-012 and AUTH-SESS-009 criterion 5: the instants of a derived session.**
 
@@ -4555,7 +4566,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** A derived session "inherits the record's assurance properties". No chapter says whether its instants are the record's own or the instant of derivation.
 - **What the code does.** As before: the derived session takes the instant of derivation as the instant of every level the record holds, and of phishing resistance where the record holds it. It stands downgraded unless the record's highest level, and its phishing resistance, each count after the record's last downgrade.
 - **Parked.** Carrying the record's own instants into a derived session.
-- **Answer:** pending.
+- **Answer:** D-192.
 
 **214. Tier 2. AUTH-SESS-001, the migration: `phishing_resistant_at` of a session already recorded.**
 
@@ -4566,7 +4577,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: the instant the row already held is kept. It is never later than the session's instant.
   2. It is overwritten with the session's instant.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-192.
 
 **215. Tier 2. AUTH-SESS-001: an instant for `delegated`.**
 
@@ -4577,7 +4588,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. No such instant: a `delegated` requirement is read from the session's creation.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-192.
 
 **216. Tier 2. `09` `GET /auth/session` and LIB-API: `LastStrongAuthAt` nullable.**
 
@@ -4588,7 +4599,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The member stays not nullable, which leaves no value for a session that never reached `aal2`.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-192.
 
 **217. Tier 2. AUTH-FACT-002 and `09` `POST /auth/step-up`: what the 200 of a `phoneCode` ask reports.**
 
@@ -4599,6 +4610,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. It reports what the factors accepted on the challenge reach, as every other 200 of the route does.
 - **Parked.** Reading 2.
+- **Answer:** D-192.
+
+**218. Tier 3. AUTH-FACT-004 and AUTH-FACT-002: the credential a code is issued for where the account holds more than one active credential of the factor.**
+
+- **Item.** Question 211.
+- **The gap.** The record names "the credential it is issued for". An ask names a factor, never a credential, and a number is tied to no credential row. No chapter says which of several active `phoneCode` credentials the code of an ask is issued for.
+- **What the code does.** The ask names the one the order of IDN-ATTR-008 gives among the account's active credentials of the factor: the one marked preferred, else the most recently enrolled. A record cannot be written naming none, so question 211 could not be built with this left open. No test pins which of two is named. No path of the library enrols a `phoneCode` credential today; only test arrangements hold one.
+- **Parked.** Nothing further: an account with one active credential of the factor, the judgement and the migration do not depend on it.
 - **Answer:** pending.
 
 ## 5. Gate result
