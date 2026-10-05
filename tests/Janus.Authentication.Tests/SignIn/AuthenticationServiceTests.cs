@@ -3610,6 +3610,110 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/factor</c>: a text code asked for at
+    /// a sign-in whose number answers <c>risk</c> is answered with the factors the
+    /// challenge still offers, none already accepted on it: a generated code accepted
+    /// before the ask is not asked for again.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavesOutAFactorAlreadyAcceptedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Holds(subject, Factor.SecurityKey);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress presented = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
+
+        Answers(PhoneSignal.Risk);
+
+        SignInProgress? offered = (await AskedAsync(began.Challenge, stepping: null))
+            .Match(progress => progress, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
+        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+        Assert.Equal([Factor.SecurityKey], offered?.Required);
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/factor</c>: a text code asked for at
+    /// a sign-in whose number answers <c>risk</c>, where the only factor the challenge
+    /// still offers was accepted on it already, is left with none and refused
+    /// <c>auth.factor.rejected</c>, counting nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavingOnlyAFactorAlreadyAcceptedIsRefusedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress presented = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
+
+        Answers(PhoneSignal.Risk);
+
+        Result<SignInProgress?> asked = await AskedAsync(began.Challenge, stepping: null);
+
+        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
+        Assert.Equal(ErrorCodes.FactorRejected, asked.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/step-up</c>: a text code asked for at
+    /// a step-up whose number answers <c>risk</c>, after a password was accepted on the
+    /// challenge, is answered with the factors of the combinations left, the password
+    /// already accepted not among them.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavesOutAFactorAlreadyAcceptedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        SessionId held = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress presented = Reached(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            held,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        SignInProgress? offered = (await AskedAsync(began.Challenge, subject, held)).Match(
+            progress => progress,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
+        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+        Assert.Equal([Factor.Totp], offered?.Required);
+        Assert.Empty(_notifications.Texts);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC7, AUTH-FACT-002b AC6: at a step-up the text code is withheld
     /// where the carrier reports a recent change for the number: no code is issued or
     /// sent, the consideration is recorded once, and the ask is answered as a sign-in's

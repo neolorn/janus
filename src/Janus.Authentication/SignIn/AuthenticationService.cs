@@ -263,12 +263,12 @@ internal sealed class AuthenticationService(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
-    /// signal answers <c>risk</c>, what the challenge then offers, or
-    /// <c>auth.factor.rejected</c> where it offers nothing; at a step-up whose number's
-    /// signal answers <c>risk</c>, the factors of the combinations left without the
-    /// entry, none where the session already meets the gate, or
-    /// <c>auth.stepup.required</c> where no combination is left; or the refusal of the
-    /// send.
+    /// signal answers <c>risk</c>, what the challenge then offers, less the factors
+    /// accepted on it already, or <c>auth.factor.rejected</c> where that is nothing; at
+    /// a step-up whose number's signal answers <c>risk</c>, the factors of the
+    /// combinations left without the entry, less those accepted already, none where the
+    /// session already meets the gate, or <c>auth.stepup.required</c> where no
+    /// combination is left; or the refusal of the send.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
@@ -277,7 +277,8 @@ internal sealed class AuthenticationService(
     /// such credential and a policy that does not permit it are sent nothing and
     /// answered as an ask that sent its code. A number whose signal answers
     /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
-    /// what is left to present, which an anonymous caller is never told. At a step-up,
+    /// what is left to present, which an anonymous caller is never told, and which
+    /// names no factor accepted on the challenge already (D-193). At a step-up,
     /// whose challenge names no action, what is left is judged against the strictest of
     /// the policy's gates, field by field, and answered as a sign-in's ask is
     /// (AUTH-STEP-002, D-187, D-188). An ask after a first factor, or under a session,
@@ -365,7 +366,8 @@ internal sealed class AuthenticationService(
 
         // AUTH-FACT-002b AC6: the entries a text carries ride the one number, so the
         // signal withholds them all, and the sign-in is answered with the second steps
-        // it still offers; one left with none is refused, never completed.
+        // it still offers, none of them accepted on the challenge already (AUTH-FACT-002
+        // AC7, D-193); one left with none is refused, never completed.
         Assurance reached = Assurance.Reached(Properties(open.Presented))
             ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
 
@@ -375,7 +377,7 @@ internal sealed class AuthenticationService(
             reached,
             trusts: false);
 
-        _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted);
+        _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted || open.Presented.Contains(entry));
 
         return wanted.Count is 0
             ? Result.Failure<SignInProgress?>(Error.From(ErrorCodes.FactorRejected))
@@ -1142,9 +1144,10 @@ internal sealed class AuthenticationService(
     // that is judged against the strictest of the policy's gates, field by field, on the
     // session the step-up raises; a session that is not the account's judges no gate.
     // The ask is answered as a sign-in's is (D-188): with the factors of the
-    // combinations left, or with none where the session already meets that gate, and
-    // it is refused only where no combination is left, with the gate and what the
-    // account does next. Whether the session meets the gate is judged from the session
+    // combinations left, less those accepted on the challenge already, as a call that
+    // presents a factor is (D-193), or with none where the session already meets that
+    // gate, and it is refused only where nothing is left to present, with the gate and
+    // what the account does next. Whether the session meets the gate is judged from the session
     // (AUTH-STEP-002 step 1); what the answer reports is what the factors accepted on
     // the challenge reach together, as every 200 of a step-up does, and never what the
     // session reached before them (AUTH-STEP-002 AC4e, D-192).
@@ -1174,7 +1177,10 @@ internal sealed class AuthenticationService(
         }
 
         List<Factor> required = left.Outcome is StepUpOutcome.Present
-            ? [.. left.Combinations.SelectMany(combination => combination).Distinct()]
+            ? [.. left.Combinations
+                .Select(combination => combination.Except(accepted))
+                .SelectMany(remaining => remaining)
+                .Distinct()]
             : [];
 
         if (!StepUpRefusal.Met(left) && required.Count is 0)

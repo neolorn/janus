@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Credentials;
@@ -271,6 +272,46 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.NotEmpty(_notifications.Mail);
         Assert.NotEmpty(_notifications.Texts);
         Assert.Equal(FactorCatalogue.Password, Assert.Single(_events.Of<CredentialEnrolled>()).Kind);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007, chapter 09 <c>POST /auth/step-up</c>: a social-only account whose
+    /// session was downgraded since it signed in is refused the password it sets, and
+    /// the refusal of that gate, whose level is <c>delegated</c> and which asks no
+    /// maximum age, carries <c>maxAge</c> null and never the age the policy gives
+    /// <c>factor:enrol</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_TheRefusalOfASocialOnlyAccountsEnrolmentGateCarriesNoMaximumAgeAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        await _authenticators.LinkAsync(
+            Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, Label("Google"), Noon),
+            "provider-subject",
+            TestContext.Current.CancellationToken);
+
+        IssuedSession issued = Value(await Sessions.BeginAsync(
+            subject,
+            [Factor.Google],
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        Session live = Assert.IsType<Session>(
+            await _live.FindAsync(issued.Id, TestContext.Current.CancellationToken));
+
+        live.Downgrade(_clock.GetUtcNow());
+
+        Error? refused = (await Service.SetPasswordAsync(
+                Authority(subject, issued.Id),
+                Another,
+                Source,
+                TestContext.Current.CancellationToken))
+            .Match(() => (Error?)null, error => error);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused?.Code);
+        Assert.Equal("delegated", refused?.Details["required"].GetProperty("level").GetString());
+        Assert.Equal(JsonValueKind.Null, refused?.Details["required"].GetProperty("maxAge").ValueKind);
     }
 
     /// <summary>

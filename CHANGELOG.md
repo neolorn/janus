@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The 403 `auth.stepup.required` of a step-up gate that asks no maximum age, one whose
+  level is `delegated`, carries `required.maxAge` null, where it carried the age the
+  policy gives the action, a limit that gate does not apply. A gate at any other
+  level carries its maximum age in whole seconds as before.
+- `POST /auth/factor` and `POST /auth/step-up` asked for a text code and answered 200,
+  the number's signal having withheld the code, name in `required` only what is left
+  to present: a factor already accepted on the challenge is left out, as it is from
+  the answer of a call that presents a factor at a step-up, where every factor of the
+  combinations left was named, the accepted ones among them. A sign-in left with
+  nothing but a factor already accepted is refused 422 `auth.factor.rejected`.
 - A step-up gate whose level is `delegated`, which is what enrolling asks of an account
   that reaches no more, asks no maximum age: the session counts however long ago it
   reached that level, where it was refused 403 `auth.stepup.required` once the maximum
