@@ -619,6 +619,44 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// BFF-SESS-006 and chapter 09: a return whose session cannot be derived, for a
+    /// reason other than the record having ended, returns the browser to the stored
+    /// return address with the code of a session that is not there, whatever code the
+    /// derivation was refused with inside, and establishes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AReturnWhoseSessionIsNotDerivedReturnsTheBrowserExpiredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        // The opening the derivation makes, the first after the exchange is answered,
+        // is refused with a code that is not the ended record's.
+        deployment.Provider.Answered = address =>
+        {
+            if (address.AbsolutePath is "/oidc/token")
+            {
+                deployment.Work.RefusesBegin = Error.From(ErrorCodes.Restricted);
+            }
+        };
+
+        Answer refused = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Null(deployment.Work.RefusesBegin);
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
     /// BFF-SESS-006: the browser is sent back onto this application, so a return
     /// address naming another site is not one it is sent to.
     /// </summary>

@@ -46,6 +46,11 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
     public IDictionary<string, (HttpStatusCode Status, string Body)> Answers { get; } =
         new Dictionary<string, (HttpStatusCode Status, string Body)>(StringComparer.Ordinal);
 
+    /// <summary>
+    /// What a test does once the deployment has answered a request to an address.
+    /// </summary>
+    public Action<Uri>? Answered { get; set; }
+
     /// <inheritdoc/>
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -105,6 +110,8 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
         answered.Headers.ContentType = context.Response.ContentType is string type
             ? MediaTypeHeaderValue.Parse(type)
             : null;
+
+        Answered?.Invoke(address);
 
         return new HttpResponseMessage((HttpStatusCode)context.Response.StatusCode)
         {

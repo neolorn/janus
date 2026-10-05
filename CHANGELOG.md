@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /auth/signon/return` returns the browser with `auth.session.expired` whenever
+  the per-application session is not derived, whatever code the derivation was refused
+  with inside. A derivation refused for a reason other than the record having ended
+  answered that reason's own code and status before.
 - A fault on a navigation route stays a fault, answered 500 `system.fault` and never
   carried as a code in `error`. A start of the sign-on, or of a provider round trip to
   sign in or to register, for which no pre-authentication session can be issued is

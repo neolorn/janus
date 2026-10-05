@@ -48,11 +48,11 @@ namespace Janus.Hosting.Bff;
 /// read once and dropped: after it, this application holds a session record and nothing
 /// else. The sign-on is a navigation (BFF-ERR-001): a failure other than its state
 /// returns the browser, to where it was going at the start and to the stored return
-/// address at the return, with the code of a session that is not there, and a return
-/// whose state is absent, unbound or mismatched is refused and sent nowhere. A fault
-/// stays a fault (BFF-ERR-002): no pre-authentication session to bind the start to, or
-/// a push or an exchange that did not reach the provider, was answered a 5xx or read
-/// no answer in its protocol's shape.
+/// address at the return, with the code of a session that is not there, whatever code
+/// refused it inside, and a return whose state is absent, unbound or mismatched is
+/// refused and sent nowhere. A fault stays a fault (BFF-ERR-002): no pre-authentication
+/// session to bind the start to, or a push or an exchange that did not reach the
+/// provider, was answered a 5xx or read no answer in its protocol's shape.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -369,13 +369,12 @@ internal sealed class SignOn(
             .DeriveAsync(named, SessionType.PerApp, RequestOrigin.Of(context.Request), cancellationToken)
             .ConfigureAwait(false);
 
-        // A record that has ended since the code was issued is a session that is not
-        // there; anything else that kept the session from being derived is a fault.
-        if (derived.Match(_ => (Error?)null, failure => failure) is Error unestablished)
+        // BFF-SESS-006, chapter 09: a session that was not derived is one that is not
+        // there, whatever code the derivation was refused with inside, which is
+        // never carried to the browser.
+        if (derived.Match(_ => false, _ => true))
         {
-            return unestablished.Code == ErrorCodes.SessionExpired
-                ? Expired(attempt.ReturnTo)
-                : Answers.Refused(unestablished);
+            return Expired(attempt.ReturnTo);
         }
 
         // BFF-SESS-004, BFF-CSRF-005a AC3: the pair the browser carries is written
