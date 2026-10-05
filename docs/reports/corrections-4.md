@@ -4520,3 +4520,32 @@ its commits can be read.
 - `dec8e8d2` fails the truth-table change check over itself alone and passes over the range (section 1, `part/seams`).
 - Not merged: `part/bot-defence` (question 136, `b099d14a`), kept as a local branch until question 169 is answered.
 - Open: questions 161 to 187 (section 4). Not built for them: the startup log of the rules set aside (161); the comparison of the identifier with an origin's host (163); the fourth-clause test of CONV-DESIGN-007 criterion 7 and its sites (168); question 136 on the working branch (169 to 171); the answer of the other session-required routes to an enrolment session, when that session ends after a second step's codes, and the narrowing of its reach on the verify route (176 to 178); `viewedAt` of a registration's set (179); the replace half of question 153 and the repeated add the sweep overtakes (180, 181); a second removal row for one identifier (185); the due instant of a row with no immediate attempt (186).
+
+**`corrections-4`, after the items of D-189.** Full gate at `0ad61d82`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). The pipeline's last run on the pull request covers `f1e724ac`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3572 |
+| Contract tests | passed, 148 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1026 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 103 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). Of the three migrations since the last gate it lists `KeyEachIdentifierRemovalByItsOwnIdentifier` (`pk_identifier_removals` dropped and added on `removal_id`, `removal_id` set not null) and `KeepWhenAnEnrolmentSessionShowedRecoveryCodes` (`ck_recovery_links_codes_shown` added); `KeepTheEnrolmentSessionThatStagedAReplace` lists nothing |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- From the docs commit `a6297785` to the merge of `part/bot-defence` (`0cb54693`), every commit fails one contract test, `SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource`, for the two `10` rows that part builds.
+- One description on the working branch was over 72 characters (the report commit of questions 188 and 189). It was not pushed; it was reworded, and the five commits above it were written again over it with the same trees, authors and dates. The merge hashes this report gives are the ones that stand.
+- Open: questions 188 to 201 (section 4). Not built for them: the comparison of a configured origin with a ceremony's (188); `KeyRing`'s static members read in `KeyRingService` (189); what a suspended authenticator answers (190); the answers of 191 and 192; the lead of 193, unconfirmed; any raise by the `datacenter-ranges` job (194); the in-process refusal in the operations that take only an access context (195); what questions 198 to 200 park.
