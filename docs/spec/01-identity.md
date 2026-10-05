@@ -914,7 +914,7 @@ it is not deleted, since membership may end.
 **IDN-LIFE-012** — Linking a Google or Apple identity SHALL attach a credential and
 SHALL have no effect on permissions or identity.
 
-*Source: D-005, original spec, D-146, D-166, D-192*
+*Source: D-005, original spec, D-146, D-166, D-192, D-193*
 
 The provider's email is never a key. It counts as verified by the sign-in only where
 the provider operates the mailbox; any other provider-supplied address is verified by
@@ -946,7 +946,13 @@ under, it has not expired and its `nonce` is the round trip's. Where the provide
 discovery document, its published keys or its token endpoint cannot be reached or read,
 the round trip returns the browser with `error` `auth.provider.unavailable`, counts no
 failed attempt, since nothing the person presented failed, and raises `degradation`
-(OPS-OBS-002, `09`, D-192).
+(OPS-OBS-002, `09`, D-192). A discovery document that names no HTTPS authorization or
+token endpoint cannot be read for what the round trip needs, and every answer of the
+token endpoint but a success holding an identity token and a 400 whose `error` is
+`invalid_grant` (RFC 6749 section 5.2) is the provider unavailable too, a refusal of the
+deployment's own client (`invalid_client`) among them; `invalid_grant` is the code
+refused, a failed attempt. A reading its caller cancelled is no failure to read: it
+raises nothing and the request is not answered (BFF-ERR-002, D-193).
 
 **Acceptance criteria**
 1. Linking changes no grant and no membership.
@@ -959,9 +965,11 @@ failed attempt, since nothing the person presented failed, and raises `degradati
    minted for it that expires 5 minutes after it is made, and exchanges a year apart
    both succeed with no redeclaration and no restart.
 6. A round trip whose provider's discovery document, published keys or token endpoint
-   cannot be reached or read returns the browser with `error`
+   cannot be reached or read, a token endpoint answering a 5xx, a 429 or
+   `invalid_client` among them, returns the browser with `error`
    `auth.provider.unavailable`, counts no failed attempt and raises `degradation` under
-   `provider.unavailable:<provider>`.
+   `provider.unavailable:<provider>`; a token endpoint answering `invalid_grant` returns
+   `auth.factor.rejected`, counted and recorded.
 
 ---
 
@@ -978,7 +986,7 @@ is `suspended` with a security notice to the security-notice set); on an email d
 the provider-verified identifier SHALL drop to unverified. Every event is verified
 against the provider's published keys, is idempotent by its `jti`, and is audited.
 
-*Source: D-164, D-166, D-183, D-187, D-191*
+*Source: D-164, D-166, D-183, D-187, D-191, D-193*
 
 A person's Google account is taken over and Google tells every relying party within
 seconds. A system that ignores that is choosing to keep the attacker signed in.
@@ -1010,9 +1018,10 @@ way.
 callback name, in the transaction its work runs in; an event that carries no `jti` is
 refused as unreadable (RFC 8417 section 2.2). A provider document the library cannot
 have or read refuses nothing: the delivery is answered as a fault, nothing is claimed or
-recorded, and the provider may deliver it again (`09` section 10). A carried event is
-recorded as `auth.providerevent.taken`; a replayed one as `auth.providerevent.rejected`
-and answered as a carried one is; one the provider's keys do not verify as
+recorded, and the provider may deliver it again (`09` section 10); a reading its caller
+cancelled is answered nothing (BFF-ERR-002, D-193). A carried event is recorded as
+`auth.providerevent.taken`; a replayed one as `auth.providerevent.rejected` and answered
+as a carried one is; one the provider's keys do not verify as
 `auth.providerevent.rejected` against the account its unverified claims name, where they
 name one, and refused. The provider's subject identifier is never recorded or logged. On
 the Google route a token whose `nbf` is later than now is refused as one whose `exp` has

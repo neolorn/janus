@@ -365,13 +365,19 @@ control now that composition rules are gone.
 
 ### 7.4 Social sign-in providers
 
-Unreachable (`degradation` under `provider.unavailable:<provider>`): the person is
-returned with `auth.provider.unavailable`; nothing is counted or changed. Those whose
-only way in is that provider must wait; everyone else can use another factor. Do not
-remove the provider's declaration to quiet the alert: a provider the deployment does not
-declare answers `auth.factor.notpermitted` at the round trip, and its security events
-are refused, Google's with `invalid_issuer` and Apple's with
-`integration.callback.rejected` (`09` section 10, IDN-LIFE-012a, D-192).
+Unreachable or unreadable (`degradation` under `provider.unavailable:<provider>`,
+`details.part` `discovery`, `keys` or `token`; a token endpoint's 5xx or 429, its
+refusal of the deployment's own client, and a discovery document naming no HTTPS
+authorization or token endpoint included): the person is returned with
+`auth.provider.unavailable`; nothing is counted or changed. Where the token endpoint
+refuses the deployment's client (`invalid_client`), the fault is the deployment's: check
+the credential the secret source gives for the provider, a revoked key or a rotated
+secret; correct it there and restart the application, which reads it at start
+(IDN-LIFE-012, D-193). Those whose only way in is that provider must wait; everyone else
+can use another factor. Do not remove the provider's declaration to quiet the alert: a
+provider the deployment does not declare answers `auth.factor.notpermitted` at the round
+trip, and its security events are refused, Google's with `invalid_issuer` and Apple's
+with `integration.callback.rejected` (`09` section 10, IDN-LIFE-012a, D-192).
 
 
 

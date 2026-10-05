@@ -565,19 +565,21 @@ pad `=` excluded (RFC 8620 section 1.2). Every public member that takes or retur
 a name or identifier takes the type, the mail server's app-password operations included;
 an internal record MAY hold the value as text once the boundary has read it (D-188).
 
-*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166, D-174, D-183, D-187, D-188*
+*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166, D-174, D-183, D-187, D-188, D-193*
 
 **Acceptance criteria**
 1. No entity exposes a public or internal property setter.
 2. No method takes a bare `Guid` or `string` where a typed identifier or value exists.
    The criterion reads every project, the public types of `Janus.Core` and the endpoint
-   handlers of `Janus.Hosting` included. Inside the declaration of a typed identifier or
-   value, a parameter of the type it wraps (the `Guid` of an identifier, the `string` of
-   a value) is outside this criterion: it is the value the type is made from; every
-   other member of the type is held to it. A member implementing an interface declared
-   in an assembly of a package CONV-DESIGN-008 lists, or names as one a listed package
-   brings, takes the parameters that interface declares and is outside this criterion;
-   no other member of the implementing type is.
+   handlers of `Janus.Hosting` included; a navigation route's handler, which takes its
+   route and query values as text (CONV-DESIGN-006, D-193), is outside it for those
+   values. Inside the declaration of a typed identifier or value, a parameter of the
+   type it wraps (the `Guid` of an identifier, the `string` of a value) is outside this
+   criterion: it is the value the type is made from; every other member of the type is
+   held to it. A member implementing an interface declared in an assembly of a package
+   CONV-DESIGN-008 lists, or names as one a listed package brings, takes the parameters
+   that interface declares and is outside this criterion; no other member of the
+   implementing type is.
 3. Constructing an invalid canonical value is a compile-time or immediate runtime
    failure, never a stored row. A value type's default instance, which the language
    cannot forbid, gives no text: it fails where it is first read, before any write.
@@ -614,30 +616,35 @@ DTO and a contract type is a hand-written static method beside the DTO. Serializ
 uses `System.Text.Json` source generation. No controllers, no reflection-based mapping.
 A route or query value for which a typed identifier or value exists (CONV-DESIGN-004)
 binds to that type at the edge through `IParsable<T>`; no handler takes it as a bare
-`Guid` or `string`. Each endpoint declares, as endpoint metadata added through one
-route-builder extension of `Janus.Hosting`, the error codes `09` gives it: its row's,
-and those the text of its section or subsection gives the routes that text governs,
-before or after a table (among them `authz.restricted` and `authz.denied` in section 6;
-`authz.restricted`, `authz.denied` and `identity.organization.notfound` in section 8;
-`identity.registration.incomplete` for the step endpoints of section 2), and 422
-`integration.sms.balancefloor` where the `09` preamble gives it; what its mounting
-answers, where its row does not give it, is derived, as the chapter's preamble says, and
-declared by no endpoint. A navigation route (BFF-ERR-001) declares the same way the
-codes `09` gives it to carry in the query member `error` of its redirect, which the
-contract file lists under that redirect, since no status of `10` is sent with them
-(D-192). An endpoint declares codes only: the status of each is the one `10` gives it,
-which `ApiStatus` maps, and a code `ApiStatus` maps by its details is listed under each
-status it can take. The endpoint contract file (LIB-API-001) is generated from that
-metadata, from the typed results' and body metadata, and from the endpoint's mounting
-(`09`, preamble). Each endpoint declares those route and query values too, by name and
-type, in the same metadata; the declaration is generic over the type, so no reflection
-reads the handler (CONV-CODE-004). Where the framework could not bind a request, the
-error translation stage refuses it **400** `api.request.malformed`, `details.member`
-naming the first declared value, in the order declared, whose type's `TryParse` refuses
-the request's text; on a navigation route it returns the browser instead, with that code
-in `error` and nothing of `details` (D-192).
+`Guid` or `string`, save a navigation route's (BFF-ERR-001), which takes each value as
+text and judges it itself, returning the browser with `api.request.malformed` in `error`
+where one does not read (the sign-on with `auth.session.expired`, BFF-SESS-006), since
+the framework's refusal has no way back to the browser (D-193). Each endpoint declares,
+as endpoint metadata added through one route-builder extension of `Janus.Hosting`, the
+error codes `09` gives it: its row's, and those the text of its section or subsection
+gives the routes that text governs, before or after a table (among them
+`authz.restricted` and `authz.denied` in section 6; `authz.restricted`, `authz.denied`
+and `identity.organization.notfound` in section 8; `identity.registration.incomplete`
+for the step endpoints of section 2), and 422 `integration.sms.balancefloor` where the
+`09` preamble gives it; what its mounting answers, where its row does not give it, is
+derived, as the chapter's preamble says, and declared by no endpoint. A navigation route
+(BFF-ERR-001) declares the same way the codes `09` gives it to carry in the query member
+`error` of its redirect, which the contract file lists under that redirect, since no
+status of `10` is sent with them (D-192). An endpoint declares codes only: the status of
+each is the one `10` gives it, which `ApiStatus` maps, and a code `ApiStatus` maps by
+its details is listed under each status it can take. The endpoint contract file
+(LIB-API-001) is generated from that metadata, from the typed results' and body
+metadata, and from the endpoint's mounting (`09`, preamble). Each endpoint declares
+those route and query values too, by name and type, in the same metadata (a navigation
+route declares none as typed, D-193); the declaration is generic over the type, so no
+reflection reads the handler (CONV-CODE-004). Where the framework could not bind a
+request, the error translation stage refuses it **400** `api.request.malformed`,
+`details.member` naming the first declared value, in the order declared, whose type's
+`TryParse` refuses the request's text; no navigation route meets that refusal, since
+none binds a typed value (D-193).
 
-*Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187, D-192*
+*Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187, D-192,
+D-193*
 
 **Acceptance criteria**
 1. No type derives from `ControllerBase`.
@@ -657,9 +664,10 @@ in `error` and nothing of `details` (D-192).
    declares nor answers by its mounting fails the test that made it; the machine
    callback's redirect, whose `error` is the provider's own, is outside this sentence.
 5. A route or query value that does not parse as its type answers 400
-   `api.request.malformed` naming it, or, on a navigation route, returns the browser
-   with it in `error`, and each handler's typed route and query parameters equal those
-   its endpoint declares.
+   `api.request.malformed` naming it; on a navigation route, which takes its values as
+   text, the handler returns the browser with that code in `error` (the sign-on with
+   `auth.session.expired`); and each handler's typed route and query parameters equal
+   those its endpoint declares.
 
 ---
 
@@ -1452,20 +1460,20 @@ level governs: failed authentication (`auth.authentication.failed`), denied auth
 refused), configuration change (`ops.configuration.changed`), break-glass use
 (`auth.breakglass.used`).
 
-*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192*
+*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193*
 
 **Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
 press (a link token unknown or expired included, when pressed) or on a social provider's
 return, a refused new-device verification code, or a refused break-glass credential. A
-plain open of a link, a press in another browser, a provider's own error or a cancel,
-and a provider that cannot be reached or read (`auth.provider.unavailable`,
-IDN-LIFE-012, D-192) present nothing and are not failed authentication, and neither is a
-fault of the library's own inside a sign-in or a step-up, which writes no
-`auth.stepup.failed`; a refused factor is one refused with a code AUTH-ABUSE-001 lists
-(D-188, D-189). A `phoneCode` ask presents nothing: refused `auth.factor.rejected` where
-no factor is left, or `auth.credential.suspended` for a suspended number, it is no
-failed authentication and writes no `auth.stepup.failed` (AUTH-FACT-002, AUTH-RECOV-007,
-D-190).
+plain open of a link, a press in another browser, a provider's own error or a cancel, a
+provider's return carrying no `code` (D-193), and a provider that cannot be reached or
+read (`auth.provider.unavailable`, IDN-LIFE-012, D-192) present nothing and are not
+failed authentication, and neither is a fault of the library's own inside a sign-in or a
+step-up, which writes no `auth.stepup.failed`; a refused factor is one refused with a
+code AUTH-ABUSE-001 lists (D-188, D-189). A `phoneCode` ask presents nothing: refused
+`auth.factor.rejected` where no factor is left, or `auth.credential.suspended` for a
+suspended number, it is no failed authentication and writes no `auth.stepup.failed`
+(AUTH-FACT-002, AUTH-RECOV-007, D-190).
 
 **Acceptance criteria**
 1. Raising the minimum log level does not suppress these.

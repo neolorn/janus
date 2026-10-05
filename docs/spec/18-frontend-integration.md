@@ -116,10 +116,12 @@ enrolment session makes on its routes (`09` `POST /enrol/begin`), where it means
 session ended and the person needs a new link (D-188, D-189). A navigation returned with
 `error` `auth.stepup.required` or `auth.session.expired` carries no `details` and is
 rendered as FE-API-006 states; after `auth.stepup.required` the person starts the action
-again, and its own request meets the gate in place (BFF-STEP-001, D-192).
+again, and its own request meets the gate in place (BFF-STEP-001, D-192); for a link
+that request is `POST /account/link/{provider}`, which the frontend asks before the
+round trip (FE-ACCT-001, D-193).
 
 *Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188, D-189,
-D-192*
+D-192, D-193*
 
 The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
 job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
@@ -853,7 +855,7 @@ declaration (REG-PREF-001); and the **profile** fields the policy enables
 (REG-PROF-001).
 
 *Source: D-146; AUTH-FACT-001, AUTH-SESS-013, REG-IDENT-002, REG-IDENT-004 to
-REG-IDENT-006, REG-PREF-001, REG-PROF-001, AUTH-FACT-002a, D-166*
+REG-IDENT-006, REG-PREF-001, REG-PROF-001, AUTH-FACT-002a, D-166, D-193*
 
 Nothing about a credential beyond these fields is shown (AUTH-FACT-001). The undo is
 link-borne (`POST /account/identifiers/{id}/undo`) because after a hostile removal the
@@ -878,6 +880,9 @@ the person.
 6. Before a provider is linked (`POST /account/link/{provider}`), where the credential
    list holds a second-step credential, the R-A16 disclosure is shown in one sentence
    before the round trip starts (AUTH-FACT-002a).
+7. A link starts with `POST /account/link/{provider}`; its 403 is met in place
+   (FE-API-004), and only its 204 sends the browser to
+   `GET /auth/providers/{provider}?intent=link` (`09`, D-193).
 
 ---
 

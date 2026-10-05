@@ -14769,6 +14769,8 @@ BFF-STEP-001 (criterion 2); `18` FE-API-004 (the step-up prompt); `20` REG-IDENT
 
 ## D-192 — Corrections-4 questions 211 to 217 and the truth-table ruling after D-191
 
+> **Amended.** Question 212: a link's gate is asked at the round trip's start and again on its return; every intent's return carries `auth.factor.rejected`, a provider's own error or a missing code counting nothing; at the token endpoint only `invalid_grant` is the code refused, every other failure the provider unavailable; a fault on a navigation stays a fault; a navigation route binds no typed value; 211: an account holds at most one `phoneCode` credential (D-193).
+
 **Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-191 (question 205, the migration keeps the instant of phishing resistance a row already held; question 203, what the 200 of a `phoneCode` ask at a step-up reports), D-183 (question 46, the step-up rows of the truth table cover a gate judged from a session too)
 
 **TL;DR.** Building D-191 proved three defects by tests written first (205, 209, 210),
@@ -14947,6 +14949,144 @@ the preamble, API-CONV-003 (the 400 row), `POST /auth/step-up`, `GET /auth/signo
 `11` section 7.4 (new); `17` BFF-SESS-006 (body), BFF-STEP-001 (body, criterion 1),
 BFF-ERR-001 (body, new criterion 4), BFF-ABUSE-001 (body, criterion 4); `18` FE-API-003
 (body), FE-API-004 (body), FE-API-005 (body, criterion 4), FE-REG-005 (body).
+
+---
+
+## D-193 — Corrections-4 questions 218 to 228: the answers after D-192 was built
+
+**Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-192 (question 212, where a link's gate is asked, the codes a registration's return carries, what a provider that cannot be read is, that a navigation route binds no typed value, and that a fault on a navigation stays a fault; question 211, which credential a code names)
+
+**TL;DR.** Building D-192 raised eleven questions; none reverses it. A link's gate is
+asked at the round trip's start, before the browser leaves, and again on the return, so
+the start may return the gate's three codes (221). A provider's own error or a cancel
+returns `auth.factor.rejected` for every intent and counts nothing; at the token endpoint
+only `invalid_grant` is the code refused, and every other failure (a 5xx, a 429, a refusal
+of the deployment's own client, an answer with no identity token) is the provider
+unavailable (222, 223). A fault stays a fault on a navigation too: 500 `system.fault`,
+never a code in `error` (225, 226). A navigation route takes its values as text and judges
+them itself, so the framework's 400 never reaches it (224). An account holds one
+`phoneCode` credential at most (218); no route enrols that factor yet, which is recorded
+for the Milestone 1 exit review. A refusal of a gate that asks no maximum age carries none
+(220), and an ask's `required` leaves out the factors already accepted (219). 227 and 228
+stand as built.
+
+**The questions.** Questions 218 to 228 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names its question; the chapters
+carry the full rule.
+
+**The provider round trip (questions 221 to 224, 227 and 228).**
+
+- **221. Where a link's gate is asked.** At both ends, as built: a start to link asks the
+  gate `POST /account/link/{provider}` answers (a session, the `provider:link` step-up,
+  the provider permitted by the policy in force) before the browser leaves, so no one is
+  sent to the provider for a link that would be refused, and the return asks it again
+  before it links, since the step-up may have aged or the session ended meanwhile. The
+  start's list gains `auth.stepup.required`, `authz.restricted` and `authz.denied` for a
+  link, and its `auth.factor.notpermitted` covers a provider the policy in force does not
+  permit as well as one the deployment does not declare. On a navigation the step-up code
+  carries no `details`; the frontend asks `POST /account/link/{provider}` first, whose 403
+  carries them, and only its 204 starts the round trip (`18` FE-API-004 and FE-ACCT-001
+  criterion 7); that route now declares its 422 `auth.factor.notpermitted`. *Rejected:*
+  the return alone (a person would pass through the provider only to be refused on coming
+  back).
+- **222. `auth.factor.rejected` at a registration's return.** The list lacked it: a
+  provider's own `error` (a cancel included), a return with no `code`, and an identity
+  token that does not hold up are answered before the intent is read, so every intent
+  returns it. The first two present nothing: nothing is counted or recorded, as
+  CONV-LOG-005 already says of a provider's own error or a cancel (AUTH-ABUSE-001 and its
+  criterion 14). An identity token that does not hold up is a presented factor refused,
+  counted and recorded (IDN-LIFE-012 criterion 4, AUTH-ABUSE-001, CONV-LOG-005).
+  *Rejected:* another code for a registration (the refusal is the same refusal whatever
+  the intent).
+- **223. A token endpoint that answers other than success.** Only a 400 whose `error` is
+  `invalid_grant` is the code the browser carried refused (RFC 6749 section 5.2: the grant
+  invalid, expired, revoked, or issued to another client): `auth.factor.rejected`, counted
+  and recorded. Every other answer but a success holding an identity token is the provider
+  unavailable, part `token`, nothing counted: a 5xx, a 429, a refusal of the deployment's
+  own client (`invalid_client`, `unauthorized_client` and the others, a revoked key or a
+  rotated secret), or an answer that cannot be read or holds no identity token
+  (IDN-LIFE-012 criterion 6, `11` section 7.4). *Rejected:* every non-success status a
+  refused identity (a provider's outage, or the deployment's own broken credential, would
+  be counted against the person and raise nothing); every 4xx a refused identity (the
+  same, for a refusal of the client).
+- **224. A navigation route that cannot bind a value.** A navigation route binds no typed
+  route or query value: it takes each as text and judges it itself, returning the browser
+  with `api.request.malformed` in `error` where one does not read, which it declares; the
+  framework's 400 never reaches it, so the translation stage owes nothing
+  (CONV-DESIGN-006, `09` preamble and API-CONV-003). This is the one exception to typed
+  binding at the edge: the framework's refusal has no way back to the browser. *Rejected:*
+  a destination and a redirect status for the stage (machinery for a request no navigation
+  route lets through).
+- **227. A discovery document that names no endpoint.** As built: a document that reads
+  but names no HTTPS authorization or token endpoint cannot be read for what the round
+  trip needs, so it is `auth.provider.unavailable`, part `discovery` (IDN-LIFE-012).
+- **228. A reading the caller cancelled.** As built: the cancellation is the caller's
+  going, no failure to read; it raises nothing and the request is not answered
+  (BFF-ERR-002), on the round trip and on the security-event routes alike (IDN-LIFE-012a).
+
+**Faults on a navigation (questions 225 and 226).**
+
+- **225 and 226. A fault stays a fault.** A start for which no pre-authentication session
+  can be issued (the store or the configuration failing), and a sign-on whose push or
+  exchange cannot reach the authentication application or reads no answer, are faults: 500
+  `system.fault`, as BFF-ERR-002 answers every fault, never a code in `error`, which
+  carries refusals of the person's attempt; a 5xx from the authentication application is a
+  fault too (BFF-SESS-006, BFF-ERR-001 criterion 5). Every refusal of the sign-on other
+  than its `state` returns the browser with `auth.session.expired`, whatever code it was
+  refused with inside, as BFF-SESS-006 says: the frontend has one thing to do, sign in
+  again. *Rejected:* returning the browser expired for a fault (it would hide the fault
+  and send the person round a loop that cannot succeed); `auth.session.csrfinvalid` at a
+  start that could not issue a session (no `state` has failed).
+
+**Second steps (questions 218 and 219).**
+
+- **218. Which credential a code names.** The account's one: an account holds at most one
+  active `phoneCode` credential, and the code's record names it (AUTH-FACT-002). The order
+  built (the preferred, else the most recently enrolled) stands as a guard and is never
+  needed with one. Two things stay open, for the Milestone 1 exit review, because no route
+  enrols the factor and so no account can hold one meanwhile (it is off by default too):
+  how it is enrolled, and which number it is bound to. As built it texts the primary
+  phone, but NIST SP 800-63B-4 section 3.1.3.3 treats setting or changing the
+  pre-registered number as binding a new authenticator, and REG-IDENT-005 lets an ordinary
+  session change the primary with no step-up; the enrolment design must bind the
+  credential to the number it was enrolled for, or make a change of that number an
+  enrolment. *Rejected:* letting the ask name a credential (an account holds one).
+- **219. `required` on an ask answered 200.** It leaves out the factors already accepted
+  on the challenge, as a presenting call's does: `required` names what is left to present
+  (AUTH-FACT-002, `09` `/auth/factor` and `/auth/step-up`). *Rejected:* every factor of
+  the combinations left (the frontend would ask again for a password already accepted).
+
+**The `delegated` gate (question 220).**
+
+- **220. `maxAge` in its refusal.** A gate that asks no maximum age carries none: `maxAge`
+  is null in the refusal of a `delegated` gate (`09` `/auth/step-up`, `10`
+  `auth.stepup.required`, AUTH-STEP-007). *Rejected:* the age the policy gives the action
+  (it names a limit the gate does not apply).
+
+**What the run reported besides.** The truth-table change check watches `Session.cs` and
+`StepUp.cs`, and the six rows `91774d4c` owed are written. `StepUp.cs` also holds what
+step 2 offers, which is outside permission logic (D-188 question 146): move the offer to a
+file of its own, so the check watches the judgement alone. The `delegated` gate's one row,
+its refusing side, is right, since no action can be bound to it. Item 3h waited on
+question 221 and is built now. The ranges job's test failed again for a cause last round's
+fix did not reach (the alert-dispatch job carrying the raised row in the same pass); the
+fix in test code stands, and so does the gate's second run. The REF-001 contract test was
+red from the docs commit until the code carried the new code; that is expected where a
+docs commit adds a code, since the contract test runs in the full gate.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `01` IDN-LIFE-012 (values, criterion 6), IDN-LIFE-012a (how an event is
+taken); `02` AUTH-FACT-002 (values, criterion 7), AUTH-ABUSE-001 (body, new criterion 14);
+`08` CONV-DESIGN-004 (criterion 2), CONV-DESIGN-006 (body, criterion 5), CONV-LOG-005
+(values); `09` the preamble, API-CONV-003 (the 400 row), `/auth/factor` (second-step
+codes), `POST /auth/step-up` (the `phoneCode` ask, `maxAge`), `GET /auth/signon` ·
+`GET /auth/signon/return`, `POST /account/link/{provider}` (body, 422),
+`GET /auth/providers/{provider}` (the round trip, the codes `error` carries); `10`
+`auth.factor.rejected`, `auth.session.expired`, `auth.stepup.required`,
+`auth.factor.notpermitted`, `auth.provider.unavailable`, section 5a (`provider:link`);
+`11` section 7.4; `17` BFF-SESS-006 (body), BFF-ERR-001 (body, new criterion 5),
+BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7).
 
 ---
 
@@ -15152,6 +15292,7 @@ BFF-ERR-001 (body, new criterion 4), BFF-ABUSE-001 (body, criterion 4); `18` FE-
 | Corrections-4 questions 188 to 201: the answers after D-189 was built | D-190 |
 | Corrections-4 questions 202 to 210: the answers after D-190 was built | D-191 |
 | Corrections-4 questions 211 to 217 and the truth-table ruling after D-191 | D-192 |
+| Corrections-4 questions 218 to 228: the answers after D-192 was built | D-193 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

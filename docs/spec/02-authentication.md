@@ -144,7 +144,7 @@ requests and in credential records; eleven identifiers may appear in `loginFacto
 (D-151).
 
 *Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187,
-D-188, D-189, D-190, D-192*
+D-188, D-189, D-190, D-192, D-193*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -165,16 +165,18 @@ NIST SP 800-63B-4 section 3.1.3.3 (AUTH-FACT-002b).
 
 **Values (D-166, D-183).** A `phoneCode` code is asked for by `POST /auth/factor` (at a
 step-up, `POST /auth/step-up`) naming `phoneCode` with no `value`, once a challenge
-offers it after a first factor or under a session. The library then asks the phone
-signal of the number (AUTH-FACT-002b). Where it does not answer `risk`, a code bound to
-that challenge is issued on its record and sent as criterion 6 states, and the ask is
-answered 202. Where it answers `risk`, nothing is issued, sent or counted, the
-consideration is recorded, `phoneCode` is withheld from the challenge, and the ask is
-answered with what the challenge then offers (AUTH-FACT-002b criterion 6); at a step-up,
-whose challenge names no action, what it offers is judged against the strictest of the
-policy's gates, field by field, as a host-named gate that no policy states values for is
-(AUTH-STEP-002, D-187); with no combination left the ask is answered
-`auth.stepup.required` with the outcome AUTH-STEP-002 gives, `pending` with
+offers it after a first factor or under a session. An account holds at most one active
+`phoneCode` credential, and the code's record names it (AUTH-FACT-004, D-193). The
+library then asks the phone signal of the number (AUTH-FACT-002b). Where it does not
+answer `risk`, a code bound to that challenge is issued on its record and sent as
+criterion 6 states, and the ask is answered 202. Where it answers `risk`, nothing is
+issued, sent or counted, the consideration is recorded, `phoneCode` is withheld from the
+challenge, and the ask is answered with what the challenge then offers, its `required`
+naming no factor already accepted on the challenge (AUTH-FACT-002b criterion 6, D-193);
+at a step-up, whose challenge names no action, what it offers is judged against the
+strictest of the policy's gates, field by field, as a host-named gate that no policy
+states values for is (AUTH-STEP-002, D-187); with no combination left the ask is
+answered `auth.stepup.required` with the outcome AUTH-STEP-002 gives, `pending` with
 `pendingUntil` among them (D-189), and where the session already meets that gate as
 AUTH-STEP-002 step 1 judges it the ask is answered 200 with `required` empty, nothing
 further being needed (D-188); each 200 with which an ask at a step-up is answered
@@ -203,12 +205,12 @@ suspended number is answered as AUTH-RECOV-007 states (D-190).
    sign-in.
 7. A `phoneCode` ask whose number answers `risk` sends nothing and records the
    consideration; at a sign-in it is answered with the factors the challenge still
-   offers, or `auth.factor.rejected` where none is left; at a step-up, judged against
-   the strictest of the policy's gates field by field, with no combination left it is
-   answered `auth.stepup.required` with the outcome AUTH-STEP-002 gives (`report-loss`,
-   `enrol`, or `pending` with `pendingUntil` where a loss report is in flight), and with
-   that gate already met, as AUTH-STEP-002 step 1 judges it, it is answered 200 with
-   `required` empty.
+   offers, none already accepted on it (D-193), or `auth.factor.rejected` where none is
+   left; at a step-up, judged against the strictest of the policy's gates field by
+   field, with no combination left it is answered `auth.stepup.required` with the
+   outcome AUTH-STEP-002 gives (`report-loss`, `enrol`, or `pending` with `pendingUntil`
+   where a loss report is in flight), and with that gate already met, as AUTH-STEP-002
+   step 1 judges it, it is answered 200 with `required` empty.
 
 ---
 
@@ -2252,7 +2254,9 @@ outside the operation instead (AUTHZ-CONCEAL-004). A fault of the library's own 
 sign-in, a step-up, a sign-in code's or a device check's path is no failed attempt:
 nothing is counted under this item or recorded under CONV-LOG-005, no
 `auth.stepup.failed` is written, and the request answers `system.fault` (D-188, D-189).
-A failed attempt of a presented factor is one refused with `auth.factor.rejected`,
+A provider's own `error` on its return, a cancel included, and a return carrying no
+`code` present nothing and are no failed attempt either (CONV-LOG-005, D-193). A failed
+attempt of a presented factor is one refused with `auth.factor.rejected`,
 `auth.factor.notpermitted`, `auth.code.invalid`, `auth.code.expired`,
 `auth.code.replayed`, `auth.credential.suspended`, `auth.webauthn.algorithmnotallowed`,
 `auth.webauthn.countermismatch`, `auth.webauthn.rpidchanged` or
@@ -2260,7 +2264,7 @@ A failed attempt of a presented factor is one refused with `auth.factor.rejected
 (`auth.breakglass.invalid`, `auth.breakglass.consumed`) is one too (OPS-BOOT-004); a new
 refusal of a factor joins this list with its `10` row (D-189).
 
-*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190*
+*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2318,6 +2322,9 @@ the control without handing over the lever.
     browser with `error=auth.throttled` and `retryAt`.
 13. Two addresses within one IPv6 /64 share one source delay, and an IPv4-mapped
     address shares its IPv4 address's.
+14. A provider's return carrying its own `error`, a cancel included, or no `code`, from
+   a source under no delay, returns the browser with `auth.factor.rejected` and counts
+   and records nothing.
 
 ---
 
