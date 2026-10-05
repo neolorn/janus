@@ -1079,6 +1079,12 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
+        // IDN-LIFE-008 AC4 (D-190): an undo completes under no session, whatever it
+        // restores or displaces, so every session of the account ends with it. It is
+        // the owner's answer to a change that may have come from a stolen session,
+        // which the removal or the replace left live.
+        await EndOthersAsync(given.Subject, keeping: null, now, cancellationToken).ConfigureAwait(false);
+
         var undo = OpaqueToken.Draw(randomness);
 
         // REG-IDENT-004: an add of the value the account staged meanwhile is left as it
@@ -2126,7 +2132,7 @@ internal sealed class IdentifierService(
     }
 
     // IDN-LIFE-008: the session that made the change is kept, where there is one; a
-    // change made from no browser keeps none.
+    // change made from no browser, and an undo, keeps none.
     private async ValueTask EndOthersAsync(
         SubjectId subject,
         SessionId? keeping,

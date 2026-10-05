@@ -264,7 +264,56 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             ("linkToken", Undo()));
 
         Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
-        Assert.Equal(2, Emails(await browser.SendAsync("GET", "/account")).GetArrayLength());
+        Assert.Equal(
+            2,
+            Emails(await (await SignedInAgainAsync(subject)).SendAsync("GET", "/account")).GetArrayLength());
+    }
+
+    /// <summary>
+    /// IDN-LIFE-008 AC4, REG-IDENT-006 AC11 and chapter 09 (D-190): the undo completes
+    /// under no session, so it ends every session of the account: the browser that
+    /// pressed the link while holding one, and one signed in elsewhere, are each
+    /// answered 401 <c>auth.session.expired</c> from then on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_008_AC4_AnUndoEndsEverySessionOfTheAccountAsync()
+    {
+        _deployment.Templates.Set(
+            MessageKind.IdentifierRemoved,
+            SendKind.Email,
+            "en",
+            new MessageTemplate("removed", "{link}"));
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
+        _ = await browser.SendAsync("DELETE", "/account/identifiers/" + going);
+        Browser elsewhere = await SignedInAgainAsync(subject);
+
+        Answer restored = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + going + "/undo",
+            ("linkToken", Undo()));
+        Answer[] after =
+        [
+            await browser.SendAsync("GET", "/account"),
+            await elsewhere.SendAsync("GET", "/account"),
+        ];
+
+        Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
+        Assert.All(
+            after,
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status401Unauthorized, answer.Status);
+                Assert.Equal(ErrorCodes.SessionExpired.ToString(), answer.Text("code"));
+            });
+        Assert.Equal(
+            subject,
+            await _deployment.Identifiers.OwnerAsync(
+                IdentifierKind.Email,
+                Second,
+                TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -413,7 +462,8 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             new MessageTemplate("removed", "{link}"));
 
         Browser browser = await Flow.SignedInAsync(_deployment);
-        Guid going = _deployment.Identifiers.Verified(Registered(), IdentifierKind.Email, Second).Value;
+        SubjectId subject = Registered();
+        Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
 
         Assert.Equal(
             StatusCodes.Status204NoContent,
@@ -429,7 +479,8 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             "POST",
             "/account/identifiers/" + going + "/undo",
             ("linkToken", Undo()));
-        Answer presented = await browser.SendAsync(
+        Browser again = await SignedInAgainAsync(subject);
+        Answer presented = await again.SendAsync(
             "POST",
             "/account/identifiers/" + staged + "/verify",
             ("code", code));
@@ -437,7 +488,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
         Assert.Equal(StatusCodes.Status409Conflict, presented.Status);
         Assert.Equal(ErrorCodes.IdentifierMaximum.ToString(), presented.Text("code"));
-        Assert.False(Listed(Emails(await browser.SendAsync("GET", "/account")), staged)
+        Assert.False(Listed(Emails(await again.SendAsync("GET", "/account")), staged)
             .GetProperty("verified")
             .GetBoolean());
     }
@@ -935,6 +986,34 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         return device.Id.Value;
+    }
+
+    // A browser holding a session the account signed in to since, which is what is
+    // left to it once an undo has ended every session it had (IDN-LIFE-008).
+    private async Task<Browser> SignedInAgainAsync(SubjectId subject)
+    {
+        var secret = OpaqueToken.Draw(_randomness);
+        var token = OpaqueToken.Draw(_randomness);
+        var browser = new Browser(_deployment);
+
+        await _deployment.Sessions.AddAsync(
+            Session.Begin(
+                SessionId.New(_deployment.Clock),
+                subject,
+                new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = Somewhere },
+                _deployment.Clock.GetUtcNow(),
+                TimeSpan.FromDays(1),
+                TimeSpan.FromDays(30),
+                breakGlassReason: null),
+            secret.Fingerprint(),
+            token.Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        browser.Hold(BrowserCookies.Session, secret.Value);
+        browser.Hold(BrowserCookies.Csrf, token.Value);
+
+        return browser;
     }
 
     private async Task<Guid> OpenedAsync(SubjectId subject)

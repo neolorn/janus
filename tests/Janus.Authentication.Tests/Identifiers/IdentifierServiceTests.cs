@@ -1893,6 +1893,70 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-008 AC4 (D-190): the undo of a removal completes under no session, so
+    /// it ends every session of the account, the one that made the removal and one
+    /// opened since included.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AC4_AnUndoOfARemovalEndsEverySessionAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId removing = Stepped();
+        Accepted(await Service.RemoveAsync(Acting, removing, second, Source, TestContext.Current.CancellationToken));
+        SessionId since = Stepped();
+
+        Accepted(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        Assert.True(Named(await HeldAsync(), Second).IsVerified);
+        Assert.NotNull((await _sessions.FindAsync(removing, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(since, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC11 (D-190): the undo of a replace, which moves the value back
+    /// onto the identifier that stands and displaces what it holds, ends every session
+    /// of the account too, the one the replace completed under included.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC11_AnUndoOfAReplaceEndsEverySessionAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        SessionId completing = Stepped();
+        await ReplacingAsync(email, completing, Second);
+        await VerifiedAsync(email, completing);
+        SessionId since = Stepped();
+        string undo = _notifications.Texts.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+        Assert.NotNull((await _sessions.FindAsync(completing, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(since, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-008 (D-190): an undo that is refused, its window having ended, changes
+    /// nothing and ends no session.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AnUndoRefusedPastItsWindowEndsNoSessionAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId removing = Stepped();
+        Accepted(await Service.RemoveAsync(Acting, removing, second, Source, TestContext.Current.CancellationToken));
+        _clock.Advance(Settings.IdentifierChangeCoolingOff.Default);
+
+        ErrorCode refused = Refused(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.ChangeWindowElapsed, refused);
+        Assert.Null((await _sessions.FindAsync(removing, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC5, AUTH-ABUSE-004 AC15: the confirmation asked of the displaced
     /// address goes under the purpose of the new address's code, since the person
     /// making the change asked for it and it is no notice.

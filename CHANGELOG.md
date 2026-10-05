@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /account/identifiers/{id}/undo` ends every session of the account, whether
+  the undo restores a removed identifier or moves a replaced value back, where it
+  ended none: an undo completes under no session. A browser that held a session is
+  answered 401 `auth.session.expired` from then on and signs in again.
 - In an enrolment session whose second step has shown no recovery codes,
   `POST /account/recoverycodes/exported` records nothing and answers 403
   `authz.denied`, before any other refusal and before the restriction is asked,

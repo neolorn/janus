@@ -147,7 +147,9 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts a removed identifier back from the undo link its message carried.
+    /// Puts a removed identifier back from the undo link its message carried. The undo
+    /// completes under no session, so every session of the account ends with it
+    /// (IDN-LIFE-008).
     /// </summary>
     /// <param name="linkToken">The token the undo link carried.</param>
     /// <param name="source">The address the request came from.</param>
