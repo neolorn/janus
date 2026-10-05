@@ -1504,15 +1504,14 @@ internal sealed class AuthenticationService(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
-        // AUTH-RECOV-007: a code sent for a credential suspended since is judged as an
-        // active one's is, so only the right one learns of the suspension: it is spent,
-        // and the refusal is a failed attempt whose record and counts commit with the
-        // spend.
-        if (await SuspendedAsync(subject, presented.Factor, cancellationToken).ConfigureAwait(false))
+        // AUTH-FACT-004 AC7, AUTH-RECOV-007: a code is judged against the credential it
+        // was sent for only once it is right, so only the right one learns that the
+        // credential is gone or suspended: it is spent, and the refusal is a failed
+        // attempt whose record and counts commit with the spend.
+        if (await UnansweredAsync(held, cancellationToken).ConfigureAwait(false) is Error unanswered)
         {
             return Result.Failure<bool>(
-                await RefusedAsync(Error.From(ErrorCodes.CredentialSuspended), kept: true, counted, cancellationToken)
-                    .ConfigureAwait(false));
+                await RefusedAsync(unanswered, kept: true, counted, cancellationToken).ConfigureAwait(false));
         }
 
         // A right code is spent whatever follows, and the lock is judged only after it,
@@ -1533,19 +1532,35 @@ internal sealed class AuthenticationService(
         return Result.Success(false);
     }
 
-    // AUTH-RECOV-007: whether the account's credential of a factor is suspended by a
-    // loss report or by a removal that would lower reachable assurance, none of that
-    // factor standing active beside it.
-    private async ValueTask<bool> SuspendedAsync(
-        SubjectId subject,
-        Factor factor,
-        CancellationToken cancellationToken)
+    // AUTH-FACT-004 AC7, AUTH-RECOV-007: what refuses a right code of a second step the
+    // library texts, read from the credential it was sent for, which is a credential of
+    // its factor the account held when it went out. Where none of those stands active,
+    // one suspended by a loss report, or by a removal that would lower reachable
+    // assurance, answers that it is suspended; where each has been removed or
+    // invalidated since, the code is refused as one sent to an address given up since
+    // is. A code of any other entry was sent for no credential.
+    private async ValueTask<Error?> UnansweredAsync(PendingSignIn held, CancellationToken cancellationToken)
     {
-        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
+        if (!Asks(held.Factor))
+        {
+            return null;
+        }
 
-        return !enrolled.Any(credential => credential.IsUsable && credential.Factor == factor)
-            && enrolled.Any(credential => credential.IsAwaitingInvalidation && credential.Factor == factor);
+        Authenticator[] sentFor =
+        [
+            .. (await authenticators.OfAsync(held.Subject, cancellationToken).ConfigureAwait(false))
+                .Where(credential => credential.Factor == held.Factor && credential.AddedAt <= held.IssuedAt),
+        ];
+
+        if (sentFor.Any(credential => credential.IsUsable))
+        {
+            return null;
+        }
+
+        return Error.From(
+            sentFor.Any(credential => credential.IsAwaitingInvalidation)
+                ? ErrorCodes.CredentialSuspended
+                : ErrorCodes.FactorRejected);
     }
 
     // AUTH-FACT-004, CONV-DESIGN-003: ends the unit of work a right code was spent in

@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A right `phoneCode` code presented at `POST /auth/factor` or `POST /auth/step-up`
+  after the credential it was sent for was removed or invalidated is spent and refused
+  422 `auth.factor.rejected`, a failed attempt counted and recorded, where it was
+  accepted for as long as the code lived. A credential enrolled after the code was sent
+  does not answer for the one that is gone, and a wrong code is refused as any wrong
+  code is.
 - `POST /auth/step-up` declares 422 `identity.identifier.domainnotallowed`, which it
   answers where a right `emailCode` code was sent to an address a domain lock now
   refuses: the lock is judged after the code, the code is spent, and no failed attempt
