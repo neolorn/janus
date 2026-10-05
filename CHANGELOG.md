@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/step-up` is called once for each factor on one challenge: the factors
+  accepted are held on the challenge and the session is raised with them together, so
+  a password at one call and a generator's code at the next reach AAL2. The answer is
+  200 `factorRequired`, with the factors still to present, until what was accepted
+  reaches the strictest of the gates of the policy in force, and 200 `complete` then,
+  where the first accepted factor ended the challenge before.
 - A factor refused 422 `auth.credential.suspended` at a sign-in or a step-up is a
   failed attempt: it is counted against the source and the account and recorded as
   every other refusal of a presented factor is.

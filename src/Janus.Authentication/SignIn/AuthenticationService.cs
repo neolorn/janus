@@ -753,14 +753,22 @@ internal sealed class AuthenticationService(
     /// <param name="presented">The factor and what proves it.</param>
     /// <param name="source">The address the attempt came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>What the session now reaches, or the refusal.</returns>
+    /// <returns>
+    /// What the session now reaches, and the factors still to present where those
+    /// accepted so far do not reach the gate; or the refusal.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-STEP-001, AUTH-ABUSE-001 and CONV-LOG-005. A refused step-up
-    /// factor is a failed authentication: it answers to the delay a sign-in answers
-    /// to, counted against the same source and the same account, and the session it
-    /// is presented on exempts it from nothing, since a session in someone else's
-    /// hands is what a step-up is asked of.
+    /// Implements AUTH-STEP-001, AUTH-STEP-002 step 2 and AC4c, AUTH-ABUSE-001 and
+    /// CONV-LOG-005. A refused step-up factor is a failed authentication: it answers to
+    /// the delay a sign-in answers to, counted against the same source and the same
+    /// account, and the session it is presented on exempts it from nothing, since a
+    /// session in someone else's hands is what a step-up is asked of. A step-up is
+    /// called once per factor: each accepted factor is held on its challenge with those
+    /// accepted before it, the session is raised to what they reach together, and the
+    /// challenge ends once the session meets the strictest of the policy's gates, which
+    /// is the gate of a step-up that names no action, or once nothing more can be
+    /// presented towards it (D-187, D-190).
     /// </remarks>
     public async ValueTask<Result<SignInOutcome>> RaiseAsync(
         AccessContext context,
@@ -848,6 +856,21 @@ internal sealed class AuthenticationService(
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
+        Error? failure = null;
+
+        // AUTH-STEP-002 step 2: the step-up names no action, so what it goes on asking
+        // for is read from the strictest of the policy's gates, before the unit of work
+        // begins, since the carrier's signal may be asked for it (AUTH-FACT-002b).
+        StepUpChallenge asked = (await guard
+                .ChallengeUnnamedAsync(asking, session, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<StepUpChallenge>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInOutcome>(failure);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -855,20 +878,36 @@ internal sealed class AuthenticationService(
         }
 
         // D-166 X3: the challenge is held under its lock from before the session is
-        // raised until it is removed, so a second raise on it waits and is refused.
-        if (await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false) is null)
+        // raised until it is recorded or removed, so a second raise on it waits, and
+        // one that finds it gone is refused.
+        Challenge? holding = await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (holding is null)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
         }
 
-        Error? failure = null;
+        // AUTH-STEP-002 step 2 (D-190): the factor accepted at this call joins those the
+        // challenge holds from the calls before it, and the session is raised to what
+        // they reach together.
+        foreach (Factor accepted in open.Presented)
+        {
+            holding.Accepted(accepted);
+        }
+
+        await challenges.RecordAsync(holding, cancellationToken).ConfigureAwait(false);
 
         IssuedSession? raised = (await sessions
-                .PresentAsync(live, open.Presented, cancellationToken)
+                .PresentAsync(live, holding.Presented, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => (IssuedSession?)value, error => Withheld<IssuedSession?>(error, ref failure));
+
+        bool reached = failure is null
+            && (await guard.ReachedAsync(live, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<bool>(error, ref failure));
 
         if (failure is not null || raised is null)
         {
@@ -877,7 +916,19 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
         }
 
-        await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+        // The challenge holds the factors until together they reach the gate, and no
+        // longer: one left behind would let a later factor stand beside them again.
+        List<Factor> required = reached
+            ? []
+            : [.. asked.Combinations
+                .SelectMany(combination => combination)
+                .Distinct()
+                .Except(holding.Presented)];
+
+        if (required.Count is 0)
+        {
+            await challenges.RemoveAsync(holding.Fingerprint, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -887,10 +938,10 @@ internal sealed class AuthenticationService(
 
         return Result.Success(new SignInOutcome(
             new SignInProgress(
-                SignInStatus.Complete,
+                required.Count is 0 ? SignInStatus.Complete : SignInStatus.FactorRequired,
                 live.Attained,
                 live.PhishingResistant,
-                [],
+                required,
                 TrustDeviceOffered: false,
                 raised.Id,
                 Requirement: null,

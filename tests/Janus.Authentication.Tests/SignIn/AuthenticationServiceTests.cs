@@ -140,12 +140,15 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Throttle,
             _notifications,
             Signals,
-            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
+            Guard,
             Codes,
             _configuration,
             _work,
             _clock,
             _randomness);
+
+    private StepUpGuard Guard =>
+        new(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock);
 
     private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
 
@@ -685,6 +688,61 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 on,
                 (await BeganAsync(Address)).Challenge,
                 new FactorPresentation(Factor.Password) { Value = password },
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC4c: a password at one call of a step-up and a generated code at
+    /// the next, against the one challenge, pass a gate declared <c>aal2</c>: the
+    /// password is held on the challenge, which goes on asking, and the code beside it
+    /// raises the session to what the two reach together.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AC4c_APasswordAtOneCallAndAGeneratedCodeAtTheNextPassAGateDeclaredAal2Async()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        Result<SignInProgress> first = await SteppedAsync(new FactorPresentation(Factor.Password) { Value = Secret });
+        Error? between = await Guard.PassedAsync(
+            subject,
+            session,
+            StepUpAction.AccountSuspend,
+            TestContext.Current.CancellationToken);
+        Result<SignInProgress> second = await SteppedAsync(new FactorPresentation(Factor.Totp) { Value = generated });
+
+        Assert.Equal(ErrorCodes.StepUpRequired, between?.Code);
+        Assert.Null(Refused(second));
+        Assert.Null(await Guard.PassedAsync(
+            subject,
+            session,
+            StepUpAction.AccountSuspend,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(
+            (SignInStatus.FactorRequired, AssuranceLevel.Aal1),
+            (Reached(first).Status, Reached(first).AssuranceLevel));
+        Assert.Equal([Factor.Totp], Reached(first).Required);
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, false),
+            (Reached(second).Status, Reached(second).AssuranceLevel, Reached(second).PhishingResistant));
+        Assert.Empty(Reached(second).Required);
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.False(_work.Open);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(FactorPresentation presented) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                presented,
                 Source,
                 TestContext.Current.CancellationToken);
     }
@@ -2885,6 +2943,18 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         return session.Id;
     }
+
+    // AUTH-STEP-002: the system policy with one action's gate declared, the others as
+    // the policy ships them.
+    private void Declares(Gate declared) =>
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                Gates = Janus.Core.Policies.SystemDefault.Gates.ToDictionary(
+                    gate => gate.Key,
+                    gate => gate.Key is StepUpAction.AccountSuspend ? declared : gate.Value),
+            });
 
     // REG-DOM-001: the account is placed under a lock that admits no address it holds.
     private void LockedElsewhere(SubjectId subject)
