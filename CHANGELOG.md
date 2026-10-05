@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/factor` and `POST /auth/step-up` asked for a text code and answered 200,
+  the number's signal having withheld the code, name in `required` only what is left
+  to present: a factor already accepted on the challenge is left out, as it is from
+  the answer of a call that presents a factor at a step-up, where every factor of the
+  combinations left was named, the accepted ones among them. A sign-in left with
+  nothing but a factor already accepted is refused 422 `auth.factor.rejected`.
 - A step-up gate whose level is `delegated`, which is what enrolling asks of an account
   that reaches no more, asks no maximum age: the session counts however long ago it
   reached that level, where it was refused 403 `auth.stepup.required` once the maximum
