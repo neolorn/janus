@@ -620,6 +620,42 @@ public sealed class CredentialFlowTests : IAsyncDisposable
         Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
     }
 
+    /// <summary>
+    /// REG-IDENT-007 AC3 (D-189) and chapter 09: the enrolment session reaches the
+    /// pending verification of the replace it staged and no other, so the code of an add
+    /// the account staged from a session answers 422 <c>auth.code.invalid</c> there and
+    /// a press of its link answers 422 <c>auth.code.expired</c>, and the add stands
+    /// unproved.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_TheEnrolmentSessionReachesNoVerificationItDidNotStageAsync()
+    {
+        Browser holder = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        _ = await holder.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Replaced));
+        string staged = "/account/identifiers/" + Assert.Single(_deployment.Pending.All).Identifier.Value + "/verify";
+        await LinkedAsync(subject, mailboxLost: true);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer code = await browser.SendAsync(
+            "POST",
+            staged,
+            ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+        Answer press = await browser.SendAsync(
+            "POST",
+            staged,
+            ("linkToken", Flow.Token(_deployment, IdentifierKind.Email)),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, code.Status);
+        Assert.Equal(ErrorCodes.CodeInvalid.ToString(), code.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, press.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), press.Text("code"));
+        Assert.False(Assert.Single(_deployment.Pending.All).Staged.IsVerified);
+    }
+
     // The account the tests act on, with the clock past the minute the registration's
     // own messages hold the address for (AUTH-ABUSE-004).
     /// <summary>

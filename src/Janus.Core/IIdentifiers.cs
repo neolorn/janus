@@ -199,7 +199,32 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Proves a value staged from an enrolment session by the code sent to it.
+    /// What a verification link does where the browser that opened it holds an
+    /// enrolment session. The session reaches the pending verification of the replace
+    /// it staged and no other: a press of a token that names any other is refused as
+    /// one that opens nothing. Everything else is answered as a browser that holds no
+    /// session is answered.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session the browser opened.</param>
+    /// <param name="linkToken">The token the message carried.</param>
+    /// <param name="press">Whether the person pressed the control.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether the press proved it, and where it did not, what the landing shows.
+    /// </returns>
+    ValueTask<Result<LinkLanding>> LandAsync(
+        EnrolmentSessionId enrolment,
+        [NeverLogged] string linkToken,
+        bool press,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Proves the value of the replace an enrolment session staged by the code sent to
+    /// it. The session reaches that pending verification and no other: a code that
+    /// names any other is refused as one that names no pending verification of the
+    /// account.
     /// </summary>
     /// <param name="enrolment">The enrolment session the browser opened.</param>
     /// <param name="identifier">Which identifier the code was sent for.</param>

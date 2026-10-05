@@ -228,7 +228,7 @@ internal sealed class IdentifierService(
             return Result.Failure(restricted);
         }
 
-        return await ProvedAsync(context, subject, session, identifier, code, source, cancellationToken)
+        return await ProvedAsync(context, subject, session, enrolment: null, identifier, code, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -250,6 +250,7 @@ internal sealed class IdentifierService(
                     asking: null,
                     opened.Subject,
                     completing: null,
+                    opened.Id,
                     identifier,
                     code,
                     source,
@@ -257,13 +258,15 @@ internal sealed class IdentifierService(
                 .ConfigureAwait(false);
     }
 
-    // The code is judged the same way whoever presented it: what differs is only how
-    // the account it belongs to was established, and the session, where there is one,
+    // The code is judged the same way whoever presented it: what differs is how the
+    // account it belongs to was established, which of the account's pending
+    // verifications that reaches (REG-IDENT-007), and the session, where there is one,
     // that a replacement it completes keeps (IDN-LIFE-008).
     private async ValueTask<Result> ProvedAsync(
         AccessContext? asking,
         SubjectId subject,
         SessionId? completing,
+        EnrolmentSessionId? enrolment,
         IdentifierId identifier,
         [NeverLogged] string code,
         string source,
@@ -283,10 +286,11 @@ internal sealed class IdentifierService(
         // A code that names no verification of the account's names no identifier, as one
         // at a registration that names no identifier of its session: it is answered as a
         // wrong code and counted against the source alone, and the count is the one
-        // write the refusal keeps.
+        // write the refusal keeps. In an enrolment session, so is a code that names any
+        // verification but that of the replace the session staged (D-189).
         if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false)
                 is not PendingVerification listed
-            || listed.Subject != subject)
+            || !Reaches(listed, subject, enrolment))
         {
             return (await throttle.FailedAsync(presenting, cancellationToken).ConfigureAwait(false))
                 .Match(() => Result.Failure(Error.From(ErrorCodes.CodeInvalid)), Result.Failure);
@@ -330,7 +334,7 @@ internal sealed class IdentifierService(
 
         // A verification gone since it was found names nothing either, so its code is
         // counted against the source alone and that count is committed alone.
-        if (waiting is null || waiting.Subject != subject)
+        if (waiting is null || !Reaches(waiting, subject, enrolment))
         {
             return Result.Failure(
                 await CountedAsync(presenting, Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false));
@@ -393,7 +397,7 @@ internal sealed class IdentifierService(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<LinkLanding>> LandAsync(
+    public ValueTask<Result<LinkLanding>> LandAsync(
         SessionId? session,
         [NeverLogged] string linkToken,
         bool press,
@@ -403,6 +407,38 @@ internal sealed class IdentifierService(
         ArgumentNullException.ThrowIfNull(linkToken);
         ArgumentNullException.ThrowIfNull(source);
 
+        return LandedAsync(session, enrolment: null, linkToken, press, source, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<LinkLanding>> LandAsync(
+        EnrolmentSessionId enrolment,
+        [NeverLogged] string linkToken,
+        bool press,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(linkToken);
+        ArgumentNullException.ThrowIfNull(source);
+
+        return await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            is not EnrolmentSession opened
+            ? Result.Failure<LinkLanding>(Error.From(ErrorCodes.SessionExpired))
+            : await LandedAsync(session: null, opened.Id, linkToken, press, source, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    // The link is judged the same way whichever browser opened it: what differs is the
+    // session a press proves the browser against, and, for a browser that holds an
+    // enrolment session, which pending verification its press reaches (REG-IDENT-007).
+    private async ValueTask<Result<LinkLanding>> LandedAsync(
+        SessionId? session,
+        EnrolmentSessionId? enrolment,
+        [NeverLogged] string linkToken,
+        bool press,
+        string source,
+        CancellationToken cancellationToken)
+    {
         // REG-SESS-003, AUTH-ABUSE-001 (D-188): a token names no identifier until it
         // opens something, so every press is first held to the delay of the source that
         // presents it; a token merely opened is held to none and counts nothing.
@@ -413,8 +449,15 @@ internal sealed class IdentifierService(
             return Result.Failure<LinkLanding>(delayed);
         }
 
+        // REG-IDENT-007 (D-189): an enrolment session reaches the pending verification of
+        // the replace it staged and no other, so a press there of a token that names any
+        // other (another verification's link, or a displaced address's confirmation,
+        // which no replace an enrolment session staged asks for) opens nothing.
         if (await WaitingAsync(linkToken, cancellationToken).ConfigureAwait(false)
-            is not (PendingVerification waiting, byte[] fingerprint))
+                is not (PendingVerification waiting, byte[] fingerprint)
+            || (press
+                && enrolment is not null
+                && (waiting.Enrolment != enrolment || Displaced(waiting, fingerprint))))
         {
             // REG-IDENT-007 AC6: a pressed token that opens nothing (swept, abandoned or
             // never issued) is counted against that source alone, and the count is the
@@ -1134,7 +1177,7 @@ internal sealed class IdentifierService(
             return Result.Failure(closed);
         }
 
-        return await StagedAsync(context, subject, session, identifier, value, source, cancellationToken)
+        return await StagedAsync(context, subject, session, enrolment: null, identifier, value, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -1163,6 +1206,7 @@ internal sealed class IdentifierService(
                     asking: null,
                     opened.Subject,
                     session: null,
+                    opened.Id,
                     identifier,
                     value,
                     source,
@@ -1178,6 +1222,7 @@ internal sealed class IdentifierService(
         AccessContext? asking,
         SubjectId subject,
         SessionId? session,
+        EnrolmentSessionId? enrolment,
         IdentifierId identifier,
         string value,
         string source,
@@ -1266,6 +1311,7 @@ internal sealed class IdentifierService(
         var waiting = PendingVerification.ToReplace(
             subject,
             session,
+            enrolment,
             StagedIdentity.Of(identifier, changing.Kind, entered, canonical),
             session is not null && held.NoticeSetWithout(identifier).Count is 0,
             time.GetUtcNow());
@@ -1367,6 +1413,12 @@ internal sealed class IdentifierService(
     // none to the kind, so the maximum does not judge it.
     private static bool Overfull(HeldIdentifiers held, GivenUpIdentifier given, int maximum) =>
         held.Find(given.Id) is null && held.Verified(given.Kind) >= maximum;
+
+    // REG-IDENT-007 (D-189): a session reaches every pending verification of its
+    // account. An enrolment session reaches the one of the replace it staged and no
+    // other.
+    private static bool Reaches(PendingVerification waiting, SubjectId subject, EnrolmentSessionId? enrolment) =>
+        waiting.Subject == subject && (enrolment is null || waiting.Enrolment == enrolment);
 
     private static bool Displaced(PendingVerification waiting, byte[] fingerprint) =>
         waiting.OldLink is byte[] link

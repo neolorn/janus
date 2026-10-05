@@ -2919,6 +2919,158 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC3 (D-189): an enrolment session reaches the pending verification
+    /// of the replace it staged and no other, so the code of an add the account staged
+    /// from a session is answered there as a wrong code, counted against the request's
+    /// source alone, and spends no try of the code it names.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AnEnrolmentSessionsCodeForAnAddIsCountedInvalidAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        Accepted(await Service.AddAsync(
+            Acting,
+            Stepped(),
+            IdentifierKind.Phone,
+            Number,
+            Source,
+            TestContext.Current.CancellationToken));
+        IdentifierId phone = Named(await HeldAsync(), Number).Id;
+
+        ErrorCode refused = Refused(await Service.VerifyAsync(
+            Enrolling(mailboxLost: true),
+            phone,
+            Code(phone),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, refused);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures);
+        Assert.Equal(0, Outstanding(phone).Attempts);
+        Assert.False(Named(await HeldAsync(), Number).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC3 (D-189): the replace an enrolment session reaches is the one it
+    /// staged, so the code of a replace a session staged is answered there as a wrong
+    /// code, counted against the request's source alone, and the replace stands as it
+    /// stood.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AnEnrolmentSessionsCodeForAReplaceItDidNotStageIsCountedInvalidAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        ErrorCode refused = Refused(await Service.VerifyAsync(
+            Enrolling(mailboxLost: true),
+            email,
+            Code(email),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, refused);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures);
+        Assert.Equal(0, Outstanding(email).Attempts);
+        Assert.False(Waiting(email).Staged.IsVerified);
+        Assert.Null(Waiting(email).Enrolment);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC3 and AC6 (D-189): in an enrolment session a press of a token that
+    /// names any verification but that of the replace the session staged, the link of
+    /// the new address or the confirmation of the displaced one, is answered
+    /// <c>auth.code.expired</c>, counted against the request's source alone and changes
+    /// nothing; one merely opened counts nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AnEnrolmentSessionsPressForAReplaceItDidNotStageIsCountedExpiredAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        string confirmation = _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token();
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.LandAsync(opened, link, press: false, Source, TestContext.Current.CancellationToken));
+        Assert.Empty(_throttle.Failures);
+        ErrorCode[] refused =
+        [
+            Refused(await Service.LandAsync(opened, link, press: true, Source, TestContext.Current.CancellationToken)),
+            Refused(await Service.LandAsync(opened, confirmation, press: true, Source, TestContext.Current.CancellationToken)),
+        ];
+
+        Assert.Equal([ErrorCodes.CodeExpired, ErrorCodes.CodeExpired], refused);
+        Assert.Equal([(ThrottleScope.Source, Source), (ThrottleScope.Source, Source)], _throttle.Failures);
+        Assert.False(Waiting(email).Staged.IsVerified);
+        Assert.Null(Waiting(email).OldConfirmedAt);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC3 (D-189): the replace an enrolment session stages keeps which
+    /// session staged it, and a press of its link from that session shows the code and
+    /// proves nothing, as from any browser that holds no session (REG-SESS-003).
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AReplaceKeepsTheEnrolmentSessionThatStagedItAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+        Accepted(await Service.ReplaceAsync(
+            opened,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+
+        LinkLanding landed = (await Service.LandAsync(opened, link, press: true, Source, TestContext.Current.CancellationToken))
+            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(opened, Waiting(email).Enrolment);
+        Assert.False(landed.Verified);
+        Assert.Equal(Code(email), landed.Code);
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 (D-148, D-189): a link landed from an enrolment session that has
+    /// ended is told what a session that has ended is told.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_ALapsedEnrolmentSessionLandsNoLinkAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        ErrorCode refused = Refused(await Service.LandAsync(
+            EnrolmentSessionId.New(_clock),
+            "a-token-no-verification-sent",
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.SessionExpired, refused);
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 and AUTH-RECOV-002: an enrolment session opened for an account
     /// whose mailbox still answers reaches the replacement no more than a session
     /// that has not stepped up does.

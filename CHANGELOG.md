@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- In an enrolment session, `POST /account/identifiers/{id}/verify` reaches only the
+  pending verification of the replace that session staged. A code that names any other
+  answers 422 `auth.code.invalid` and a press that names any other answers 422
+  `auth.code.expired`, each counted against the request's source.
+  `IIdentifiers.LandAsync` gains an overload that takes the enrolment session, and a
+  migration adds the `enrolment` column to `identity.identifier_verifications`.
 - `POST /register/verify/{id}` and `POST /account/identifiers/{id}/verify` hold every
   code and every press to the delay of the request's source first, the press that
   opens a verification included, where a registration link's press that would verify

@@ -424,6 +424,7 @@ table identifier_verifications
   column link bytea
   column staged_at timestamp with time zone not null
   column enc_staged bytea not null
+  column enrolment uuid
   constraint ck_identifier_verifications_link CHECK (((link IS NULL) OR (octet_length(link) = 32)))
   constraint ck_identifier_verifications_old CHECK ((is_replacement OR ((NOT old_must_confirm) AND (old_confirmed_at IS NULL) AND (old_link IS NULL))))
   constraint ck_identifier_verifications_old_link CHECK (((old_link IS NULL) OR (octet_length(old_link) = 32)))

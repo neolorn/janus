@@ -426,9 +426,15 @@ internal static class AccountEndpoints
         // none.
         if (request.LinkToken is { Length: > 0 } token)
         {
-            Result<LinkLanding> landed = await identifiers
-                .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
-                .ConfigureAwait(false);
+            // REG-IDENT-007 (D-189): a browser that holds an enrolment session and no
+            // other reaches the pending verification of the replace that session staged.
+            Result<LinkLanding> landed = browser.Live is null && Opened(browser) is EnrolmentSessionId opened
+                ? await identifiers
+                    .LandAsync(opened, token, request.Press, source, cancellationToken)
+                    .ConfigureAwait(false)
+                : await identifiers
+                    .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
+                    .ConfigureAwait(false);
 
             return browser.Live is Session pressing
                 && landed.Match(landing => landing.Verified && landing.SameBrowser, _ => false)

@@ -15,7 +15,8 @@ namespace Janus.Authentication.Identifiers;
 /// is the registration's, unchanged: the same code, the same link, the same five
 /// tries, and the same rule that a link pressed anywhere but the browser that staged
 /// it proves nothing. What this adds is whose it is, which browser staged it, and,
-/// for a replace, whether the address being displaced has still to confirm.
+/// for a replace, which enrolment session staged it where one did and whether the
+/// address being displaced has still to confirm.
 /// </remarks>
 internal sealed class PendingVerification
 {
@@ -24,6 +25,7 @@ internal sealed class PendingVerification
     private PendingVerification(
         SubjectId subject,
         SessionId? browser,
+        EnrolmentSessionId? enrolment,
         StagedIdentity staged,
         bool isReplacement,
         bool oldMustConfirm,
@@ -31,6 +33,7 @@ internal sealed class PendingVerification
     {
         Subject = subject;
         Browser = browser;
+        Enrolment = enrolment;
         Staged = staged;
         IsReplacement = isReplacement;
         OldMustConfirm = oldMustConfirm;
@@ -54,6 +57,13 @@ internal sealed class PendingVerification
     /// session staged it and no browser holds a session at all (AUTH-RECOV-002).
     /// </summary>
     public SessionId? Browser { get; }
+
+    /// <summary>
+    /// The enrolment session that staged the replace, which is the only enrolment
+    /// session its code is taken from, and nothing where a session staged it
+    /// (AUTH-RECOV-002, REG-IDENT-007).
+    /// </summary>
+    public EnrolmentSessionId? Enrolment { get; }
 
     /// <summary>
     /// The value being proved, with what was sent to prove it.
@@ -156,6 +166,7 @@ internal sealed class PendingVerification
         return new PendingVerification(
             subject,
             browser,
+            enrolment: null,
             staged,
             isReplacement: false,
             oldMustConfirm: false,
@@ -171,6 +182,10 @@ internal sealed class PendingVerification
     /// The session the replace was made from, or nothing where an enrolment session
     /// made it.
     /// </param>
+    /// <param name="enrolment">
+    /// The enrolment session the replace was made from, or nothing where a session made
+    /// it.
+    /// </param>
     /// <param name="staged">The new value, under the identifier it will replace.</param>
     /// <param name="oldMustConfirm">
     /// Whether the address being displaced has to confirm, which is so only where the
@@ -182,6 +197,7 @@ internal sealed class PendingVerification
     public static PendingVerification ToReplace(
         SubjectId subject,
         SessionId? browser,
+        EnrolmentSessionId? enrolment,
         StagedIdentity staged,
         bool oldMustConfirm,
         DateTimeOffset stagedAt)
@@ -191,6 +207,7 @@ internal sealed class PendingVerification
         return new PendingVerification(
             subject,
             browser,
+            enrolment,
             staged,
             isReplacement: true,
             oldMustConfirm,
@@ -203,6 +220,7 @@ internal sealed class PendingVerification
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="browser">The session it was staged from.</param>
+    /// <param name="enrolment">The enrolment session it was staged from.</param>
     /// <param name="staged">The value being proved.</param>
     /// <param name="isReplacement">Whether proving it swaps a value.</param>
     /// <param name="oldMustConfirm">Whether the displaced address has to confirm.</param>
@@ -214,6 +232,7 @@ internal sealed class PendingVerification
     public static PendingVerification Existing(
         SubjectId subject,
         SessionId? browser,
+        EnrolmentSessionId? enrolment,
         StagedIdentity staged,
         bool isReplacement,
         bool oldMustConfirm,
@@ -223,7 +242,7 @@ internal sealed class PendingVerification
     {
         ArgumentNullException.ThrowIfNull(staged);
 
-        return new PendingVerification(subject, browser, staged, isReplacement, oldMustConfirm, stagedAt)
+        return new PendingVerification(subject, browser, enrolment, staged, isReplacement, oldMustConfirm, stagedAt)
         {
             OldConfirmedAt = oldConfirmedAt,
             OldLink = oldLink,

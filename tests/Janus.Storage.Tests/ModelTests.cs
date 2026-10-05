@@ -352,6 +352,7 @@ public sealed class ModelTests
             // REG-IDENT-007, REG-SESS-003).
             "identifier_verifications.browser",
             "identifier_verifications.enc_staged",
+            "identifier_verifications.enrolment",
             "identifier_verifications.identifier_id",
             "identifier_verifications.is_replacement",
             "identifier_verifications.link",
