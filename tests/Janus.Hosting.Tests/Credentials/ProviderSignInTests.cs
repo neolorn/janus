@@ -543,7 +543,8 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-012 AC6 and OPS-OBS-002: a provider whose discovery document or
-    /// published keys cannot be reached or read is not started. The browser is sent
+    /// published keys cannot be reached or read, or whose discovery document names no
+    /// endpoint to sign in at, is not started. The browser is sent
     /// back with the code of that, nothing is bound, nothing is recorded as a failed
     /// authentication, and the degradation is raised under the provider's scope,
     /// naming the provider and the part.
@@ -555,6 +556,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     [InlineData("discovery", 0)]
     [InlineData("discovery", 1)]
     [InlineData("discovery", 2)]
+    [InlineData("discovery", 3)]
     [InlineData("keys", 0)]
     [InlineData("keys", 1)]
     [InlineData("keys", 2)]

@@ -270,6 +270,15 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
             {
                 ProviderOutage.Refused => throw new HttpRequestException("The connection was refused."),
                 ProviderOutage.Silent => throw new TaskCanceledException("The request timed out."),
+                ProviderOutage.Endpointless => new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        request.RequestUri == AppleMetadata
+                            ? Metadata(AppleIssuer, AppleKeys)
+                            : Metadata(GoogleIssuer, GoogleKeys),
+                        Encoding.UTF8,
+                        "application/json"),
+                },
                 _ => new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent("<html>maintenance</html>", Encoding.UTF8, "text/html"),

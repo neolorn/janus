@@ -13,4 +13,7 @@ internal enum ProviderOutage
 
     /// <summary>It answers, with what cannot be read as the document asked for.</summary>
     Unreadable = 2,
+
+    /// <summary>It answers a document that names its issuer and keys and no endpoint to sign in at.</summary>
+    Endpointless = 3,
 }
