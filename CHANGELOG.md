@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The start and the continuation of a social provider's round trip declare the codes
+  they carry in the query member `error` of their redirect, and the endpoint contract
+  lists them under that redirect.
 - `ErrorCodes.ProviderUnavailable`, the code `auth.provider.unavailable`: a social
   provider's round trip could not reach or read the provider. It maps to 502, which
   no response bears, since only a navigation's redirect carries the code in `error`.

@@ -118,6 +118,66 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-006 AC3: the routes of a social provider's round trip declare the
+    /// codes chapter 09 gives them to carry in the query member <c>error</c> of their
+    /// redirect, the start its own and the continuation those of every intent.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AC3_AProviderRoundTripDeclaresTheCodesItsRedirectCarries()
+    {
+        ErrorCode[] start =
+        [
+            ErrorCodes.RequestMalformed,
+            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.ProviderUnavailable,
+            ErrorCodes.SessionExpired,
+            ErrorCodes.RegistrationSignedIn,
+        ];
+        ErrorCode[] continuation =
+        [
+            ErrorCodes.Throttled,
+            ErrorCodes.ProviderUnavailable,
+            ErrorCodes.FactorRejected,
+            ErrorCodes.CredentialSuspended,
+            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.FactorRequired,
+            ErrorCodes.PolicyGraceExpired,
+            ErrorCodes.RegistrationIncomplete,
+            ErrorCodes.SessionExpired,
+            ErrorCodes.IdentifierInvalid,
+            ErrorCodes.IdentifierMixedScript,
+            ErrorCodes.IdentifierDomainNotAllowed,
+            ErrorCodes.RestrictionExceeded,
+            ErrorCodes.StepUpRequired,
+            ErrorCodes.Restricted,
+            ErrorCodes.Denied,
+        ];
+        RouteEndpoint[] mounted = [.. _deployment.Endpoints.OfType<RouteEndpoint>()];
+
+        foreach (string provider in new[] { "google", "apple" })
+        {
+            Assert.Equal(start, Carried(mounted, "GET /auth/providers/" + provider));
+            Assert.Equal(continuation, Carried(mounted, "GET /auth/providers/" + provider + "/return"));
+        }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-006: an endpoint declares a code it carries once.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AnEndpointDeclaresEachCarriedCodeOnce()
+    {
+        Assert.All(
+            _deployment.Endpoints.OfType<RouteEndpoint>(),
+            endpoint =>
+            {
+                IReadOnlyList<ErrorCode> carried = EndpointDeclaration.Of(endpoint)?.Carried ?? [];
+
+                Assert.Equal(carried.Distinct(), carried);
+            });
+    }
+
+    /// <summary>
     /// CONV-DESIGN-006 AC5: each handler's typed route and query parameters equal those
     /// its endpoint declares, by name and type and in the handler's order, and no
     /// handler takes one as a bare <see cref="Guid"/>.
@@ -231,6 +291,10 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
         endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]
         + " "
         + endpoint.RoutePattern.RawText!.TrimEnd('/');
+
+    // What the route of that method and path declares it carries, in the order declared.
+    private static IReadOnlyList<ErrorCode> Carried(RouteEndpoint[] mounted, string named) =>
+        EndpointDeclaration.Of(Assert.Single(mounted, candidate => Named(candidate) == named))!.Carried;
 
     private static IReadOnlyList<DeclaredValue> Declared(Endpoint endpoint) =>
         EndpointDeclaration.Of(endpoint)?.Values ?? [];

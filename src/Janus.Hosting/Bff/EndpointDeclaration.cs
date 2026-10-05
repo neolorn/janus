@@ -10,23 +10,30 @@ namespace Janus.Hosting.Bff;
 
 /// <summary>
 /// What an endpoint declares where it is mounted: the error codes chapter 09 gives it,
-/// and the route and query values it binds to a type.
+/// those it gives a navigation route to carry in its redirect, and the route and query
+/// values it binds to a type.
 /// </summary>
 /// <remarks>
 /// Implements CONV-DESIGN-006 and API-CONV-003. The codes are its row's, those the text
 /// of its section gives the routes that text governs, and the gateway floor's where the
 /// chapter's preamble gives it. What its mounting answers, where its row does not give
 /// it, is derived and declared by no endpoint. It declares codes only, the status of
-/// each being the one <see cref="ApiStatus"/> maps. The values are declared in the
-/// order the request is read for the first that does not parse, and each declaration
-/// is generic over the value's type, so no reflection reads the handler
+/// each being the one <see cref="ApiStatus"/> maps. A navigation route (BFF-ERR-001)
+/// declares the same way the codes it carries in the query member <c>error</c> of its
+/// redirect, which go with that redirect and with no status. The values are declared
+/// in the order the request is read for the first that does not parse, and each
+/// declaration is generic over the value's type, so no reflection reads the handler
 /// (CONV-CODE-004).
 /// </remarks>
 internal sealed class EndpointDeclaration
 {
-    private EndpointDeclaration(IReadOnlyList<ErrorCode> codes, IReadOnlyList<DeclaredValue> values)
+    private EndpointDeclaration(
+        IReadOnlyList<ErrorCode> codes,
+        IReadOnlyList<ErrorCode> carried,
+        IReadOnlyList<DeclaredValue> values)
     {
         Codes = codes;
+        Carried = carried;
         Values = values;
     }
 
@@ -34,6 +41,12 @@ internal sealed class EndpointDeclaration
     /// The codes chapter 09 gives the endpoint, in the order declared.
     /// </summary>
     public IReadOnlyList<ErrorCode> Codes { get; }
+
+    /// <summary>
+    /// The codes chapter 09 gives a navigation route to carry in the query member
+    /// <c>error</c> of its redirect, in the order declared.
+    /// </summary>
+    public IReadOnlyList<ErrorCode> Carried { get; }
 
     /// <summary>
     /// The typed route and query values the endpoint binds, in the order declared.
@@ -50,7 +63,21 @@ internal sealed class EndpointDeclaration
     {
         ArgumentNullException.ThrowIfNull(codes);
 
-        return new EndpointDeclaration([.. codes], []);
+        return new EndpointDeclaration([.. codes], [], []);
+    }
+
+    /// <summary>
+    /// Declares the codes chapter 09 gives a navigation route to carry in the query
+    /// member <c>error</c> of its redirect.
+    /// </summary>
+    /// <param name="codes">The codes.</param>
+    /// <returns>The declaration with the codes after those it already carries.</returns>
+    /// <exception cref="ArgumentNullException">The codes are absent.</exception>
+    public EndpointDeclaration Carrying(params ErrorCode[] codes)
+    {
+        ArgumentNullException.ThrowIfNull(codes);
+
+        return new EndpointDeclaration(Codes, [.. Carried, .. codes], Values);
     }
 
     /// <summary>
@@ -75,6 +102,7 @@ internal sealed class EndpointDeclaration
 
         return new EndpointDeclaration(
             Codes,
+            Carried,
             [
                 .. Values,
                 new DeclaredValue(
