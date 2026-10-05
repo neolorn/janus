@@ -16,7 +16,9 @@ namespace Janus.Hosting.Tests;
 /// <summary>
 /// What an endpoint answers beyond what it declares, and the check the test host runs
 /// on every response it carries: no endpoint answers a code it neither declares nor is
-/// answered by its mounting or by the pipeline (CONV-DESIGN-006, chapter 09 preamble).
+/// answered by its mounting or by the pipeline, and no navigation route's redirect
+/// carries a code the route does not declare it carries (CONV-DESIGN-006, chapter 09
+/// preamble).
 /// </summary>
 internal static class EndpointAnswers
 {
@@ -24,6 +26,9 @@ internal static class EndpointAnswers
     // where a password manager and an authenticator read them and the forgery layers
     // ask them for nothing.
     private const string SiteRoot = "/.well-known/";
+
+    // BFF-ERR-001: the query member a navigation's redirect carries a refusal's code in.
+    private const string Carrier = "error";
 
     /// <summary>
     /// The answers the pipeline gives a request that reached an endpoint, which
@@ -72,7 +77,11 @@ internal static class EndpointAnswers
     /// <summary>
     /// Fails the running test where the response is a refusal carrying a code the
     /// endpoint the request reached does not declare and neither its mounting nor the
-    /// pipeline answers. A request that reached no library endpoint is not judged.
+    /// pipeline answers, or a redirect whose query member carries a code the endpoint
+    /// does not declare it carries: a navigation route binds no typed value, so its
+    /// mounting gives it none to carry. A request that reached no library endpoint is
+    /// not judged, and neither is the redirect of a machine callback, which carries a
+    /// provider's own member on.
     /// </summary>
     /// <param name="context">The request, answered.</param>
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
@@ -81,9 +90,7 @@ internal static class EndpointAnswers
         ArgumentNullException.ThrowIfNull(context);
 
         if (context.GetEndpoint() is not RouteEndpoint endpoint
-            || EndpointDeclaration.Of(endpoint) is not EndpointDeclaration declared
-            || context.Response.StatusCode < StatusCodes.Status400BadRequest
-            || context.Response.ContentType?.StartsWith("application/json", StringComparison.Ordinal) is not true)
+            || EndpointDeclaration.Of(endpoint) is not EndpointDeclaration declared)
         {
             return;
         }
@@ -91,6 +98,24 @@ internal static class EndpointAnswers
         string route = endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]
             + " "
             + endpoint.RoutePattern.RawText;
+
+        if (context.Response.StatusCode is >= StatusCodes.Status300MultipleChoices and < StatusCodes.Status400BadRequest)
+        {
+            if (Machine(endpoint) is null
+                && Borne(context.Response.Headers.Location.ToString()) is string borne
+                && !declared.Carried.Any(known => known.ToString() == borne))
+            {
+                Assert.Fail($"{route} returned the browser with {Carrier}={borne}, which it does not declare.");
+            }
+
+            return;
+        }
+
+        if (context.Response.StatusCode < StatusCodes.Status400BadRequest
+            || context.Response.ContentType?.StartsWith("application/json", StringComparison.Ordinal) is not true)
+        {
+            return;
+        }
 
         if (Written(context.Response.Body) is not string body)
         {
@@ -104,6 +129,30 @@ internal static class EndpointAnswers
         {
             Assert.Fail($"{route} answered {context.Response.StatusCode} {code}, which it does not declare.");
         }
+    }
+
+    // The code a redirect carries in its query member, which stands before any
+    // fragment; an address with no such member carries none.
+    private static string? Borne(string location)
+    {
+        int fragment = location.IndexOf('#', StringComparison.Ordinal);
+        string address = fragment < 0 ? location : location[..fragment];
+        int query = address.IndexOf('?', StringComparison.Ordinal);
+
+        if (query < 0)
+        {
+            return null;
+        }
+
+        foreach (string member in address[(query + 1)..].Split('&'))
+        {
+            if (member.StartsWith(Carrier + "=", StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(member[(Carrier.Length + 1)..]);
+            }
+        }
+
+        return null;
     }
 
     // The machine path a route pattern takes, where the machine profile governs one.
