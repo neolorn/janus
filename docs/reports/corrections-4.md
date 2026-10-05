@@ -1769,6 +1769,27 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no change to `endpoints.txt`.
 - Questions 229 and 230.
 
+### `part/navigation` (D-193), merged as `9b0a14ce`: questions 221 to 226
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 222: a return from a source under a delay is answered `auth.throttled` before the provider's error or a missing code is read; a provider's own error, a cancel or a missing code counts and records nothing | `393ed418` | AUTH-ABUSE-001, CONV-LOG-005 | `ProviderSignInTests.AUTH_ABUSE_001_AC14_AProvidersOwnErrorOrAMissingCodeCountsAndRecordsNothingAsync`, `ProviderSignInTests.AUTH_ABUSE_001_AC12_AReturnUnderADelayIsThrottledBeforeItsErrorIsReadAsync` |
+| Question 223: at the token endpoint only a 400 whose `error` is `invalid_grant` is the code refused; every other answer without an identity token is the provider unavailable, part `token`, nothing counted | `ca5f94e7` | IDN-LIFE-012 | `ProviderSignInTests.IDN_LIFE_012_AC6_ATokenEndpointAnsweringAnythingButATokenOrInvalidGrantIsUnavailableAsync`, `ProviderSignInTests.IDN_LIFE_012_AC6_ATokenEndpointAnsweringInvalidGrantRefusesTheCodeCountedAndRecordedAsync` |
+| Question 221: the start declares the link's three codes in `error`; `POST /account/link/{provider}` declares 422 `auth.factor.notpermitted`; the return asks the link's gate again | `1543ed1d` | IDN-LIFE-012, CONV-DESIGN-006 | `ProviderSignInTests.IDN_LIFE_012_AReturnToLinkAsksForTheStepUpAgainAsync`, `ProviderSignInTests.IDN_LIFE_012_AReturnToLinkAsksThePolicyInForceAgainAsync`, `ProviderSignInTests.IDN_LIFE_012_AReturnToLinkAsksTheRestrictionAgainAsync`, `ProviderSignInTests.IDN_LIFE_012_AStartToLinkFromARestrictedAccountIsNotStartedAsync`, `ProviderSignInTests.IDN_LIFE_012_AStartToLinkAProviderThePolicyDoesNotPermitIsNotStartedAsync`, `EndpointDeclarationTests.CONV_DESIGN_006_AC3_AProviderRoundTripDeclaresTheCodesItsRedirectCarries`, `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract` |
+| Item 3h of question 212: the test host fails a redirect of a library route whose `error` is a code the route does not declare it carries; the machine callbacks are outside it | `6e7097dd` | CONV-DESIGN-006 | `EndpointAnswersTests.CONV_DESIGN_006_AC4_ARedirectCarryingAnUndeclaredCodeFailsTheTest`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_ARedirectCarryingADeclaredCodePasses`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_ARedirectCarriesNoCodeByItsMounting`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_TheMachineCallbacksRedirectIsOutsideTheCheck`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_TheHostHoldsEveryRedirectItCarriesAsync` |
+| Question 224: a navigation route binds no typed value; a test holds it | `3b8a6321` | CONV-DESIGN-004, CONV-DESIGN-006 | `EndpointDeclarationTests.CONV_DESIGN_006_AC5_ANavigationRouteBindsNoTypedValue` |
+| Questions 225 and 226: a start no pre-authentication session can be issued for is a fault, on the round trip and the sign-on; a push or an exchange answered a 5xx, or outside its protocol's shape, or not reached, is a fault | `8d9b73c2` | BFF-ERR-001, BFF-ERR-002, BFF-SESS-006, BFF-CSRF-005a | `SignOnTests.BFF_ERR_002_AStartNoPreAuthenticationSessionCanBeIssuedForIsAFaultAsync`, `ProviderSignInTests.BFF_ERR_002_AStartNoPreAuthenticationSessionCanBeIssuedForIsAFaultAsync`, `SignOnTests.BFF_ERR_002_APushAnsweredA5xxOrOutsideItsProtocolsShapeIsAFaultAsync`, `SignOnTests.BFF_ERR_002_AnExchangeAnsweredA5xxOrOutsideItsProtocolsShapeIsAFaultAsync`, `SignOnTests.BFF_ERR_002_APushThatCannotReachTheAuthenticationApplicationIsAFaultAsync`, `SignOnTests.BFF_ERR_002_AnExchangeThatCannotReachTheAuthenticationApplicationIsAFaultAsync`, `SignOnTests.BFF_SESS_006_APushRefusedInItsProtocolsShapeReturnsTheBrowserExpiredAsync`, `SignOnTests.BFF_SESS_006_AnExchangeRefusedInItsProtocolsShapeReturnsTheBrowserExpiredAsync` |
+| Question 226: a sign-on whose session is not derived, for whatever reason, returns the browser with `auth.session.expired` | `f3c9a014` | BFF-SESS-006, BFF-ERR-001 | `SignOnTests.BFF_SESS_006_AReturnWhoseSessionIsNotDerivedReturnsTheBrowserExpiredAsync` |
+
+- Question 222: the test of criterion 14 was written first and passed: a cancel, a provider's error and a missing code already counted and recorded nothing. The test of criterion 12 failed: such a return under a delay was answered `auth.factor.rejected`.
+- Question 223: 20 of 21 cases failed before the change (`auth.factor.rejected`, counted). A 401 carrying `invalid_grant` is unavailable: a 400 alone refuses the code.
+- Question 221: the return already asked the gate; its four tests passed before any change, and no service code changed. The one failure before was the link route's undeclared 422.
+- Item 3h: at once the check found the provider start returning `error=auth.session.csrfinvalid`, undeclared; `8d9b73c2` removes it.
+- Question 224: the check of CONV-DESIGN-004 criterion 2 is a scan of the source (`PublicSurfaceTests.CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType`), and the navigation handlers pass it with no exemption: they take text for which no typed value exists. No exemption was written. Question 235.
+- Questions 225 and 226: a 5xx from the authentication application was not a fault as built: 10 of 11 cases of the push and of the exchange returned the browser with `auth.session.expired` before the change. A start with no pre-authentication session answered `auth.session.csrfinvalid` before.
+- No migration, no public surface line, no truth-table row. `endpoints.txt`: the provider start's `error` line gains the three codes; `POST /account/link/{provider}` gains `422 auth.factor.notpermitted`. `CHANGELOG.md` conflicted at the merge; both sides are kept.
+- Questions 231 to 235.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4806,6 +4827,57 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is: no row is owed where the judgement did not change, and the check is read over the range.
   2. Every commit that touches a watched file carries a change to the table.
 - **Parked.** Nothing.
+- **Answer:** pending.
+
+**231. Tier 3. `09` `GET /auth/providers/{provider}`: a return to link after the session ended.**
+
+- **Item.** Question 221.
+- **What the code does.** The link's attempt is bound to the session. Where the session ended between the start and the return, no attempt is found and the return answers 403 `auth.session.csrfinvalid`. The branch that would return `auth.session.expired` is not reached.
+- **What the specification says.** `09` lists `auth.session.expired` for the continuation to link, and D-193 has the return ask again "since the step-up may have aged or the session ended meanwhile". `09` also gives 403 "where no attempt is bound to the browser".
+- **The contradiction.** The two sentences give one request two answers.
+- **Parked.** The ended session at a link's return. The rest of question 221 is built.
+- **Answer:** pending.
+
+**232. Tier 2. CONV-DESIGN-006 criterion 4: "nor answers by its mounting" on a redirect.**
+
+- **Item.** Item 3h of question 212.
+- **What the code does.** The test host allows in a redirect's `error` the codes the route declares it carries, and no other. A code the mounting answers in a body is not allowed there. No route carries one today.
+- **Readings.**
+  1. As built.
+  2. The mounting's codes are allowed in `error` too.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**233. Tier 2. BFF-SESS-006: a 4xx of the authentication application that names no `error`.**
+
+- **Item.** Questions 225 and 226.
+- **What the code does.** At the push and the exchange, a 4xx whose body names `error` as text is a refusal: the browser returns with `auth.session.expired`. A 4xx whose body does not (empty, not JSON, no such member) is a fault, 500 (`8d9b73c2`). Before, it returned the browser.
+- **What the specification says.** A push or an exchange that "reads no answer in its protocol's shape" is a fault.
+- **Readings.**
+  1. As built.
+  2. Every 4xx is a refusal.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**234. Tier 2. BFF-SESS-006, BFF-LOG-001: the code a sign-on's derivation was refused with.**
+
+- **Item.** Question 226.
+- **What the code does.** A derivation refused for a reason other than `auth.session.expired` returns the browser with `auth.session.expired`, and the reason's own code is logged nowhere. Before, the refusal was answered with its own code and logged as every refusal is. No entry of the browser profile's log describes the case.
+- **Readings.**
+  1. As it is.
+  2. A new log entry carries the code.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**235. Tier 2. CONV-DESIGN-004 criterion 2: the exemption of a navigation handler's values.**
+
+- **Item.** Question 224.
+- **What the code does.** The criterion's check is a scan of the source for a method that takes an identifier or a named value as its underlying type. The navigation handlers take `intent`, `returnTo`, `code`, `state` and `error` as text, which the scan does not match, so they pass with no exemption, and none was written. A test now holds that a navigation route binds no typed value.
+- **What the owner's answer says.** "Exempt a navigation handler's route and query values from the check".
+- **Readings.**
+  1. As it is: nothing is exempted because nothing is refused.
+  2. The scan names navigation handlers and skips their values, which needs it to know which members they are.
+- **Parked.** Reading 2.
 - **Answer:** pending.
 
 ## 5. Gate result
