@@ -1557,7 +1557,7 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Public surface: the one line of `TruthTableAsync`, with its changelog line. No migration.
 - Parked: question 189.
 
-### `part/sign-in` (D-189), merged as `9904e5c5`: questions 173 and 174
+### `part/sign-in` (D-189), merged as `929df608`: questions 173 and 174
 
 | Item | Commits | Implements | Tests |
 |---|---|---|---|
@@ -1571,7 +1571,7 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface change.
 - Parked: questions 190 to 193.
 
-### `part/bot-defence` (D-188 and D-189), merged as `ccc325b5`: questions 136 and 169 to 171
+### `part/bot-defence` (D-188 and D-189), merged as `0cb54693`: questions 136 and 169 to 171
 
 | Item | Commits | Implements | Tests |
 |---|---|---|---|
@@ -1588,7 +1588,7 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration.
 - Parked: question 194.
 
-### `part/enrolment-session` (D-189), merged as `0280d9a5`: questions 179, 176 and 177
+### `part/enrolment-session` (D-189), merged as `cb21abfe`: questions 179, 176 and 177
 
 | Item | Commits | Implements | Tests |
 |---|---|---|---|
@@ -1600,6 +1600,23 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - AUTH-RECOV-006 criteria 1 and 2, the frontend's half (FE-SEC-001): not this repository's code. No test runs two reports of one marked session at once; the hold is the lock `RecoveryLinkStoreTests.AUTH_RECOV_002_AC1_TwoCompletionsOfOneEnrolmentSessionAtOnceCompleteOnceAsync` covers.
 - No path of the truth-table change check is touched; no row. No public surface change.
 - Parked: questions 195 to 197.
+
+### `part/identifiers` (D-189), merged as `4bed2b4e`: questions 185, 182 to 184, 178, 180 and 181
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 185: a removal row is keyed by an identifier of its own and names the identifier it came from; an undo finds its removal by its own link, moves its value back onto a standing identifier, displacing what it holds as a replace does, and is not judged against the maximum there | `831d10c5` | REG-IDENT-006 | `IdentifierServiceTests.REG_IDENT_006_AC10_AnIdentifierReplacedTwiceStandsBehindTwoRemovalsAsync`, `IdentifierServiceTests.REG_IDENT_006_AC10_AnUndoLeavesTheOtherRemovalOfItsIdentifierAsync`, `IdentifierServiceTests.REG_IDENT_006_AnUndoOntoAStandingIdentifierDisplacesTheValueItHoldsAsync`, `IdentifierServiceTests.REG_IDENT_006_AnUndoOntoAStandingIdentifierIsNeverRefusedTheMaximumAsync`, `IdentifierServiceTests.CONV_DESIGN_003_AC5_AnUndoSpentMeanwhileIsRolledBackAsync`, `ValueLockTests.REG_IDENT_006_AC10_AnIdentifierReplacedTwiceStandsBehindTwoRemovalRowsAsync`, `IdentifierStoreTests.REG_IDENT_006_AC10_ARowWrittenBeforeTheKeyKeepsItsIdentifierUnderOneOfItsOwnAsync` |
+| Questions 182 to 184: at both verify routes every code and press is first held to the source's delay; a wrong code is counted against the source and the identifier; one past its lifetime or its cap, naming nothing held or opening nothing against the source; an `{id}` not held is 422 `auth.code.invalid`, held and counted; a lapsed confirmation's count is committed; a right code refused for another cause counts and writes nothing | `8e131ff3` | REG-SESS-003, REG-IDENT-007, AUTH-ABUSE-001 | `RegistrationServiceTests.REG_SESS_003_AC6_ACodeForAnIdentifierTheSessionDoesNotHoldIsCountedAgainstItsSourceAsync`, `RegistrationServiceTests.REG_SESS_003_AC6_ACodePastItsLifetimeIsCountedAgainstItsSourceAloneAsync`, `RegistrationServiceTests.REG_SESS_003_AC6_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync`, `RegistrationServiceTests.REG_SESS_003_AC6_APressThatWouldVerifyIsHeldToItsSourcesDelayAsync`, `RegistrationServiceTests.CONV_DESIGN_003_AC5_ACodeForNoStagedIdentifierCommitsItsCountAloneAsync`, `IdentifierServiceTests.CONV_DESIGN_003_AC5_AnExpiredCodeCommitsItsCountAloneAsync`, `IdentifierServiceTests.REG_SESS_003_AC6_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync`, `IdentifierServiceTests.CONV_DESIGN_003_AC5_ACodeForAVerificationGoneMeanwhileCommitsItsCountAloneAsync`, `IdentifierServiceTests.REG_SESS_003_AC6_ACodeThatNamesNoVerificationOfTheAccountIsCountedAgainstItsSourceAsync`, `IdentifierServiceTests.REG_SESS_003_AC6_ACodeForAnotherAccountsVerificationIsCountedAgainstItsSourceAsync`, `IdentifierServiceTests.REG_IDENT_007_AC6_AConfirmationPressedPastItsLifetimeIsCountedAndChangesNothingAsync`, `RegistrationFlowTests.REG_SESS_003_AC6_ACodeForAnIdentifierTheSessionDoesNotHoldIsAnsweredInvalidAsync` |
+| Question 178: a pending verification keeps the enrolment session that staged its replace; in an enrolment session a code naming any other is `auth.code.invalid` and a press naming any other `auth.code.expired`, each counted against the source; `IIdentifiers.LandAsync(EnrolmentSessionId, string, bool, string, CancellationToken)` (public) | `07e3b2b5` | REG-IDENT-007, AUTH-RECOV-002 | `IdentifierServiceTests.REG_IDENT_007_AC3_AnEnrolmentSessionsCodeForAnAddIsCountedInvalidAsync`, `IdentifierServiceTests.REG_IDENT_007_AC3_AnEnrolmentSessionsCodeForAReplaceItDidNotStageIsCountedInvalidAsync`, `IdentifierServiceTests.REG_IDENT_007_AC3_AnEnrolmentSessionsPressForAReplaceItDidNotStageIsCountedExpiredAsync`, `IdentifierServiceTests.REG_IDENT_007_AC3_AReplaceKeepsTheEnrolmentSessionThatStagedItAsync`, `IdentifierServiceTests.REG_IDENT_007_ALapsedEnrolmentSessionLandsNoLinkAsync`, `PendingVerificationStoreTests.REG_IDENT_007_AC3_AReplaceKeepsTheEnrolmentSessionThatStagedItAsync`, `CredentialFlowTests.REG_IDENT_007_AC3_TheEnrolmentSessionReachesNoVerificationItDidNotStageAsync` |
+| Question 180: a repeated replace naming the staged value sends again each record not yet spent, through the restrictions, under the staged row's lock; a refusal sends neither and answers 429 `auth.restriction.exceeded`; another value is 409 `identity.change.pending` | `f302eace` | REG-IDENT-007 | `IdentifierServiceTests.REG_IDENT_007_AC8_ARepeatedReplaceOfTheStagedValueSendsItsRecordsAgainAsync`, `IdentifierServiceTests.REG_IDENT_007_AC8_ARepeatedReplaceSendsNoRecordAlreadySpentAsync`, `IdentifierServiceTests.REG_IDENT_007_AC8_ARepeatedReplaceTheRestrictionsRefuseSendsNothingAsync`, `IdentifierServiceTests.REG_IDENT_007_AC8_ARepeatedReplaceHoldsTheStagedRowBeforeItWritesAsync`, `IdentifierServiceTests.REG_IDENT_007_AC8_AReplaceOfAnotherValueStagedMeanwhileIsRefusedPendingAsync`, `AccountApplicationTests.REG_IDENT_007_AC8_ARepeatedReplaceAnswersAsTheFirstAndAnotherValueIsPendingAsync` |
+| Question 181: a repeated add whose pending verification is gone under its row's lock is judged and staged as a fresh add | `69420395` | REG-IDENT-004 | `IdentifierServiceTests.REG_IDENT_004_ARepeatedAddWhosePendingVerificationIsGoneIsStagedAfreshAsync`, `IdentifierServiceTests.REG_IDENT_004_ARepeatedAddWhosePendingVerificationIsGoneIsJudgedAgainstTheMaximumAsync` |
+
+- Migrations: `20261004230636_KeyEachIdentifierRemovalByItsOwnIdentifier` (drops the key on `identifier_id`, adds `removal_id`, fills it for existing rows by one hand-written `UPDATE` that draws a version 7 identifier from `removed_at`, sets it not null, keys the table by it and adds `ix_identifier_removals_identifier`; its `Down` fails where one identifier stands behind two rows) and `20261004235730_KeepTheEnrolmentSessionThatStagedAReplace` (a nullable column `identifier_verifications.enrolment`). The snapshot merged without a conflict, so neither was regenerated; the model holds no pending change after the merge.
+- The registration route's answer for a code whose `{id}` its session does not hold changed from `identity.registration.incomplete` to 422 `auth.code.invalid`.
+- The interleavings of questions 180 and 181 are decided on the fakes through their lock hooks, not against PostgreSQL.
+- For question 180 the service change was written before its tests.
+- Public surface: the one overload of `IIdentifiers.LandAsync`, with its changelog line. No path of the truth-table change check is touched.
+- Parked: questions 198 to 201.
 
 ## 2. Items not implemented
 
@@ -4318,6 +4335,38 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The report is refused there, under a code no chapter names.
 - **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**198. Tier 3. REG-IDENT-006 and IDN-LIFE-008: what an undo that displaces a value does to the account's sessions.**
+
+- **Item.** Question 185.
+- **The gap.** D-189 has an undo onto a standing identifier displace what it holds "as a replace does". IDN-LIFE-008 speaks of a removal and a replacement, not of an undo.
+- **What the code does.** No session is ended at an undo. A verified value so displaced gets a removal row and its undo link; an unverified one is displaced with no row.
+- **Parked.** Nothing built beyond that.
+- **Answer:** pending.
+
+**199. Tier 3. REG-IDENT-007, questions 178 and 180 together: who staged a replace after a resend from another session.**
+
+- **Item.** Questions 178 and 180.
+- **The gap.** Question 178 reaches "the pending verification of the replace it staged"; question 180 makes a repeated replace of the staged value a resend. Neither says whether a resend changes who staged it.
+- **What the code does.** A resend changes neither the browser nor the enrolment session recorded: an enrolment session that resends a replace a signed-in session staged is answered 202 and then cannot verify it (422 `auth.code.invalid`). A replace an enrolment session staged before the column existed carries none and is reached by no enrolment session until it is swept and staged again.
+- **Parked.** Any change of who staged a replace at a resend.
+- **Answer:** pending.
+
+**200. Tier 3. REG-SESS-003 against question 178: a press of the link of the replace the enrolment session itself staged.**
+
+- **Item.** Question 178.
+- **The gap.** REG-SESS-003 lets a press verify from the browser that started it. D-189 speaks of a press "naming any other".
+- **What the code does.** As before: in an enrolment session the press shows the code, proves nothing and counts nothing.
+- **Parked.** A press that verifies from the enrolment session.
+- **Answer:** pending.
+
+**201. Tier 2. Questions 185 and 178: names and shapes the chapters do not give.**
+
+- **Item.** Questions 185 and 178.
+- **What the code does.** The removal row's key is the column `removal_id` and the identifier it came from stays in `identifier_id`, with the index `ix_identifier_removals_identifier`; an existing row's key is drawn from its `removed_at`. The enrolment session that staged a replace is the nullable column `identifier_verifications.enrolment`. The press in an enrolment session is the public overload `IIdentifiers.LandAsync(EnrolmentSessionId, string, bool, string, CancellationToken)`.
+- **What the specification says.** The chapters state the behaviour and name none of these.
+- **Parked.** Nothing: built as above.
 - **Answer:** pending.
 
 ## 5. Gate result
