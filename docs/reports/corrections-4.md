@@ -4810,3 +4810,32 @@ its commits can be read.
 - The run at `403b8609`: `BackgroundJobsTests.AUTH_ABUSE_008_AC6_ARunOfTheRangesJobRaisesTheAbsenceThoughNoRegistrationArrivesAsync` failed (integration 1027 of 1028). Another test of its class runs a pass 40 days later on the test clock; where that one ran first, its row in the alert ledger folded this test's raise. The test now clears the ledger before its pass (`eb1d0dda`, test code only). The cause was read from the ledger's claim statement; the failing order was not reproduced.
 - The fast checks were not run on the docs commit `ed761159` or on `9305c0d3`; they pass at each merge from `5b923f31` on.
 - Open: questions 202 to 210 (section 4). Not built for them: writing the session only once a step-up's gate is reached (203); another answer for a step-up that cannot reach its gate (204); the leads of 205 and 209, unconfirmed; `auth.credential.suspended` for a suspended social credential whose provider vouches (208); refusing a suspended key before its counter is judged (210). Questions 202, 206 and 207 park nothing.
+
+**`corrections-4`, after the items of D-191.** Full gate at `63d5e373`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). The pipeline's last run on the pull request covers `7354e8df`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3657 |
+| Contract tests | passed, 148 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1034 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 107 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). For the one migration since the last gate, `KeepTheInstantASessionLastReachedEachLevel`, it lists the columns `attained` and `phishing_resistant` dropped from `identity.sessions`, `ck_sessions_attained` and `ck_sessions_phishing_resistant` dropped, and `ck_sessions_levels` added |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The fast checks ran before the docs commit `9caa47e5` and before each report commit after it.
+- An empty `.git/index.lock`, two hours old, with no git process running, stood in the clone at the first commit of this round; it was deleted. No git configuration was changed.
+- Open: questions 211 to 217 (section 4). Not built for them: naming the credential on a pending code's row (211); declaring the codes a provider's return carries in its redirect (212); carrying the record's own instants into a derived session (213); the report of a `phoneCode` ask's 200 at a step-up (217). Questions 214, 215 and 216 park nothing.
