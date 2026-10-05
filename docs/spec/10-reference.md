@@ -67,7 +67,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.invitation.mailboxheld` | An invitation names a corporate address whose mailbox has been held before, by anyone (the invitee included; the address of an erased holder is not recognised, REG-MAIL-003), and its body carries no `formerMailbox` (section 5.44); the issue checks nothing about who the invitee is, and no mailbox changes; 409 | REG-MAIL-001, REG-MAIL-003, INT-MAIL-006, D-166, D-178 |
 | `identity.mailbox.taken` | The corporate address an invitation asserts is held by a member, or reserved by a standing invitation that has not expired; `details.member` is `corporateEmail`; 409 | REG-MAIL-001, INT-MAIL-006, D-166 |
 | `identity.mailbox.notfound` | The account holds no mailbox the mail server is told to enable, or the deployment registers no mail server; the app-password endpoints are not present for it; a creation from the break-glass session, or a session another application opened from it, is `authz.denied` instead, decided at the gate step before the mailbox is looked up (OPS-BOOT-002); 404 | INT-MAIL-006, REG-MAIL-002, OPS-BOOT-002, D-166, D-179 |
-| `identity.registration.signedin` | `POST /register` from a browser holding a live session: nothing is staged, no account document is answered, and the frontend sends the person to the account application; where the request carries an invitation token, the invitation is first attached to the signed-in account (REG-INV-002); 409 | REG-SESS-002, D-162, D-166 |
+| `identity.registration.signedin` | `POST /register` from a browser holding a live session: nothing is staged, no account document is answered, and the frontend sends the person to the account application; where the request carries an invitation token, the invitation is first attached to the signed-in account (REG-INV-002); also a provider round trip started to register from such a browser, carried in `error` (`09`, D-192); 409 | REG-SESS-002, D-162, D-166, D-192 |
 | `identity.registration.incomplete` | A registration request for a step the session has not reached: its predecessor is incomplete, or it is complete already; a confirmation (`POST /register/confirm`) while a staged identifier is unverified; also a session that reaches account creation without its terms and notice versions; 409 | REG-SESS-002 AC1, REG-SESS-004, REG-SESS-007, D-162, D-166 |
 | `identity.reactivation.tokeninvalid` | Reactivation link token unknown, expired or consumed (`POST /account/reactivate`); 422 | IDN-LIFE-013, D-147, D-166 |
 | `identity.photo.invalid` | Upload failed content validation; 422 | IDN-ATTR-004, D-106, D-166 |
@@ -88,7 +88,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.code.expired` | A verification code or an authentication code (the `emailCode` code, the `phoneCode` second-step code, the code a sign-in link shows in another browser) past its lifetime, or presented after its attempt cap, the correct code included (AUTH-FACT-004 AC3); also a registration link token, or an account's identifier link token (`POST /account/identifiers/{id}/verify`, D-188), that, pressed, opens nothing (REG-SESS-003 AC6), and an old address's confirmation of a replace pressed past its lifetime (REG-IDENT-007); and the right code or press of an add, or the presentation that would apply a replace's swap, where an identifier has come to hold its value, or an undo to reserve it, since it was staged (REG-IDENT-004, REG-IDENT-007); and, in an enrolment session, a press naming any verification but that of the replace it staged (`09`, D-189); 422 | AUTH-FACT-004, REG-SESS-003, REG-IDENT-004, REG-IDENT-007, D-166, D-183, D-187, D-188, D-189 |
 | `auth.code.invalid` | A verification code or an authentication code rejected; also a code at a verify route whose `{id}` names nothing the registration session holds staged or the account holds pending, or, in an enrolment session, names any verification but that of the replace it staged (`09`, D-189); 422 | AUTH-FACT-004, D-166, D-189 |
 | `auth.code.replayed` **(new)** | Code already consumed within its window; 422 | AUTH-FACT-005, D-166 |
-| `auth.factor.notpermitted` | A factor the account may not use here: a verification-only factor offered as authentication, or a factor the policy in force does not permit in `loginFactors`, presented at sign-in or at step-up; 422 | AUTH-FACT-002, AUTH-STEP-002, IDN-LIFE-009b, D-166 |
+| `auth.factor.notpermitted` | A factor the account may not use here: a verification-only factor offered as authentication, or a factor the policy in force does not permit in `loginFactors`, presented at sign-in, at step-up or to link; also, at a provider round trip's start, a provider the deployment does not declare, carried in `error` (`09`, D-192); 422 | AUTH-FACT-002, AUTH-STEP-002, IDN-LIFE-009b, D-166, D-192 |
 | `auth.factor.rejected` | Factor presented and refused; 422 | AUTH-FACT-001, D-166 |
 | `auth.factor.required` **(new)** | Further factors needed to reach required assurance; 422 | AUTH-FACT-001, D-166 |
 | `auth.lossreport.notpermitted` | Self-service loss report and removal unavailable to this account; 409 | AUTH-RECOV-008, D-141, D-166 |
@@ -108,12 +108,13 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.recovery.tokeninvalid` | Recovery link rejected; 422 | AUTH-RECOV-002, D-166 |
 | `auth.recovery.selfapproval` **(new)** | An approver attempted to approve recovery for their own account; enforced in the domain; 422 | AUTH-RECOV-002a, D-147, D-166 |
 | `auth.screening.unavailable` **(new)** | Blocklist screening could not run; operation refused; 422 | AUTH-PASS-004, D-166 |
-| `auth.session.expired` | Session past idle or absolute limit; `details.reauthenticate` is `single-factor` when one factor (passkey or password) restores the session — idle expiry inside the absolute window, **AAL2-policy principals only** — or `full`; the break-glass session answers `full` on any expiry (OPS-BOOT-002); also a registration session that has ended, among them one ended at the terms step because a staged identifier was taken or reserved since (REG-SESS-005), answered with no `details`, and an enrolment session that has ended, alike (D-188), or that is presented on a route that requires a session and is not one it reaches (D-189); 401 | AUTH-SESS-005, REG-SESS-005, D-123, D-139, D-166, D-186, D-188, D-189 |
+| `auth.session.expired` | Session past idle or absolute limit; `details.reauthenticate` is `single-factor` when one factor (passkey or password) restores the session — idle expiry inside the absolute window, **AAL2-policy principals only** — or `full`; the break-glass session answers `full` on any expiry (OPS-BOOT-002); also a registration session that has ended, among them one ended at the terms step because a staged identifier was taken or reserved since (REG-SESS-005), answered with no `details`, and an enrolment session that has ended, alike (D-188), or that is presented on a route that requires a session and is not one it reaches (D-189); on a navigation (a sign-on that fails, or a provider round trip whose session or registration session is absent or has ended) it is carried in `error` instead (BFF-ERR-001, D-192); 401 | AUTH-SESS-005, REG-SESS-005, D-123, D-139, D-166, D-186, D-188, D-189, D-192 |
 | `auth.session.csrfinvalid` **(new)** | A state-changing browser request refused by a layer of `17` section 4: fetch metadata, the custom request header, the origin or the synchronizer token; one code for every layer, which only the log entry names; also a sign-on or provider round trip whose `state` is absent, unbound or not the one the browser was sent out with (BFF-SESS-006, IDN-LIFE-012); 403 | AUTH-SESS-007, BFF-CSRF-001 to BFF-CSRF-004, D-162, D-166 |
-| `auth.stepup.required` **(new)** | The gate is not met; `details` carries `required` (`level`, `phishingResistant`, `maxAge` in whole seconds), `outcome` (`present` · `enrol` · `report-loss` · `pending`), `options` (the combinations of catalogue identifiers that would meet it) and `pendingUntil`, null unless the outcome is `pending`. At the invitation acknowledgement `details` carries `outcome` `enrol` and `policyRequirement` `{ field, value }` in place of the gate values. A gate judged from a host's assurance report (LIB-HOST-004), where no session of the library that is the acting person's own carries the request, that is not met (a provider failure included) carries `required`, `outcome` `present`, empty `options` and a null `pendingUntil`. Otherwise no `details` where no session of the library belonging to the acting account was judged (`09` `/auth/step-up`); 403 | AUTH-STEP-001, AUTH-STEP-002, LIB-HOST-004, D-141, D-166, D-183 |
+| `auth.stepup.required` **(new)** | The gate is not met; `details` carries `required` (`level`, `phishingResistant`, `maxAge` in whole seconds), `outcome` (`present` · `enrol` · `report-loss` · `pending`), `options` (the combinations of catalogue identifiers that would meet it) and `pendingUntil`, null unless the outcome is `pending`. At the invitation acknowledgement `details` carries `outcome` `enrol` and `policyRequirement` `{ field, value }` in place of the gate values. A gate judged from a host's assurance report (LIB-HOST-004), where no session of the library that is the acting person's own carries the request, that is not met (a provider failure included) carries `required`, `outcome` `present`, empty `options` and a null `pendingUntil`. Otherwise no `details` where no session of the library belonging to the acting account was judged (`09` `/auth/step-up`); on a navigation it is carried in `error` alone, with no `details` (BFF-STEP-001, D-192); 403 | AUTH-STEP-001, AUTH-STEP-002, LIB-HOST-004, D-141, D-166, D-183, D-192 |
 | `auth.stepup.unavailable` **(new)** | No assurance provider registered; 403 | AUTH-STEP-003, D-166 |
+| `auth.provider.unavailable` **(new)** | A social provider's round trip could not reach or read the provider: its discovery document, its published keys or its token endpoint; the browser is returned with it in `error` (BFF-ERR-001), and no failed attempt is counted; 502 | IDN-LIFE-012, D-192 |
 | `auth.throttled` **(new)** | A progressive delay or a rate limit is in effect; `details.retryAt` is the instant the next attempt is looked at, and the answer carries `Retry-After`; a throttled navigation (a social provider's return) carries `error=auth.throttled` and `retryAt` in its query instead (BFF-ABUSE-001); 429 | AUTH-ABUSE-001, AUTH-ABUSE-002, AUTH-RECOV-002, OPS-ALERT-006, D-166 |
-| `auth.restriction.exceeded` **(new)** | A send refused by a named restriction; `details.retryAt` is the earliest time a bucket lifts, identical whether or not the address is registered (AUTH-ABUSE-002). Replaces `integration.sms.windowactive`; 429 | AUTH-ABUSE-004, D-146, D-166 |
+| `auth.restriction.exceeded` **(new)** | A send refused by a named restriction; `details.retryAt` is the earliest time a bucket lifts, identical whether or not the address is registered (AUTH-ABUSE-002). Replaces `integration.sms.windowactive`; on a navigation it is carried in `error`, with `retryAt` in the query (BFF-ABUSE-001, D-192); 429 | AUTH-ABUSE-004, D-146, D-166, D-192 |
 | `auth.restriction.notfound` | The restriction named in the path is not in the set (`GET` and `DELETE /admin/restrictions/{name}`, `POST /admin/restrictions/{name}/grant`); 404 | AUTH-ABUSE-004, D-166 |
 | ~~`auth.device.verificationrequired`~~ | *Retired by D-166. The held sign-in is the `status` value `deviceVerificationRequired` of `POST /auth/factor` (section 5.33), answered 200, not a code.* | |
 | `auth.policy.graceexpired` **(new)** | The account does not meet a raised requirement and `policy.enforcement.grace` has elapsed; sign-in stops at enrolment. `details.outcome` is `enrol`; 403 | AUTH-FACT-017, D-146, D-166 |
@@ -645,12 +646,13 @@ another factor restores it (IDN-LIFE-012a).
 `delegated` · `aal1` · `aal2` · `aal3`
 
 `delegated` — no asserted AAL: a social-only session (AUTH-SESS-005a, D-128, D-141);
-signed in on the provider's word, below `aal1` wherever a tier is needed. Formerly
-`none`.
+signed in on the provider's word, below `aal1` wherever a tier is needed; also what a
+step-up reports where the factors accepted reach no level (`09` `POST /auth/step-up`,
+D-192). Formerly `none`.
 
 The same values name an **account's reachable assurance** (AUTH-STEP-006).
 
-*Source: AUTH-SESS-002, D-140, D-141*
+*Source: AUTH-SESS-002, D-140, D-141, D-192*
 
 ### 5.5 Subject types
 
@@ -949,6 +951,7 @@ thing. The scopes the chapters name:
 | `degradation` | `certificate.renewal.absent` · `certificate.renewal.unread` | No certificate renewal outcome is declared, or the declared one could not answer | OPS-OBS-002, INF-TLS-003 |
 | `degradation` | `botdefence.ranges.absent` · `botdefence.ranges.stale` · `botdefence.ranges.refresh` | At a read of the file that fails, the job's or the first a process makes where a registration is judged, the file not opened or read, or refused whole (`.refresh`); and while `datacenterRange` is among `abuse.botdefence.signals`, at each run of the `datacenter-ranges` job and where a registration is judged, no range source declared or no range file read (`.absent`), or the file held older than `abuse.botdefence.ranges.maxage` by its own date (`.stale`) | AUTH-ABUSE-008, D-189, D-190, D-191 |
 | `degradation` | `location.database.absent` · `location.database.stale` · `location.database.refresh` | At a read of the file that fails, the job's or the first a process makes where an address is resolved, the file not opened or read, or refused whole (`.refresh`); and where an address is resolved, no location file declared or none read (`.absent`), or the file held older than `location.database.maxage` by its own date (`.stale`) | INT-GEN-006, OPS-OBS-002, D-190, D-191 |
+| `degradation` | `provider.unavailable:<provider>` | A social provider's round trip could not reach or read the provider, its discovery document, its published keys or its token endpoint; details `{ provider, part }`, `part` one of `discovery` · `keys` · `token` | IDN-LIFE-012, OPS-OBS-002, D-192 |
 | `expiry-approaching` | `envelope-rotation` | The annual envelope operation falls due within `maintenance.expiry.warninglead` of a year after the log's latest `envelope-rotation` entry | OPS-MAINT-001 |
 | `expiry-approaching` | `kek-cryptoperiod` | The key-encryption key's cryptoperiod ends within `maintenance.expiry.warninglead`; `details.version`, `details.rotatedAt`, `details.dueAt` | DR-009a |
 
@@ -1560,19 +1563,22 @@ D-141, D-146, D-162, D-166, D-168, D-177, D-183, D-187*
 | 422 | Well-formed, semantically rejected: a body naming something that does not exist or cannot be acted on, answered with a named code, `api.request.invalid` where none more specific exists |
 | 429 | Throttled, carries `Retry-After` |
 | 500 | An unhandled fault: `system.fault` with the correlation identifier and nothing else (BFF-ERR-002, D-153) |
+| 502 | A dependency outside the deployment could not be reached or read: `auth.provider.unavailable`, which only a navigation's `error` carries, so no response bears this status (D-192) |
 
 **The status belongs to the code.** Each code of section 1 SHALL answer with the one
-status its row names, at every endpoint that raises it; no endpoint gives a code a status
-of its own. The one exception is `integration.callback.rejected`: 429 where the callback
-rate limit refused the request and the refusal carries `details.retryAt`, 422 otherwise.
-A code whose row names a fault, and a code no row names, SHALL be answered as
+status its row names, at every endpoint that raises it; no endpoint gives a code a
+status of its own. A code a navigation route carries in `error` (BFF-ERR-001) goes with
+that route's redirect, not its row's status (`08` CONV-DESIGN-006, D-192). The one
+exception among answered statuses is `integration.callback.rejected`: 429 where the
+callback rate limit refused the request and the refusal carries `details.retryAt`, 422
+otherwise. A code whose row names a fault, and a code no row names, SHALL be answered as
 `system.fault` with 500 (BFF-ERR-002). A `model.*` code is a startup or command refusal,
 or the code a fault carries into the log (an unwrap under a version no longer held,
 OPS-SEC-003); a conformance finding is a report of the suite (LIB-TEST-001);
 `integration.mailserver.conflict` is a mail server's answer to the provisioning job
 (INT-MAIL-007). None is answered by a request.
 
-*Source: API-CONV-003, D-162, D-166, D-177, D-183*
+*Source: API-CONV-003, D-162, D-166, D-177, D-183, D-192*
 
 ---
 

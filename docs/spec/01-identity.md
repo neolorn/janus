@@ -914,7 +914,7 @@ it is not deleted, since membership may end.
 **IDN-LIFE-012** — Linking a Google or Apple identity SHALL attach a credential and
 SHALL have no effect on permissions or identity.
 
-*Source: D-005, original spec, D-146, D-166*
+*Source: D-005, original spec, D-146, D-166, D-192*
 
 The provider's email is never a key. It counts as verified by the sign-in only where
 the provider operates the mailbox; any other provider-supplied address is verified by
@@ -928,20 +928,25 @@ provider's event finds the credential by it, and it is never shown.
 the deployment declares (LIB-HOST-001), under the first declared client identifier, and
 reads the provider's credential through the secret source (LIB-EXT-001) by the
 provider's name when the application starts; a credential the secret source does not
-give, or gives empty or unusable, stops the start with `model.startup.secretunavailable`,
-`details.key` `socialProvider.<provider>`. Where the credential is a signing credential
-(issuer, key identifier and a P-256 private key), the client secret is minted at each
-exchange: header `alg` `ES256` and `kid`; claims `iss` the credential's issuer, `iat` now, `exp` 5 minutes later, `aud` the issuer the provider's discovery
-document names, `sub` the client identifier; it is never stored. The round trip asks
-for the scope `openid email` and nothing else, authenticates at the provider's token
-endpoint with `client_secret_post`, asks for `response_mode=form_post` where the
-discovery document lists it, and sends a PKCE `S256` challenge where the document lists
-`S256` in `code_challenge_methods_supported`; otherwise it relies on the `nonce`,
-validated in the identity token from the token endpoint before anything the token says
-is used (RFC 9700 sections 2.1.1 and 4.5.3.2). The identity token is accepted only
-where its signature verifies under the provider's published keys, its `iss` is the
+give, or gives empty or unusable, stops the start with
+`model.startup.secretunavailable`, `details.key` `socialProvider.<provider>`. Where the
+credential is a signing credential (issuer, key identifier and a P-256 private key), the
+client secret is minted at each exchange: header `alg` `ES256` and `kid`; claims `iss`
+the credential's issuer, `iat` now, `exp` 5 minutes later, `aud` the issuer the
+provider's discovery document names, `sub` the client identifier; it is never stored.
+The round trip asks for the scope `openid email` and nothing else, authenticates at the
+provider's token endpoint with `client_secret_post`, asks for `response_mode=form_post`
+where the discovery document lists it, and sends a PKCE `S256` challenge where the
+document lists `S256` in `code_challenge_methods_supported`; otherwise it relies on the
+`nonce`, validated in the identity token from the token endpoint before anything the
+token says is used (RFC 9700 sections 2.1.1 and 4.5.3.2). The identity token is accepted
+only where its signature verifies under the provider's published keys, its `iss` is the
 issuer the discovery document names, its `aud` is the client the round trip was started
-under, it has not expired and its `nonce` is the round trip's.
+under, it has not expired and its `nonce` is the round trip's. Where the provider's
+discovery document, its published keys or its token endpoint cannot be reached or read,
+the round trip returns the browser with `error` `auth.provider.unavailable`, counts no
+failed attempt, since nothing the person presented failed, and raises `degradation`
+(OPS-OBS-002, `09`, D-192).
 
 **Acceptance criteria**
 1. Linking changes no grant and no membership.
@@ -953,6 +958,10 @@ under, it has not expired and its `nonce` is the round trip's.
 5. With a signing credential supplied, every code exchange presents a client secret
    minted for it that expires 5 minutes after it is made, and exchanges a year apart
    both succeed with no redeclaration and no restart.
+6. A round trip whose provider's discovery document, published keys or token endpoint
+   cannot be reached or read returns the browser with `error`
+   `auth.provider.unavailable`, counts no failed attempt and raises `degradation` under
+   `provider.unavailable:<provider>`.
 
 ---
 

@@ -1122,7 +1122,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183, D-187, D-189*
+*Source: D-015, D-183, D-187, D-189, D-192*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1131,10 +1131,15 @@ authorization system that is trusted and one that is feared.
 1. The table covers direct grants, container inheritance, multi-level inheritance, group
    membership, nested group membership, deny overriding allow, expiry,
    cross-organization isolation, **derived grants**, **deny defeating a derived grant**,
-   **a derived grant on a container reaching its contents**, and **a bound action judged
+   **a derived grant on a container reaching its contents**, **a bound action judged
    from a host's assurance report** (met; unmet on its level, its phishing resistance,
    its age, each where the bound gate asks it, or an instant after now; a provider that
-   fails; no provider).
+   fails; no provider), and **a bound action judged from the library's session** (met;
+   unmet on its level, its phishing resistance or its age, each where the bound gate
+   asks it; a lower level reached since, beside a higher one past the gate's maximum
+   age; proof reached only before the session's last downgrade); the session's rows are
+   the library's own, not scenarios of `10` section 5.30, since the conformance suite
+   judges a step-up from a host's report alone (LIB-TEST-001).
 2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
    step-up case agrees when the check answers the gate's outcome and the filter answers
    the same: where the gate is met, the filter lists the record; where it is not, the

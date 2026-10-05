@@ -144,7 +144,7 @@ applications SHALL re-establish silently through the authentication application
 AUTH-OIDC-006), acting as a **confidential client** of the library's provider, and SHALL
 retain no token afterwards.
 
-*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172*
+*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -152,21 +152,23 @@ pushes the authorization request to `POST /oidc/par` at the provider address the
 declares (LIB-HOST-001), **back-channel** on the machine profile (BFF-MACH-001), with
 its client secret, `prompt=none`, its registered `redirect_uri`, an `S256` PKCE
 challenge and a `state` bound to the pre-authentication session (BFF-CSRF-005a,
-AUTH-OIDC-006). It holds the
-verifier on the pre-authentication session, encrypted under the deployment's data key
-(PRIV-RIGHT-005a), and redirects the browser to `/oidc/authorize` with the client
-identifier and the returned `request_uri` alone. On return, `GET /auth/signon/return`
-forgets the attempt, validates `state`, exchanges the code back-channel with its client
-secret and PKCE verifier, reads `sid` from the ID token, creates the per-app session bound to that session record, which carries its
-break-glass reason where it has one (OPS-BOOT-002, D-171), rotates the cookie
-(BFF-SESS-004), discards the token and
-sends the browser to the stored return address, which is followed only as a path of
-this application (`09` section 3). On `login_required` it pushes again without
-`prompt=none`, so the person signs in at the authentication application and the flow
-repeats. The sign-on is a navigation route (BFF-ERR-001): a `state` that is absent,
-unbound or not the one the browser was sent out with is refused with
-`auth.session.csrfinvalid` and sent nowhere; any other failure returns the browser to
-the stored return address with `error` `auth.session.expired`.
+AUTH-OIDC-006). It holds the verifier on the pre-authentication session, encrypted under
+the deployment's data key (PRIV-RIGHT-005a), and redirects the browser to
+`/oidc/authorize` with the client identifier and the returned `request_uri` alone. On
+return, `GET /auth/signon/return` forgets the attempt, validates `state`, exchanges the
+code back-channel with its client secret and PKCE verifier, reads `sid` from the ID
+token, creates the per-app session bound to that session record, rotates the cookie
+(BFF-SESS-004), discards the token and sends the browser to the stored return address,
+which is followed only as a path of this application (`09` section 3). The per-app
+session takes the record's instants and last downgrade, never the instant of derivation
+(AUTH-SESS-012, D-192), and carries its break-glass reason where it has one
+(OPS-BOOT-002, D-171). On `login_required` it pushes again without `prompt=none`, so the
+person signs in at the authentication application and the flow repeats. The sign-on is a
+navigation route (BFF-ERR-001): a `state` that is absent, unbound or not the one the
+browser was sent out with is refused with `auth.session.csrfinvalid` and sent nowhere;
+any other failure returns the browser with 302, to `returnTo` at the start and to the
+stored return address at the return, with `error` `auth.session.expired`; a start from a
+browser with no pre-authentication session issues one (BFF-CSRF-005a, D-192).
 
 **Values (D-166).** The client is the one the host declares for this application
 (`SignOnClient`, LIB-HOST-001). Its secret is the one the library generated for that
@@ -629,20 +631,24 @@ structured data and a correlation identifier. Rendered prose SHALL NOT cross it,
 the BFF SHALL NOT return HTML intended for a person to read — including framework
 default error pages.
 
-*Source: LIB-API-003, API-CONV-002, D-054, D-166*
+*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192*
 
-A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on
-round trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the
-browser to where it started with the code in the query parameter `error`, placed before
-any fragment; a return whose binding or `state` fails is answered
-`403 auth.session.csrfinvalid` and sent nowhere. The log records the route, the provider
-where there is one, and the trace, never the code, the `state` or anything the provider
-wrote.
+A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
+trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
+to where it started with the code in the query parameter `error`, placed before any
+fragment; a return whose binding or `state` fails is answered
+`403 auth.session.csrfinvalid` and sent nowhere. The codes each carries in `error` are
+those `09` lists for it, which its routes declare (CONV-DESIGN-006), and nothing else of
+a refusal's `details` crosses, save `retryAt` (BFF-ABUSE-001, D-192). The log records
+the route, the provider where there is one, and the trace, never the provider's
+authorization `code`, the `state` or anything the provider wrote.
 
 **Acceptance criteria**
 1. No response body contains a user-facing sentence.
 2. Every error carries a correlation identifier resolving to audit and logs.
 3. Every code appears in `10-reference.md`.
+4. A navigation's redirect carries `error`, `retryAt` beside a throttled or restriction
+   refusal, and nothing else of the refusal's `details`.
 
 ---
 
@@ -695,7 +701,7 @@ identifier.
 **BFF-STEP-001** — Where a request requires step-up, the BFF SHALL reject it with the
 step-up code rather than performing it.
 
-*Source: AUTH-STEP-001, D-166, D-191*
+*Source: AUTH-STEP-001, D-166, D-191, D-192*
 
 The frontend initiates the step-up flow and retries. The BFF does not redirect
 mid-request.
@@ -709,12 +715,14 @@ customer) — and never redirects.
 
 The `details` of the identity API's `auth.stepup.required` response — the three gate
 values, the `outcome`, the `options` and `pendingUntil` (`09` `/auth/step-up`, D-141) —
-pass through to the frontend unchanged; the BFF adds nothing and removes nothing.
+pass through to the frontend unchanged; the BFF adds nothing and removes nothing. On a
+navigation (BFF-ERR-001) the step-up code crosses in `error` with nothing of its
+`details` (D-192).
 
 **Acceptance criteria**
-1. The rejection names what is required — level, phishing-resistance and maximum
-   age — never a factor; the `options` list of presentable combinations is passed
-   through as the identity API supplied it.
+1. A rejection answered in a body names what is required — level, phishing-resistance
+   and maximum age — never a factor; the `options` list of presentable combinations is
+   passed through as the identity API supplied it.
 2. Retrying once a step-up 200 reports what meets the gate (`18` FE-API-004) succeeds
    without re-submitting business data the user would have to re-enter.
 3. An expired-session rejection carries `details.reauthenticate`; retrying after
@@ -730,17 +738,20 @@ identical whether or not the account exists. A send refused by a restriction
 row gives that answer, CONV-DESIGN-002, AUTH-ABUSE-004) SHALL cross the boundary as
 `auth.restriction.exceeded` with `retryAt`, identical whether or not the address is
 registered; a refused send that neither a chapter nor the operation's `09` row answers
-fails nothing and crosses nothing. A throttled answer to a navigation (a social
-provider's return) SHALL carry `retryAt` as a query member beside `error` (BFF-ERR-001).
+fails nothing and crosses nothing. A throttled answer, or a restriction's refusal, to a
+navigation (a social provider's round trip) SHALL carry `retryAt` as a query member
+beside `error` (BFF-ERR-001, D-192).
 
-*Source: AUTH-ABUSE-002, AUTH-ABUSE-003, D-146, D-166, D-186*
+*Source: AUTH-ABUSE-002, AUTH-ABUSE-003, D-146, D-166, D-186, D-192*
 
 **Acceptance criteria**
 1. Responses and timing are indistinguishable across existence.
 2. The remaining interval is communicated.
 3. A refused send for a registered and for an unregistered address produces identical
    responses carrying `retryAt`.
-4. A throttled provider return carries `error=auth.throttled` and `retryAt`.
+4. A throttled provider return carries `error=auth.throttled` and `retryAt`, and a
+   restriction's refusal on a navigation carries `error=auth.restriction.exceeded` and
+   `retryAt`.
 
 ---
 

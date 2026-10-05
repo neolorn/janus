@@ -91,12 +91,13 @@ one place, so no call site can omit them.
 **FE-API-003** — The frontend SHALL render errors from **codes**, never from server
 prose.
 
-*Source: LIB-API-003, D-054, D-166*
+*Source: LIB-API-003, D-054, D-166, D-192*
 
-Every code in `10-reference.md` has a message in every configured locale. A code with
-no message is a build failure, not a runtime surprise. A refusal returned on a
-navigation (a social provider's return, or the sign-on return of BFF-SESS-006) arrives
-as the query member `error` (BFF-ERR-001) and is rendered from its code the same way.
+Every code in `10-reference.md` has a message in every configured locale. A code with no
+message is a build failure, not a runtime surprise. A refusal returned on a navigation
+(a social provider's round trip, or the sign-on of BFF-SESS-006, at its start or its
+return) arrives as the query member `error` (BFF-ERR-001) and is rendered from its code
+the same way.
 
 **Acceptance criteria**
 1. No error is displayed by echoing a server string.
@@ -112,9 +113,13 @@ provided. An expired session SHALL NOT redirect the person to a sign-in page. A 
 no `details` means no session was held, and is FE-API-006's, save on a registration
 request, where it means the registration session ended (FE-REG-005), and on a request an
 enrolment session makes on its routes (`09` `POST /enrol/begin`), where it means that
-session ended and the person needs a new link (D-188, D-189).
+session ended and the person needs a new link (D-188, D-189). A navigation returned with
+`error` `auth.stepup.required` or `auth.session.expired` carries no `details` and is
+rendered as FE-API-006 states; after `auth.stepup.required` the person starts the action
+again, and its own request meets the gate in place (BFF-STEP-001, D-192).
 
-*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188, D-189*
+*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188, D-189,
+D-192*
 
 The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
 job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
@@ -171,14 +176,15 @@ D-191*
 
 ---
 
-**FE-API-005** — Throttling responses SHALL be surfaced with their retry interval,
-and the frontend SHALL NOT retry automatically before it elapses. A send refused by a
+**FE-API-005** — Throttling responses SHALL be surfaced with their retry interval, and
+the frontend SHALL NOT retry automatically before it elapses. A send refused by a
 restriction (`auth.restriction.exceeded`, AUTH-ABUSE-004) SHALL be rendered with its
-`retryAt` and the route to support, and the rendering SHALL be identical whether or
-not the address is registered. A navigation returned with `error=auth.throttled`
-carries `retryAt` as a query member (BFF-ABUSE-001) and is surfaced the same way.
+`retryAt` and the route to support, and the rendering SHALL be identical whether or not
+the address is registered. A navigation returned with `error=auth.throttled` or
+`error=auth.restriction.exceeded` carries `retryAt` as a query member (BFF-ABUSE-001,
+D-192) and is surfaced the same way.
 
-*Source: AUTH-ABUSE-002, BFF-ABUSE-001, D-146, D-166*
+*Source: AUTH-ABUSE-002, BFF-ABUSE-001, D-146, D-166, D-192*
 
 The wording is the frontend's (CONV-CONTENT-001), with one constraint: the refusal for
 a registered and for an unregistered address must read the same, because a difference
@@ -190,8 +196,8 @@ exceptions to the content rule).
 2. No automatic retry occurs within it.
 3. A restriction refusal shows `retryAt` and a way to reach support; the screen for a
    registered and for an unregistered address is identical in text and layout.
-4. A provider return carrying `error=auth.throttled` shows the interval its `retryAt`
-   names.
+4. A navigation returned with `error=auth.throttled` or
+   `error=auth.restriction.exceeded` shows the interval its `retryAt` names.
 
 ---
 
@@ -533,10 +539,12 @@ registration session's state from the server (`GET /register`, `GET /register/ev
 and SHALL NEVER hold it only in the browser. A registration request refused 401
 `auth.session.expired` means the registration session has ended: the wizard shows that
 the registration ended, with the sign-in exit and a way to begin again, and neither
-reauthenticates (FE-API-004) nor starts the sign-on (FE-API-006) (REG-SESS-005, D-186).
+reauthenticates (FE-API-004) nor starts the sign-on (FE-API-006) (REG-SESS-005, D-186);
+a provider round trip started to register and returned with `error`
+`auth.session.expired` means the same (`09`, D-192).
 
 *Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010,
-API-REDIR-002, D-166, D-186*
+API-REDIR-002, D-166, D-186, D-192*
 
 The first six steps run on the authentication application against the registration
 session; the account exists from the end of step 6; steps 7 to 10 run on the account

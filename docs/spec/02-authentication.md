@@ -144,7 +144,7 @@ requests and in credential records; eleven identifiers may appear in `loginFacto
 (D-151).
 
 *Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187,
-D-188, D-189, D-190*
+D-188, D-189, D-190, D-192*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -177,9 +177,11 @@ policy's gates, field by field, as a host-named gate that no policy states value
 `auth.stepup.required` with the outcome AUTH-STEP-002 gives, `pending` with
 `pendingUntil` among them (D-189), and where the session already meets that gate as
 AUTH-STEP-002 step 1 judges it the ask is answered 200 with `required` empty, nothing
-further being needed (D-188). An ask before a first factor sends nothing and is answered
-202, whatever the account holds; one after it, or under a session, naming a suspended
-number is answered as AUTH-RECOV-007 states (D-190).
+further being needed (D-188); each 200 with which an ask at a step-up is answered
+reports what the factors accepted on the challenge reach together, as every 200 of the
+step-up does (AUTH-STEP-002, D-192). An ask before a first factor sends nothing and is
+answered 202, whatever the account holds; one after it, or under a session, naming a
+suspended number is answered as AUTH-RECOV-007 states (D-190).
 
 **Acceptance criteria**
 1. `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are absent from every
@@ -407,16 +409,17 @@ since the factor succeeded, and the lock is judged after the code, never before 
 that a wrong code learns nothing of the lock (D-188). A right code sent to an address
 given up since is refused `auth.factor.rejected`, a refused factor counted and recorded
 with its spend in the same unit of work, and so is a right `phoneCode` code whose
-credential has been removed or invalidated since it was sent; one whose credential is
-suspended is answered as AUTH-RECOV-007 states (D-191). For every factor, the lock on
-the address the sign-in was opened with is judged after the factor's verification and
-counts no failure, and what the verification wrote (a code's spend, a credential's
-counter) is kept with that refusal (CONV-DESIGN-003, D-189); at a step-up, the lock on
-the address an email code was sent to is judged after the code (REG-DOM-001, D-190). The
-`emailCode` code SHALL be sent as the message kind `sign-in-code` and the `phoneCode`
-code as `secondstep-code`, never as a verification code.
+credential, the one its record names from its issue, has been removed or invalidated
+since it was sent (D-192); one whose credential is suspended is answered as
+AUTH-RECOV-007 states (D-191). For every factor, the lock on the address the sign-in was
+opened with is judged after the factor's verification and counts no failure, and what
+the verification wrote (a code's spend, a credential's counter) is kept with that
+refusal (CONV-DESIGN-003, D-189); at a step-up, the lock on the address an email code
+was sent to is judged after the code (REG-DOM-001, D-190). The `emailCode` code SHALL be
+sent as the message kind `sign-in-code` and the `phoneCode` code as `secondstep-code`,
+never as a verification code.
 
-*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189, D-190, D-191*
+*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189, D-190, D-191, D-192*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -440,8 +443,9 @@ restrictions bound how many they can ask for.
    `link.magic.lifetime`; each dies after `code.signin.attempts` wrong tries, whatever
    `code.verification.lifetime` and `code.verification.attempts` hold. The `emailCode`
    code is sent as `sign-in-code`.
-7. A right `phoneCode` code presented after the credential it was sent for was removed
-   or invalidated is refused `auth.factor.rejected`, counted and recorded, and spent.
+7. A right `phoneCode` code presented after the credential its record names was removed
+   or invalidated is refused `auth.factor.rejected`, counted and recorded, and spent,
+   whatever other credential of the factor the account holds.
 
 ---
 
@@ -1044,11 +1048,13 @@ was last downgraded (AUTH-SESS-009), origin address, device, idle expiry, absolu
 expiry. A presentation writes the instant of each level it reaches, its own and every
 lower one, and of phishing resistance where it reaches it, and changes no instant of
 what it does not reach: a bare password under a session that reached `aal2` earlier
-renews `aal1` alone. The level the session holds is the highest it has reached (D-191).
+renews no instant above `aal1`. The levels are those of `10` section 5.4, `delegated`
+among them, since an enrolment gate can ask it (AUTH-STEP-007, D-192). The level the
+session holds is the highest it has reached (D-191).
 
 Redis for speed, PostgreSQL as the durable copy.
 
-*Source: D-007, D-020.2, D-147, D-183, D-191*
+*Source: D-007, D-020.2, D-147, D-183, D-191, D-192*
 
 **Acceptance criteria**
 1. Revoking the session invalidates the app session, the auth session, and any
@@ -1118,7 +1124,7 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147, D-166, D-171*
+*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192*
 
 **The flow.** A BFF holding no session pushes an authorization request with
 `prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
@@ -1129,9 +1135,11 @@ case the BFF pushes again without `prompt=none` and the person signs in. The BFF
 exchanges the code **back-channel** on the machine profile (BFF-MACH-001) with its
 client secret and PKCE verifier, reads the `sid` claim that names the session record,
 creates its per-app session bound to that record, and discards the ID token. The per-app
-session inherits the record's assurance properties (AUTH-SESS-002) and, where the record
-belongs to a break-glass session, takes its reason from the record it is bound to
-(OPS-BOOT-002, D-171).
+session inherits the record's assurance properties (AUTH-SESS-002), with the instant the
+record last reached each level and phishing resistance and the record's last downgrade,
+never the instant of derivation, since deriving presents nothing (AUTH-SESS-001,
+AUTH-SESS-009, D-192), and, where the record belongs to a break-glass session, takes its
+reason from the record it is bound to (OPS-BOOT-002, D-171).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (API-REDIR-001), single-use short-lived
@@ -1159,6 +1167,10 @@ Every one is a standard requirement restated, not a mechanism designed here.
    access or ID token after the exchange.
 7. The per-app session references the session record named by `sid`, so revoking the
    record ends it (AUTH-SESS-004).
+8. A per-app session established at 10:00 from a record that last reached `aal2` at
+   09:00 passes no `aal2` gate whose maximum age is 30 minutes, and one established
+   after the record was downgraded passes no gate on proof reached before that
+   downgrade; establishing it changes no instant of the record.
 
 ---
 
@@ -1541,13 +1553,14 @@ split across two apps or folded into another.
 (AUTH-SESS-001) and the account's reachable assurance (AUTH-STEP-006) only; it SHALL
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
-*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191*
+*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191,
+D-192*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If a level at or above the gate's, and
    phishing resistance where the gate requires it, were each last reached within the
-   maximum age and after the session's last downgrade (AUTH-SESS-001, AUTH-SESS-009),
-   **require nothing**.
+   maximum age (none where the gate's level is `delegated`, AUTH-STEP-007) and after the
+   session's last downgrade (AUTH-SESS-001, AUTH-SESS-009), **require nothing**.
 2. **Otherwise offer every combination of the account's usable factors** (state
    `active`, AUTH-RECOV-007, of a factor the policy in force permits in `loginFactors`,
    and not a restricted entry withheld because its number's signal answers `risk`,
@@ -1556,22 +1569,26 @@ NOT read the account's list of enrolled factors, and no rule text SHALL name a f
    one factor at each call, the factors accepted held on the step-up's challenge until
    together they reach the gate (D-190). Each call that presents a factor writes into
    the session record what the factors accepted so far reach together (AUTH-SESS-001)
-   and answers with that, `factorRequired` with the factors still offered until the gate
-   is reached, and `complete` once it is or once no combination still offered can be
-   completed with the factors accepted, which ends the challenge; a `phoneCode` ask is
-   answered as AUTH-FACT-002 states; a step-up names no action, so its gate is the
-   strictest of the policy's gates, field by field (D-187), and the request it was for
-   is judged again by its own gate when it is repeated (D-191). A password alone reaches
-   AAL1; a passkey alone reaches AAL2 phishing-resistant; password + non-discoverable
-   WebAuthn credential (a security key as second factor) reaches AAL2
-   phishing-resistant, because WebAuthn is phishing-resistant whether or not the
-   credential is discoverable (AUTH-FACT-002, D-148); password + TOTP and password +
-   recovery code reach AAL2 without phishing resistance; password + SMS code
-   (`phoneCode`) reaches AAL2 and never phishing-resistance, so it satisfies a gate
-   whose level is `aal2` and never one that requires phishing resistance. A second
-   factor alone contributes nothing; a social credential, an email factor or a sign-in
-   link contributes nothing (AUTH-STEP-005, AUTH-FACT-003). Presenting a combination
-   writes exactly what it reached into the session record.
+   and answers with that (where they reach no level, as a second factor alone does,
+   nothing is written and `delegated`, not phishing-resistant, is answered, D-192),
+   `factorRequired` with the factors still offered until the gate is reached, and
+   `complete` once it is or once no combination still offered can be completed with the
+   factors accepted, which ends the challenge; a `phoneCode` ask writes nothing into the
+   session record and is answered as AUTH-FACT-002 states, its 200 reporting what the
+   factors accepted reach, `delegated`, not phishing-resistant, where they reach no
+   level (D-192); a step-up names no action, so its gate is the strictest of the
+   policy's gates, field by field (D-187), and the request it was for is judged again by
+   its own gate when it is repeated (D-191). A password alone reaches AAL1; a passkey
+   alone reaches AAL2 phishing-resistant; password + non-discoverable WebAuthn
+   credential (a security key as second factor) reaches AAL2 phishing-resistant, because
+   WebAuthn is phishing-resistant whether or not the credential is discoverable
+   (AUTH-FACT-002, D-148); password + TOTP and password + recovery code reach AAL2
+   without phishing resistance; password + SMS code (`phoneCode`) reaches AAL2 and never
+   phishing-resistance, so it satisfies a gate whose level is `aal2` and never one that
+   requires phishing resistance. A second factor alone contributes nothing; a social
+   credential, an email factor or a sign-in link contributes nothing (AUTH-STEP-005,
+   AUTH-FACT-003). Presenting a combination writes exactly what it reached into the
+   session record.
 3. **If no usable combination can reach the gate**, the answer is one of three,
    never a bare refusal:
    - the account's reachable assurance (AUTH-STEP-006) is **below** the gate (the
@@ -1628,8 +1645,8 @@ this design's own extension, recorded as a choice (D-125).
 2. Evaluating a gate reads the session record and the account's reachable
    assurance; it never enumerates enrolled factors.
 3. A subject whose session last reached the gate's level, and phishing resistance where
-   the gate asks for it, within the maximum age and after its last downgrade
-   (AUTH-SESS-009), is not challenged.
+   the gate asks for it, within the maximum age (none at a `delegated` gate,
+   AUTH-STEP-007) and after its last downgrade (AUTH-SESS-009), is not challenged.
 4. On an account whose reachable assurance is AAL2, a bare password passes no gate;
    password + TOTP, password + recovery code, password + security key, or a passkey
    does, and the subject chooses among those they can present.
@@ -1641,8 +1658,11 @@ this design's own extension, recorded as a choice (D-125).
 4c. A password at one call of a step-up and a TOTP code at the next pass a gate declared
    `aal2`, as password + TOTP does (AUTH-SESS-005a).
 4d. At a step-up whose strictest gate asks `aal2`, on an account holding a second step,
-   a password alone is answered 200 `factorRequired` reporting `aal1`, and renews the
-   instant of `aal1` alone.
+   a password alone is answered 200 `factorRequired` reporting `aal1`, and renews no
+   instant above `aal1`.
+4e. A `phoneCode` ask at a step-up answered 200, under a session that reached `aal2`
+   earlier and with no factor yet accepted on the challenge, reports `delegated`, not
+   phishing-resistant, and writes nothing into the session record.
 5. A customer holding only a password passes every customer gate with the password.
 6. Every combination that reaches the gate is offered; none that does not is.
 7. A subject with no usable combination is told to enrol or to report a loss; a
@@ -1735,14 +1755,17 @@ the enrolling session. Recovery (AUTH-RECOV-002, AUTH-RECOV-005) is the enrolmen
 a password under this rule, with the recovery artefact standing in for the session;
 it SHALL NOT change the state of any other authenticator.
 
-*Source: NIST SP 800-63B-4 §4.1.2.1, D-141, D-166*
+*Source: NIST SP 800-63B-4 §4.1.2.1, D-141, D-166, D-192*
 
 A password-only customer adds a passkey after a fresh password. A customer holding
 password + TOTP adds a passkey with password + TOTP. A social-only customer sets a
-password with no further gate — `delegated` is the lower value — and that password
-then reaches AAL1 at once; the notification to every channel is the control. Under
-the administrative policy the gate is AAL2 phishing-resistant, and the invitation or
-re-enrolment link stands in for the first credential.
+password with no further gate — `delegated` is the lower value — and that password then
+reaches AAL1 at once; the notification to every channel is the control. A gate whose
+level is `delegated` asks no maximum age: step 1 counts the session's `delegated`
+instant however old, since the one factor that reaches that level, a social credential,
+is never offered at a step-up (AUTH-STEP-005, D-192). Under the administrative policy
+the gate is AAL2 phishing-resistant, and the invitation or re-enrolment link stands in
+for the first credential.
 
 **Acceptance criteria**
 1. Enrolment of any authenticator produces a notification on every recorded channel
@@ -1753,6 +1776,9 @@ re-enrolment link stands in for the first credential.
 4. Setting a password on an existing account, by the person, by recovery or by an
    invitation, raises `CredentialEnrolled` with the catalogue entry `password` and no
    credential identifier.
+5. A social-only account whose session began longer ago than the maximum age the policy
+   gives `factor:enrol` sets a password with no presentation, and the enrolment is
+   notified to every recorded channel.
 
 ---
 

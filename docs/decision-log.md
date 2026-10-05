@@ -12852,6 +12852,8 @@ rules and the stop conditions, the report); `08` the preamble, CONV-VCS-001, CON
 
 > **Amended.** Question 58: a fault of the library's own inside a sign-in is no failed attempt and is neither counted nor recorded (D-188).
 
+> **Amended.** Question 46: the truth table's step-up rows cover a bound action judged from the library's session too, and CONV-VCS-004 names that judgement as permission logic (D-192).
+
 **Date:** 2026-10-01 · **Status:** accepted · **Amends:** D-108 (the sensitive-data categories are no seeded table), D-166 (the items, rules and sections its D-183 note lists), D-171 (item 1, where the key ring is registered), D-176 (where the key ring and the mail server in use are registered)
 
 **TL;DR.** The answers to the 45 questions the corrections-4 run parked under D-182, and
@@ -14624,6 +14626,8 @@ criterion 11), REG-IDENT-007 (body, criterion 8, new criteria 9 and 10).
 
 ## D-191 — Corrections-4 questions 202 to 210: the answers after D-190 was built
 
+> **Amended.** Question 205: the migration keeps the instant of phishing resistance a row already held, not the session's one instant; 203: a `phoneCode` ask's 200 at a step-up reports what the factors accepted on the challenge reach, as every 200 of the route does (D-192).
+
 **Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-190 (question 190, a held social credential and the provider's return; question 193, what each step-up call writes and answers; question 194, a failed first read is a refresh that fails), D-164 (what a held social credential answers when presented), D-166 (question 328, the host's assurance report gives the instant of each level), D-034 (WebAuthn, an equal counter is a possible clone), D-020 (20.2, the session record keeps the instant each level was last reached)
 
 **TL;DR.** Building D-190 raised nine questions. One is a real defect, to be proved by a
@@ -14760,6 +14764,189 @@ list), `POST /auth/step-up`, `GET /auth/session` (`lastStrongAuthAt`),
 (`reauthenticate`), section 5.23 (the range file's and the location file's scopes); `17`
 BFF-STEP-001 (criterion 2); `18` FE-API-004 (the step-up prompt); `20` REG-IDENT-007
 (body, new criterion 11).
+
+---
+
+## D-192 — Corrections-4 questions 211 to 217 and the truth-table ruling after D-191
+
+**Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-191 (question 205, the migration keeps the instant of phishing resistance a row already held; question 203, what the 200 of a `phoneCode` ask at a step-up reports), D-183 (question 46, the step-up rows of the truth table cover a gate judged from a session too)
+
+**TL;DR.** Building D-191 proved three defects by tests written first (205, 209, 210),
+fixed them, and raised seven questions and one request for a ruling. The ruling: the code
+that decides whether a session meets a step-up gate is permission logic, since it admits
+or refuses an action exactly as a host's report does, so the truth table now covers it and
+the change that fixed 205 owes its rows. A text code is judged against the very credential
+its record names (211). The codes a navigation round trip carries in `error` are declared
+on its routes and listed in `09`; the sign-on's failure answer is brought to BFF-SESS-006;
+a provider that cannot be reached gets a code of its own (212). A session derived from the
+record takes the record's instants, never the instant of derivation, so opening another
+application renews no proof (213). Every 200 of a step-up reports what the factors
+accepted reach, a `phoneCode` ask's included (217). 214 to 216 confirm what was built.
+
+**The questions.** Questions 211 to 217 of the corrections-4 report
+(`docs/reports/corrections-4.md`), and the ruling the run asked for on `91774d4c`. Each
+answer below names its question; the chapters carry the full rule.
+
+**The truth table (the ruling on `91774d4c`).**
+
+- **The session's gate judgement is permission logic.** Whether a session meets a step-up
+  gate (AUTH-STEP-002 step 1, the downgrade of AUTH-SESS-009 included) decides whether a
+  bound action is admitted, exactly as the judgement from a host's report does, and the
+  defect of question 205 was a permission defect the truth table did not see. CONV-VCS-004
+  now names that judgement in `Janus.Authentication` as permission logic, and
+  AUTHZ-TEST-001 criterion 1 covers a bound action judged from the library's session: met;
+  unmet on its level, its phishing resistance or its age, each where the gate asks it; a
+  lower level reached since, beside a higher one past the gate's maximum age; proof
+  reached only before the session's last downgrade. `91774d4c` owes those rows, written in
+  this run. What a step-up challenge offers (step 2) stays outside, as D-188 question 146
+  found. *Rejected:* drawing the line by project (a gate's judgement could then change
+  unseen wherever it sits).
+
+**Codes whose credential is gone (question 211).**
+
+- **211. Which credential a code was sent for.** The one its record names: a `phoneCode`
+  code's record names, when it is issued, the credential it is issued for, and the code is
+  judged against that credential's state; where it has been removed or invalidated since,
+  a right code is refused `auth.factor.rejected`, counted, recorded and spent, whatever
+  other credential of the factor the account holds; where it is suspended, it is answered
+  as AUTH-RECOV-007 states (AUTH-FACT-004 and its criterion 7). The migration need carry
+  no code pending when it runs: nothing is released and a code lives minutes, so such a
+  code may be removed and the person asks again. *Rejected:* any credential of the factor
+  the account held when the code was sent (it ties the code to a factor and a time, not to
+  the credential it went to, so another credential the account held then would answer for
+  the one removed).
+
+**The navigation round trips (question 212).**
+
+- **212. Where the codes a redirect carries are declared.** On the routes that answer with
+  the redirect, as a body's codes are, held by the contract test: the endpoint contract
+  file lists them under the redirect, since no status of `10` is sent with them, and an
+  integration test whose redirect carries a code its route does not declare fails
+  (CONV-DESIGN-006 and its criteria 3 and 4, BFF-ERR-001). `09` now lists them for the
+  provider round trip. At the start: `api.request.malformed` (an intent absent or not one
+  of the three), `auth.factor.notpermitted` (a provider the deployment does not declare),
+  `auth.provider.unavailable`, `auth.session.expired` (a link with no session, or a
+  registration with no registration session) and `identity.registration.signedin` (a
+  registration from a browser holding a session); a start to sign in from a browser with
+  no pre-authentication session issues one (BFF-CSRF-005a criterion 1) and is not refused.
+  At the continuation, for every intent `auth.throttled` and `auth.provider.unavailable`;
+  to sign in, and to register with a `sub` already linked, which signs in (REG-IDENT-008),
+  `auth.factor.rejected`, `auth.credential.suspended`, `auth.factor.notpermitted`,
+  `auth.factor.required` (an administrative-organization account, whose floor is `aal2`,
+  AUTH-SESS-005b) and `auth.policy.graceexpired`; to register,
+  `identity.registration.incomplete` (the age step not done; never
+  `identity.affirmation.required`, which is the terms step's), `auth.session.expired`,
+  `identity.identifier.invalid`, `identity.identifier.mixedscript`,
+  `identity.identifier.domainnotallowed` and `auth.restriction.exceeded`; to link,
+  `auth.factor.rejected`, `auth.factor.notpermitted`, `auth.stepup.required`,
+  `authz.restricted`, `authz.denied` and `auth.session.expired`. A throttled refusal, and
+  a send a restriction refuses, carry `retryAt` beside `error`; nothing else of a
+  refusal's `details` crosses. `auth.session.csrfinvalid` stays a 403 body that sends the
+  browser nowhere; the machine callback's redirect, whose `error` is the provider's own,
+  is outside the rule. A route or query value a navigation route cannot bind returns the
+  browser with `api.request.malformed` in `error`, never a 400 body (CONV-DESIGN-006). The
+  frontend renders every such return as FE-API-006 states; a navigation that returns
+  `auth.stepup.required` carries no `details`, so the person starts the action again and
+  its own request meets the gate in place (BFF-STEP-001, `18` FE-API-003 to FE-API-005).
+  BFF-ERR-001's log line now says "the provider's authorization `code`", which it always
+  meant: the code a refusal carries is logged as every refusal's is (BFF-LOG-001 criterion
+  2). The provider round trip answers 303, as `09` has always given it; the routes built
+  answer 302, the machine callback aside, and are brought to it. *Rejected:* declaring
+  only what a route answers in a body (the codes a person most often meets on a navigation
+  would stand in no contract).
+- **212, a provider that cannot be reached.** New code `auth.provider.unavailable`: the
+  provider's discovery document, its published keys or its token endpoint could not be
+  reached or read; the browser is returned with it, no failed attempt is counted, since
+  nothing the person presented failed, and `degradation` is raised under
+  `provider.unavailable:<provider>` with details `{ provider, part }`, `part` naming what
+  failed (`discovery`, `keys` or `token`), so the outage is seen (IDN-LIFE-012 criterion
+  6, OPS-OBS-002, `10` section 5.23, `11` section 7.4). Its row's status, 502, is the one
+  `ApiStatus` maps it to; a code a navigation carries goes with the redirect, so no
+  response bears it (`10` section 6). *Rejected:* `auth.factor.notpermitted`, which the
+  code gave (it tells the person the factor is barred where the provider is only down).
+- **212, the sign-on.** `09` answered a sign-on failure other than its `state` 401
+  `auth.session.expired`; BFF-SESS-006, BFF-ERR-001 and `18` FE-API-003 and FE-API-006
+  make the sign-on a navigation route whose failure returns the browser with `error`. The
+  chapter governs: both halves return the browser with 302, to `returnTo` at the start and
+  to the stored return address at the return, carrying `error` `auth.session.expired`,
+  which they declare; a start from a browser with no pre-authentication session issues one
+  (BFF-CSRF-005a). An `error` `login_required` at the return is no failure: the return
+  pushes again without `prompt=none`, as BFF-SESS-006 has it. *Rejected:* the 401 body (a
+  navigation would show the person raw JSON the frontend never sees to render).
+
+**The derived session (question 213).**
+
+- **213. The instants of a derived session.** The record's own: a per-app session
+  established from the record (AUTH-SESS-012) takes the instant the record last reached
+  each level and phishing resistance, and the record's last downgrade, never the instant
+  of derivation, since deriving presents nothing. So opening another application under a
+  record whose `aal2` proof is old passes no `aal2` gate whose maximum age has passed
+  (AUTH-SESS-012 criterion 8). *Rejected:* the instant of derivation (the defect of
+  question 205 again: whoever holds the authentication cookie would renew every proof by
+  opening an application).
+
+**The session record (questions 214 to 216).**
+
+- **214. The migration's instant of phishing resistance.** As built: the instant the row
+  already held is kept. It is the exact instant phishing resistance was reached and never
+  later than the session's one instant, so it is the stricter carry-over; D-191's wording
+  ("the instant of phishing resistance where it reached it" taken from the session's one
+  instant) is corrected to it.
+- **215. An instant for `delegated`.** As built: the record keeps an instant for each
+  level of `10` section 5.4, `delegated` among them, since an enrolment gate can ask it
+  (AUTH-SESS-001, AUTH-STEP-007). The host's report carries none for `delegated`, since no
+  gate judged from a report asks below `aal1` (`10` section 4.1a, LIB-HOST-004). A gate
+  whose level is `delegated`, which only an enrolment on a social-only account meets, asks
+  no maximum age: the one factor that reaches that level, a social credential, is never
+  offered at a step-up (AUTH-STEP-005), so an aged `delegated` instant could never be
+  renewed and the account could set no password, against AUTH-STEP-007's "no further gate"
+  and the two-move path of AUTH-STEP-008; the notification to every channel stays the
+  control (AUTH-STEP-002 step 1 and criterion 3, AUTH-STEP-007 criterion 5). A
+  presentation that reaches no level, a second factor alone, writes no instant,
+  `delegated`'s included (AUTH-STEP-002 step 2): the record never exceeds what was
+  presented (AUTH-STEP-008 invariant 6).
+- **216. `lastStrongAuthAt` nullable.** As built: null where the session never reached
+  `aal2` or above, as `09` gives it; the public member's change stands with its public
+  surface and changelog lines.
+
+**Step-up (question 217).**
+
+- **217. What a `phoneCode` ask's 200 reports.** What every 200 of the route reports: what
+  the factors accepted on the challenge reach together, `delegated` and not
+  phishing-resistant where they reach no level (none accepted yet, or a second factor
+  alone); the ask writes nothing into the session record (AUTH-STEP-002 step 2 and
+  criterion 4e, AUTH-FACT-002, `09` `POST /auth/step-up`). The ask is answered 200 with
+  `required` empty where the session already meets the gate as AUTH-STEP-002 step 1 judges
+  it, as `02` has said since D-188; `09`, which said "the factors already presented", now
+  says the same. *Rejected:* the highest level the session has reached (an `aal2` reached
+  hours ago would read as meeting the gate, and the frontend would retry into the same
+  refusal).
+
+**What the run reported besides.** The three leads D-191 asked to be proved first were
+real defects, each test seen failing before its fix: a bare password renewed an earlier
+`aal2` proof (205); a right `phoneCode` code was accepted after its credential was removed
+or invalidated (209); a counter of zero presented against a stored counter above zero was
+accepted (210). The last is the rule as AUTH-FACT-014 criterion 3 states it ("where either
+is non-zero"), not a step beyond it. The tests of the host's report could not be seen
+failing, since they name members that did not exist before; that stands.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `01` IDN-LIFE-012 (values, new criterion 6); `02` AUTH-FACT-002
+(values), AUTH-FACT-004 (authentication codes, criterion 7), AUTH-SESS-001 (body),
+AUTH-SESS-012 (the flow, new criterion 8), AUTH-STEP-002 (step 1, step 2, criteria 3 and
+4d, new criterion 4e), AUTH-STEP-007 (body, new criterion 5); `03` AUTHZ-TEST-001
+(criterion 1); `06` OPS-OBS-002 (body, values); `07` LIB-HOST-004 (body); `08`
+CONV-DESIGN-006 (body, criteria 3 to 5), CONV-LOG-005 (values), CONV-VCS-004 (body); `09`
+the preamble, API-CONV-003 (the 400 row), `POST /auth/step-up`, `GET /auth/signon` ·
+`GET /auth/signon/return`, `GET /auth/providers/{provider}` (the round trip, the codes
+`error` carries); `10` `auth.provider.unavailable` (new), `auth.session.expired`,
+`auth.stepup.required`, `auth.factor.notpermitted`, `identity.registration.signedin`,
+`auth.restriction.exceeded`, section 5.4 (`delegated`), section 5.23
+(`provider.unavailable:<provider>`), section 6 (502, the status of a navigation's code);
+`11` section 7.4 (new); `17` BFF-SESS-006 (body), BFF-STEP-001 (body, criterion 1),
+BFF-ERR-001 (body, new criterion 4), BFF-ABUSE-001 (body, criterion 4); `18` FE-API-003
+(body), FE-API-004 (body), FE-API-005 (body, criterion 4), FE-REG-005 (body).
 
 ---
 
@@ -14964,6 +15151,7 @@ BFF-STEP-001 (criterion 2); `18` FE-API-004 (the step-up prompt); `20` REG-IDENT
 | Corrections-4 questions 161 to 187: the answers after D-188 was built | D-189 |
 | Corrections-4 questions 188 to 201: the answers after D-189 was built | D-190 |
 | Corrections-4 questions 202 to 210: the answers after D-190 was built | D-191 |
+| Corrections-4 questions 211 to 217 and the truth-table ruling after D-191 | D-192 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

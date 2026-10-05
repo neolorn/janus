@@ -1465,27 +1465,28 @@ debugger.
 **OPS-OBS-002** — Degradations SHALL be visible, never silent. Fallback to an offline
 blocklist, a failed provider push, a notification whose attempts are exhausted (a send
 the restrictions or the gateway floor refuse, at its admission or at its retry, is no
-degradation and raises nothing, AUTH-ABUSE-004), a reconciliation discrepancy and a lost
-database channel (the registration signal, REG-SESS-003) SHALL each surface. The absence
-or staleness of a watch the library needs from the environment (a clock reference, a
-certificate renewal outcome, the location file, the datacenter range file while
-`datacenterRange` is among `abuse.botdefence.signals`, AUTH-ABUSE-008) is a degradation
-too, and so is a refresh of either file that fails (D-190).
+degradation and raises nothing, AUTH-ABUSE-004), a reconciliation discrepancy, a lost
+database channel (the registration signal, REG-SESS-003) and a social provider's round
+trip that cannot reach or read the provider (IDN-LIFE-012, D-192) SHALL each surface.
+The absence or staleness of a watch the library needs from the environment (a clock
+reference, a certificate renewal outcome, the location file, the datacenter range file
+while `datacenterRange` is among `abuse.botdefence.signals`, AUTH-ABUSE-008) is a
+degradation too, and so is a refresh of either file that fails (D-190).
 
 **Values (D-166).** Each degradation raises `degradation` (OPS-ALERT-001) under a scope
 naming it; the scopes include `password.blocklist.fallback`, `clock.reference.absent`,
 `clock.reference.unread`, `certificate.renewal.absent`, `certificate.renewal.unread`,
-and the location file's and the range file's (`10` section 5.23, D-190). A lost
-registration channel is raised with `details.component` `registration-channel` by the
-registration signal itself (REG-SESS-003), when a wait begins while its channel is not
-listening, in a scope and unit of work of its own, deduplicated by the window of
-OPS-ALERT-002; the event stream takes only the registration signal (LIB-API-005). A fall
-back to the offline blocklist is raised as `password.blocklist.fallback` with
-`details.configured` (the corpus configured) and `details.used` (`offline`) before the
-offline corpus is asked; a fall back that cannot be raised refuses the operation with
-what refused the raise.
+the location file's and the range file's (`10` section 5.23, D-190), and
+`provider.unavailable:<provider>` (D-192). A lost registration channel is raised with
+`details.component` `registration-channel` by the registration signal itself
+(REG-SESS-003), when a wait begins while its channel is not listening, in a scope and
+unit of work of its own, deduplicated by the window of OPS-ALERT-002; the event stream
+takes only the registration signal (LIB-API-005). A fall back to the offline blocklist
+is raised as `password.blocklist.fallback` with `details.configured` (the corpus
+configured) and `details.used` (`offline`) before the offline corpus is asked; a fall
+back that cannot be raised refuses the operation with what refused the raise.
 
-*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189, D-190*
+*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189, D-190, D-192*
 
 **Acceptance criteria**
 1. Each listed condition produces a monitored signal.

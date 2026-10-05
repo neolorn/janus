@@ -622,18 +622,22 @@ before or after a table (among them `authz.restricted` and `authz.denied` in sec
 `identity.registration.incomplete` for the step endpoints of section 2), and 422
 `integration.sms.balancefloor` where the `09` preamble gives it; what its mounting
 answers, where its row does not give it, is derived, as the chapter's preamble says, and
-declared by no endpoint. It declares codes only: the status of each is the one `10`
-gives it, which `ApiStatus` maps, and a code `ApiStatus` maps by its details is listed
-under each status it can take. The endpoint contract file (LIB-API-001) is generated
-from that metadata, from the typed results' and body metadata, and from the endpoint's
-mounting (`09`, preamble). Each endpoint declares those route and query values too, by
-name and type, in the same metadata; the declaration is generic over the type, so no
-reflection reads the handler (CONV-CODE-004). Where the framework could not bind a
-request, the error translation stage refuses it **400** `api.request.malformed`,
-`details.member` naming the first declared value, in the order declared, whose type's
-`TryParse` refuses the request's text.
+declared by no endpoint. A navigation route (BFF-ERR-001) declares the same way the
+codes `09` gives it to carry in the query member `error` of its redirect, which the
+contract file lists under that redirect, since no status of `10` is sent with them
+(D-192). An endpoint declares codes only: the status of each is the one `10` gives it,
+which `ApiStatus` maps, and a code `ApiStatus` maps by its details is listed under each
+status it can take. The endpoint contract file (LIB-API-001) is generated from that
+metadata, from the typed results' and body metadata, and from the endpoint's mounting
+(`09`, preamble). Each endpoint declares those route and query values too, by name and
+type, in the same metadata; the declaration is generic over the type, so no reflection
+reads the handler (CONV-CODE-004). Where the framework could not bind a request, the
+error translation stage refuses it **400** `api.request.malformed`, `details.member`
+naming the first declared value, in the order declared, whose type's `TryParse` refuses
+the request's text; on a navigation route it returns the browser instead, with that code
+in `error` and nothing of `details` (D-192).
 
-*Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187*
+*Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187, D-192*
 
 **Acceptance criteria**
 1. No type derives from `ControllerBase`.
@@ -642,15 +646,20 @@ request, the error translation stage refuses it **400** `api.request.malformed`,
    the internal service that carries its work.
 3. Every library endpoint declares the codes its `09` row and the text of its section or
    subsection give it, with `integration.sms.balancefloor` where the `09` preamble gives
-   it, and the contract file lists each under the status `10` gives it.
+   it, and the contract file lists each under the status `10` gives it; a navigation
+   route's codes carried in `error` are listed under its redirect.
 4. A response of a library endpoint in the integration tests that carries a code the
    endpoint neither declares nor answers by its mounting or the pipeline fails the test
    that made it. A body its protocol shapes, with no `code` (the provider's `/oidc/*`
    endpoints, the RFC 8935 answers of the Google security-event route), is outside this
-   criterion, and so is a path outside the library's mount, which is the host's.
+   criterion, and so is a path outside the library's mount, which is the host's. A
+   redirect of a navigation route whose `error` carries a code the route neither
+   declares nor answers by its mounting fails the test that made it; the machine
+   callback's redirect, whose `error` is the provider's own, is outside this sentence.
 5. A route or query value that does not parse as its type answers 400
-   `api.request.malformed` naming it, and each handler's typed route and query
-   parameters equal those its endpoint declares.
+   `api.request.malformed` naming it, or, on a navigation route, returns the browser
+   with it in `error`, and each handler's typed route and query parameters equal those
+   its endpoint declares.
 
 ---
 
@@ -1443,18 +1452,19 @@ level governs: failed authentication (`auth.authentication.failed`), denied auth
 refused), configuration change (`ops.configuration.changed`), break-glass use
 (`auth.breakglass.used`).
 
-*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190*
+*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192*
 
 **Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
 press (a link token unknown or expired included, when pressed) or on a social provider's
 return, a refused new-device verification code, or a refused break-glass credential. A
-plain open of a link, a press in another browser, and a provider's own error or a cancel
-present nothing and are not failed authentication, and neither is a fault of the
-library's own inside a sign-in or a step-up, which writes no `auth.stepup.failed`; a
-refused factor is one refused with a code AUTH-ABUSE-001 lists (D-188, D-189). A
-`phoneCode` ask presents nothing: refused `auth.factor.rejected` where no factor is
-left, or `auth.credential.suspended` for a suspended number, it is no failed
-authentication and writes no `auth.stepup.failed` (AUTH-FACT-002, AUTH-RECOV-007,
+plain open of a link, a press in another browser, a provider's own error or a cancel,
+and a provider that cannot be reached or read (`auth.provider.unavailable`,
+IDN-LIFE-012, D-192) present nothing and are not failed authentication, and neither is a
+fault of the library's own inside a sign-in or a step-up, which writes no
+`auth.stepup.failed`; a refused factor is one refused with a code AUTH-ABUSE-001 lists
+(D-188, D-189). A `phoneCode` ask presents nothing: refused `auth.factor.rejected` where
+no factor is left, or `auth.credential.suspended` for a suspended number, it is no
+failed authentication and writes no `auth.stepup.failed` (AUTH-FACT-002, AUTH-RECOV-007,
 D-190).
 
 **Acceptance criteria**
@@ -1538,11 +1548,14 @@ this item: the gate inspects single-parent commits only (D-158).
 **CONV-VCS-004** — A change under review (a pull request, or a push to the default
 branch) that touches permission logic SHALL change the truth table in the same change.
 Permission logic is the `Janus.Authorization` project, the authorization persistence of
-`Janus.Storage`, the model declaration types of `Janus.Core`, the mapping of the contract
-tables (`MapAuthorizationTables`), and a migration that changes the view
-`effective_grants`.
+`Janus.Storage`, the model declaration types of `Janus.Core`, the mapping of the
+contract tables (`MapAuthorizationTables`), a migration that changes the view
+`effective_grants`, and the judgement in `Janus.Authentication` of whether a session
+meets a step-up gate (AUTH-STEP-002 step 1, the downgrade of AUTH-SESS-009 included),
+which admits or refuses a bound action as the judgement from a host's report does
+(D-192).
 
-*Source: AUTHZ-TEST-001, CONV-TEST-003, D-166*
+*Source: AUTHZ-TEST-001, CONV-TEST-003, D-166, D-192*
 
 If there is no truth-table change, that is the signal to stop and write one. This is
 the one place the discipline is hard rather than advisory.

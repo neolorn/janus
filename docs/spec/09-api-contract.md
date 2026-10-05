@@ -18,12 +18,15 @@ and those the text of its section or subsection gives the routes that text gover
 before or after a table, which the endpoint declares (`08` CONV-DESIGN-006, D-187), and
 422 `integration.sms.balancefloor`, which an endpoint declares where its row answers
 `auth.restriction.exceeded` for a send that may go by SMS, an ask of AUTH-ABUSE-003
-excepted (AUTH-ABUSE-006, D-186), each under the status `10` gives it; and the answers
-its mounting gives it, where its row does not give them, which the file derives and
-nothing declares: 401 `auth.session.expired` where it requires a session, 403
-`auth.session.csrfinvalid` where the request-forgery layers of `17` section 4 apply to
-it, and 400 `api.request.malformed` where it reads a body or binds a typed route or
-query value. What the pipeline answers whatever the endpoint (429 `auth.throttled` from
+excepted (AUTH-ABUSE-006, D-186), each under the status `10` gives it (a code a
+navigation route carries in the query member `error` is listed under its redirect
+instead, CONV-DESIGN-006, D-192); and the answers its mounting gives it, where its row
+does not give them, which the file derives and nothing declares: 401
+`auth.session.expired` where it requires a session, 403 `auth.session.csrfinvalid` where
+the request-forgery layers of `17` section 4 apply to it, and 400
+`api.request.malformed` where it reads a body or binds a typed route or query value (on
+a navigation route, `api.request.malformed` carried in `error`, listed under its
+redirect). What the pipeline answers whatever the endpoint (429 `auth.throttled` from
 the browser profile's source-based rate limiting, 404 `authz.resource.notfound` for a
 path or method no endpoint serves, 500 `system.fault`) is listed once, beside the stage
 order, and not under each endpoint (D-183).
@@ -102,7 +105,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 |---|---|
 | 200 | Success with a body |
 | 204 | Success, no body |
-| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission), or a route or query value or a body member does not read as its type (an identifier that is not a UUID, or an app-password identifier outside its form; a role name, a restriction name or a document name outside its rule). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone |
+| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission), or a route or query value or a body member does not read as its type (an identifier that is not a UUID, or an app-password identifier outside its form; a role name, a restriction name or a document name outside its rule). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone. On a navigation route (BFF-ERR-001) a value it cannot bind returns the browser with `api.request.malformed` in `error`, and the start of a provider round trip whose `{provider}` names no declared provider returns it with `auth.factor.notpermitted` (D-192). |
 | 401 | No valid session: **session death only** |
 | 403 | Authenticated, not permitted, **and existence is not concealed**. `authz.denied` means only that a permission is absent (section 8 states when an identifier naming no row is answered so); the reserved account's refusals of OPS-BOOT-002 are answered with it too, and so is the report of a recovery-code export in an enrolment session whose second step has shown no codes (D-190). Also carries `auth.stepup.required` (step-up is a 403, never a 401), `authz.restricted` and `auth.session.csrfinvalid` |
 | 404 | Not found: a path naming a runtime record the deployment does not hold, answered with a named code (under `/admin` nothing is concealed; section 8 states the one case answered as a missing permission instead); **or concealed denial** (`authz.resource.notfound`); also a path under the prefix that no endpoint serves, and a method a served path does not take. 405 is not used and no `Allow` header is sent |
@@ -110,7 +113,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 | 422 | Well-formed but refused on meaning: a body referring to something that does not exist or cannot be acted on, a blocklisted password, a mixed-script identifier. Answered with a named code, and with `api.request.invalid` (`details.member`) where `10` names none more specific |
 | 429 | Throttled, or refused by a rate limit or a sending restriction (`auth.throttled`, `auth.restriction.exceeded`, and `integration.callback.rejected` for the callback rate limit only); carries `Retry-After` and `details.retryAt` |
 
-*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179, D-183, D-187, D-190*
+*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179, D-183, D-187, D-190, D-192*
 
 **Acceptance criteria**
 1. A concealed denial is byte-identical and timing-identical to a genuine 404.
@@ -680,33 +683,38 @@ account's, another account's included, one answer for both
 Raises an existing session's assurance. Same request and response shape as
 `/auth/factor`; called once per factor until the session reaches the gate. Each call
 that presents a factor writes into the session record what the factors accepted on the
-challenge reach together, and its **200** reports that in `assuranceLevel` and
-`phishingResistant`: `factorRequired`, with the factors still offered, until the
-strictest of the policy's gates is reached, and `complete` once it is or once no
-combination still offered can be completed with the factors accepted, which ends the
-challenge; the request the step-up was for is judged again by its own gate when it is
-repeated (AUTH-STEP-002, D-191). A factor the policy in force for the account does not
-permit is refused `auth.factor.notpermitted` before it is verified, and counted
+challenge reach together (nothing where they reach no level, D-192), and its **200**
+reports what they reach in `assuranceLevel` and `phishingResistant`: `factorRequired`,
+with the factors still offered, until the strictest of the policy's gates is reached,
+and `complete` once it is or once no combination still offered can be completed with the
+factors accepted, which ends the challenge; the request the step-up was for is judged
+again by its own gate when it is repeated (AUTH-STEP-002, D-191). A call that presents
+no factor, a `phoneCode` ask, writes nothing into the session record; its **200**, as
+every **200** of the route does, reports what the factors accepted on the challenge
+reach together, `delegated`, not phishing-resistant, where they reach no level (none
+yet, or a second factor alone, D-192). A factor the policy in force for the account does
+not permit is refused `auth.factor.notpermitted` before it is verified, and counted
 (AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask whose number answers `risk` is
 answered as `/auth/factor` answers it: **200** `factorRequired` with the combinations
 the challenge still offers, judged against the strictest of the policy's gates field by
 field, since the step-up names no action; **403** `auth.stepup.required` with the
 outcome AUTH-STEP-002 gives where none is left (`report-loss`, `enrol`, or `pending`
-with `pendingUntil`, D-189); and **200** with `required` empty where the factors already
-presented meet that gate (AUTH-FACT-002, AUTH-FACT-002b, D-187, D-188). The shape's
-refusals of a presented factor are this route's too: **422** with each code
-`/auth/factor` lists as a failed attempt (AUTH-ABUSE-001, D-188, D-189), and **422**
-`identity.identifier.domainnotallowed` where a right email code sent to an address the
-domain lock now refuses is presented: judged after the code, it counts no failure
-(REG-DOM-001, AUTH-FACT-004, D-190). A `phoneCode` ask naming a suspended number sends
-nothing and is **422** `auth.credential.suspended`, counting nothing, where the policy
-in force permits `phoneCode`, and **202** otherwise (AUTH-RECOV-007, D-190, D-191).
+with `pendingUntil`, D-189); and **200** with `required` empty where the session already
+meets that gate as AUTH-STEP-002 step 1 judges it (AUTH-FACT-002, AUTH-FACT-002b, D-187,
+D-188). The shape's refusals of a presented factor are this route's too: **422** with
+each code `/auth/factor` lists as a failed attempt (AUTH-ABUSE-001, D-188, D-189), and
+**422** `identity.identifier.domainnotallowed` where a right email code sent to an
+address the domain lock now refuses is presented: judged after the code, it counts no
+failure (REG-DOM-001, AUTH-FACT-004, D-190). A `phoneCode` ask naming a suspended number
+sends nothing and is **422** `auth.credential.suspended`, counting nothing, where the
+policy in force permits `phoneCode`, and **202** otherwise (AUTH-RECOV-007, D-190,
+D-191).
 
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191*
+D-191, D-192*
 
 Rotates the session identifier on success.
 
@@ -794,12 +802,19 @@ The browser profile's sign-on (BFF-SESS-006): both halves are the library's.
 answers **302** to the provider's `/oidc/authorize` carrying `client_id` and
 `request_uri` only; a browser already holding a per-app session is sent to `returnTo`,
 which is followed only as a path of this application. `GET /auth/signon/return` answers
-**302** to the stored return address with the session cookies set.
+**302** to the stored return address with the session cookies set. A start from a
+browser with no pre-authentication session issues one (BFF-CSRF-005a). The sign-on is a
+navigation route (BFF-ERR-001): a failure other than its `state` returns the browser
+with **302**, to `returnTo` at the start and to the stored return address at the return,
+carrying `error` `auth.session.expired` placed before any fragment, which both routes
+declare (BFF-SESS-006, CONV-DESIGN-006, D-192). An `error` `login_required` at the
+return is no failure: the return pushes again without `prompt=none` and answers **302**
+to `/oidc/authorize` (BFF-SESS-006).
 
-**403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`
-**401**: `auth.session.expired`, for any other failure
+**403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`; the
+browser is sent nowhere
 
-*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166*
+*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192*
 
 ---
 
@@ -1336,21 +1351,43 @@ session otherwise, and the browser is sent to the provider. The provider returns
 browser to `/callbacks/providers/{provider}/return` on the machine profile, by query or
 form post; that route ignores any cookie and answers only **303** to
 `/auth/providers/{provider}/return` carrying `code`, `state` and `error` in the query.
-The continuation finishes the round trip on the browser profile. A refusal of the
-person's attempt returns the browser to where it started with the code in the query
-member `error`, placed before any fragment; a throttled refusal carries `retryAt` beside
-it (`error=auth.throttled&retryAt=<instant>`, ISO 8601 in UTC), and a provider's return
-asks the source's delay before the code is traded (AUTH-ABUSE-001). A sign-in by a
-linked credential that is suspended, on a window or held after its provider's security
-event, is refused `auth.credential.suspended` once the provider vouches, the browser
-returned with it in `error`, a failed attempt counted (AUTH-RECOV-007, D-191).
+The continuation finishes the round trip on the browser profile. A start to sign in from
+a browser with no pre-authentication session issues one and binds the attempt to it
+(BFF-CSRF-005a, D-192). A refusal of the person's attempt returns the browser to where
+it started with the code in the query member `error`, placed before any fragment, and
+nothing else of the refusal's `details`; a throttled refusal, and a send a restriction
+refuses, carry `retryAt` beside it (`error=auth.throttled&retryAt=<instant>`, ISO 8601
+in UTC), and a provider's return asks the source's delay before the code is traded
+(AUTH-ABUSE-001, D-192). A sign-in by a linked credential that is suspended, on a window
+or held after its provider's security event, is refused `auth.credential.suspended` once
+the provider vouches, the browser returned with it in `error`, a failed attempt counted
+(AUTH-RECOV-007, D-191). Where the provider's discovery document, its published keys or
+its token endpoint cannot be reached or read, the browser is returned with
+`auth.provider.unavailable`, no failed attempt counted (IDN-LIFE-012, D-192).
+
+The codes `error` carries, which the routes declare (CONV-DESIGN-006, D-192): at the
+start, `api.request.malformed` (an intent absent or not one of the three),
+`auth.factor.notpermitted` (a provider the deployment does not declare; nothing is
+presented, so nothing is counted), `auth.provider.unavailable`, `auth.session.expired`
+(a link with no session, or a registration with no registration session) and
+`identity.registration.signedin` (a registration from a browser holding a session); at
+the continuation, for every intent `auth.throttled` and `auth.provider.unavailable`; to
+sign in, and to register with a `sub` already linked, which signs in (REG-IDENT-008),
+`auth.factor.rejected`, `auth.credential.suspended`, `auth.factor.notpermitted`,
+`auth.factor.required` (an administrative-organization account, whose floor is `aal2`,
+AUTH-SESS-005b) and `auth.policy.graceexpired`; to register,
+`identity.registration.incomplete` (the age step not done), `auth.session.expired`,
+`identity.identifier.invalid`, `identity.identifier.mixedscript`,
+`identity.identifier.domainnotallowed` and `auth.restriction.exceeded`; to link,
+`auth.factor.rejected`, `auth.factor.notpermitted`, `auth.stepup.required`,
+`authz.restricted`, `authz.denied` and `auth.session.expired`.
 
 **303**: to the provider, to the continuation, or back to `returnTo`
 **403**: `auth.session.csrfinvalid`, where no attempt is bound to the browser, it names
 another provider, or its `state` does not match; the browser is sent nowhere
 
 *Source: IDN-LIFE-012, REG-IDENT-008, BFF-MACH-001, BFF-CSRF-005a, BFF-ABUSE-001, D-166,
-D-191*
+D-191, D-192*
 
 ---
 

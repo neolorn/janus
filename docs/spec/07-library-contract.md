@@ -369,13 +369,14 @@ the application, by `MapIdentityWellKnown`, and SHALL NOT carry the prefix.
 **LIB-HOST-004** — Where authorization is consumed without authentication, the host
 SHALL supply an assurance provider if step-up is required, reporting for the caller, as
 the session record does (AUTH-SESS-001), the instant each assurance level was last
-reached (`Aal1At`, `Aal2At`, `Aal3At`, none where never), the instant phishing
-resistance was last reached (`PhishingResistantAt`, none where never) and the account's
-reachable assurance (`Reachable`), a presentation renewing only what it reaches. The
-gate is judged from that report as AUTH-STEP-002 step 1 judges a session (D-191). Absent
-one, step-up checks SHALL fail closed.
+reached (`Aal1At`, `Aal2At`, `Aal3At`, none where never; none for `delegated`, since no
+gate judged from a report asks below `aal1`), the instant phishing resistance was last
+reached (`PhishingResistantAt`, none where never) and the account's reachable assurance
+(`Reachable`), a presentation renewing only what it reaches. The gate is judged from
+that report as AUTH-STEP-002 step 1 judges a session (D-191). Absent one, step-up checks
+SHALL fail closed.
 
-*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191*
+*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191, D-192*
 
 **Acceptance criteria**
 1. Authorization alone compiles and runs.

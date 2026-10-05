@@ -363,6 +363,16 @@ unavailable → password set and change **fail rather than accept unscreened**
 Do not disable screening to restore service. Blocklist screening is the load-bearing
 control now that composition rules are gone.
 
+### 7.4 Social sign-in providers
+
+Unreachable (`degradation` under `provider.unavailable:<provider>`): the person is
+returned with `auth.provider.unavailable`; nothing is counted or changed. Those whose
+only way in is that provider must wait; everyone else can use another factor. Do not
+remove the provider's declaration to quiet the alert: a provider the deployment does not
+declare answers `auth.factor.notpermitted` at the round trip, and its security events
+are refused, Google's with `invalid_issuer` and Apple's with
+`integration.callback.rejected` (`09` section 10, IDN-LIFE-012a, D-192).
+
 
 
 ## 8. Security incidents
