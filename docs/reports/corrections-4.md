@@ -4678,3 +4678,32 @@ its commits can be read.
 - From the docs commit `a6297785` to the merge of `part/bot-defence` (`0cb54693`), every commit fails one contract test, `SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource`, for the two `10` rows that part builds.
 - One description on the working branch was over 72 characters (the report commit of questions 188 and 189). It was not pushed; it was reworded, and the five commits above it were written again over it with the same trees, authors and dates. The merge hashes this report gives are the ones that stand.
 - Open: questions 188 to 201 (section 4). Not built for them: the comparison of a configured origin with a ceremony's (188); `KeyRing`'s static members read in `KeyRingService` (189); what a suspended authenticator answers (190); the answers of 191 and 192; the lead of 193, unconfirmed; any raise by the `datacenter-ranges` job (194); the in-process refusal in the operations that take only an access context (195); what questions 198 to 200 park.
+
+**`corrections-4`, after the items of D-190.** Full gate at `eb1d0dda`, run locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). It ran twice: the run at `403b8609` was red on one integration test, below, and every other job of it passed. The pipeline's last run on the pull request covers `13101bea`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3628 |
+| Contract tests | passed, 148 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1028 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 103 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). No migration was added since the last gate |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The run at `403b8609`: `BackgroundJobsTests.AUTH_ABUSE_008_AC6_ARunOfTheRangesJobRaisesTheAbsenceThoughNoRegistrationArrivesAsync` failed (integration 1027 of 1028). Another test of its class runs a pass 40 days later on the test clock; where that one ran first, its row in the alert ledger folded this test's raise. The test now clears the ledger before its pass (`eb1d0dda`, test code only). The cause was read from the ledger's claim statement; the failing order was not reproduced.
+- The fast checks were not run on the docs commit `ed761159` or on `9305c0d3`; they pass at each merge from `5b923f31` on.
+- Open: questions 202 to 210 (section 4). Not built for them: writing the session only once a step-up's gate is reached (203); another answer for a step-up that cannot reach its gate (204); the leads of 205 and 209, unconfirmed; `auth.credential.suspended` for a suspended social credential whose provider vouches (208); refusing a suspended key before its counter is judged (210). Questions 202, 206 and 207 park nothing.
