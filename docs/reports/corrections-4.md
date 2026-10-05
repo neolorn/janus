@@ -1618,6 +1618,21 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Public surface: the one overload of `IIdentifiers.LandAsync`, with its changelog line. No path of the truth-table change check is touched.
 - Parked: questions 198 to 201.
 
+### `part/hosting` (D-190), merged as `5b923f31`: questions 188, 189 and 194
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 188: every origin of `webauthn.origins` and `webauthn.relatedorigins` is held in its serialization (scheme, host in ASCII form, the port only where it is not the scheme's default); a ceremony's origin is matched against the origins so held, ordinally; the well-known document lists the related origins in that form | `802451ed` | AUTH-FACT-010, AUTH-FACT-012 | `WebAuthnServiceTests.AUTH_FACT_010_AC6_AnOriginConfiguredInUnicodeAdmitsACeremonyInAsciiFormAsync`, `WebAuthnServiceTests.AUTH_FACT_010_ACeremonyFromAnOriginNotHeldIsRefusedAsync`, `RelyingPartyTests.AUTH_FACT_010_AConfiguredOriginIsHeldInItsSerialization`, `RelyingPartyTests.AUTH_FACT_010_ARelatedOriginIsHeldInItsSerialization`, `RelyingPartyTests.AUTH_FACT_012_AC1_TheDocumentListsEachRelatedOriginInItsSerialization`, `RelyingPartyTests.AUTH_FACT_012_AC1_TheDocumentListsExactlyTheConfiguredOrigins` |
+| Question 189: the secret names and the refusal of a secret not available stand in the internal static class `KeyRingSecrets` of `Janus.Core`, beside `IKeyRingFilling`; `Janus.Hosting` names no seam's implementation anywhere | `c170fb37` | CONV-DESIGN-007 | `PublicSurfaceTests.CONV_DESIGN_007_AC7_NoTypeOfTheHostingProjectNamesASeamsImplementationAnywhere` (replaces `CONV_DESIGN_007_AC7_NoConstructorOrFactoryOfTheHostingProjectNamesASeamsImplementation`, whose assertions it keeps) |
+| Question 194, the location file: its three degradations carry their scope (`location.database.absent`, `.stale`, `.refresh`) on the alert raised and its record; before, the scope was empty and the name stood only in the deduplication key | `a016f14d` | INT-GEN-006 | `LocationDatabaseTests.INT_GEN_006_AC2_TheMissingFileSurfacesAsADegradationAsync`, `LocationDatabaseTests.INT_GEN_006_AC2_AFailedRefreshSurfacesAsADegradationAsync`, `LocationDatabaseTests.INT_GEN_006_AFileWithNoDateIsRefusedAsync`, `LocationDatabaseTests.INT_GEN_006_AStaleFileAnswersNoLocationAndIsRaisedAsync` |
+| Question 194, the range file: a read that fails raises `degradation` under `botdefence.ranges.refresh` and keeps the copy held; while `datacenterRange` is among the signals, each run of the `datacenter-ranges` job raises `botdefence.ranges.absent` or `botdefence.ranges.stale`; the raise where a registration is judged stays | `9578aaa6` | AUTH-ABUSE-008, INT-GEN-006 | `DatacenterRangesTests.AUTH_ABUSE_008_AC6_AFailedRefreshIsRaisedAndKeepsTheCopyHeldUntilItIsStaleAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_ARefreshWhoseFileIsRefusedWholeIsRaisedAndKeepsTheCopyHeldAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_EachRunWithNoRangeSourceRaisesTheAbsenceThoughNoRegistrationArrivesAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_EachRunWithNoFileReadRaisesTheAbsenceThoughNoRegistrationArrivesAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_EachRunWithAStaleFileRaisesTheStalenessThoughNoRegistrationArrivesAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_WithTheSignalOutOfTheSetARunRaisesNeitherAbsenceNorStalenessAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC6_ARunWhoseDegradationCannotBeRaisedFailsAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_WithNoFileReadTheSignalDoesNotFireAndDegradationIsRaisedAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AFileWithNoDateIsRefusedAsync`, `BackgroundJobsTests.AUTH_ABUSE_008_AC6_ARunOfTheRangesJobRaisesTheAbsenceThoughNoRegistrationArrivesAsync` |
+
+- A configured origin written with a path or a trailing slash is held as scheme, host and port alone; none is refused for it.
+- The tests of questions 189 and 194 were written before the change and did not compile against the code before it, so they were not seen failing; those of 188 were.
+- `a016f14d` was built on its own at the merge; its tests ran with `9578aaa6`.
+- No migration, no public surface, no path of the truth-table change check.
+- Question 202.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4369,6 +4384,17 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the specification says.** The chapters state the behaviour and name none of these.
 - **Parked.** Nothing: built as above.
 - **Answer:** D-190.
+
+**202. Tier 2. AUTH-ABUSE-008 criterion 6 and `10` section 5.23: `botdefence.ranges.refresh` at the file's first read where a registration is judged.**
+
+- **Item.** Question 194.
+- **What the code does.** Where no run of the job has read the file yet, the first registration judged reads it; a read that fails there raises `botdefence.ranges.refresh` and then `botdefence.ranges.absent`. The location file does the same at its first read.
+- **What the specification says.** The range file is "refreshed and judged for age exactly as the IP location file is"; D-190 has the failed refresh raised "at the refresh".
+- **Readings.**
+  1. As built: every read that fails is a refresh that fails.
+  2. Only the job's read raises `botdefence.ranges.refresh`; the read at a registration raises the absence alone.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
 
 ## 5. Gate result
 
