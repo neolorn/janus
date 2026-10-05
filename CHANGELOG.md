@@ -22,12 +22,18 @@ against the public contract of LIB-API-001.
   provider vouches, a failed attempt counted and recorded, where it returned
   `error=auth.factor.rejected`. On an account that is not active it is refused
   `auth.factor.rejected` as an active credential is.
-- A right `phoneCode` code presented at `POST /auth/factor` or `POST /auth/step-up`
-  after the credential it was sent for was removed or invalidated is spent and refused
-  422 `auth.factor.rejected`, a failed attempt counted and recorded, where it was
-  accepted for as long as the code lived. A credential enrolled after the code was sent
-  does not answer for the one that is gone, and a wrong code is refused as any wrong
-  code is.
+- A `phoneCode` code names, from its issue, the one credential it is issued for, and is
+  judged against that credential alone. A right code presented at `POST /auth/factor`
+  or `POST /auth/step-up` after that credential was removed or invalidated is spent and
+  refused 422 `auth.factor.rejected`, a failed attempt counted and recorded, where it
+  was accepted for as long as the code lived; where that credential is suspended it is
+  spent and refused 422 `auth.credential.suspended`. No other credential of the factor
+  answers for it, whether the account held it when the code was sent or enrolled it
+  since, and a wrong code is refused as any wrong code is. `identity.signin_links`
+  gains the `credential` column, which a `phoneCode` row must fill and no other row
+  may (`ck_signin_links_credential`); the migration
+  `NameTheCredentialASecondStepCodeIsIssuedFor` removes each `phoneCode` code pending
+  when it runs, so the person asks for another.
 - `POST /auth/step-up` declares 422 `identity.identifier.domainnotallowed`, which it
   answers where a right `emailCode` code was sent to an address a domain lock now
   refuses: the lock is judged after the code, the code is spent, and no failed attempt

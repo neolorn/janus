@@ -16,7 +16,9 @@ namespace Janus.Authentication.SignIn;
 /// where the sign-in began when they opened it somewhere else. The address it went to is
 /// kept, so that a domain lock that changed while it was out is judged when it is used.
 /// A code the library texts as a second step is issued for one sign-in or step-up and
-/// answers that one alone (AUTH-FACT-002 AC4).
+/// answers that one alone (AUTH-FACT-002 AC4), and it names, from its issue, the
+/// credential it is issued for, which is the one it is judged against when it is
+/// presented (AUTH-FACT-004 AC7).
 /// </remarks>
 internal sealed class PendingSignIn
 {
@@ -25,6 +27,7 @@ internal sealed class PendingSignIn
         SubjectId subject,
         Factor factor,
         IdentifierId? email,
+        AuthenticatorId? credential,
         [NeverLogged] byte[] code,
         byte[]? browser,
         byte[]? challenge,
@@ -35,6 +38,7 @@ internal sealed class PendingSignIn
         Subject = subject;
         Factor = factor;
         Email = email;
+        Credential = credential;
         Code = code;
         Browser = browser;
         Challenge = challenge;
@@ -54,6 +58,12 @@ internal sealed class PendingSignIn
 
     /// <summary>The email address it went to, where it went to one.</summary>
     public IdentifierId? Email { get; }
+
+    /// <summary>
+    /// The credential it was issued for, where it is a second step's code, or nothing
+    /// where it was issued for none.
+    /// </summary>
+    public AuthenticatorId? Credential { get; }
 
     /// <summary>The code the same message carried, held as it is compared.</summary>
     [NeverLogged]
@@ -82,12 +92,24 @@ internal sealed class PendingSignIn
     public int WrongAttempts { get; private set; }
 
     /// <summary>
+    /// Whether an entry's code is issued for a credential: a second step the library
+    /// texts when it is asked for, rather than a sign-in a channel alone carries.
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    /// <returns>Whether its code names a credential.</returns>
+    public static bool NamesCredential(Factor factor) =>
+        FactorCatalogue.Delivered.Contains(factor) && FactorCatalogue.Of(factor).CanBeSecondFactor;
+
+    /// <summary>
     /// Issues one.
     /// </summary>
     /// <param name="token">The secret the message carries.</param>
     /// <param name="subject">Whose sign-in.</param>
     /// <param name="factor">Which factor it stands for.</param>
     /// <param name="email">The email address it goes to, where it goes to one.</param>
+    /// <param name="credential">
+    /// The credential it is issued for, where it is a second step's code.
+    /// </param>
     /// <param name="code">The code the same message carries.</param>
     /// <param name="browser">What the requesting browser carried, or nothing.</param>
     /// <param name="challenge">
@@ -96,17 +118,40 @@ internal sealed class PendingSignIn
     /// <param name="at">Now.</param>
     /// <param name="lifetime">How long it works for.</param>
     /// <returns>The pending sign-in.</returns>
+    /// <exception cref="ArgumentException">
+    /// A second step's code names no credential, or another entry's names one.
+    /// </exception>
     public static PendingSignIn Issue(
         OpaqueToken token,
         SubjectId subject,
         Factor factor,
         IdentifierId? email,
+        AuthenticatorId? credential,
         [NeverLogged] string code,
         byte[]? browser,
         byte[]? challenge,
         DateTimeOffset at,
-        TimeSpan lifetime) =>
-        new(token.Fingerprint(), subject, factor, email, Held(code), browser, challenge, at, at + lifetime);
+        TimeSpan lifetime)
+    {
+        if (NamesCredential(factor) != credential.HasValue)
+        {
+            throw new ArgumentException(
+                "A second step's code names the credential it is issued for, and no other entry's names one.",
+                nameof(credential));
+        }
+
+        return new PendingSignIn(
+            token.Fingerprint(),
+            subject,
+            factor,
+            email,
+            credential,
+            Held(code),
+            browser,
+            challenge,
+            at,
+            at + lifetime);
+    }
 
     /// <summary>
     /// The pending sign-in as the store holds it.
@@ -115,6 +160,7 @@ internal sealed class PendingSignIn
     /// <param name="subject">Whose sign-in.</param>
     /// <param name="factor">Which factor it stands for.</param>
     /// <param name="email">The email address it went to, where it went to one.</param>
+    /// <param name="credential">The credential it was issued for, where it names one.</param>
     /// <param name="code">The code it carries.</param>
     /// <param name="browser">What the requesting browser carried, or nothing.</param>
     /// <param name="challenge">
@@ -130,6 +176,7 @@ internal sealed class PendingSignIn
         SubjectId subject,
         Factor factor,
         IdentifierId? email,
+        AuthenticatorId? credential,
         [NeverLogged] byte[] code,
         byte[]? browser,
         byte[]? challenge,
@@ -140,7 +187,17 @@ internal sealed class PendingSignIn
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(code);
 
-        return new PendingSignIn(fingerprint, subject, factor, email, code, browser, challenge, issuedAt, expiresAt)
+        return new PendingSignIn(
+            fingerprint,
+            subject,
+            factor,
+            email,
+            credential,
+            code,
+            browser,
+            challenge,
+            issuedAt,
+            expiresAt)
         {
             WrongAttempts = wrongAttempts,
         };

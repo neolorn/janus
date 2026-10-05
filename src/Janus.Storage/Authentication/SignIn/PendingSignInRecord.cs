@@ -28,6 +28,11 @@ internal sealed class PendingSignInRecord
     /// <summary>The <c>email</c> column: the address it went to, where it went to one.</summary>
     public IdentifierId? Email { get; set; }
 
+    /// <summary>
+    /// The <c>credential</c> column: the credential a second step's code was issued for.
+    /// </summary>
+    public AuthenticatorId? Credential { get; set; }
+
     /// <summary>The <c>code</c> column.</summary>
     [NeverLogged]
     public byte[] Code { get; set; } = [];
