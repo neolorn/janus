@@ -1711,6 +1711,25 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No public surface line, no change to `endpoints.txt`, no path of the truth-table change check.
 - Question 218.
 
+### `part/gates` (D-192), merged as `18d09076`: the truth-table ruling, questions 213 and 217, the `delegated` gate
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| The ruling: the truth-table change check watches the files that hold the session's gate judgement, `src/Janus.Authentication/Sessions/Session.cs` and `src/Janus.Authentication/Factors/StepUp.cs` | `3d9be581` | CONV-VCS-004 | None: the repository holds no test of the gate script. Run by hand: over `91774d4c` alone it now fails, over `a57a48ff` and over `78d544e8` it passes |
+| The ruling: the rows `91774d4c` owed, a bound action judged from the library's session (gate `aal2`, phishing-resistant, 5 minutes): met; below the level; not phishing-resistant; proof older than the maximum age; a lower level reached since beside the gate's level past its maximum age; proof reached only before the last downgrade | `8ebda000` | AUTHZ-TEST-001 | `TruthTableTests.AUTHZ_TEST_001_AC2_EverySessionCaseDecidesTheSameWayThroughBothPathsAsync` |
+| Question 213: a derived session takes the instant its record last reached each level and phishing resistance, and the record's last downgrade; three truth-table rows | `ef586196` | AUTH-SESS-012 | `SessionServiceTests.AUTH_SESS_012_AC8_ADerivedSessionTakesItsRecordsInstantsAndLastDowngradeAsync`, the session theory of `TruthTableTests` |
+| Question 217: the 200 of a `phoneCode` ask at a step-up reports what the factors accepted on the challenge reach, `delegated` and not phishing-resistant where they reach no level, and writes nothing | `f6da93c0` | AUTH-STEP-002, AUTH-FACT-002 | `AuthenticationServiceTests.AUTH_STEP_002_AC4e_ATextCodeAskWithNoFactorAcceptedReportsDelegatedAndWritesNothingAsync`, `AuthenticationServiceTests.AUTH_STEP_002_ATextCodeAskAfterAPasswordReportsWhatTheFactorsAcceptedReachAsync`, `AuthenticationServiceTests.AUTH_STEP_002_ASecondFactorAloneAtAStepUpWritesNoInstantAndReportsDelegatedAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpTheSessionAlreadyMeetsRequiresNothingAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithWhatIsLeftAsync` |
+| A gate whose level is `delegated` asks no maximum age; the downgrade still counts; one truth-table row | `20246a98` | AUTH-STEP-002, AUTH-STEP-007, AUTHZ-TEST-001 | `CredentialServiceTests.AUTH_STEP_007_AC5_ASocialOnlyAccountSetsAPasswordFromASessionOlderThanTheGatesMaximumAgeAsync`, `StepUpTests.AUTH_STEP_002_AC3_AGateWhoseLevelIsDelegatedAsksNoMaximumAge`, `StepUpTests.AUTH_STEP_002_AC3_AGateWhoseLevelIsDelegatedCountsNothingReachedUpToTheLastDowngrade`, `StepUpTests.AUTH_STEP_002_AC3_AnEnrolmentGateAboveDelegatedAsksItsMaximumAge`, the session theory of `TruthTableTests` |
+
+- The six rows of the ruling passed as written; no code changed for them.
+- Question 213's test was written first and failed: a session derived an hour after its record reached `aal2` passed an `aal2` gate of 30 minutes.
+- Question 217: four tests failed before the change, each on the level reported (the session's highest, where the factors accepted reach less). A second factor alone already wrote no instant, `DelegatedAt` included, and already reported `delegated`: its test passed before any change. An ask was already answered with `required` empty from the session's own judgement (step 1), not from the challenge's factors; nothing changed there.
+- The test of AUTH-STEP-007 criterion 5 was written first and failed: the password was refused `auth.stepup.required`.
+- `StepUp.cs` holds step 1 and, in the same file, the combinations step 2 offers. The check works by file, so a change to the offer alone in that file is asked a truth-table change too.
+- The row written for the `delegated` gate is its refusing side (a session that reached `delegated` alone passes no bound action's gate). No action can be bound to a `delegated` gate (`GateLevel` has no such member; the gate arises only at an enrolment on an account that reaches no more), so the admitting side is held by the unit tests and the test of AUTH-STEP-007 criterion 5, not by a row.
+- No migration, no public surface line, no change to `endpoints.txt`.
+- Questions 219 and 220.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4618,6 +4637,32 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** The record names "the credential it is issued for". An ask names a factor, never a credential, and a number is tied to no credential row. No chapter says which of several active `phoneCode` credentials the code of an ask is issued for.
 - **What the code does.** The ask names the one the order of IDN-ATTR-008 gives among the account's active credentials of the factor: the one marked preferred, else the most recently enrolled. A record cannot be written naming none, so question 211 could not be built with this left open. No test pins which of two is named. No path of the library enrols a `phoneCode` credential today; only test arrangements hold one.
 - **Parked.** Nothing further: an account with one active credential of the factor, the judgement and the migration do not depend on it.
+- **Answer:** pending.
+
+**The ruling asked on `91774d4c`: whether the judgement of a gate from a session owes a truth-table change.**
+
+- **Item.** Question 205.
+- **Answer:** D-192. Built in `3d9be581` and `8ebda000`.
+
+**219. Tier 2. AUTH-FACT-002 criterion 7 and `09` `POST /auth/step-up`: `required` on a `phoneCode` ask answered 200.**
+
+- **Item.** Question 217.
+- **What the code does.** Where the number's signal withholds the code, the ask's 200 lists in `required` every factor of the combinations left, a factor already accepted on the challenge among them. A call that presents a factor leaves out the factors already accepted.
+- **What the specification says.** `09`: the 200 names "the combinations the challenge still offers".
+- **Readings.**
+  1. As it is.
+  2. `required` on an ask leaves out the factors already accepted, as a presenting call's does.
+- **Parked.** Reading 2. No test asserts `required` after a factor was accepted.
+- **Answer:** pending.
+
+**220. Tier 2. AUTH-STEP-002 criterion 3: `maxAge` in the refusal of a `delegated` gate.**
+
+- **Item.** The `delegated` gate of D-192.
+- **What the code does.** A `delegated` gate asks no maximum age, and refuses only a session downgraded since. That refusal's `details` still carry the `maxAge` the policy gives the action.
+- **Readings.**
+  1. As it is.
+  2. The refusal of a gate that asks no maximum age carries none.
+- **Parked.** Reading 2.
 - **Answer:** pending.
 
 ## 5. Gate result
