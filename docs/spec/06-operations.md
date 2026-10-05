@@ -690,7 +690,7 @@ protected keys (OPS-CFG-005).
 | **Erasure or takedown delivery exhausted its retries** | High | IDN-LIFE-003a |
 | **Certificate renewal failure** | High — a total-outage precursor | INF-TLS-003 |
 | **Host clock drift beyond tolerance** | Normal | INF-HOST-001 |
-| **Degradation: blocklist fallback, failed provider push, undelivered notification (attempts exhausted), reconciliation drift, registration channel lost, a watch the environment does not supply** | Normal | OPS-OBS-002 |
+| **Degradation: blocklist fallback, failed provider push, undelivered notification (attempts exhausted), reconciliation drift, registration channel lost, a watch the environment does not supply, a failed refresh of the location or range file** | Normal | OPS-OBS-002, D-190 |
 | **Repeated callback verification failure** | Normal | BFF-MACH-003 |
 | **Unusual rate of duplicate-identifier notifications** — an enumeration probe | Normal | AUTH-ABUSE-003, D-121 |
 | **Privacy-request decision deadline approaching** — `privacy.request.warninglead` before it | Normal | PRIV-RIGHT-002, D-126 |
@@ -706,7 +706,7 @@ protected keys (OPS-CFG-005).
 | **`legal.governinglanguage` changed**, raised beside `protected-setting-changed` | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
 
-*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186*
+*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186, D-190*
 
 **Identifiers and thresholds (D-153, D-177).** Every row carries the identifier `10`
 section 5.23 lists, in table order; `AlertRaised` carries it, with the scope where the
@@ -1470,21 +1470,22 @@ database channel (the registration signal, REG-SESS-003) SHALL each surface. The
 or staleness of a watch the library needs from the environment (a clock reference, a
 certificate renewal outcome, the location file, the datacenter range file while
 `datacenterRange` is among `abuse.botdefence.signals`, AUTH-ABUSE-008) is a degradation
-too.
+too, and so is a refresh of either file that fails (D-190).
 
 **Values (D-166).** Each degradation raises `degradation` (OPS-ALERT-001) under a scope
 naming it; the scopes include `password.blocklist.fallback`, `clock.reference.absent`,
-`clock.reference.unread`, `certificate.renewal.absent` and
-`certificate.renewal.unread`. A lost registration channel is raised with
-`details.component` `registration-channel` by the registration signal itself
-(REG-SESS-003), when a wait begins while its channel is not listening, in a scope and
-unit of work of its own, deduplicated by the window of OPS-ALERT-002; the event stream
-takes only the registration signal (LIB-API-005). A fall back to the offline blocklist
-is raised as `password.blocklist.fallback` with `details.configured` (the corpus
-configured) and `details.used` (`offline`) before the offline corpus is asked; a fall
-back that cannot be raised refuses the operation with what refused the raise.
+`clock.reference.unread`, `certificate.renewal.absent`, `certificate.renewal.unread`,
+and the location file's and the range file's (`10` section 5.23, D-190). A lost
+registration channel is raised with `details.component` `registration-channel` by the
+registration signal itself (REG-SESS-003), when a wait begins while its channel is not
+listening, in a scope and unit of work of its own, deduplicated by the window of
+OPS-ALERT-002; the event stream takes only the registration signal (LIB-API-005). A fall
+back to the offline blocklist is raised as `password.blocklist.fallback` with
+`details.configured` (the corpus configured) and `details.used` (`offline`) before the
+offline corpus is asked; a fall back that cannot be raised refuses the operation with
+what refused the raise.
 
-*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189*
+*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189, D-190*
 
 **Acceptance criteria**
 1. Each listed condition produces a monitored signal.

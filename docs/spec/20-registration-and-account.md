@@ -257,13 +257,14 @@ is reserved to (an add's verification, a replace's swap, a corporate address tak
 an acknowledgement) ends the reservation, and the undo is then answered as one past its
 window (422 `identity.change.windowelapsed`). A sign-in link or email code sent to the
 identifier before its removal SHALL NOT sign in; it is refused with
-`auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is removed. A
-pending add listed on the account (REG-IDENT-004) is not an identifier this item
-removes: a removal naming it, admitted at the same gate, ends its pending verification
-as `POST /account/identifiers/{id}/abandon` does, with no undo, reservation, notice or
-session ended (D-187).
+`auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is removed,
+and every session of the account SHALL end at an undo, which completes under no session
+(IDN-LIFE-008, D-190). A pending add listed on the account (REG-IDENT-004) is not an
+identifier this item removes: a removal naming it, admitted at the same gate, ends its
+pending verification as `POST /account/identifiers/{id}/abandon` does, with no undo,
+reservation, notice or session ended (D-187).
 
-*Source: D-146, D-162, D-166, D-187, D-188, D-189; amends D-035 (old-address
+*Source: D-146, D-162, D-166, D-187, D-188, D-189, D-190; amends D-035 (old-address
 confirmation retired except in REG-IDENT-007); IDN-LIFE-008 applies*
 
 Why the undo goes to the remaining set and never to the removed address: an undo that
@@ -301,6 +302,7 @@ usable.
 10. An identifier replaced twice within `identifier.change.coolingoff`, through three
     distinct values, stands behind two removal rows; each undo restores its own value
     and both values stay reserved until their windows end or their undo is used.
+11. An undo, of a removal or of a replace, ends every session of the account.
 
 ---
 
@@ -323,15 +325,22 @@ after that changes nothing and is answered 422 `auth.code.expired`, as a verific
 link past its lifetime is. A replace whose swap has not applied SHALL be swept
 (OPS-OBS-003) once every record it holds is spent or past its lifetime, the new
 address's code and, where the old address must confirm, that confirmation, leaving the
-identifier as it stood (D-187). A repeated replace naming the value already staged is a
-resend: it sends again each of the replace's records not yet spent (the new address's
-code, and the old address's confirmation where it must confirm and has not), each a send
-of its purpose counted by the restrictions (AUTH-ABUSE-004), holding the staged
-replace's row while it writes, as REG-IDENT-004's resend does (D-188, D-189); a replace
-naming another value is refused `identity.change.pending`.
+identifier as it stood (D-187). A repeated replace naming the value already staged, from
+the session that staged it (the browser REG-SESS-003 binds it to, or the enrolment
+session that staged it), is a resend: it sends again each of the replace's records not
+yet spent (the new address's code, and the old address's confirmation where it must
+confirm and has not), each a send of its purpose counted by the restrictions
+(AUTH-ABUSE-004), holding the staged replace's row while it writes, as REG-IDENT-004's
+resend does (D-188, D-189); from any other session it stages the replace afresh for the
+asking session, the records staged before it answering nothing from then on, each new
+one a send counted by the restrictions (D-190); a replace naming another value is
+refused `identity.change.pending`. In an enrolment session, the new address's link of
+the replace that session staged lands on the authentication application, where that
+session is held, and a press of it there verifies, as a press in the browser that staged
+any replace does (REG-SESS-003, D-190).
 
-*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, amends D-035 and restates
-IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
+*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, amends D-035 and
+restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
 undo a hostile change. If that address is lost or compromised, administrative recovery
@@ -357,9 +366,16 @@ undo a hostile change. If that address is lost or compromised, administrative re
    nothing and is answered 422 `auth.code.expired`, the identifier stays as it stood,
    and a new replace of it naming another value is refused `identity.change.pending`
    until the staged one is swept or abandoned.
-8. A repeated replace naming the staged value sends again each of its records not yet
-   spent, each counted by the restrictions, and, within them, is answered 202 as the
-   first was; one naming another value is refused 409 `identity.change.pending` (D-189).
+8. A repeated replace naming the staged value, from the session that staged it, sends
+   again each of its records not yet spent, each counted by the restrictions, and,
+   within them, is answered 202 as the first was; one naming another value is refused
+   409 `identity.change.pending` (D-189).
+9. A repeated replace naming the staged value from another session stages it afresh for
+   that session: the codes and links sent before it answer nothing, and a press of the
+   new link verifies only in the asking session's browser.
+10. In an enrolment session that staged a replace, the new address's link lands on the
+    authentication application, and a press of it in the browser holding that session
+    verifies it.
 
 ---
 
@@ -689,11 +705,13 @@ LIB-HOST-001) and the kind one of `10`'s link kinds. The links of this chapter a
 `sign-in` (a sign-in link), which land on the authentication application, and
 `identifier` (an identifier's add or replace), `identifier-confirm` (the old address's
 confirmation of REG-IDENT-007) and `undo` (the undo of REG-IDENT-006), which land on the
-account application. Every kind acts only on a press, never on load (FE-VER-001). The
-token travels in the fragment, so no request, log or referrer carries it.
+account application, save the `identifier` link of a replace an enrolment session
+staged, which lands on the authentication application, where that session is held
+(D-190). Every kind acts only on a press, never on load (FE-VER-001). The token travels
+in the fragment, so no request, log or referrer carries it.
 
 *Source: D-148; D-146, D-162, D-166, D-183, supersedes the code-only design of
-IDN-LIFE-004; API-LAND-001, D-187, D-189*
+IDN-LIFE-004; API-LAND-001, D-187, D-189, D-190*
 
 Without the browser binding, an attacker who starts a registration with a victim's
 address gets it verified the moment the victim clicks the verification link. Mail scanners
@@ -1004,13 +1022,16 @@ otherwise) is outside the lock of the organization it invites into; the personal
 of an integrated invitation is not judged at issue.
 
 A member's sign-in email SHALL be the email address a sign-in is opened with and the
-email address a sign-in link or email code is sent to; a sign-in opened with a phone
-number, a username, a provider or a discoverable passkey uses none. The lock SHALL reach
-an account through its current memberships only, and each organization's lock SHALL be
-judged on its own. The lock SHALL be told only after a factor of the sign-in has
-succeeded (AUTH-ABUSE-003). A sign-in link or email code requested for an address the
-lock refuses SHALL be answered as any other request and SHALL NOT be sent; one sent
-earlier SHALL be judged again when it is used.
+email address a sign-in link or email code is sent to, at a sign-in or at a step-up,
+where a right code sent to an address the lock refuses is answered
+`identity.identifier.domainnotallowed`, judged after the code, and counts no failure
+(AUTH-FACT-004, D-190); a sign-in opened with a phone number, a username, a provider or
+a discoverable passkey uses none. The lock SHALL reach an account through its current
+memberships only, and each organization's lock SHALL be judged on its own. The lock
+SHALL be told only after a factor of the sign-in or the step-up has succeeded
+(AUTH-ABUSE-003). A sign-in link or email code requested for an address the lock refuses
+SHALL be answered as any other request and SHALL NOT be sent; one sent earlier SHALL be
+judged again when it is used.
 
 Adding or verifying a domain, and removing the last one listed, is a loosening under
 OPS-CFG-002. The lock SHALL be on from the first domain listed, verified or not; while
@@ -1049,7 +1070,7 @@ address's domain is read the same way and admits only where it equals a listed d
 subdomain is a different domain. An address whose domain does not read is admitted only
 where no lock applies.
 
-*Source: D-146, D-166, D-183, D-187*
+*Source: D-146, D-166, D-183, D-187, D-190*
 
 In a single-organization deployment the administrator is trusted anyway; the library is
 generic, and DNS verification is what every comparable product requires.
@@ -1089,6 +1110,8 @@ generic, and DNS verification is what every comparable product requires.
     beside the mapping table) as its nontransitional ASCII column gives it, a status
     that marks an error under these checks, the STD3 rules included, read as a failure.
     Read through the canonical form, U+200C is removed and `ß` reads as `ss`.
+14. An email code sent before the lock refused its address, presented right at a
+    step-up, is answered `identity.identifier.domainnotallowed` and counts no failure.
 
 ---
 

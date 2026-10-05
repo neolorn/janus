@@ -156,7 +156,7 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183*
+*Source: D-106, D-166, D-172, D-183, D-190*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -188,14 +188,17 @@ provider's protocol endpoints are not operations. Beside its contract an endpoin
 take the browser's own records: its pre-authentication binding, the rotation of its
 session, and the registration signal.
 
-**Every operation takes an access context** (AUTHZ-IMP-001) — a system principal
-with a stated reason when called from background work (IDN-PRIN-001) — and is
-authorized by the gate exactly as the endpoint would be. Calling in-process is not a way
-round the permission. The read of the provider's published key set (`IOidc.KeysAsync`)
-is no operation, so it takes no access context and meets no gate: it answers the public
-keys `GET /oidc/jwks` publishes and nothing else, reads no record of a person, and is
-asked by the key set's endpoint and by the sign-on's reading of the identity token
-(BFF-SESS-006), where no person acts and no background work runs.
+**Every operation takes an access context** (AUTHZ-IMP-001) — a system principal with a
+stated reason when called from background work (IDN-PRIN-001) — and is authorized by the
+gate exactly as the endpoint would be, save that an operation a registration or an
+enrolment session reaches takes in its place a credential authority
+(`CredentialAuthority`), or has an overload that takes the enrolment session; an
+enrolment session's authority is judged as `08` CONV-DESIGN-002 states (D-190). Calling
+in-process is not a way round the permission. The read of the provider's published key
+set (`IOidc.KeysAsync`) is no operation, so it takes no access context and meets no
+gate: it answers the public keys `GET /oidc/jwks` publishes and nothing else, reads no
+record of a person, and is asked by the key set's endpoint and by the sign-on's reading
+of the identity token (BFF-SESS-006), where no person acts and no background work runs.
 
 **Seams that join the host's transaction.** `IResources` (AUTHZ-INHERIT-002) and
 `ICallbackReferences` (BFF-MACH-003) are seams, not operations of this contract: each
@@ -235,7 +238,7 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Hosting location, environment and cross-border basis** | Configuration: `hosting.location` (INT-HOST-001) and `hosting.environment`, the free-text environment cell of the records of processing (PRIV-ROPA-001); the basis only where hosting is outside Egypt |
 | **Relying party identifier and origins** | Configuration (AUTH-FACT-010) |
 | **Application kind** | Which of the deployment's applications the process serves, `ApplicationKind`: `Management` or `Public`, declared at registration (`AddJanus`) and never at the mount; it decides `SameSite` alone (BFF-CSRF-005). The unset value is `Management` |
-| **Landing origins** | Required, no default: `LandingOrigins` (`Authentication`, `Account`), the origin of the authentication application and the origin of the account application, each an absolute `https` origin. Every link the library sends is `<origin>/link#<kind>.<token>`, its kind (the link kinds of `10`) choosing the application (FE-VER-001), so the token never reaches a server in the address. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `landingOrigins.authentication` or `landingOrigins.account`; an origin that is not the origin of a registered browser client's return address, or an authentication origin that is not the origin of the sign-in address, fails it with `model.startup.declarationinvalid` under the same `details.key` |
+| **Landing origins** | Required, no default: `LandingOrigins` (`Authentication`, `Account`), the origin of the authentication application and the origin of the account application, each an absolute `https` origin. Every link the library sends is `<origin>/link#<kind>.<token>`, so the token never reaches a server in the address; its kind (the link kinds of `10`) chooses the application (FE-VER-001), save the `identifier` link of a replace an enrolment session staged, which lands on the authentication application (D-190). Absent, startup fails with `model.startup.declarationmissing`, `details.key` `landingOrigins.authentication` or `landingOrigins.account`; an origin that is not the origin of a registered browser client's return address, or an authentication origin that is not the origin of the sign-in address, fails it with `model.startup.declarationinvalid` under the same `details.key` |
 | **Authentication addresses** | Required, no default: `AuthenticationAddresses` (`signIn`, `provider`): where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3), and the address the library is mounted at on the authentication application, prefix included, where another application finds `/oidc/par`, `/oidc/authorize` and `/oidc/token` (BFF-SESS-006, LIB-HOST-003). Absent, empty or blank, startup fails with `model.startup.declarationmissing` naming `authenticationAddresses.signIn` or `authenticationAddresses.provider` (D-162) |
 | **Passkey pages** | Required, no default: `PasskeyAddresses` (`changePassword`, `enrol`, `manage`), the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). Absent, or with a field empty or blank, startup fails with `model.startup.declarationmissing` naming `passkeyAddresses` or the field (D-162) |
 | **Sign-on client** | Required, no default: `SignOnClient` (`clientId`), what this application calls itself at the provider when it establishes its own session; the client registry holds the one destination a code returns to under it (BFF-SESS-006). Absent, startup fails with `model.startup.declarationmissing` naming `signOnClient.clientId`. It carries no secret: the library generates the client's secret, holds it in the registry and rotates it (OPS-SEC-002) (D-162) |
@@ -263,8 +266,8 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Mail server** | Optional: `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`; INT-MAIL-006, INT-MAIL-008, INT-MAIL-010), or the shipped JMAP adapter, which the library uses where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-EXT-001). A deployment has a mail server registered where the host registered an `IMailServer`, or where that key was set at the start; which one is in use is decided once, at the start (CONV-DESIGN-007), so a change of the key by `configure` takes effect at the next start (OPS-CFG-004). A push carries the mailbox's identifier, a key stable until the server confirms it, the canonical address and the mailbox state of `10` (`disabled` · `enabled` · `removed`); a push that meets, at the mailbox's name, an account not carrying that identifier is answered `integration.mailserver.conflict`, which marks it failed at that attempt with no further attempt in the run; any other failure is retried under `outbox.retry.*`, and a push marked failed is begun again each day (INT-MAIL-007); the listing answers, for each account, the mailbox identifier it carries (none where it carries none), its address (none where the address the server lists does not read as an email address, IDN-ACCT-004) and whether it is enabled; the app-password calls carry the person's token. Absent, nothing is pushed or compared (the rows are still written, and the first pass of a start with one registered pushes every state owed) and every app-password operation answers `identity.mailbox.notfound`, except a creation from the break-glass session or a session opened from it, which is refused with `authz.denied` first (OPS-BOOT-002); a deployment whose staff mail is hosted elsewhere needs none |
 | **Mail server client** | Required where a mail server is registered, no default: `MailServerClient` (`clientId`), the registry's `protocol` client the mail server trusts, to which the library issues the person's token for the app-password calls (INT-MAIL-010, AUTH-OIDC-001 AC4). Absent, startup fails with `model.startup.declarationmissing` naming `mailServerClient.clientId` |
 | **DNS resolver** | Optional: `IDnsResolver` (`TextRecordsAsync`), the TXT lookup domain verification reads (REG-DOM-001). Absent, adding a domain to an organization's lock is refused with `config.value.notallowed`, `details.requires` `dnsResolver`, and a stored listed domain fails startup with `model.startup.declarationmissing` naming `dnsResolver`; a deployment that locks no domain needs none |
-| **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised (INT-GEN-006, AUTH-SESS-013) |
-| **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189) |
+| **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised under the scopes `10` section 5.23 names (INT-GEN-006, AUTH-SESS-013, D-190) |
+| **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised under the scopes `10` section 5.23 names until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189, D-190) |
 | **Clock reference** | Optional: `IClockReference`, the offset the environment measured against its time source (INF-HOST-001). Absent, or unable to answer, `degradation` is raised under `clock.reference.absent` or `clock.reference.unread` |
 | **Certificate renewal** | Optional: `ICertificateRenewal`, the outcome of the latest certificate renewal (INF-TLS-003). Absent, or unable to answer, `degradation` is raised under `certificate.renewal.absent` or `certificate.renewal.unread` |
 | **Restore-test instance** | Optional: `IRestoreTestInstance`, which builds the throwaway instance the restore test restores into and tears it down (DR-007, DR-008). Absent, every run of the restore test fails as `unrestored` and raises `restore-test-failed` |
@@ -289,7 +292,7 @@ were still missing after that correction; and `10` then listed twenty keys with 
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
-D-179, D-180, D-183, D-189*
+D-179, D-180, D-183, D-189, D-190*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every

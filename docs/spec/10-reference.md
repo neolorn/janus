@@ -29,10 +29,10 @@ message — rewording the human-facing text is free, changing the code is breaki
 | Code | Meaning | Source |
 |---|---|---|
 | `identity.affirmation.required` | The affirmation record derived at the age step is absent at the terms step; 422 | REG-PROF-002, REG-SESS-007, D-146 (was IDN-LIFE-002), D-166 |
-| `identity.change.pending` | A change of this kind is already in progress: a replace of another value already staged for the identifier; a repeated replace of the staged value is a resend (REG-IDENT-007, D-189); 409 | IDN-LIFE-004, D-146, D-166, D-189 |
+| `identity.change.pending` | A change of this kind is already in progress: a replace of another value already staged for the identifier; a repeated replace of the staged value is a resend from the session that staged it, and from another session stages the replace afresh (REG-IDENT-007, D-189, D-190); 409 | IDN-LIFE-004, D-146, D-166, D-189, D-190 |
 | `identity.identifier.primary` **(new)** | Removal refused: the identifier is the primary of its kind; set another primary first; 409 | REG-IDENT-006, D-146, D-166 |
 | `identity.identifier.lastofkind` **(new)** | Removal refused: it would leave fewer than the required minimum of that kind (one verified email always; one verified phone while `registration.phone` is `required`); 409 | REG-IDENT-001, REG-IDENT-006, D-146, D-166 |
-| `identity.identifier.domainnotallowed` **(new)** | The email's domain is outside the organization's verified `emailDomains` list. At sign-in it is told only after a factor succeeds; at an invitation's issue it carries no `details.member`; 422 | REG-DOM-001, IDN-ORG-006, D-146, D-166 |
+| `identity.identifier.domainnotallowed` **(new)** | The email's domain is outside the organization's verified `emailDomains` list. At a sign-in, and at a step-up for an email code, it is told only after a factor succeeds and counts no failure (AUTH-FACT-004, D-190); at an invitation's issue it carries no `details.member`; 422 | REG-DOM-001, IDN-ORG-006, D-146, D-166, D-190 |
 | `identity.identifier.invalid` | The identifier is not one the operation takes: the value is not a well-formed identifier of a kind the operation accepts; a corporate address equals the personal email the same request names (REG-MAIL-001); or the identifier named is not one the account or the registration holds in the state the operation needs (of that kind; in single-address mode, for a replace); a code at a verify route whose `{id}` names nothing held is `auth.code.invalid` (D-189). An unverified identifier made primary or named by the backup setting is `identity.identifier.unverified`, not this code. Where a body carries more than one identifier, `details.member` names the member; 422 | REG-IDENT-001, REG-IDENT-004, REG-IDENT-005, REG-IDENT-007, REG-INV-001, REG-MAIL-001, D-162, D-166, D-189 |
 | `identity.identifier.unverified` | An unverified identifier, a pending add listed on the account included (REG-IDENT-004), is made primary of its kind or named by the kind's backup setting (`POST /account/identifiers/{id}/primary`, `PUT /account/identifiers/backup`); nothing changes; 409 | REG-IDENT-005, D-166, REG-IDENT-004, D-187 |
 | `identity.identifier.locked` | The identifier is locked and nothing about it is the person's to change: an invitation bound it, a provider operates its mailbox, or it is the personal email a membership keeps, which is not removed, made primary or replaced while the membership lasts; 409 | REG-IDENT-010, REG-MAIL-001, D-162, D-166 |
@@ -92,8 +92,8 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.factor.rejected` | Factor presented and refused; 422 | AUTH-FACT-001, D-166 |
 | `auth.factor.required` **(new)** | Further factors needed to reach required assurance; 422 | AUTH-FACT-001, D-166 |
 | `auth.lossreport.notpermitted` | Self-service loss report and removal unavailable to this account; 409 | AUTH-RECOV-008, D-141, D-166 |
-| `auth.lossreport.pending` **(new)** | This authenticator is already reported lost; `details.invalidatesAt`; 409 | AUTH-RECOV-007, D-141, D-166 |
-| `auth.credential.suspended` **(new)** | A reported-lost authenticator was presented; 422 | AUTH-RECOV-007, D-141, D-166 |
+| `auth.lossreport.pending` **(new)** | This authenticator is already suspended, by a loss report or by a removal that would lower the account's reachable assurance; `details.invalidatesAt`; 409 | AUTH-RECOV-007, D-141, D-166, D-190 |
+| `auth.credential.suspended` **(new)** | A suspended authenticator (reported lost, or suspended by a removal that would lower the account's reachable assurance) was presented and what it presented verified, or a `phoneCode` ask after a first factor or under a session named a suspended number (one before a first factor is answered 202); a presentation counts as a failed attempt, an ask counts nothing (AUTH-ABUSE-001); 422 | AUTH-RECOV-007, D-141, D-166, D-190 |
 | `auth.credential.notfound` | The account holds no active credential by that identifier of the kind the operation acts on, including an app password the mail server does not hold for the person; a credential of another account answers the same; 404 | AUTH-FACT-001, INT-MAIL-010, D-162, D-166 |
 | `auth.credential.labelinvalid` | A credential or app-password label that is empty, over 64 characters, or already held by another credential of the same kind on the account in any capitalisation (OPS-DB-001); 422 | AUTH-FACT-001, REG-MAIL-002, D-162, D-166 |
 | `auth.credential.notupgradable` | The credential named at `POST /account/credentials/{id}/upgrade` is the account's and is not a second-factor security key; 409 | AUTH-FACT-002b, D-162, D-166 |
@@ -132,7 +132,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 
 | Code | Meaning | Source |
 |---|---|---|
-| `authz.denied` **(new)** | Permission absent; used where existence is not concealed. Under `/admin`, an identifier naming no row whose organization the permission is asked in (a group, a grant, a registered record) is refused with it exactly as a missing permission is (`09` section 8); so are the refusals OPS-BOOT-002 gives on the reserved account, bootstrap or a key rotation run where it may not, and, in process, an access context of an enrolment session's authority on an operation it does not reach (over HTTP it is no session there, `auth.session.expired`) (D-188, D-189); 403 | AUTHZ-CONCEAL-005, OPS-BOOT-001 AC1, OPS-SEC-003 AC1, D-166, D-188, D-189 |
+| `authz.denied` **(new)** | Permission absent; used where existence is not concealed. Under `/admin`, an identifier naming no row whose organization the permission is asked in (a group, a grant, a registered record) is refused with it exactly as a missing permission is (`09` section 8); so are the refusals OPS-BOOT-002 gives on the reserved account, bootstrap or a key rotation run where it may not, and, in process, an enrolment session's authority given to an operation that can take it and that the session does not reach (over HTTP it is no session there, `auth.session.expired`); and the export's report in an enrolment session whose second step has shown no codes (`09`, D-188, D-189, D-190); 403 | AUTHZ-CONCEAL-005, OPS-BOOT-001 AC1, OPS-SEC-003 AC1, CONV-DESIGN-002, D-166, D-188, D-189, D-190 |
 | `authz.grant.duplicate` | An identical live grant exists; 409 | AUTHZ-GRANT-003, D-166 |
 | `authz.grant.expired` **(new)** | A grant written with an expiry that is not after the present; 409 | AUTHZ-GRANT-003, D-166 |
 | `authz.grant.notfound` | A revocation names a grant already revoked, or one a derivation wrote, and the caller holds `grant:manage` where it is scoped; an identifier naming no grant is `authz.denied` (`09` section 8); 404 | AUTHZ-GRANT-001, AUTHZ-SCOPE-001, D-166 |
@@ -410,8 +410,8 @@ is the empty list.
 | `device.verification.lifetime` | 90 days | R, ceiling 365 d | AUTH-FACT-016, D-146: how long a browser that passed the check is remembered. Lengthening is loosening |
 | `recovery.codes.reminder` | 365 days | R | AUTH-FACT-008, D-146: age of a recovery-code set at which one reminder fires in the account and to the security-notice set; none after until the set is regenerated |
 | `webauthn.rpid` | derived | **P** | AUTH-FACT-010 |
-| `webauthn.origins` | — **required** | **P** | AUTH-FACT-010 |
-| `webauthn.relatedorigins` | empty | R | AUTH-FACT-012, D-107 |
+| `webauthn.origins` | — **required** | **P**, each origin held in its serialization (AUTH-FACT-010, D-190) | AUTH-FACT-010, D-190 |
+| `webauthn.relatedorigins` | empty | R, each origin held in its serialization (AUTH-FACT-010, D-190) | AUTH-FACT-012, D-107, D-190 |
 | `webauthn.algorithms` | `[-8, -7, -257]` (EdDSA, ES256, RS256) | **P**, list of COSE algorithm integers; −7 SHALL be a member | AUTH-FACT-014, D-120 |
 
 ### 4.4 Recovery
@@ -947,7 +947,8 @@ thing. The scopes the chapters name:
 | `degradation` | `password.blocklist.fallback` | Screening fell back to the offline list; `details.configured` and `details.used` (`offline`) | OPS-OBS-002, AUTH-PASS-004 |
 | `degradation` | `clock.reference.absent` · `clock.reference.unread` | No clock reference is declared, or the declared one could not answer | OPS-OBS-002, INF-HOST-001 |
 | `degradation` | `certificate.renewal.absent` · `certificate.renewal.unread` | No certificate renewal outcome is declared, or the declared one could not answer | OPS-OBS-002, INF-TLS-003 |
-| `degradation` | `botdefence.ranges.absent` · `botdefence.ranges.stale` | While `datacenterRange` is among `abuse.botdefence.signals`: no range source is declared or no range file has been read, or the file held is older than `abuse.botdefence.ranges.maxage` by its own date | AUTH-ABUSE-008, D-189 |
+| `degradation` | `botdefence.ranges.absent` · `botdefence.ranges.stale` · `botdefence.ranges.refresh` | At the refresh, a refresh whose file could not be opened or read, or was refused whole (`.refresh`); and while `datacenterRange` is among `abuse.botdefence.signals`, at each run of the `datacenter-ranges` job and where a registration is judged, no range source declared or no range file read (`.absent`), or the file held older than `abuse.botdefence.ranges.maxage` by its own date (`.stale`) | AUTH-ABUSE-008, D-189, D-190 |
+| `degradation` | `location.database.absent` · `location.database.stale` · `location.database.refresh` | At the refresh, a refresh whose file could not be opened or read, or was refused whole (`.refresh`); and where an address is resolved, no location file declared or none read (`.absent`), or the file held older than `location.database.maxage` by its own date (`.stale`) | INT-GEN-006, OPS-OBS-002, D-190 |
 | `expiry-approaching` | `envelope-rotation` | The annual envelope operation falls due within `maintenance.expiry.warninglead` of a year after the log's latest `envelope-rotation` entry | OPS-MAINT-001 |
 | `expiry-approaching` | `kek-cryptoperiod` | The key-encryption key's cryptoperiod ends within `maintenance.expiry.warninglead`; `details.version`, `details.rotatedAt`, `details.dueAt` | DR-009a |
 
@@ -957,11 +958,11 @@ a mail-server account that does not carry the mailbox's identifier is answered
 `integration.mailserver.conflict` and raises `degradation` at once under
 `mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier (INT-MAIL-001,
 INT-MAIL-007, REG-MAIL-003); a drift the drift check finds raises it naming the
-derivation (AUTHZ-DERIVE-005); a stale or absent location file raises it (INT-GEN-006),
-and so does a stale or absent datacenter range file while `datacenterRange` is among
-`abuse.botdefence.signals` (AUTH-ABUSE-008, D-189).
+derivation (AUTHZ-DERIVE-005); the location file and the datacenter range file raise it
+under the scopes above (INT-GEN-006, AUTH-ABUSE-008, D-189, D-190).
 
-*Source: OPS-ALERT-001, OPS-ALERT-002, OPS-OBS-002, D-153, D-166, D-177, D-178, D-189*
+*Source: OPS-ALERT-001, OPS-ALERT-002, OPS-OBS-002, D-153, D-166, D-177, D-178, D-189,
+D-190*
 
 ### 5.24 Audit actions
 
@@ -1330,7 +1331,7 @@ writes it in `direction`.
 ### 5.43 Link kinds
 
 The `<kind>` of every link the library sends, `<origin>/link#<kind>.<token>`: the origin
-is the landing origin the host declares for the application the kind belongs to
+is the landing origin the host declares for the application the link lands on
 (LIB-HOST-001), and the token travels in the fragment, so no server receives it in the
 address. The set is closed; each application's one landing component dispatches on the
 kind (`18` FE-VER-001).
@@ -1339,7 +1340,8 @@ Authentication application: `sign-in` · `registration` · `recovery` · `enrolm
 `invitation`.
 
 Account application: `identifier` · `identifier-confirm` · `undo` · `deletion-cancel` ·
-`reactivation` · `loss-report`.
+`reactivation` · `loss-report`; save the `identifier` link of a replace an enrolment
+session staged, which lands on the authentication application (D-190).
 
 Every kind acts only on a press, never on load, so a mail scanner's prefetch changes
 nothing. A message kind of section 5.25 lands under one link kind: `signin-link` under
@@ -1350,7 +1352,7 @@ nothing. A message kind of section 5.25 lands under one link kind: `signin-link`
 `deletion-cancel`; `deactivation-notice` under `reactivation`; `credential-suspended`
 under `loss-report`.
 
-*Source: API-LAND-001, FE-VER-001, LIB-HOST-001, D-166*
+*Source: API-LAND-001, FE-VER-001, LIB-HOST-001, D-166, D-190*
 
 ### 5.44 Former mailbox
 

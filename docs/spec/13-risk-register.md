@@ -529,7 +529,7 @@ Risks addressed by design rather than accepted.
 | R-M03 | Session fixation | New identifier on authentication, step-up, and privilege change | AUTH-SESS-006 |
 | R-M04 | Token theft via injected script | Opaque cookie, `httpOnly`; no token in browser storage | AUTH-SESS-003 |
 | R-M05 | Cross-site request forgery | Token enforced in the BFF layer; not per-endpoint | AUTH-SESS-007 |
-| R-M06 | Account takeover via identifier change | Adding an identifier is step-up and the new one is verified; removal is step-up and immediate, the undo goes to the remaining security-notice set and never to the removed address; other sessions terminated | D-035, D-146, REG-IDENT-004, REG-IDENT-006 |
+| R-M06 | Account takeover via identifier change | Adding an identifier is step-up and the new one is verified; removal is step-up and immediate, the undo goes to the remaining security-notice set and never to the removed address; other sessions terminated, and every session, the one that made the change included, at the undo | D-035, D-146, REG-IDENT-004, REG-IDENT-006, D-190 |
 | R-M07 | MFA defeated through recovery | Recovery restores the password only; removal is delayed and notified | D-009 |
 | R-M08 | Credential stuffing | Progressive delay per account and per source; blocklist screening; new-device check on single-factor accounts (a code to the primary email from an unrecognised browser) | D-011, D-013, D-146, AUTH-FACT-016 |
 | R-M09 | Cloned authenticator | Signature counter verified where provided | AUTH-FACT-014 |

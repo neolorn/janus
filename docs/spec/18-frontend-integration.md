@@ -129,22 +129,24 @@ way the interrupted request completes afterwards with its data intact.
 *Source: D-148; D-147; AUTH-SESS-005, BFF-STEP-001, D-139*
 
 **The prompt SHALL offer every combination that reaches the gate**: exactly the
-`details.options` the step-up response lists (`09` `/auth/step-up`): for a customer
-who can reach AAL2, password + TOTP, password + recovery code, password + security
-key, or a passkey, the subject choosing among them; for a password-only customer, the
-password. A combination that does not reach the gate is never shown, so a bare
-password is never offered on an account that reaches AAL2 (AUTH-STEP-002). The
-prompt has **two non-dead-end outcomes** beside presenting a factor: `enrol` (the
-frontend initiates enrolment in place, and the original request completes afterwards);
-`report-loss` (the frontend offers to report the missing factor lost,
-`POST /recovery/report-loss`, explaining that the action becomes available when the
-window completes). A `pending` outcome shows the completion time (`pendingUntil`) and
-the cancel option; it is a status, not an error, though it arrives as a 403 because the
-operation did not proceed (`09` `/auth/step-up`). A `phoneCode` ask at the step-up that
-is answered 200 `factorRequired` re-presents the combinations offered, and one answered
-200 with `required` empty retries the original request (D-188).
+`details.options` the step-up response lists (`09` `/auth/step-up`): for a customer who
+can reach AAL2, password + TOTP, password + recovery code, password + security key, or a
+passkey, the subject choosing among them; for a password-only customer, the password. A
+combination that does not reach the gate is never shown, so a bare password is never
+offered on an account that reaches AAL2 (AUTH-STEP-002). The prompt has **two
+non-dead-end outcomes** beside presenting a factor: `enrol` (the frontend initiates
+enrolment in place, and the original request completes afterwards); `report-loss` (the
+frontend offers to report the missing factor lost, `POST /recovery/report-loss`,
+explaining that the action becomes available when the window completes). A `pending`
+outcome shows the completion time (`pendingUntil`) and the cancel option; it is a
+status, not an error, though it arrives as a 403 because the operation did not proceed
+(`09` `/auth/step-up`). A `phoneCode` ask at the step-up that is answered 200
+`factorRequired` re-presents the combinations offered, and one answered 200 with
+`required` empty retries the original request (D-188). A factor presented at the step-up
+and answered 200 `factorRequired` is followed by the next factor of the chosen
+combination, one at each call (AUTH-STEP-002, D-190).
 
-*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188*
+*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after
@@ -598,12 +600,14 @@ serve the route **`/link`**, and one landing component SHALL serve it on both
 origin is the application's declared landing origin (`LandingOrigins`, its
 `Authentication` or `Account` member, LIB-HOST-001; the enrolment link bootstrap prints
 takes the first `webauthn.origins` entry, OPS-BOOT-001), and the kind, one of `10`'s
-link kinds, decides the application. The landing SHALL read the kind and the token from
-the fragment, SHALL remove the fragment from the address bar once it has read it, and
-SHALL dispatch on the kind. Every kind SHALL act only on a **press**, never on load, so
-that a mail scanner's prefetch changes nothing. The token SHALL reach a server only in
-the body of the call the landing makes, never in a request target. The response that
-serves the landing page SHALL carry `Referrer-Policy: no-referrer`.
+link kinds, decides the application, save the `identifier` link of a replace an
+enrolment session staged, which lands on the authentication application (D-190). The
+landing SHALL read the kind and the token from the fragment, SHALL remove the fragment
+from the address bar once it has read it, and SHALL dispatch on the kind. Every kind
+SHALL act only on a **press**, never on load, so that a mail scanner's prefetch changes
+nothing. The token SHALL reach a server only in the body of the call the landing makes,
+never in a request target. The response that serves the landing page SHALL carry
+`Referrer-Policy: no-referrer`.
 
 A verification or sign-in link (`registration`, `identifier`, `sign-in`) SHALL behave by
 **where it is opened**. In the **originating browser** (the one holding the session
@@ -628,15 +632,15 @@ hands the token to on a press:
 | `recovery` | Authentication | `POST /recovery/complete` with the new password (AUTH-RECOV-005) |
 | `enrolment` | Authentication | `POST /enrol/begin` (AUTH-RECOV-002) |
 | `invitation` | Authentication | `POST /register` with the invitation token (REG-INV-001), or a sign-in followed by the membership step (REG-INV-002) |
-| `identifier` | Account | On a press in the originating browser `POST /account/identifiers/{id}/verify`; elsewhere the code and `POST /account/identifiers/{id}/abandon` (REG-IDENT-004, REG-IDENT-007) |
+| `identifier` | Account; Authentication for the new address of a replace an enrolment session staged (D-190) | On a press in the originating browser `POST /account/identifiers/{id}/verify`; elsewhere the code and `POST /account/identifiers/{id}/abandon` (REG-IDENT-004, REG-IDENT-007) |
 | `identifier-confirm` | Account | The old address's confirmation of a replace where the account has no other channel: on a press, in any browser, `POST /account/identifiers/{id}/verify` with the token and `press` (REG-IDENT-007) |
-| `undo` | Account | `POST /account/identifiers/{id}/undo` (REG-IDENT-006) |
+| `undo` | Account | `POST /account/identifiers/{id}/undo` (REG-IDENT-006); every session of the account then ends (IDN-LIFE-008) |
 | `deletion-cancel` | Account | `POST /account/delete/cancel` |
 | `reactivation` | Account | `POST /account/reactivate` |
 | `loss-report` | Account | `POST /recovery/report-loss/{id}/cancel` (AUTH-RECOV-007) |
 
 *Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b,
-LIB-HOST-001, D-166, D-187*
+LIB-HOST-001, D-166, D-187, D-190*
 
 The server decides which case applies: the landing call without `press` returns
 `sameBrowser` and, where false, the code (`09` `POST /register/verify/{id}`). The

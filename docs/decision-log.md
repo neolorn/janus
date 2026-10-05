@@ -7261,6 +7261,8 @@ log (D-062, D-117, D-129, D-130).
 
 ## D-141 — Step-up gates declare a level; a lost authenticator is a state, not a removal
 
+> **Amended.** A suspended authenticator presented anyway is answered `auth.credential.suspended` only once what it presented verifies, and a `phoneCode` ask after a first factor or under a session naming a suspended number is answered so too, counting nothing; `auth.lossreport.pending` also answers a report on an authenticator a removal already suspended (D-190).
+
 **Date:** 2026-09-05 · **Status:** accepted · **Supersedes:** D-128 on the evaluation rule (the social carve-out stands) · **Amends:** D-134 on the trusted-device offer, D-009/D-022 (AUTH-RECOV-007 generalised), D-114 (AUTH-PASS-001a restated as a property) · **Resolves:** review-4, H-1
 
 **TL;DR.** Review-4 H-1: a customer whose only passkey died could not remove it —
@@ -14168,7 +14170,11 @@ FE-REG-001 (values, new criterion 3); `19` INF-BG-001 (body); `20` REG-SESS-005 
 REG-IDENT-004 (body), REG-IDENT-006 (body, new criterion 9), REG-IDENT-007 (body,
 criterion 6).
 
+---
+
 ## D-189 — Corrections-4 questions 161 to 187: the answers after D-188 was built
+
+> **Amended.** Question 168: `Janus.Hosting` names no seam's implementation anywhere, a constant or a static member included; 169: a failed refresh is raised at the refresh, and, while `datacenterRange` is among the signals, the file's absence or staleness at each run of the job; 176: the in-process refusal reaches only an operation that can be given an enrolment session's authority; 177: the report is refused before the session's second step showed codes; 178: a press of the replace the enrolment session staged verifies; 180: a repeated replace is a resend only from the session that staged it; 185: an undo ends every session of the account (D-190).
 
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-188 (question 128, which types are seams; question 130, the rules set aside are pinned by a test and not logged; question 134, what follows a right code; question 135, a fault at a step-up and the codes that refuse a factor; question 136, the defence stands before the invitation is judged and the range signal reads the whole address; question 139, the report that completes an enrolment session is admitted for a restricted account; question 140, the registration's set; question 144, the factory optional, where an unbound case is refused and the gate's values; question 145, a loss report pending; question 150, a row with no immediate attempt; question 151, what the verify routes count; question 152, the maximum judged only for an undo that restores a removed identifier; question 153, a replace's resend; question 155, the cookie refused once the rate limit admits the request; question 156, the step-up's refusals of a factor are every one `/auth/factor` lists; question 157, the enrolment session on other routes and when it ends), D-153 (AUTH-ABUSE-008 criterion 3, the range file is the host's and the session a request would create counts)
 
@@ -14415,6 +14421,197 @@ BFF-MACH-002 (the mount), BFF-ORDER-001 (stage 5); `18` FE-API-004 (body), FE-AP
 criterion 6), REG-SESS-006 (body), REG-IDENT-004 (body), REG-IDENT-006 (body, new
 criterion 10), REG-IDENT-007 (body, criterion 7, new criterion 8).
 
+---
+
+## D-190 — Corrections-4 questions 188 to 201: the answers after D-189 was built
+
+**Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-189 (question 168, `Janus.Hosting` names no seam's implementation anywhere; question 169, a failed refresh is raised at the refresh and the file's absence or staleness at each run of the job; question 176, the in-process refusal reaches only an operation that can be given an enrolment session's authority; question 177, the report refused before the second step showed codes; question 178, a press of the session's own replace verifies; question 180, a resend only from the session that staged the replace; question 185, an undo ends every session), D-141 (what a suspended authenticator answers, and `auth.lossreport.pending` for one a removal suspended)
+
+**TL;DR.** Building D-189 raised 14 questions. Eight change what was built (188, 190, 192,
+194, 197, 198, 199, 200); 189 moves names only; 195 brings the chapters to what was built;
+193 is to be proved by a test first; the rest confirm what was built. The largest: a
+suspended authenticator presented anyway is answered `auth.credential.suspended`, but only
+once what it presented verifies, so a caller who does not hold it learns nothing; an undo
+ends every session of the account, since it is the owner's answer to a change that may
+have come from a stolen session; a repeated replace from a session other than the one that
+staged it stages the replace afresh for the asker; and the enrolment session's in-process
+refusal reaches only the operations that can be given its authority, since the agent
+showed the others cannot be.
+
+**The questions.** Questions 188 to 201 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names its question; the chapters
+carry the full rule.
+
+**WebAuthn origins (question 188).**
+
+- **188. A configured origin written in Unicode.** Both the match and the well-known
+  document use the serialized form. A browser writes into a ceremony's client data "the
+  serialization of callerOrigin" (WebAuthn Level 3, section 5.1.3), which carries the host
+  in ASCII form, and it reads each entry of the related-origins document with the URL
+  parser and compares it with the caller's origin as same origin (section 5.11.1). So each
+  configured origin, of `webauthn.origins` and `webauthn.relatedorigins`, is held in its
+  serialization (its scheme, its host in the ASCII form the library's conversion gives,
+  its port only where it is not the scheme's default), a ceremony's origin is matched
+  against the origins so held, ordinally, and the document lists the related origins in
+  that form (AUTH-FACT-010, AUTH-FACT-012 criterion 1). *Rejected:* matching as configured
+  (a deployment that writes its origin in Unicode would start and then refuse every
+  ceremony); the document as configured (a browser compares the parsed form anyway, and
+  the listed form should be the one compared).
+
+**Registrations (question 189).**
+
+- **189. A seam's constants.** `Janus.Hosting` names no seam's implementation anywhere, a
+  constant or a static member included. The names of the secrets the ring holds and the
+  helpers that build the refusal of a secret not available move off `KeyRing` to the
+  internal contract `Janus.Core` declares for filling the ring (as its static members, or
+  a static class of `Janus.Core` beside it), and the fourth clause's test looks at every
+  reference in `Janus.Hosting`, not only constructors and factories (CONV-DESIGN-007
+  criterion 7). One contract over both seams, `KeyRingFilling` implementing it and
+  carrying `Clear`, stands as built. *Rejected:* constructors and factories alone (a
+  constant read from the implementation still ties `Janus.Hosting` to it, which the body
+  forbids).
+
+**Suspended authenticators (questions 190 and 192).**
+
+- **190. What a suspended authenticator answers.** It is never offered (AUTH-STEP-002 step
+  2). One presented anyway, whether a loss report or a removal that would lower the
+  account's reachable assurance suspended it, is judged first as an active one would be:
+  only where what it presented verifies (an assertion's signature, a code its generator
+  gives) is it refused 422 `auth.credential.suspended`, a failed attempt counted and
+  recorded (AUTH-ABUSE-001, CONV-LOG-005); one whose proof does not verify is refused as
+  any wrong presentation is. The order is the point: a caller who holds only a
+  credential's identifier, or guesses a code, learns nothing of the authenticator's state,
+  and the one who holds it is told why it no longer works. A `phoneCode` ask made after a
+  first factor or under a session that names a suspended number sends nothing and is
+  answered 422 `auth.credential.suspended`, counting nothing, since an ask presents no
+  factor; one made before a first factor is answered 202, whatever the account holds
+  (AUTH-FACT-002, AUTH-ABUSE-003). A preferred second-step method that is suspended is not
+  offered first, or at all (IDN-ATTR-008). A code matching a suspended generator is
+  therefore judged against it, not left out (AUTH-RECOV-007). *Rejected:*
+  `auth.factor.rejected` with no reason (the owner who finds the device again is not told
+  to cancel the report); the code before verification (it would tell the state to whoever
+  holds an identifier).
+- **192. A report on an authenticator that is not active.** An authenticator a removal
+  already suspended is answered 409 `auth.lossreport.pending` with `invalidatesAt`, as one
+  already reported is: it is already on the window a report would start. One that is
+  invalidated is answered 404 `auth.credential.notfound`, which the `10` row already gives
+  for no active credential by that identifier. `auth.credential.suspended` is not this
+  route's. *Rejected:* listing `auth.credential.suspended` here (the code means a
+  suspended authenticator presented, not one named in a report).
+
+**Step-up (questions 191 and 193).**
+
+- **191. The domain lock at a step-up.** A member's sign-in email is the address a sign-in
+  link or email code is sent to at a step-up as at a sign-in (REG-DOM-001), so an email
+  code sent before a lock that now refuses its address is answered 422
+  `identity.identifier.domainnotallowed` when presented at a step-up, judged after the
+  code against the lock on the address it was sent to and counting no failure
+  (AUTH-FACT-004); the row lists it. *Rejected:* a step-up never judging the lock (a lock
+  would then not reach a step-up's code).
+- **193. Factors over several calls.** The chapters stand: a step-up is called once per
+  factor until the session reaches the gate, and the factors accepted are held on the
+  step-up's challenge until together they reach it (AUTH-STEP-002 step 2, new criterion
+  4c). Write the test first, a password at one call and a generator's code at the next
+  reaching a gate declared `aal2`; where it fails, bring the step-up to it.
+
+**The range file (question 194).**
+
+- **194. What the job raises.** A refresh that fails raises `degradation` at the refresh
+  (`botdefence.ranges.refresh`), as the location file's does
+  (`location.database.refresh`), and keeps the copy held until it is stale. And while
+  `datacenterRange` is among `abuse.botdefence.signals`, each run of the
+  `datacenter-ranges` job raises the file's absence or staleness, so a deployment that
+  receives no registration hears of it; the raise where a registration is judged stays.
+  `10` section 5.23 names the three scopes, and the location file's three as built
+  (`location.database.absent`, `.stale`, `.refresh`), which it lacked. *Rejected:* raising
+  only where a registration is judged (a security signal on by default would stay silent
+  where no one registers).
+
+**The enrolment session (questions 195 to 197 and 200).**
+
+- **195. The in-process refusal.** The agent is right that an access context cannot carry
+  an enrolment session's authority: in process that authority exists only as
+  `CredentialAuthority` and the overloads that take an enrolment session. So the rule of
+  D-189 question 176 reaches exactly the operations that can be given it: each that takes
+  a credential authority, or an overload that takes an enrolment session, and that
+  `POST /enrol/begin` does not list, refuses that authority `authz.denied` first in its
+  gate step, before any load. An operation that takes only an access context cannot be
+  given it, and over HTTP no route hands it one (BFF-ORDER-001 stage 5). The five
+  operations that meet no gate need nothing. LIB-API-005 says so beside "every operation
+  takes an access context". *Rejected:* a public member to carry the authority on
+  `AccessContext` (it would add, only to refuse it, a power no caller needs).
+- **196. What else ends it.** As built: once its second step showed codes, only their
+  report or its lifetime ends the enrolment session.
+- **197. A report before codes were shown.** In an enrolment session whose second step has
+  shown no codes, `POST /account/recoverycodes/exported` records nothing and is refused
+  403 `authz.denied`, before any other refusal and the restriction: the session reaches
+  the route only for codes it showed, and recording an export of a set the person did not
+  see in it would write a false `exportedAt`. *Rejected:* as built (it records the export
+  of a set this session never showed).
+- **200. A press of the session's own replace.** The new address's link of the replace an
+  enrolment session staged lands on the authentication application, where that session is
+  held (its cookie belongs to that application's origin alone, BFF-SESS-002), and a press
+  of it there verifies, as a press in the browser that staged any replace does
+  (REG-SESS-003, API-LAND-001, FE-VER-001, LIB-HOST-001, `10` section 5.43). *Rejected:*
+  as built (the person recovering a lost mailbox could only type the code).
+
+**Identifiers (questions 198, 199 and 201).**
+
+- **198. An undo and the sessions.** Every undo, of a removal or of a replace, whatever it
+  restores or displaces, ends every session of the account (IDN-LIFE-008): it completes
+  under no session, as the old address's confirmation does, and it is the owner's answer
+  to a change that may have come from a stolen session, which a removal or replace leaves
+  live. *Rejected:* no session ended (the session that made the hostile change would
+  outlive its undo).
+- **199. Who staged a replace after a resend.** A repeated replace naming the staged value
+  is a resend only from the session that staged it (the browser REG-SESS-003 binds it to,
+  or the enrolment session that staged it). From any other session it stages the replace
+  afresh for the asking session: the records staged before it answer nothing from then on,
+  and each new record is a send counted by the restrictions. A replace an enrolment
+  session staged before the column existed is restaged so the first time that session
+  repeats it. *Rejected:* a resend that changes who staged it (the records already sent
+  would then verify for a session that did not ask for them); refusing it 409 (the person
+  recovering a lost mailbox would wait for the sweep).
+- **201. Names the chapters do not give.** As built. The names of internal columns,
+  indexes and types are the implementer's and need no question; the public overload
+  `IIdentifiers.LandAsync(EnrolmentSessionId, ...)` stands, with its public surface line
+  and changelog line, as the other enrolment session overloads do.
+
+**Audit.** The three records the run added under Resolved by rule stand: the files
+`BrowserProfileTests` lists as reading endpoint metadata (stage 5 reads its marker only to
+resolve, and takes no route out of any stage), the unreleased changelog line brought to
+the row, and the allow-list entry for a migration's identifier (D-185). Noted, no action:
+question 180's service change was written before its tests, against the order the working
+guide sets; and the commits from the `docs:` commit to the merge of `part/bot-defence`
+fail one contract test, since the `10` rows came before the code that builds them.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `01` IDN-LIFE-008 (body, new criterion 4), IDN-ATTR-008 (body,
+criterion 4); `02` AUTH-FACT-002 (values), AUTH-FACT-002b (criterion 4), AUTH-FACT-004
+(body), AUTH-FACT-010 (values, new criterion 6), AUTH-FACT-012 (criterion 1),
+AUTH-STEP-002 (step 2, new criterion 4c), AUTH-RECOV-006 (body, new criterion 6),
+AUTH-RECOV-007 (body, new values, criterion 2, new criterion 8), AUTH-ABUSE-001 (the kept
+writes), AUTH-ABUSE-008 (values, new criterion 6); `05` INT-GEN-006 (values); `06`
+OPS-ALERT-001 (the degradation row), OPS-OBS-002 (body, values); `07` LIB-API-005 (the
+access-context paragraph), LIB-HOST-001 (the landing origins, location file and datacenter
+range file rows); `08` CONV-LAYOUT-002 (criterion 1), CONV-DESIGN-002 (own records,
+criterion 3), CONV-DESIGN-003 (body), CONV-DESIGN-007 (body, criterion 7), CONV-LOG-005
+(values); `09` API-CONV-003 (the 403 row), `POST /enrol/begin`, `POST /auth/factor`,
+`POST /auth/step-up`, `GET /.well-known/webauthn`, `POST /recovery/report-loss`,
+`POST /account/identifiers/{id}/verify`, `POST /account/identifiers/{id}/undo`,
+`PUT /account/identifiers/{id}/replace`, `POST /account/recoverycodes/exported`,
+API-LAND-001 (values, criterion 4); `10` `identity.change.pending`,
+`identity.identifier.domainnotallowed`, `auth.credential.suspended`,
+`auth.lossreport.pending`, `authz.denied`, `webauthn.origins`, `webauthn.relatedorigins`,
+section 5.23 (the range file's and the location file's scopes, the text below them),
+section 5.43 (link kinds); `13` R-M06; `15` the stolen-session identifier removal row;
+`18` FE-API-004 (the step-up prompt), FE-VER-001 (body, the `identifier` and `undo` rows);
+`20` REG-SESS-003 (values), REG-DOM-001 (body, new criterion 14), REG-IDENT-006 (body, new
+criterion 11), REG-IDENT-007 (body, criterion 8, new criteria 9 and 10).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -14614,6 +14811,7 @@ criterion 10), REG-IDENT-007 (body, criterion 7, new criterion 8).
 | Corrections-4 questions 68, 82 to 86, 89 to 105, 113 and 115 to 121: the IDNA checks, where registrations live, and the answers on contracts, identifiers and records | D-187 |
 | Corrections-4 questions 127 to 160: the answers after D-186 and D-187 were built | D-188 |
 | Corrections-4 questions 161 to 187: the answers after D-188 was built | D-189 |
+| Corrections-4 questions 188 to 201: the answers after D-189 was built | D-190 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

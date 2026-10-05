@@ -824,9 +824,11 @@ erasure pass; what a host derived from the subject's fields is the host's to cle
 REG-IDENT-007), the session under which the change completes SHALL rotate and every
 other session SHALL terminate; a replacement (REG-IDENT-007) completes when its swap
 applies, and one that completes under no session (the old address's confirmation, an
-enrolment session) terminates every session.
+enrolment session) terminates every session. An undo (REG-IDENT-006) completes under no
+session: whatever it restores or displaces, it terminates every session of the account
+(D-190).
 
-*Source: D-035, D-033.4, D-146, D-166*
+*Source: D-035, D-033.4, D-146, D-166, D-190*
 
 **Acceptance criteria**
 1. Sessions on other devices are invalidated within one request cycle: the first request
@@ -835,6 +837,7 @@ enrolment session) terminates every session.
    only the completing session live, under a new secret.
 3. A replacement completed by the old address's confirmation ends every session of the
    account.
+4. An undo, of a removal or of a replace, ends every session of the account.
 
 ---
 
@@ -1337,14 +1340,15 @@ The photo keeps IDN-ATTR-002 to IDN-ATTR-004. Postal addresses stay host data
 **IDN-ATTR-008** — Each account SHALL carry a **preferred second-step method**, chosen
 by the person from the second factors enrolled on the account
 (`PUT /account/secondstep/preferred`). It SHALL default to the most recently enrolled
-second factor and SHALL be the method offered first at a second-step challenge, with
-the other enrolled methods reachable from it.
+second factor and SHALL be the method offered first at a second-step challenge, with the
+other enrolled methods reachable from it; a method not `active` (AUTH-RECOV-007) is not
+offered, and where the preferred one is not, the challenge offers the others (D-190).
 
-*Source: D-146, D-166*
+*Source: D-146, D-166, D-190*
 
-The preference is a convenience, not a restriction: every enrolled method remains
-usable at the challenge, and the person is never held to a method they can no longer
-reach.
+The preference is a convenience, not a restriction: every enrolled `active` method
+remains usable at the challenge, and the person is never held to a method they can no
+longer reach.
 
 **Acceptance criteria**
 1. Enrolling a second factor on an account with none, or with a preference unset,
@@ -1353,7 +1357,8 @@ reach.
    `api.request.invalid`, `details.member` `method`, and changes nothing.
 3. Removing the preferred method moves the preference to the most recently enrolled
    remaining second factor, or clears it when none remains.
-4. A second-step challenge presents the preferred method first and offers the others.
+4. A second-step challenge presents the preferred method first, where it is `active`,
+   and offers the other `active` ones.
 
 ---
 

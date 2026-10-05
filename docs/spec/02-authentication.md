@@ -144,7 +144,7 @@ requests and in credential records; eleven identifiers may appear in `loginFacto
 (D-151).
 
 *Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187,
-D-188, D-189*
+D-188, D-189, D-190*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -178,7 +178,8 @@ policy's gates, field by field, as a host-named gate that no policy states value
 `pendingUntil` among them (D-189), and where the session already meets that gate as
 AUTH-STEP-002 step 1 judges it the ask is answered 200 with `required` empty, nothing
 further being needed (D-188). An ask before a first factor sends nothing and is answered
-202, whatever the account holds.
+202, whatever the account holds; one after it, or under a session, naming a suspended
+number is answered as AUTH-RECOV-007 states (D-190).
 
 **Acceptance criteria**
 1. `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are absent from every
@@ -240,7 +241,7 @@ asked for the number beforehand is a fault (CONV-ERR-001), never a send: the oth
 course would let a restricted factor go unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188*
+D-183, D-186, D-188, D-190*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -256,8 +257,8 @@ person who bought one for two-step should not have to buy another to go password
 3. `POST /account/credentials/{id}/upgrade` on a second-factor security key completes
    a passkey registration; on success the passkey is listed and the second-factor
    entry is retired; on failure nothing changes.
-4. A second-step challenge offers the preferred method first and the others from it
-   (IDN-ATTR-008).
+4. A second-step challenge offers the preferred method first and the others from it,
+   each where it is `active` (IDN-ATTR-008, AUTH-RECOV-007).
 5. Enrolling `phoneLink` or `phoneCode` shows the limitation before the number is
    confirmed; `phoneCode` carries a less-secure marker in the enrolment list, the
    credential list and the challenge.
@@ -399,20 +400,21 @@ SHALL be decided under a lock as a verification code is, its wrong try's count a
 invalidation at the cap (the pending sign-in removed) kept writes as a verification
 code's are (CONV-DESIGN-003, D-186). A code presented right is spent whatever refusal
 follows, and a fault leaves it as it was, since nothing of the operation commits
-(AUTH-ABUSE-001, D-189): where the sign-in it would complete is then refused (a domain
-lock, REG-DOM-001), its spend is a kept write committed in the one unit of work with the
-refusal, which counts no failure and records no failed authentication since the factor
-succeeded, and the lock is judged after the code, never before it, so that a wrong code
-learns nothing of the lock (D-188). A right code sent to an address given up since is
-refused `auth.factor.rejected`, a refused factor counted and recorded with its spend in
-the same unit of work. For every factor, the lock on the address the sign-in was opened
-with is judged after the factor's verification and counts no failure, and what the
-verification wrote (a code's spend, a credential's counter) is kept with that refusal
-(CONV-DESIGN-003, D-189). The `emailCode` code SHALL be sent as the message kind
-`sign-in-code` and the `phoneCode` code as `secondstep-code`, never as a verification
-code.
+(AUTH-ABUSE-001, D-189): where the sign-in or step-up it would complete is then refused
+(a domain lock, REG-DOM-001), its spend is a kept write committed in the one unit of
+work with the refusal, which counts no failure and records no failed authentication
+since the factor succeeded, and the lock is judged after the code, never before it, so
+that a wrong code learns nothing of the lock (D-188). A right code sent to an address
+given up since is refused `auth.factor.rejected`, a refused factor counted and recorded
+with its spend in the same unit of work. For every factor, the lock on the address the
+sign-in was opened with is judged after the factor's verification and counts no failure,
+and what the verification wrote (a code's spend, a credential's counter) is kept with
+that refusal (CONV-DESIGN-003, D-189); at a step-up, the lock on the address an email
+code was sent to is judged after the code (REG-DOM-001, D-190). The `emailCode` code
+SHALL be sent as the message kind `sign-in-code` and the `phoneCode` code as
+`secondstep-code`, never as a verification code.
 
-*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189*
+*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189, D-190*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -569,9 +571,14 @@ logged at run time. A configured origin's host, a related origin's host or the
 configured identifier that the conversion refuses stops the start with
 `model.startup.rpid`, and the identifier is judged against the hosts in the form the
 conversion gives both, so an identifier written in one form sits over an origin written
-in the other, as a browser judges it (D-189).
+in the other, as a browser judges it (D-189). Each configured origin, of
+`webauthn.origins` and `webauthn.relatedorigins`, is held in its serialization, the form
+a browser writes into a ceremony's client data (WebAuthn Level 3: the serialization of
+the caller's origin): its scheme, its host in the ASCII form the conversion gives, and
+its port only where it is not the scheme's default; a ceremony's origin is matched
+against the origins so held, ordinally (D-190).
 
-*Source: D-004, D-166, D-188, D-189*
+*Source: D-004, D-166, D-188, D-189, D-190*
 
 A passkey created for `example.com` works across its subdomains; the reverse does
 not. The parent domain is the widest door and keeps a future mobile app usable with
@@ -594,6 +601,8 @@ release is the proportionate update.
 5. An identifier written in ASCII form over an origin whose host is written in Unicode,
    and the reverse, starts, and an unset identifier derives, as in ASCII form
    throughout.
+6. A deployment whose origin is configured with its host in Unicode admits a ceremony
+   whose client data carries that origin with its host in ASCII form.
 
 ---
 
@@ -616,10 +625,12 @@ rather than sign-in failing with no explanation.
 **AUTH-FACT-012** — The library SHALL serve a related-origins allowlist from
 configured additional origins.
 
-*Source: D-004, D-166*
+*Source: D-004, D-166, D-190*
 
 **Acceptance criteria**
-1. The well-known document lists exactly the configured origins.
+1. The well-known document lists exactly the configured related origins, each in its
+   serialization (AUTH-FACT-010), the form a browser's URL parser gives an entry before
+   it compares it with the caller's origin (D-190).
 2. Exceeding the browser limit of **five distinct labels** — the name immediately
    before the public suffix, so `shop.com` and `shop.co.uk` count once — fails
    validation at startup (WebAuthn Level 3, Related Origin Requests). The public suffix
@@ -1516,28 +1527,29 @@ split across two apps or folded into another.
 (AUTH-SESS-001) and the account's reachable assurance (AUTH-STEP-006) only; it SHALL
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
-*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183*
+*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If the attained level and
    phishing-resistance meet the gate and were earned within the maximum age and after
    the session's last downgrade (AUTH-SESS-009), **require nothing**.
 2. **Otherwise offer every combination of the account's usable factors** (state
-   `active`, AUTH-RECOV-007, of a factor the policy in force permits in
-   `loginFactors`, and not a restricted entry withheld because its number's signal
-   answers `risk`, AUTH-FACT-002b AC6) whose contribution (AUTH-SESS-005a) lifts the
-   session to the gate, and let the subject **choose among them**. A password alone
-   reaches AAL1; a passkey alone reaches AAL2 phishing-resistant; password +
-   non-discoverable WebAuthn credential (a security key as second factor) reaches AAL2
-   phishing-resistant, because WebAuthn is phishing-resistant whether or not the
-   credential is discoverable (AUTH-FACT-002, D-148); password + TOTP and
-   password + recovery code reach AAL2 without phishing resistance; password + SMS
-   code (`phoneCode`) reaches AAL2 and never
-   phishing-resistance, so it satisfies a gate whose level is `aal2` and never one
-   that requires phishing resistance. A second factor alone contributes nothing; a
-   social credential, an email factor or a sign-in link contributes nothing
-   (AUTH-STEP-005, AUTH-FACT-003). Presenting a combination writes exactly what it
-   reached into the session record.
+   `active`, AUTH-RECOV-007, of a factor the policy in force permits in `loginFactors`,
+   and not a restricted entry withheld because its number's signal answers `risk`,
+   AUTH-FACT-002b AC6) whose contribution (AUTH-SESS-005a) lifts the session to the
+   gate, and let the subject **choose among them**, presenting the combination chosen,
+   one factor at each call, the factors accepted held on the step-up's challenge until
+   together they reach the gate (D-190). A password alone reaches AAL1; a passkey alone
+   reaches AAL2 phishing-resistant; password + non-discoverable WebAuthn credential (a
+   security key as second factor) reaches AAL2 phishing-resistant, because WebAuthn is
+   phishing-resistant whether or not the credential is discoverable (AUTH-FACT-002,
+   D-148); password + TOTP and password + recovery code reach AAL2 without phishing
+   resistance; password + SMS code (`phoneCode`) reaches AAL2 and never
+   phishing-resistance, so it satisfies a gate whose level is `aal2` and never one that
+   requires phishing resistance. A second factor alone contributes nothing; a social
+   credential, an email factor or a sign-in link contributes nothing (AUTH-STEP-005,
+   AUTH-FACT-003). Presenting a combination writes exactly what it reached into the
+   session record.
 3. **If no usable combination can reach the gate**, the answer is one of three,
    never a bare refusal:
    - the account's reachable assurance (AUTH-STEP-006) is **below** the gate (the
@@ -1603,6 +1615,8 @@ this design's own extension, recorded as a choice (D-125).
 4b. Password + non-discoverable WebAuthn credential, and a passkey alone, pass a gate
    declared `aal2` with phishing resistance required; password + TOTP and
    password + recovery code are not offered at such a gate.
+4c. A password at one call of a step-up and a TOTP code at the next pass a gate declared
+   `aal2`, as password + TOTP does (AUTH-SESS-005a).
 5. A customer holding only a password passes every customer gate with the password.
 6. Every combination that reaches the gate is offered; none that does not is.
 7. A subject with no usable combination is told to enrol or to report a loss; a
@@ -1979,11 +1993,14 @@ enrolled beside a password, and shown **once** with copy, download and print
 (AUTH-FACT-008). The person SHALL confirm they have saved them before the enrolment
 completes: in an enrolment session (AUTH-RECOV-002) the report of their export
 (`POST /account/recoverycodes/exported`) completes the enrolment and ends that session,
-which stays open on its routes until that report or the end of its lifetime (D-189). The
-set MAY be regenerated later (`POST /account/recoverycodes`, AUTH-FACT-009). A
-passkey-only account SHALL receive none.
+which stays open on its routes until that report or the end of its lifetime (D-189);
+before the session's second step showed codes, the report is refused `authz.denied`,
+before any other refusal and the restriction, and records nothing (D-190). The set MAY
+be regenerated later (`POST /account/recoverycodes`, AUTH-FACT-009). A passkey-only
+account SHALL receive none.
 
-*Source: D-009, D-146, D-189; amends the earlier "encouraged, never blocking" position*
+*Source: D-009, D-146, D-189, D-190; amends the earlier "encouraged, never blocking"
+position*
 
 The earlier position held that a hard block reduces adoption. What changed is the
 shape of the flow: the codes appear on the same screen as the enrolment, saving them is
@@ -2002,6 +2019,8 @@ codes to stand in for (AUTH-FACT-002b).
 4. A passkey-only account holds no recovery code set and is offered none.
 5. An enrolment session whose second step showed recovery codes stays open on its routes
    until `POST /account/recoverycodes/exported` reports them saved, which ends it.
+6. In an enrolment session whose second step has shown no codes, the report is refused
+   403 `authz.denied` and `exportedAt` is unchanged.
 
 ---
 
@@ -2009,9 +2028,10 @@ codes to stand in for (AUTH-FACT-002b).
 `suspended`, `invalidated`. **Reporting an authenticator lost** SHALL require one usable
 factor **or** one unused recovery code presented in a live session — no step-up — and
 SHALL move it to `suspended` at once. A suspended authenticator SHALL NOT be accepted
-for sign-in or at a gate. Every recorded channel SHALL be notified immediately and
-repeatedly, each notification carrying a cancel link; cancellation from the link or from
-any session of the account returns it to `active`. **Invalidation** completes after
+for sign-in or at a gate, and SHALL NOT be offered at either (AUTH-STEP-002,
+IDN-ATTR-008). Every recorded channel SHALL be notified immediately and repeatedly, each
+notification carrying a cancel link; cancellation from the link or from any session of
+the account returns it to `active`. **Invalidation** completes after
 `recovery.invalidation.window` (default **7 days**, configurable) and SHALL NOT complete
 if no notification was taken by its immediate attempt (AUTH-ABUSE-004), whatever later
 becomes of its row. Only on invalidation is the account's reachable assurance recomputed
@@ -2022,7 +2042,19 @@ becomes of its row. Only on invalidation is the account's reachable assurance re
 notification is the message kind `credential-suspended`, carrying the cancel link
 (D-166).
 
-*Source: D-009, D-022, D-141, D-166, D-186*
+**Values (D-190).** A suspended authenticator, whether a loss report or a removal that
+would lower the account's reachable assurance suspended it, that is presented anyway is
+judged first as an active one would be: only where what it presented verifies (an
+assertion's signature, a code its generator gives) is it refused 422
+`auth.credential.suspended`, a failed attempt (AUTH-ABUSE-001), and one whose proof does
+not verify is refused as any wrong presentation is, so a caller who does not hold it
+learns nothing of its state. A `phoneCode` ask that names a suspended number, made after
+a first factor or under a session, sends nothing and is answered 422
+`auth.credential.suspended`, counting nothing, since an ask presents no factor; one made
+before a first factor is answered 202 and sends nothing, whatever the account holds
+(AUTH-FACT-002).
+
+*Source: D-009, D-022, D-141, D-166, D-186, D-190*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -2044,7 +2076,9 @@ have nothing left to stand in for.
 **Acceptance criteria**
 1. Reporting a loss with only a password, or only one recovery code, succeeds and
    suspends the authenticator immediately; no step-up is demanded.
-2. A suspended authenticator is rejected at sign-in and at every gate.
+2. A suspended authenticator is rejected at sign-in and at every gate: with
+   `auth.credential.suspended` once what it presented verifies, and as any wrong
+   presentation is where it does not.
 3. Invalidation does not complete before the window elapses; cancellation during the
    window returns the authenticator to `active`; with no notification taken by its
    immediate attempt, invalidation is held and flagged.
@@ -2055,6 +2089,9 @@ have nothing left to stand in for.
 6. Invalidating the last second factor invalidates the recovery code set.
 7. A customer whose only passkey is lost and who has recovered a password can report
    the passkey with that password, and after the window enrol a new one with it.
+8. A `phoneCode` ask after a first factor, or under a session, naming a suspended number
+   sends nothing, is answered `auth.credential.suspended` and counts nothing; before a
+   first factor it is answered 202.
 
 ---
 
@@ -2143,25 +2180,25 @@ cap, naming nothing held or opening nothing among them, and the
 consumed refresh token's session family revoked at its reuse, with its audit record
 (AUTH-OIDC-003); a wrong try of a code, its invalidation at the cap, the spend of a
 right authentication code whatever refusal follows, and what a factor's verification
-wrote where a domain lock then refuses the sign-in (AUTH-FACT-004); a trusted device's
-failure and its trust revoked at the limit (AUTH-FACT-015); the record of a refused
-step-up factor and of a failed authentication (AUTH-STEP-002, CONV-LOG-005); the audit
-record of a signature counter that did not advance (AUTH-FACT-014); and the record of a
-bot-defence signal and of a phone signal's consideration (AUTH-ABUSE-008,
-AUTH-FACT-002b). A refusal the gate records is written outside the operation instead
-(AUTHZ-CONCEAL-004). A fault of the library's own inside a sign-in, a step-up, a sign-in
-code's or a device check's path is no failed attempt: nothing is counted under this item
-or recorded under CONV-LOG-005, no `auth.stepup.failed` is written, and the request
-answers `system.fault` (D-188, D-189). A failed attempt of a presented factor is one
-refused with `auth.factor.rejected`, `auth.factor.notpermitted`, `auth.code.invalid`,
-`auth.code.expired`, `auth.code.replayed`, `auth.credential.suspended`,
-`auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
-`auth.webauthn.rpidchanged` or `auth.webauthn.userverificationrequired`, and a
-break-glass code refused for any cause (`auth.breakglass.invalid`,
-`auth.breakglass.consumed`) is one too (OPS-BOOT-004); a new refusal of a factor joins
-this list with its `10` row (D-189).
+wrote where a domain lock then refuses the sign-in or the step-up (AUTH-FACT-004); a
+trusted device's failure and its trust revoked at the limit (AUTH-FACT-015); the record
+of a refused step-up factor and of a failed authentication (AUTH-STEP-002,
+CONV-LOG-005); the audit record of a signature counter that did not advance
+(AUTH-FACT-014); and the record of a bot-defence signal and of a phone signal's
+consideration (AUTH-ABUSE-008, AUTH-FACT-002b). A refusal the gate records is written
+outside the operation instead (AUTHZ-CONCEAL-004). A fault of the library's own inside a
+sign-in, a step-up, a sign-in code's or a device check's path is no failed attempt:
+nothing is counted under this item or recorded under CONV-LOG-005, no
+`auth.stepup.failed` is written, and the request answers `system.fault` (D-188, D-189).
+A failed attempt of a presented factor is one refused with `auth.factor.rejected`,
+`auth.factor.notpermitted`, `auth.code.invalid`, `auth.code.expired`,
+`auth.code.replayed`, `auth.credential.suspended`, `auth.webauthn.algorithmnotallowed`,
+`auth.webauthn.countermismatch`, `auth.webauthn.rpidchanged` or
+`auth.webauthn.userverificationrequired`, and a break-glass code refused for any cause
+(`auth.breakglass.invalid`, `auth.breakglass.consumed`) is one too (OPS-BOOT-004); a new
+refusal of a factor joins this list with its `10` row (D-189).
 
-*Source: D-013, D-166, D-183, D-186, D-188, D-189*
+*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2598,11 +2635,15 @@ refused whole for no date, an unreadable line, or ranges of mixed family, revers
 overlapping. The `datacenter-ranges` job refreshes it every
 `abuse.botdefence.ranges.refresh`; a file older than `abuse.botdefence.ranges.maxage`,
 judged from its own date, or none at all, is stale, and then `datacenterRange` does not
-fire and `degradation` is raised (OPS-OBS-002), so the signal is never silent. A host
-that supplies no ranges takes `datacenterRange` out of `abuse.botdefence.signals`. The
-library ships no ranges (D-189).
+fire and `degradation` is raised (OPS-OBS-002), so the signal is never silent. A refresh
+that fails raises `degradation` at the refresh, as the location file's does, and keeps
+the copy held until it is stale; and while `datacenterRange` is among
+`abuse.botdefence.signals`, each run of the job raises the file's absence or staleness,
+so a deployment that receives no registration hears of it (`10` section 5.23, D-190). A
+host that supplies no ranges takes `datacenterRange` out of `abuse.botdefence.signals`.
+The library ships no ranges (D-189).
 
-*Source: D-013, D-186, D-188, D-189*
+*Source: D-013, D-186, D-188, D-189, D-190*
 
 Phone verification already imposes attacker cost; showing every customer a puzzle is
 friction without proportionate benefit.
@@ -2625,6 +2666,10 @@ friction without proportionate benefit.
    verifier is declared; with a verifier declared the record is committed before the
    verifier is asked, no transaction is open while it is asked, and the record stands
    where the verifier fails, does not answer or requires a challenge.
+6. A refresh that fails raises `degradation` under `botdefence.ranges.refresh` and keeps
+   the copy held; while `datacenterRange` is among the signals, each run of
+   `datacenter-ranges` with no fresh file raises its absence or staleness, though no
+   registration arrives.
 
 ---
 
