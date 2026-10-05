@@ -1730,6 +1730,29 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no change to `endpoints.txt`.
 - Questions 219 and 220.
 
+### `part/navigation` (D-192), merged as `d17a4519`: question 212
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| The new code `auth.provider.unavailable`, mapped to 502 (public: `ErrorCodes.ProviderUnavailable`) | `a9f0b827` | IDN-LIFE-012, REF-001 | `ApiStatusTests.IDN_LIFE_012_AProviderThatCannotBeReachedMapsToBadGateway`, `ErrorCodesTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsACodeInTheSource`, `ErrorCodesTests.LIB_API_001_AC2_TheStatusesAreTheContract` |
+| Item 3, the declaration: a navigation route declares the codes its redirect carries in `error`, and `endpoints.txt` lists them under the redirect | `0d93d3fa`, `ed1ae39f` | CONV-DESIGN-006, BFF-ERR-001 | `EndpointDeclarationTests.CONV_DESIGN_006_AC3_AProviderRoundTripDeclaresTheCodesItsRedirectCarries`, `EndpointDeclarationTests.CONV_DESIGN_006_AC3_TheSignOnDeclaresTheCodeItsRedirectCarries`, `EndpointDeclarationTests.CONV_DESIGN_006_AnEndpointDeclaresEachCarriedCodeOnce`, `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract` |
+| 3a and 3b: an undeclared provider returns `auth.factor.notpermitted` and counts nothing; a provider whose discovery document, keys or token endpoint cannot be reached or read returns `auth.provider.unavailable`, counts and records no failed attempt, and raises `degradation` under `provider.unavailable:<provider>` with `{ provider, part }` | `1cb6fbc8`, `57fbad33` | IDN-LIFE-012, OPS-OBS-002, CONV-LOG-005, API-CONV-003 | `ProviderSignInTests.IDN_LIFE_012_AC6_AProviderWhoseDocumentsCannotBeReadIsNotStartedAsync`, `ProviderSignInTests.IDN_LIFE_012_AC6_ATokenEndpointThatCannotBeReadCountsNoFailedAttemptAsync`, `ProviderSignInTests.IDN_LIFE_012_AnUndeclaredProviderIsNotStartedAndNothingIsCountedAsync` |
+| 3c: a start to sign in with no pre-authentication session is issued one; a start to register or link with no session returns `auth.session.expired`; tests only | `a0421077` | BFF-CSRF-005a, CONV-DESIGN-006 | `ProviderSignInTests.BFF_CSRF_005a_AC1_AStartToSignInWithNoPreAuthenticationSessionIsIssuedOneAsync`, `ProviderSignInTests.CONV_DESIGN_006_AC5_ARefusedStartReturnsTheBrowserWithItsCodeAsync`, `ProviderSignInTests.IDN_LIFE_012_ARegistrationFromASignedInBrowserIsNotStartedAsync` |
+| 3d: a provider registration before the age step returns `identity.registration.incomplete` | `7340c8a4` | REG-SESS-002 | `RegistrationServiceTests.REG_SESS_002_AC1_AProviderBeforeTheAgeStepIsRefusedIncompleteAsync`, `ProviderSignInTests.REG_SESS_002_AC1_AProviderRegistrationBeforeTheAgeStepReturnsIncompleteAsync` |
+| 3e, the handler's part: an intent absent, empty or not one of the three returns the browser with `api.request.malformed`; tests only | `a0421077` | CONV-DESIGN-006 | `ProviderSignInTests.CONV_DESIGN_006_AC5_ARefusedStartReturnsTheBrowserWithItsCodeAsync` |
+| 3f: a send a restriction refuses carries `retryAt` beside `error`, and nothing else of the details crosses | `a0421077`, `97d43adb` | BFF-ERR-001, BFF-ABUSE-001 | `ProviderSignInTests.BFF_ERR_001_AC4_ASendARestrictionRefusesCarriesItsInstantAsync`, `NavigationReturnTests.BFF_ERR_001_AC4_TheCodeIsPlacedBeforeAnyFragment`, `NavigationReturnTests.BFF_ERR_001_AC4_ARefusalNamingItsInstantCarriesItBesideTheCode`, `NavigationReturnTests.BFF_ERR_001_AC4_NothingElseOfTheDetailsCrosses` |
+| 3g: the provider round trip answers 303 | `6a3c59b8` | IDN-LIFE-012, CONV-DESIGN-006 | `ProviderSignInTests.IDN_LIFE_012_TheRoundTripAnswersSeeOtherWhereverItSendsTheBrowserAsync` |
+| Item 4, the sign-on: a failure other than its state returns the browser with 302 and `error=auth.session.expired`; `login_required` at the return pushes again; a start with no pre-authentication session is issued one; the state's refusal stays 403 | `ed1ae39f` | BFF-SESS-006, BFF-ERR-001, CONV-DESIGN-006, BFF-CSRF-005a | `SignOnTests.BFF_SESS_006_AStartThatFailsReturnsTheBrowserExpiredAsync`, `SignOnTests.BFF_SESS_006_AReturnThatFailsReturnsTheBrowserExpiredAsync`, `SignOnTests.BFF_SESS_006_AReturnOnARevokedRecordReturnsTheBrowserExpiredAsync`, `SignOnTests.BFF_CSRF_005a_AC1_AStartWithNoPreAuthenticationSessionIsIssuedOneAsync`, `SignOnTests.AUTH_OIDC_006_AC2_ARequestThePushRefusesIsNotForwardedAsync`; unchanged: `SignOnTests.BFF_SESS_006_ABrowserWithNoRecordIsSentToSignInAsync`, `SignOnTests.BFF_SESS_006_AC3_AMismatchedStateIsRejectedAndLoggedAsync`, `SignOnTests.BFF_SESS_006_AC3_AReturnedCodeIsNotAcceptedTwiceAsync` |
+
+- The list of `09` was read against the code before any change: questions 221 and 222. The sign-in and link continuations match.
+- Failed before the change: the unreadable documents (`auth.factor.notpermitted`), the token endpoint (a 500, no redirect), 3d (`identity.affirmation.required`), 3g (302), the sign-on (401).
+- Passed before any change, so no service code changed: 3c (the first-contact stage already issues the pre-authentication session before the handler runs), 3e (the handler already returned the browser) and 3f (the return already copied `retryAt`).
+- Not built: item 3h, the check of a navigation's redirect against its route's declaration. Written and run, it fails one test, `ProviderSignInTests.IDN_LIFE_012_LinkingAsksForTheStepUpItsGateDeclaresAsync`, on the code question 221 parks; it waits on that answer. Also not built: what questions 223 to 226 park.
+- Public surface: `ErrorCodes.ProviderUnavailable`, with its changelog line. `error-statuses.txt`: `auth.provider.unavailable 502`. `endpoints.txt`: the provider routes answer 303 with their `error` line; the sign-on routes carry `error auth.session.expired` under 302 in place of the 401 line.
+- No migration, no truth-table row. `CHANGELOG.md` conflicted at the merge; both sides are kept.
+- `ErrorCodesTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsACodeInTheSource` was red on the working branch from the docs commit `b2cb16a6`, which gave `10` the new row, until this merge.
+- Questions 221 to 228.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4663,6 +4686,89 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. The refusal of a gate that asks no maximum age carries none.
 - **Parked.** Reading 2.
+- **Answer:** pending.
+
+**221. Tier 3. `09` `GET /auth/providers/{provider}` against `POST /account/link/{provider}`: where a link's gate is asked.**
+
+- **Item.** Question 212, items 3 and 3h.
+- **What the code does.** A start with `intent=link` asks the link's gate before the browser leaves, so the start returns `auth.stepup.required`, `authz.restricted` or `authz.denied`, and `auth.factor.notpermitted` where the policy does not list the provider. `ProviderSignInTests.IDN_LIFE_012_LinkingAsksForTheStepUpItsGateDeclaresAsync` holds the first.
+- **What the specification says.** `09` gives the start five codes, those three not among them, and gives them to the continuation "to link" alone. `POST /account/link/{provider}`: the round trip "asks the same again and links on the return".
+- **The contradiction.** Either the start asks the gate and its list lacks three codes, or the return alone asks and the start's call is not what the chapter describes.
+- **Parked.** Those three codes at the start (undeclared, behaviour unchanged), and item 3h, whose check fails on them.
+- **Answer:** pending.
+
+**222. Tier 2. `09` `GET /auth/providers/{provider}`: `auth.factor.rejected` at a registration's continuation.**
+
+- **Item.** Question 212, item 3.
+- **What the code does.** A provider's own `error`, an absent `code`, and an identity token that does not hold up are answered `auth.factor.rejected`, counted, before the intent is read, so a registration returns it too.
+- **What the specification says.** The list gives the code to sign-in, to a registration whose `sub` is already linked, and to link.
+- **Readings.**
+  1. The list lacks the code for a registration; the route declares it already for the other intents.
+  2. A registration returns another code there.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**223. Tier 2. IDN-LIFE-012 criterion 6: a token endpoint that answers a status other than success.**
+
+- **Item.** Question 212, item 3b.
+- **What the code does.** No response, and a success whose body is not JSON, are `auth.provider.unavailable`, part `token`. Any other status is a refused identity: `auth.factor.rejected`, counted and recorded. A 200 whose JSON holds no `id_token` likewise.
+- **What the specification says.** The token endpoint "cannot be reached or read".
+- **Readings.**
+  1. As built.
+  2. A 5xx is the provider unavailable; a 4xx stays refused.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**224. Tier 2. CONV-DESIGN-006 and API-CONV-003: where the browser returns when a navigation route cannot bind a value.**
+
+- **Item.** Question 212, item 3e.
+- **What the code does.** No navigation route binds a typed value (each takes text and judges it itself, returning the browser), so no request reaches the framework's refusal today. The translation stage's part is not built.
+- **The gap.** The stage has no destination for a return route (the stored return address is behind the binding that failed) and no status (303 on the round trip, 302 on the sign-on).
+- **Readings.**
+  1. To `returnTo` where it is safe, else `/`, with the route's own redirect status.
+  2. Nothing is due while no navigation route binds a typed value.
+- **Parked.** The stage's part.
+- **Answer:** pending.
+
+**225. Tier 2. `09`, BFF-CSRF-005a: a start for which no pre-authentication session could be issued.**
+
+- **Item.** Question 212, items 3c and 4.
+- **What the code does.** The first-contact stage issues the session before the handler. Where that issue fails (the store or the configuration), the provider start still returns `error=auth.session.csrfinvalid`, which its list no longer holds, and the sign-on start still answers 403 `auth.session.csrfinvalid`.
+- **Readings.**
+  1. A fault, 500 `system.fault`.
+  2. As it is.
+  3. The browser is returned with the failure's own code.
+- **Parked.** That branch of both handlers.
+- **Answer:** pending.
+
+**226. Tier 2. BFF-SESS-006: whether "a failure other than its state" covers a fault.**
+
+- **Item.** Question 212, item 4.
+- **What the code does.** An authentication application that cannot be reached, or answers the push or the exchange with no JSON, is answered 500. A session that cannot be derived for a reason other than `auth.session.expired` is answered with that reason's own code.
+- **Readings.**
+  1. As built: a fault stays a fault.
+  2. Every failure returns the browser with `auth.session.expired`.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**227. Tier 2. IDN-LIFE-012 criterion 6: a discovery document that reads but names no endpoint.**
+
+- **Item.** Question 212, item 3b.
+- **What the code does.** A document that names no HTTPS authorization or token endpoint is `auth.provider.unavailable`, part `discovery`, with its degradation (`57fbad33`). It was `auth.factor.notpermitted`. The log's entry 21 (Error) records an unavailable provider with its part, and a new entry 25 (Warning) an undeclared one.
+- **Readings.**
+  1. As built: such a document cannot be read for what the round trip needs.
+  2. It stays `auth.factor.notpermitted`.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**228. Tier 2. OPS-OBS-002: a reading of a provider's documents the caller cancelled.**
+
+- **Item.** Question 212, item 3b.
+- **What the code does.** A cancelled reading rethrows the cancellation and raises no degradation (`1cb6fbc8`). It was caught as an unreadable document. The delivery of a provider's security event shares the reading, so a cancelled delivery now ends as cancelled where it was answered as a fault.
+- **Readings.**
+  1. As built.
+  2. A cancelled reading is an unreadable document, and raises the degradation.
+- **Parked.** Nothing: reading 1 is built.
 - **Answer:** pending.
 
 ## 5. Gate result
