@@ -1753,6 +1753,22 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - `ErrorCodesTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsACodeInTheSource` was red on the working branch from the docs commit `b2cb16a6`, which gave `10` the new row, until this merge.
 - Questions 221 to 228.
 
+### `part/gates` (D-193), merged as `c0e3c3ef`: questions 219 and 220, and the step-up offer moved out of the judgement's file
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 219: an ask answered 200, at a step-up or a sign-in, leaves out of `required` the factors already accepted on the challenge; at a sign-in where that leaves none, 422 `auth.factor.rejected`, nothing counted or recorded | `6ee4cb51` | AUTH-FACT-002 | `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavesOutAFactorAlreadyAcceptedAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavesOutAFactorAlreadyAcceptedAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavingOnlyAFactorAlreadyAcceptedIsRefusedAsync` |
+| Question 220: the refusal of a `delegated` gate carries `maxAge` null | `fa06aeb3` | AUTH-STEP-007, BFF-STEP-001 | `StepUpRefusalTests.BFF_STEP_001_AC1_TheRefusalOfAGateThatAsksNoMaximumAgeCarriesNone`, `StepUpRefusalTests.BFF_STEP_001_AC1_TheRefusalOfAGateThatAsksAMaximumAgeCarriesItInWholeSeconds`, `CredentialServiceTests.AUTH_STEP_007_TheRefusalOfASocialOnlyAccountsEnrolmentGateCarriesNoMaximumAgeAsync` |
+| The truth table: what an unmet gate offers (steps 2 and 3) moved from `StepUp.cs` to `StepUpOffer.cs`, which the change check does not watch; the check's header says so | `80caaa18`, `6ecb4f9a` | CONV-VCS-004 | None new: a move, every test unchanged and passing |
+
+- Question 219's three tests were written first and failed: the ask listed the factor already accepted, and at a sign-in was answered 200 where only that factor was left. At a sign-in an ask meets an accepted factor only where a second step was accepted before any first factor.
+- Question 220's two tests of a `delegated` gate were written first and failed (`maxAge` a number). The change is in what the refusal's details carry (`StepUpRefusal`), not in the judgement: no truth-table row, no public member.
+- After the move, `StepUp.cs` (watched) holds the judgement of step 1, the level a gate is read at (AUTH-STEP-002a, AUTH-STEP-007), the account's reachable assurance (AUTH-STEP-006) and the enumeration of combinations that reads from, which the offer reads too. `StepUpOffer.cs` holds the combinations offered to an unmet gate and the `enrol`, `report-loss` and `pending` answers. The check's paths are unchanged.
+- `80caaa18` removes lines from a watched file and changes no line of the judgement; run over that commit alone the change check fails, and no row was added for it. Over the pull request's range it passes. Question 230.
+- On the part's own branch, before the merge, two of its commits had their messages amended for a body line over 72 characters; their content did not change.
+- No migration, no public surface line, no change to `endpoints.txt`.
+- Questions 229 and 230.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4660,7 +4676,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** The record names "the credential it is issued for". An ask names a factor, never a credential, and a number is tied to no credential row. No chapter says which of several active `phoneCode` credentials the code of an ask is issued for.
 - **What the code does.** The ask names the one the order of IDN-ATTR-008 gives among the account's active credentials of the factor: the one marked preferred, else the most recently enrolled. A record cannot be written naming none, so question 211 could not be built with this left open. No test pins which of two is named. No path of the library enrols a `phoneCode` credential today; only test arrangements hold one.
 - **Parked.** Nothing further: an account with one active credential of the factor, the judgement and the migration do not depend on it.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **The ruling asked on `91774d4c`: whether the judgement of a gate from a session owes a truth-table change.**
 
@@ -4676,7 +4692,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. `required` on an ask leaves out the factors already accepted, as a presenting call's does.
 - **Parked.** Reading 2. No test asserts `required` after a factor was accepted.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **220. Tier 2. AUTH-STEP-002 criterion 3: `maxAge` in the refusal of a `delegated` gate.**
 
@@ -4686,7 +4702,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. The refusal of a gate that asks no maximum age carries none.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **221. Tier 3. `09` `GET /auth/providers/{provider}` against `POST /account/link/{provider}`: where a link's gate is asked.**
 
@@ -4695,7 +4711,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the specification says.** `09` gives the start five codes, those three not among them, and gives them to the continuation "to link" alone. `POST /account/link/{provider}`: the round trip "asks the same again and links on the return".
 - **The contradiction.** Either the start asks the gate and its list lacks three codes, or the return alone asks and the start's call is not what the chapter describes.
 - **Parked.** Those three codes at the start (undeclared, behaviour unchanged), and item 3h, whose check fails on them.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **222. Tier 2. `09` `GET /auth/providers/{provider}`: `auth.factor.rejected` at a registration's continuation.**
 
@@ -4706,7 +4722,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The list lacks the code for a registration; the route declares it already for the other intents.
   2. A registration returns another code there.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **223. Tier 2. IDN-LIFE-012 criterion 6: a token endpoint that answers a status other than success.**
 
@@ -4717,7 +4733,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. A 5xx is the provider unavailable; a 4xx stays refused.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **224. Tier 2. CONV-DESIGN-006 and API-CONV-003: where the browser returns when a navigation route cannot bind a value.**
 
@@ -4728,7 +4744,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. To `returnTo` where it is safe, else `/`, with the route's own redirect status.
   2. Nothing is due while no navigation route binds a typed value.
 - **Parked.** The stage's part.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **225. Tier 2. `09`, BFF-CSRF-005a: a start for which no pre-authentication session could be issued.**
 
@@ -4739,7 +4755,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. As it is.
   3. The browser is returned with the failure's own code.
 - **Parked.** That branch of both handlers.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **226. Tier 2. BFF-SESS-006: whether "a failure other than its state" covers a fault.**
 
@@ -4749,7 +4765,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: a fault stays a fault.
   2. Every failure returns the browser with `auth.session.expired`.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **227. Tier 2. IDN-LIFE-012 criterion 6: a discovery document that reads but names no endpoint.**
 
@@ -4759,7 +4775,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: such a document cannot be read for what the round trip needs.
   2. It stays `auth.factor.notpermitted`.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-193.
 
 **228. Tier 2. OPS-OBS-002: a reading of a provider's documents the caller cancelled.**
 
@@ -4769,6 +4785,27 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. A cancelled reading is an unreadable document, and raises the degradation.
 - **Parked.** Nothing: reading 1 is built.
+- **Answer:** D-193.
+
+**229. Tier 2. `09` `POST /auth/factor`: `required` of a presenting call at a sign-in after a second step accepted first.**
+
+- **Item.** Question 219.
+- **What the code does.** At a sign-in a second step can be accepted before any first factor (it reaches no level). The presenting call that accepted it answers `factorRequired` with every usable second step the account holds in `required`, that one among them, and names no first factor, since `required` at a sign-in names second steps alone. An ask after it now leaves the accepted one out (question 219).
+- **What the specification says.** D-193: an ask leaves out the factors already accepted "as a presenting call's does". At a step-up a presenting call does; at a sign-in it does not for a second step accepted first.
+- **Readings.**
+  1. As it is.
+  2. A presenting call at a sign-in leaves out the factors already accepted. A sign-in then left with none wanted and below its level has no answer the chapter gives.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**230. Tier 2. CONV-VCS-004: a commit that only takes lines out of a watched file.**
+
+- **Item.** The move of the step-up offer (D-193).
+- **What the code does.** `80caaa18` moves the offer out of `StepUp.cs` and changes no line of the judgement. The change check, run over that commit alone, fails; it passes over the pull request's range, where the table changed. No row was added.
+- **Readings.**
+  1. As it is: no row is owed where the judgement did not change, and the check is read over the range.
+  2. Every commit that touches a watched file carries a change to the table.
+- **Parked.** Nothing.
 - **Answer:** pending.
 
 ## 5. Gate result
