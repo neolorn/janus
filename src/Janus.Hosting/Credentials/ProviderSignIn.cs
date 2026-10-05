@@ -312,27 +312,10 @@ internal sealed class ProviderSignIn(
         return Results.Empty;
     }
 
-    // CONV-CONTENT-001: the browser comes back to where it started with the code of
-    // what refused it, and the frontend says what that means.
-    // AUTH-ABUSE-002 AC2: a refusal naming the instant its wait lifts, as every
-    // throttled refusal does, carries that instant after the code and before any
-    // fragment.
-    private static IResult Back(HttpContext context, string destination, Error refusal)
-    {
-        int fragment = destination.IndexOf('#', StringComparison.Ordinal);
-        string path = fragment < 0 ? destination : destination[..fragment];
-        string rest = fragment < 0 ? string.Empty : destination[fragment..];
-        char separator = path.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        string query = "error=" + Uri.EscapeDataString(refusal.Code.ToString());
-
-        if (refusal.Details.TryGetValue("retryAt", out JsonElement retryAt)
-            && retryAt.GetString() is { } instant)
-        {
-            query += "&retryAt=" + Uri.EscapeDataString(instant);
-        }
-
-        return SeeOther(context, path + separator + query + rest);
-    }
+    // BFF-ERR-001: the browser comes back to where it started with the code of what
+    // refused it.
+    private static IResult Back(HttpContext context, string destination, Error refusal) =>
+        SeeOther(context, NavigationReturn.Refused(destination, refusal));
 
     private static string Challenge([NeverLogged] string verifier) =>
         Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
