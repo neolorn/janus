@@ -41,18 +41,21 @@ namespace Janus.Hosting.Bff;
 /// <param name="log">Where a refused return is recorded.</param>
 /// <remarks>
 /// Implements BFF-SESS-006, BFF-SESS-003, BFF-SESS-004, BFF-OWN-001, BFF-CSRF-005a,
-/// BFF-MACH-001 and AUTH-OIDC-006. The request is pushed and the code exchanged from
-/// this server to the provider and never from the browser, which carries only the
-/// reference the push was answered with; the destination the code returns to is the
-/// registered one and never one a request names, and what the exchange hands back is
-/// read once and dropped: after it, this application holds a session record and nothing
-/// else. The sign-on is a navigation (BFF-ERR-001): a failure other than its state
-/// returns the browser, to where it was going at the start and to the stored return
-/// address at the return, with the code of a session that is not there, whatever code
-/// refused it inside, and a return whose state is absent, unbound or mismatched is
-/// refused and sent nowhere. A fault stays a fault (BFF-ERR-002): no pre-authentication
-/// session to bind the start to, or a push or an exchange that did not reach the
-/// provider, was answered a 5xx or read no answer in its protocol's shape.
+/// BFF-MACH-001, BFF-ERR-001, BFF-LOG-001 and AUTH-OIDC-006. The request is pushed and
+/// the code exchanged from this server to the provider and never from the browser,
+/// which carries only the reference the push was answered with; the destination the
+/// code returns to is the registered one and never one a request names, and what the
+/// exchange hands back is read once and dropped: after it, this application holds a
+/// session record and nothing else. The sign-on is a navigation (BFF-ERR-001): a
+/// refusal other than its state's returns the browser, to where it was going at the
+/// start and to the stored return address at the return, with the code of a session
+/// that is not there, and what it carried inside, the provider's error or the
+/// library's own code, is recorded beside it; a return whose state is absent, unbound
+/// or mismatched is refused and sent nowhere. A fault stays a fault (BFF-ERR-002): no
+/// pre-authentication session to bind the start to; a push or an exchange that did not
+/// reach the provider, was answered a 5xx or read no answer in its protocol's shape;
+/// every error the push reads; every error of the exchange but a 400 naming the grant
+/// refused; and an authorization response naming the provider's own failure.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -85,6 +88,20 @@ internal sealed class SignOn(
     /// registers as this client's one destination (API-REDIR-001).
     /// </summary>
     public const string ReturnPath = "/auth/signon/return";
+
+    // OpenID Connect Core section 3.1.2.6: what the provider answers a silent request
+    // with where the person holds no record there.
+    private const string SignInRequired = "login_required";
+
+    // RFC 6749 section 5.2: the error a token endpoint refuses the grant itself with,
+    // the code spent, expired or issued to another client.
+    private const string CodeRefused = "invalid_grant";
+
+    // RFC 6749 section 4.1.2.1: the errors of an authorization response that are the
+    // provider's own failure and nothing it refused.
+    private const string ProviderFailed = "server_error";
+
+    private const string ProviderUnavailable = "temporarily_unavailable";
 
     /// <summary>
     /// Starts the flow for a browser that holds no session here.
@@ -157,17 +174,24 @@ internal sealed class SignOn(
         // AUTH-SESS-012 AC3: `login_required` answers the silent attempt and nothing
         // else, so the second attempt asks the provider to sign the person in and the
         // provider forwards them rather than refusing again.
-        if (string.Equals(error, "login_required", StringComparison.Ordinal))
+        if (string.Equals(error, SignInRequired, StringComparison.Ordinal))
         {
             return await ForwardAsync(context, attempt.ReturnTo, silent: false, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        // BFF-ERR-001 AC5, chapter 09: the provider's own failure is a fault and no
+        // refusal of the person's, so the browser is not returned to sign in again.
+        if (error is ProviderFailed or ProviderUnavailable)
+        {
+            throw new InvalidOperationException("The authentication application failed the authorization request.");
         }
 
         if (error is { Length: > 0 } refused)
         {
             BrowserProfileLog.SignOnRefused(log, context.TraceIdentifier, refused);
 
-            return Expired(attempt.ReturnTo);
+            return Refused(context, attempt.ReturnTo, refused);
         }
 
         return code is not { Length: > 0 } issued
@@ -201,13 +225,16 @@ internal sealed class SignOn(
     private static string Address(string provider, string route) =>
         provider.TrimEnd('/') + route;
 
-    // BFF-ERR-002, chapter 09: what the authentication application answered a push or
-    // an exchange with. The member asked for is the answer, and a refusal in its
-    // protocol's shape, a 4xx naming its error (RFC 6749 section 5.2), is none. A 5xx,
-    // or anything that is neither, is a fault, as a body that does not read is.
+    // BFF-ERR-002, BFF-ERR-001 AC5, chapter 09: what the authentication application
+    // answered a push or an exchange with. The member asked for is the answer. A 400
+    // whose error is the one the caller names as a refusal is none; a push names no
+    // such error, so every error it reads is a fault. Every other answer is a fault:
+    // any other error, which refuses the deployment's own client or request, a 5xx, a
+    // 4xx naming no error, and a body that does not read.
     private static async ValueTask<string?> AnsweredAsync(
         HttpResponseMessage answered,
         string member,
+        string? refusal,
         CancellationToken cancellationToken)
     {
         using var body = JsonDocument.Parse(
@@ -218,12 +245,13 @@ internal sealed class SignOn(
             return value;
         }
 
-        return (int)answered.StatusCode is >= StatusCodes.Status400BadRequest and < StatusCodes.Status500InternalServerError
-            && Text(body, "error") is { Length: > 0 }
+        return refusal is not null
+            && (int)answered.StatusCode is StatusCodes.Status400BadRequest
+            && string.Equals(Text(body, "error"), refusal, StringComparison.Ordinal)
                 ? null
                 : throw new InvalidOperationException(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"The authentication application answered {(int)answered.StatusCode} outside its protocol's shape."));
+                    $"The authentication application answered {(int)answered.StatusCode} with no answer this application takes."));
     }
 
     private static string? Text(JsonDocument body, string member) =>
@@ -328,7 +356,18 @@ internal sealed class SignOn(
             .PostAsync(new Uri(Address(addresses.Provider, "/oidc/par")), form, cancellationToken)
             .ConfigureAwait(false);
 
-        return await AnsweredAsync(answered, "request_uri", cancellationToken).ConfigureAwait(false);
+        return await AnsweredAsync(answered, "request_uri", refusal: null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // BFF-ERR-001 AC5, BFF-LOG-001 AC2: a refusal returns the browser with the code of
+    // a session that is not there, and what it carried inside, the provider's error or
+    // the library's own code, is recorded beside it and never carried to the browser.
+    private IResult Refused(HttpContext context, string returnTo, string inside)
+    {
+        BrowserProfileLog.SignOnReturned(log, context.TraceIdentifier, ErrorCodes.SessionExpired, inside);
+
+        return Expired(returnTo);
     }
 
     private async Task<IResult> RedeemAsync(
@@ -346,14 +385,21 @@ internal sealed class SignOn(
             return Expired(attempt.ReturnTo);
         }
 
-        string? identity = await ExchangedAsync(registered, attempt, code, cancellationToken)
+        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
+        {
+            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
+
+            return Expired(attempt.ReturnTo);
+        }
+
+        string? identity = await ExchangedAsync(registered, secret, attempt, code, cancellationToken)
             .ConfigureAwait(false);
 
         if (identity is null)
         {
             BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
 
-            return Expired(attempt.ReturnTo);
+            return Refused(context, attempt.ReturnTo, CodeRefused);
         }
 
         SessionId? spine = await RecordAsync(identity, cancellationToken).ConfigureAwait(false);
@@ -370,11 +416,11 @@ internal sealed class SignOn(
             .ConfigureAwait(false);
 
         // BFF-SESS-006, chapter 09: a session that was not derived is one that is not
-        // there, whatever code the derivation was refused with inside, which is
+        // there, and the code the derivation was refused with inside is recorded and
         // never carried to the browser.
-        if (derived.Match(_ => false, _ => true))
+        if (derived.Match(_ => (Error?)null, failure => failure) is Error underived)
         {
-            return Expired(attempt.ReturnTo);
+            return Refused(context, attempt.ReturnTo, underived.Code.ToString());
         }
 
         // BFF-SESS-004, BFF-CSRF-005a AC3: the pair the browser carries is written
@@ -390,17 +436,14 @@ internal sealed class SignOn(
 
     // BFF-SESS-006 AC2 and AC4: the code is traded on this server's own connection,
     // and what comes back is read for the one claim that names the record and dropped.
+    // Nothing comes back where the provider refused the code itself.
     private async Task<string?> ExchangedAsync(
         OidcClient registered,
+        [NeverLogged] string secret,
         SignOnAttempt attempt,
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
-        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
-        {
-            return null;
-        }
-
         using HttpClient requests = channel.CreateClient(Channel);
         using var form = new FormUrlEncodedContent(
             new Dictionary<string, string>(StringComparer.Ordinal)
@@ -417,7 +460,7 @@ internal sealed class SignOn(
             .PostAsync(new Uri(Address(addresses.Provider, "/oidc/token")), form, cancellationToken)
             .ConfigureAwait(false);
 
-        return await AnsweredAsync(answered, "id_token", cancellationToken).ConfigureAwait(false);
+        return await AnsweredAsync(answered, "id_token", CodeRefused, cancellationToken).ConfigureAwait(false);
     }
 
     // OPS-SEC-002: the secret is read from the registry at each request and held

@@ -11,6 +11,7 @@ using Janus.Authentication;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -1342,6 +1343,36 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
         Assert.Equal(Page + "?error=" + ErrorCodes.Restricted, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's attempt is bound to its session, so a
+    /// return whose session has ended since the browser left finds no attempt. It is
+    /// refused as every return with none bound to the browser is, never returned with
+    /// the code of a session that is not there: the browser is sent nowhere and
+    /// nothing is linked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAfterItsSessionEndedFindsNoAttemptAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        foreach (Session held in _deployment.Sessions.All.Where(held => held.Type is SessionType.Auth).ToList())
+        {
+            await _deployment.Sessions.EndSpineAsync(
+                held.Id,
+                _deployment.Clock.GetUtcNow(),
+                CancellationToken.None);
+        }
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, landed.Status);
+        Assert.Equal(ErrorCodes.SessionCsrfInvalid.ToString(), landed.Text("code"));
+        Assert.Null(landed.Location);
         Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
     }
 
