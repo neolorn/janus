@@ -1799,12 +1799,9 @@ internal sealed class RegistrationService(
             return Result.Failure<ProvidedRegistration>(Error.From(ErrorCodes.SessionExpired));
         }
 
-        if (!live.AgeAnswered)
-        {
-            return Result.Failure<ProvidedRegistration>(Error.From(ErrorCodes.AffirmationRequired));
-        }
-
-        if (live.Step is not RegistrationStep.Email)
+        // REG-SESS-002 AC1: the age step not done is a predecessor incomplete, as any
+        // other step out of order is.
+        if (!live.AgeAnswered || live.Step is not RegistrationStep.Email)
         {
             return Result.Failure<ProvidedRegistration>(Error.From(ErrorCodes.RegistrationIncomplete));
         }

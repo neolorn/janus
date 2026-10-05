@@ -31,6 +31,31 @@ against the public contract of LIB-API-001.
   renews no proof: a gate whose maximum age has passed since the record reached its
   level stays unmet there, and proof the record reached before its last downgrade
   passes no gate.
+- `GET /auth/signon` and `GET /auth/signon/return` are a navigation: a failure other
+  than the state returns the browser with 302, to `returnTo` at the start and to the
+  stored return address at the return, carrying `error=auth.session.expired` before any
+  fragment, where it answered 401 `auth.session.expired` in a body. Both routes declare
+  the code under their redirect. A return whose state is absent, unbound or mismatched
+  is still refused 403 `auth.session.csrfinvalid` and sent nowhere.
+- The start and the continuation of a social provider's round trip answer 303 wherever
+  they send the browser, where they answered 302.
+- A social provider's round trip whose provider cannot be reached or read, at its
+  discovery document, its published keys or its token endpoint, returns the browser
+  with `error=auth.provider.unavailable`, counts no failed attempt, records no failed
+  authentication and raises `degradation` under `provider.unavailable:<provider>` with
+  details `provider` and `part` (`discovery`, `keys` or `token`). An unreadable
+  document at the start returned `error=auth.factor.notpermitted` before, and a token
+  endpoint that gave no response or no JSON was answered as a fault. The start at a
+  provider the deployment does not declare still returns `auth.factor.notpermitted`.
+- A registration continued with a social provider before the age step is done returns
+  the browser with `error=identity.registration.incomplete`, where it returned
+  `error=identity.affirmation.required`.
+- The start and the continuation of a social provider's round trip declare the codes
+  they carry in the query member `error` of their redirect, and the endpoint contract
+  lists them under that redirect.
+- `ErrorCodes.ProviderUnavailable`, the code `auth.provider.unavailable`: a social
+  provider's round trip could not reach or read the provider. It maps to 502, which
+  no response bears, since only a navigation's redirect carries the code in `error`.
 - The signature counter of a WebAuthn assertion is checked wherever the counter
   presented or the one stored is above zero, as WebAuthn Level 3 section 7.2 states: a
   counter not above the stored one is refused 422 `auth.webauthn.countermismatch` and

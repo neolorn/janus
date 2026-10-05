@@ -61,6 +61,15 @@ public sealed class ApiStatusTests
     }
 
     /// <summary>
+    /// IDN-LIFE-012, chapter 10 section 6: a social provider that could not be reached
+    /// or read is a dependency outside the deployment, so its code maps to 502, which
+    /// only a navigation's redirect carries.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_012_AProviderThatCannotBeReachedMapsToBadGateway() =>
+        Assert.Equal(StatusCodes.Status502BadGateway, ApiStatus.Of(ErrorCodes.ProviderUnavailable));
+
+    /// <summary>
     /// API-CONV-003: 401 is session death and nothing else, so no other failure may
     /// take it however much it looks like one.
     /// </summary>

@@ -831,6 +831,14 @@ public static class ErrorCodes
     public static ErrorCode PolicyGraceExpired { get; } = ErrorCode.Parse("auth.policy.graceexpired");
 
     /// <summary>
+    /// A social provider's round trip could not reach or read the provider: its
+    /// discovery document, its published keys or its token endpoint. Start the round
+    /// trip again once the provider answers.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-012, chapter 10 section 1.2.</remarks>
+    public static ErrorCode ProviderUnavailable { get; } = ErrorCode.Parse("auth.provider.unavailable");
+
+    /// <summary>
     /// The credential's signature algorithm is outside the allow-list. Enrol an
     /// authenticator that produces one the deployment admits.
     /// </summary>

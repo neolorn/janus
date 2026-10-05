@@ -51,6 +51,7 @@ public sealed class ErrorCodesTests
         "auth.password.toolong",
         "auth.password.tooshort",
         "auth.policy.graceexpired",
+        "auth.provider.unavailable",
         "auth.recovery.channelnotonaccount",
         "auth.recovery.reasonrequired",
         "auth.recovery.selfapproval",

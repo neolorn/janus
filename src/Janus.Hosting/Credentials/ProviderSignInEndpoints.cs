@@ -23,7 +23,9 @@ namespace Janus.Hosting.Credentials;
 /// out with, bound to what the browser carries. The return a provider sends the
 /// browser to is on the machine profile, because a provider that returns by a posted
 /// form posts across sites: it reads nothing of the browser and sends it on, by a
-/// read, to the continuation.
+/// read, to the continuation. The start and the continuation declare the codes
+/// chapter 09 gives each to carry in the query member <c>error</c> of its redirect
+/// (CONV-DESIGN-006).
 /// </remarks>
 internal static class ProviderSignInEndpoints
 {
@@ -61,8 +63,13 @@ internal static class ProviderSignInEndpoints
                     string? returnTo,
                     CancellationToken cancellationToken) =>
                     signIn.StartAsync(context, provider, intent, returnTo, cancellationToken))
-                .Declares(EndpointDeclaration.Answering())
-                .Produces(StatusCodes.Status302Found);
+                .Declares(EndpointDeclaration.Answering().Carrying(
+                    ErrorCodes.RequestMalformed,
+                    ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.ProviderUnavailable,
+                    ErrorCodes.SessionExpired,
+                    ErrorCodes.RegistrationSignedIn))
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapGet(
                 Start + route + Returned,
@@ -73,8 +80,24 @@ internal static class ProviderSignInEndpoints
                     string? error,
                     CancellationToken cancellationToken) =>
                     signIn.ReturnAsync(context, provider, code, state, error, cancellationToken))
-                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid))
-                .Produces(StatusCodes.Status302Found);
+                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(
+                    ErrorCodes.Throttled,
+                    ErrorCodes.ProviderUnavailable,
+                    ErrorCodes.FactorRejected,
+                    ErrorCodes.CredentialSuspended,
+                    ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.FactorRequired,
+                    ErrorCodes.PolicyGraceExpired,
+                    ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.SessionExpired,
+                    ErrorCodes.IdentifierInvalid,
+                    ErrorCodes.IdentifierMixedScript,
+                    ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.RestrictionExceeded,
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.Denied))
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapMethods(
                 Return + route + Returned,

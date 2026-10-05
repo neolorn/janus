@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Hosting.Credentials;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -140,6 +141,11 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
     public bool Reachable { get; set; } = true;
 
     /// <summary>
+    /// The parts of every provider that are out, and how each fails a request.
+    /// </summary>
+    public IDictionary<ProviderPart, ProviderOutage> Outages { get; } = new Dictionary<ProviderPart, ProviderOutage>();
+
+    /// <summary>
     /// What each exchange the deployment made presented, in order.
     /// </summary>
     public IReadOnlyList<IReadOnlyDictionary<string, string>> Exchanges => _exchanges;
@@ -258,6 +264,28 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
 
         _ = Interlocked.Increment(ref _calls);
 
+        if (Outages.TryGetValue(Part(request.RequestUri), out ProviderOutage outage))
+        {
+            return outage switch
+            {
+                ProviderOutage.Refused => throw new HttpRequestException("The connection was refused."),
+                ProviderOutage.Silent => throw new TaskCanceledException("The request timed out."),
+                ProviderOutage.Endpointless => new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        request.RequestUri == AppleMetadata
+                            ? Metadata(AppleIssuer, AppleKeys)
+                            : Metadata(GoogleIssuer, GoogleKeys),
+                        Encoding.UTF8,
+                        "application/json"),
+                },
+                _ => new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("<html>maintenance</html>", Encoding.UTF8, "text/html"),
+                },
+            };
+        }
+
         if (Reachable && request.Method == HttpMethod.Post
             && (request.RequestUri == GoogleToken || request.RequestUri == AppleToken))
         {
@@ -305,6 +333,14 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
 
         base.Dispose(disposing);
     }
+
+    // The part of a provider an address belongs to.
+    private static ProviderPart Part(Uri? asked) =>
+        asked == GoogleToken || asked == AppleToken
+            ? ProviderPart.Token
+            : asked == GoogleKeys || asked == AppleKeys
+                ? ProviderPart.Keys
+                : ProviderPart.Discovery;
 
     private static string Metadata(string issuer, Uri keys) =>
         JsonSerializer.Serialize(new Dictionary<string, string>(StringComparer.Ordinal)

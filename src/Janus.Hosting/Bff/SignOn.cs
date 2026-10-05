@@ -46,7 +46,10 @@ namespace Janus.Hosting.Bff;
 /// reference the push was answered with; the destination the code returns to is the
 /// registered one and never one a request names, and what the exchange hands back is
 /// read once and dropped: after it, this application holds a session record and nothing
-/// else.
+/// else. The sign-on is a navigation (BFF-ERR-001): a failure other than its state
+/// returns the browser, to where it was going at the start and to the stored return
+/// address at the return, with the code of a session that is not there, and a return
+/// whose state is absent, unbound or mismatched is refused and sent nowhere.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -161,14 +164,19 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnRefused(log, context.TraceIdentifier, refused);
 
-            return Answers.Refused(ErrorCodes.SessionExpired);
+            return Expired(attempt.ReturnTo);
         }
 
         return code is not { Length: > 0 } issued
-            ? Answers.Refused(ErrorCodes.SessionExpired)
+            ? Expired(attempt.ReturnTo)
             : await RedeemAsync(context, carried, attempt, issued, cancellationToken)
                 .ConfigureAwait(false);
     }
+
+    // BFF-SESS-006, chapter 09: a failure other than the state returns the browser to
+    // where it was going with the code of a session that is not there.
+    private static IResult Expired(string returnTo) =>
+        Results.Redirect(NavigationReturn.Refused(returnTo, Error.From(ErrorCodes.SessionExpired)));
 
     // BFF-SESS-006: the registered destination is the only one, so what the browser is
     // sent back to is read from the registry and never from the request that asked.
@@ -210,7 +218,7 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnUnregistered(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionExpired);
+            return Expired(returnTo);
         }
 
         if (browser.FirstContact is not PreAuthentication contact)
@@ -229,7 +237,7 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnPushRejected(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionExpired);
+            return Expired(returnTo);
         }
 
         await contacts
@@ -311,7 +319,7 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnUnregistered(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionExpired);
+            return Expired(attempt.ReturnTo);
         }
 
         string? identity = await ExchangedAsync(registered, attempt, code, cancellationToken)
@@ -321,7 +329,7 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionExpired);
+            return Expired(attempt.ReturnTo);
         }
 
         SessionId? spine = await RecordAsync(identity, cancellationToken).ConfigureAwait(false);
@@ -330,16 +338,20 @@ internal sealed class SignOn(
         {
             BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
 
-            return Answers.Refused(ErrorCodes.SessionExpired);
+            return Expired(attempt.ReturnTo);
         }
 
         Result<IssuedSession> derived = await sessions
             .DeriveAsync(named, SessionType.PerApp, RequestOrigin.Of(context.Request), cancellationToken)
             .ConfigureAwait(false);
 
+        // A record that has ended since the code was issued is a session that is not
+        // there; anything else that kept the session from being derived is a fault.
         if (derived.Match(_ => (Error?)null, failure => failure) is Error unestablished)
         {
-            return Answers.Refused(unestablished);
+            return unestablished.Code == ErrorCodes.SessionExpired
+                ? Expired(attempt.ReturnTo)
+                : Answers.Refused(unestablished);
         }
 
         // BFF-SESS-004, BFF-CSRF-005a AC3: the pair the browser carries is written

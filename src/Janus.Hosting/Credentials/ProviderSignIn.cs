@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sessions;
@@ -38,7 +39,8 @@ namespace Janus.Hosting.Credentials;
 /// <param name="browser">What the request arrived carrying.</param>
 /// <param name="channel">Where the back-channel request is made from.</param>
 /// <param name="ring">Where each provider's credential is borrowed from at the exchange.</param>
-/// <param name="time">The clock a minted client secret is dated by.</param>
+/// <param name="alerts">Where a provider that could not be reached or read is raised.</param>
+/// <param name="time">The clock a minted client secret and a raised degradation are dated by.</param>
 /// <param name="randomness">What the state, the nonce and the proof key are drawn from.</param>
 /// <param name="log">Where a refused round trip is recorded.</param>
 /// <remarks>
@@ -50,7 +52,11 @@ namespace Janus.Hosting.Credentials;
 /// key. A browser that left for the provider comes back to the path it started from,
 /// carrying the code of any refusal and never its words (CONV-CONTENT-001). A signing
 /// credential has the client secret minted at each exchange, so none is stored and
-/// none lapses (OPS-SEC-002).
+/// none lapses (OPS-SEC-002). A provider whose discovery document, published keys or
+/// token endpoint cannot be reached or read is no refusal of what the person
+/// presented: the browser comes back with the code of that, nothing is counted or
+/// recorded as a failed authentication, and the degradation is raised under the
+/// provider's scope (IDN-LIFE-012 AC6, CONV-LOG-005, OPS-OBS-002).
 /// </remarks>
 internal sealed class ProviderSignIn(
     ProviderKeys providers,
@@ -63,12 +69,17 @@ internal sealed class ProviderSignIn(
     RequestSession browser,
     IHttpClientFactory channel,
     IKeyRing ring,
+    IAlertChannels alerts,
     TimeProvider time,
     RandomNumberGenerator randomness,
     ILogger<ProviderSignIn> log)
 {
     // IDN-LIFE-012: how long a client secret minted for one exchange is good for.
     private static readonly TimeSpan MintedLifetime = TimeSpan.FromMinutes(5);
+
+    // Chapter 10 section 5.23: the scope a provider that could not be reached or read is
+    // raised under, before the provider's name.
+    private const string UnavailableScope = "provider.unavailable:";
 
     // What a round trip is started for, as the start names it.
     private static readonly FrozenDictionary<string, ProviderIntent> Intents =
@@ -102,14 +113,14 @@ internal sealed class ProviderSignIn(
 
         if (intent is null || !Intents.TryGetValue(intent, out ProviderIntent intended))
         {
-            return Back(destination, Error.From(ErrorCodes.RequestMalformed));
+            return Back(context, destination, Error.From(ErrorCodes.RequestMalformed));
         }
 
         // A browser already signed in has nothing to sign in to, and goes where it was
         // going, as it does from the sign-on (BFF-SESS-006 AC1).
         if (intended is ProviderIntent.SignIn && browser.Live is not null)
         {
-            return Results.Redirect(destination);
+            return SeeOther(context, destination);
         }
 
         Error? failure = null;
@@ -120,16 +131,25 @@ internal sealed class ProviderSignIn(
 
         if (failure is not null)
         {
-            return Back(destination, failure);
+            return Back(context, destination, failure);
         }
 
-        if (providers.Of(provider) is not SocialProvider declared
-            || await providers.SignInAsync(provider, cancellationToken).ConfigureAwait(false)
-                is not { Authorization: Uri authorize } configured)
+        // API-CONV-003: a provider the deployment does not declare is a factor that is
+        // not permitted; nothing is presented, so nothing is counted.
+        if (providers.Of(provider) is not SocialProvider declared)
         {
-            BrowserProfileLog.ProviderUnavailable(log, context.TraceIdentifier, provider);
+            BrowserProfileLog.ProviderUndeclared(log, context.TraceIdentifier, provider);
 
-            return Back(destination, Error.From(ErrorCodes.FactorNotPermitted));
+            return Back(context, destination, Error.From(ErrorCodes.FactorNotPermitted));
+        }
+
+        ProviderMetadata configured = (await providers.SignInAsync(provider, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<ProviderMetadata>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return await UnavailableAsync(context, provider, destination, failure, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var state = OpaqueToken.Draw(randomness);
@@ -149,7 +169,7 @@ internal sealed class ProviderSignIn(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Results.Redirect(Authorization(declared, authorize, configured, state, nonce, verifier));
+        return SeeOther(context, Authorization(declared, configured.Authorization!, configured, state, nonce, verifier));
     }
 
     /// <summary>
@@ -206,7 +226,7 @@ internal sealed class ProviderSignIn(
         {
             BrowserProfileLog.ProviderRefused(log, context.TraceIdentifier, provider);
 
-            return Back(attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
+            return Back(context, attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
         }
 
         // AUTH-ABUSE-001: an address that has earned a delay is sent back before the
@@ -216,12 +236,21 @@ internal sealed class ProviderSignIn(
                 .ConfigureAwait(false)
             is Error delayed)
         {
-            return Back(attempt.ReturnTo, delayed);
+            return Back(context, attempt.ReturnTo, delayed);
         }
 
-        if (await IdentityAsync(provider, attempt, issued, cancellationToken).ConfigureAwait(false)
-            is not JsonWebToken identity
-            || identity.Subject is not { Length: > 0 } subject)
+        Error? unavailable = null;
+
+        JsonWebToken? identity = (await IdentityAsync(provider, attempt, issued, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<JsonWebToken?>(error, ref unavailable));
+
+        if (unavailable is not null)
+        {
+            return await UnavailableAsync(context, provider, attempt.ReturnTo, unavailable, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (identity?.Subject is not { Length: > 0 } subject)
         {
             BrowserProfileLog.ProviderExchangeRejected(log, context.TraceIdentifier, provider);
 
@@ -231,7 +260,7 @@ internal sealed class ProviderSignIn(
                 .ProviderRefusedAsync(provider, RequestOrigin.Source(context.Request), cancellationToken)
                 .ConfigureAwait(false);
 
-            return Back(attempt.ReturnTo, refused);
+            return Back(context, attempt.ReturnTo, refused);
         }
 
         return attempt.Intent switch
@@ -272,27 +301,21 @@ internal sealed class ProviderSignIn(
                 ? returnTo
                 : "/";
 
-    // CONV-CONTENT-001: the browser comes back to where it started with the code of
-    // what refused it, and the frontend says what that means.
-    // AUTH-ABUSE-002 AC2: a refusal naming the instant its wait lifts, as every
-    // throttled refusal does, carries that instant after the code and before any
-    // fragment.
-    private static IResult Back(string destination, Error refusal)
+    // Chapter 09: the round trip answers 303 wherever it sends the browser, to the
+    // provider, on to where it was going or back to where it started, so what follows
+    // is a read whatever the request was.
+    private static IResult SeeOther(HttpContext context, string location)
     {
-        int fragment = destination.IndexOf('#', StringComparison.Ordinal);
-        string path = fragment < 0 ? destination : destination[..fragment];
-        string rest = fragment < 0 ? string.Empty : destination[fragment..];
-        char separator = path.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        string query = "error=" + Uri.EscapeDataString(refusal.Code.ToString());
+        context.Response.StatusCode = StatusCodes.Status303SeeOther;
+        context.Response.Headers.Location = location;
 
-        if (refusal.Details.TryGetValue("retryAt", out JsonElement retryAt)
-            && retryAt.GetString() is { } instant)
-        {
-            query += "&retryAt=" + Uri.EscapeDataString(instant);
-        }
-
-        return Results.Redirect(path + separator + query + rest);
+        return Results.Empty;
     }
+
+    // BFF-ERR-001: the browser comes back to where it started with the code of what
+    // refused it.
+    private static IResult Back(HttpContext context, string destination, Error refusal) =>
+        SeeOther(context, NavigationReturn.Refused(destination, refusal));
 
     private static string Challenge([NeverLogged] string verifier) =>
         Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
@@ -410,37 +433,100 @@ internal sealed class ProviderSignIn(
             : Result.Success(ProviderBinding.Before(contact.Fingerprint));
     }
 
+    // IDN-LIFE-012 AC6, OPS-OBS-002: a provider that could not be reached or read is
+    // recorded, raised as the degradation it is under the provider's scope, naming the
+    // provider and the part, and answered with its code. Nothing the person presented
+    // failed, so nothing is counted and no failed authentication is recorded
+    // (CONV-LOG-005). Any other refusal goes back as it is.
+    private async Task<IResult> UnavailableAsync(
+        HttpContext context,
+        Factor provider,
+        string destination,
+        Error refusal,
+        CancellationToken cancellationToken)
+    {
+        if (refusal.Code != ErrorCodes.ProviderUnavailable
+            || !refusal.Details.TryGetValue(ProviderKeys.Part, out JsonElement part))
+        {
+            return Back(context, destination, refusal);
+        }
+
+        string named = ProviderRoutes.NameOf(provider);
+
+        BrowserProfileLog.ProviderUnavailable(log, context.TraceIdentifier, provider, part.GetString()!);
+
+        Result raised = await alerts
+            .RaiseAsync(
+                Alerts.Scoped(
+                    AlertCondition.Degradation,
+                    UnavailableScope + named,
+                    time.GetUtcNow(),
+                    new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                    {
+                        ["provider"] = JsonSerializer.SerializeToElement(named),
+                        [ProviderKeys.Part] = part,
+                    }),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Back(
+            context,
+            destination,
+            raised.Match(() => Error.From(ErrorCodes.ProviderUnavailable), unraised => unraised));
+    }
+
     // IDN-LIFE-012, REG-IDENT-008: the code is traded on this server's own connection,
     // and the identity token it is traded for is believed only once it verifies
     // against the provider's own keys and carries the nonce this browser was sent with.
-    private async ValueTask<JsonWebToken?> IdentityAsync(
+    // An identity that does not hold up is nothing; a provider that could not be
+    // reached or read is the failure it is.
+    private async ValueTask<Result<JsonWebToken?>> IdentityAsync(
         Factor provider,
         ProviderAttempt attempt,
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
-        if (providers.Of(provider) is not SocialProvider declared
-            || await providers.SignInAsync(provider, cancellationToken).ConfigureAwait(false)
-                is not { Token: Uri exchange } configured
-            || await ExchangedAsync(declared, configured.Issuer, exchange, attempt, code, cancellationToken)
-                .ConfigureAwait(false) is not string token
-            || await providers.IdentityAsync(provider, token, cancellationToken).ConfigureAwait(false)
-                is not JsonWebToken identity
-            || Claim(identity, "nonce") is not string nonce
-            || !CryptographicOperations.FixedTimeEquals(
-                OpaqueToken.Of(nonce).Fingerprint(),
-                attempt.NonceFingerprint))
+        if (providers.Of(provider) is not SocialProvider declared)
         {
-            return null;
+            return Result.Success<JsonWebToken?>(null);
         }
 
-        return identity;
+        Error? unavailable = null;
+
+        ProviderMetadata configured = (await providers.SignInAsync(provider, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<ProviderMetadata>(error, ref unavailable));
+
+        if (unavailable is not null)
+        {
+            return Result.Failure<JsonWebToken?>(unavailable);
+        }
+
+        string? token = (await ExchangedAsync(declared, configured, attempt, code, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(traded => traded, error => Withheld<string?>(error, ref unavailable));
+
+        if (unavailable is not null)
+        {
+            return Result.Failure<JsonWebToken?>(unavailable);
+        }
+
+        return Result.Success(
+            token is not null
+            && await providers.IdentityAsync(provider, configured, token, cancellationToken).ConfigureAwait(false)
+                is JsonWebToken identity
+            && Claim(identity, "nonce") is string nonce
+            && CryptographicOperations.FixedTimeEquals(
+                OpaqueToken.Of(nonce).Fingerprint(),
+                attempt.NonceFingerprint)
+                ? identity
+                : null);
     }
 
-    private async Task<string?> ExchangedAsync(
+    // The code traded for an identity token: the token, nothing where the provider
+    // would not trade it, or that the token endpoint could not be reached or read.
+    private async Task<Result<string?>> ExchangedAsync(
         SocialProvider declared,
-        string issuer,
-        Uri exchange,
+        ProviderMetadata configured,
         ProviderAttempt attempt,
         [NeverLogged] string code,
         CancellationToken cancellationToken)
@@ -450,7 +536,7 @@ internal sealed class ProviderSignIn(
         string secret = ring
             .BorrowProviderCredential(
                 ProviderRoutes.NameOf(declared.Provider),
-                credential => Presented(credential, declared.ClientIds[0], issuer))
+                credential => Presented(credential, declared.ClientIds[0], configured.Issuer))
             .Match(presented => presented, error => throw new InvalidOperationException(error.Code.ToString()));
 
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -467,26 +553,41 @@ internal sealed class ProviderSignIn(
             parameters["code_verifier"] = verifier;
         }
 
-        using HttpClient requests = channel.CreateClient(ProviderKeys.Channel);
-        using var form = new FormUrlEncodedContent(parameters);
-        using HttpResponseMessage answered = await requests
-            .PostAsync(exchange, form, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!answered.IsSuccessStatusCode)
+        try
         {
-            return null;
+            using HttpClient requests = channel.CreateClient(ProviderKeys.Channel);
+            using var form = new FormUrlEncodedContent(parameters);
+            using HttpResponseMessage answered = await requests
+                .PostAsync(configured.Token!, form, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!answered.IsSuccessStatusCode)
+            {
+                return Result.Success<string?>(null);
+            }
+
+            using var body = JsonDocument.Parse(
+                await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+            return Result.Success(
+                body.RootElement.ValueKind is JsonValueKind.Object
+                && body.RootElement.TryGetProperty("id_token", out JsonElement token)
+                && token.ValueKind is JsonValueKind.String
+                    ? token.GetString()
+                    : null);
         }
-
-        using var body = JsonDocument.Parse(
-            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-
-        return body.RootElement.ValueKind is JsonValueKind.Object
-            && body.RootElement.TryGetProperty("id_token", out JsonElement token)
-            && token.ValueKind is JsonValueKind.String
-                ? token.GetString()
-                : null;
+        catch (Exception unanswered) when (Unreached(unanswered, cancellationToken))
+        {
+            return Result.Failure<string?>(ProviderKeys.Unavailable(ProviderPart.Token));
+        }
     }
+
+    // IDN-LIFE-012 AC6: the token endpoint was not reached where no response came
+    // back, the connection failing or the wait for it running out with the caller
+    // still there, and was not read where what it answered a trade with is no JSON.
+    private static bool Unreached(Exception failure, CancellationToken cancellationToken) =>
+        failure is HttpRequestException or JsonException
+        || (failure is OperationCanceledException && !cancellationToken.IsCancellationRequested);
 
     // IDN-LIFE-012, OPS-SEC-002: a static secret is presented as the provider issued
     // it; from a signing credential a client secret is minted for this exchange alone,
@@ -537,7 +638,7 @@ internal sealed class ProviderSignIn(
     {
         if (browser.FirstContact?.Registration is not RegistrationSessionId session)
         {
-            return Back(destination, Error.From(ErrorCodes.SessionExpired));
+            return Back(context, destination, Error.From(ErrorCodes.SessionExpired));
         }
 
         SessionOrigin origin = RequestOrigin.Of(context.Request);
@@ -557,18 +658,18 @@ internal sealed class ProviderSignIn(
 
         if (failure is not null)
         {
-            return Back(destination, failure);
+            return Back(context, destination, failure);
         }
 
         if (!provided.Linked)
         {
-            return Results.Redirect(destination);
+            return SeeOther(context, destination);
         }
 
         if ((await registration.AbandonAsync(session, null, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error unended)
         {
-            return Back(destination, unended);
+            return Back(context, destination, unended);
         }
 
         return await SignedInAsync(
@@ -590,7 +691,7 @@ internal sealed class ProviderSignIn(
     {
         if (browser.Context is not AccessContext holder || browser.Live is not Session live)
         {
-            return Back(destination, Error.From(ErrorCodes.SessionExpired));
+            return Back(context, destination, Error.From(ErrorCodes.SessionExpired));
         }
 
         Result linked = await credentials
@@ -604,8 +705,8 @@ internal sealed class ProviderSignIn(
             .ConfigureAwait(false);
 
         return linked.Match(
-            () => Results.Redirect(destination),
-            refused => Back(destination, refused));
+            () => SeeOther(context, destination),
+            refused => Back(context, destination, refused));
     }
 
     // BFF-CSRF-005a AC3, AUTH-SESS-006: the session pair is written and what the
@@ -623,7 +724,7 @@ internal sealed class ProviderSignIn(
 
         if (failure is not null)
         {
-            return Back(destination, failure);
+            return Back(context, destination, failure);
         }
 
         if (reached.Session is IssuedSession issued)
@@ -637,6 +738,6 @@ internal sealed class ProviderSignIn(
             }
         }
 
-        return Results.Redirect(destination);
+        return SeeOther(context, destination);
     }
 }

@@ -24,6 +24,25 @@ public sealed partial class RegistrationServiceTests
     private const string AppleSubject = "001234.5a6b7c8d9e0f.1234";
 
     /// <summary>
+    /// REG-SESS-002 AC1: Continue with a provider before the age step is done is a
+    /// request for a step whose predecessor is incomplete, and is refused as one.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_002_AC1_AProviderBeforeTheAgeStepIsRefusedIncompleteAsync()
+    {
+        RegistrationSessionId session = await StartedAsync();
+
+        Result<ProvidedRegistration> provided = await ProvidedAsync(
+            session,
+            Factor.Google,
+            GoogleSubject,
+            Gmail,
+            verified: true);
+
+        Assert.Equal(ErrorCodes.RegistrationIncomplete, Refused(provided));
+    }
+
+    /// <summary>
     /// REG-IDENT-008 AC1: Continue with Google on a gmail.com address reaches the
     /// confirm step with the address verified and locked, and no code is sent.
     /// </summary>

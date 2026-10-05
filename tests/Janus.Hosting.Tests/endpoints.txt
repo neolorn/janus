@@ -1265,16 +1265,20 @@ POST /auth/logout
   401 auth.session.expired
   403 auth.session.csrfinvalid
 GET /auth/providers/apple
-  302
+  303
+    error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired identity.registration.signedin
   403 auth.session.csrfinvalid
 GET /auth/providers/apple/return
-  302
+  303
+    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   403 auth.session.csrfinvalid
 GET /auth/providers/google
-  302
+  303
+    error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired identity.registration.signedin
   403 auth.session.csrfinvalid
 GET /auth/providers/google/return
-  302
+  303
+    error auth.credential.suspended auth.factor.notpermitted auth.factor.rejected auth.factor.required auth.policy.graceexpired auth.provider.unavailable auth.restriction.exceeded auth.session.expired auth.stepup.required auth.throttled authz.denied authz.restricted identity.identifier.domainnotallowed identity.identifier.invalid identity.identifier.mixedscript identity.registration.incomplete
   403 auth.session.csrfinvalid
 GET /auth/session
   200
@@ -1289,11 +1293,11 @@ GET /auth/session
   403 auth.session.csrfinvalid
 GET /auth/signon
   302
-  401 auth.session.expired
+    error auth.session.expired
   403 auth.session.csrfinvalid
 GET /auth/signon/return
   302
-  401 auth.session.expired
+    error auth.session.expired
   403 auth.session.csrfinvalid
 POST /auth/step-up
   request application/json

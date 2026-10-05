@@ -27,10 +27,13 @@ internal static partial class EndpointContract
 
     private const string RetryAt = "retryAt";
 
+    private const string Carrier = "error";
+
     /// <summary>
     /// The lines of the contract: each endpoint by method and route pattern, then
     /// indented its request body's members, each status it answers with the members of
-    /// the body it produces there and the codes the status carries, and last the browser
+    /// the body it produces there and the codes the status carries, under a redirect the
+    /// codes a navigation route carries in the query member of it, and last the browser
     /// profile's stages in order with the pipeline's own answers.
     /// </summary>
     /// <param name="endpoints">Every endpoint the host mounted.</param>
@@ -87,7 +90,8 @@ internal static partial class EndpointContract
 
     // Each status the endpoint answers: what it produces, then what it declares, what
     // its mounting answers and nothing else, each code under the status the status map
-    // gives it.
+    // gives it. The codes a navigation route carries in the query member of its
+    // redirect go under that redirect, since no status of the map is sent with them.
     private static IEnumerable<string> Answers(RouteEndpoint endpoint, JsonSerializerOptions json)
     {
         IProducesResponseTypeMetadata[] produced = [.. endpoint.Metadata.GetOrderedMetadata<IProducesResponseTypeMetadata>()];
@@ -99,6 +103,15 @@ internal static partial class EndpointContract
             yield return Line
                 + Status(status)
                 + (refused.TryGetValue(status, out SortedSet<string>? codes) ? " " + string.Join(' ', codes) : string.Empty);
+
+            if (status is >= StatusCodes.Status300MultipleChoices and < StatusCodes.Status400BadRequest
+                && EndpointDeclaration.Of(endpoint)!.Carried is { Count: > 0 } carried)
+            {
+                yield return Member
+                    + Carrier
+                    + " "
+                    + string.Join(' ', carried.Select(code => code.ToString()).Order(StringComparer.Ordinal));
+            }
 
             foreach (IProducesResponseTypeMetadata result in produced.Where(result => result.StatusCode == status))
             {
