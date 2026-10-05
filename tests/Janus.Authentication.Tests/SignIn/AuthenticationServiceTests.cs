@@ -2887,6 +2887,71 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// Chapter 09 <c>POST /auth/factor</c>: where a second step is accepted before any
+    /// first factor, what is left to present is the first factors the challenge opened
+    /// with, never the second step accepted nor another; one of them, presented, then
+    /// completes the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task PresentAsync_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Holds(subject, Factor.SecurityKey);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress second = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
+        SignInProgress first = Reached(await PresentAsync(began.Challenge, second.Required[0], Secret));
+
+        Assert.Equal(SignInStatus.FactorRequired, second.Status);
+        Assert.Equal(AssuranceLevel.Delegated, second.AssuranceLevel);
+        Assert.Equal(began.Available, second.Required);
+        Assert.Equal(Factor.Password, second.Required[0]);
+        Assert.DoesNotContain(Factor.Totp, second.Required);
+        Assert.DoesNotContain(Factor.SecurityKey, second.Required);
+        Assert.Equal(SignInStatus.Complete, first.Status);
+        Assert.Equal(AssuranceLevel.Aal2, first.AssuranceLevel);
+        Assert.Empty(first.Required);
+    }
+
+    /// <summary>
+    /// Chapter 09 <c>POST /auth/factor</c>: in the usual order a first factor is
+    /// accepted and what is left to present is the second steps the challenge offers,
+    /// the factor accepted never among them; one of them, presented, then completes
+    /// the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task PresentAsync_AFirstFactorAccepted_RequiresTheSecondStepsLeftAndNoFactorAcceptedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.SecurityKey);
+        Holds(subject, Factor.Totp, isPreferred: true);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress first = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        SignInProgress second = Reached(await PresentAsync(began.Challenge, first.Required[0], generated));
+
+        Assert.Equal(SignInStatus.FactorRequired, first.Status);
+        Assert.Equal(AssuranceLevel.Aal1, first.AssuranceLevel);
+        Assert.Equal([Factor.Totp, Factor.SecurityKey], first.Required);
+        Assert.DoesNotContain(Factor.Password, first.Required);
+        Assert.Empty(first.Required.Intersect(began.Available));
+        Assert.Equal(SignInStatus.Complete, second.Status);
+        Assert.Equal(AssuranceLevel.Aal2, second.AssuranceLevel);
+        Assert.Empty(second.Required);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007a AC2: a password an invalidation left below the single-factor
     /// floor signs in and is told to change it, rather than being locked out.
     /// </summary>
@@ -3611,12 +3676,13 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/factor</c>: a text code asked for at
-    /// a sign-in whose number answers <c>risk</c> is answered with the factors the
-    /// challenge still offers, none already accepted on it: a generated code accepted
-    /// before the ask is not asked for again.
+    /// a sign-in whose number answers <c>risk</c>, after a generated code was accepted
+    /// before any first factor, is answered with what is left to present, which is the
+    /// first factors the challenge opened with: the code accepted is not asked for
+    /// again, and no other second step is named.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavesOutAFactorAlreadyAcceptedAsync()
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskAfterASecondStepAcceptedFirstNamesTheFirstFactorsAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -3639,19 +3705,24 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(SignInStatus.FactorRequired, presented.Status);
         Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
-        Assert.Equal([Factor.SecurityKey], offered?.Required);
+        Assert.Equal(AssuranceLevel.Delegated, offered?.AssuranceLevel);
+        Assert.Equal(began.Available, offered?.Required);
+        Assert.Equal(presented.Required, offered?.Required);
+        Assert.DoesNotContain(Factor.Totp, offered?.Required ?? []);
+        Assert.DoesNotContain(Factor.SecurityKey, offered?.Required ?? []);
         Assert.Empty(_notifications.Texts);
         Assert.Empty(_throttle.Counted);
     }
 
     /// <summary>
     /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/factor</c>: a text code asked for at
-    /// a sign-in whose number answers <c>risk</c>, where the only factor the challenge
-    /// still offers was accepted on it already, is left with none and refused
-    /// <c>auth.factor.rejected</c>, counting nothing.
+    /// a sign-in whose number answers <c>risk</c>, where the only other second step the
+    /// account holds was accepted on the challenge before any first factor, is not left
+    /// with none: the first factors the challenge opened with are what is left, and the
+    /// ask names them, counting nothing.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavingOnlyAFactorAlreadyAcceptedIsRefusedAsync()
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskWithOnlyASecondStepAcceptedFirstIsNotRefusedAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -3668,10 +3739,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Answers(PhoneSignal.Risk);
 
-        Result<SignInProgress?> asked = await AskedAsync(began.Challenge, stepping: null);
+        SignInProgress? offered = (await AskedAsync(began.Challenge, stepping: null))
+            .Match(progress => progress, error => throw new InvalidOperationException(error.Code.ToString()));
 
         Assert.Equal(SignInStatus.FactorRequired, presented.Status);
-        Assert.Equal(ErrorCodes.FactorRejected, asked.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+        Assert.Equal(began.Available, offered?.Required);
         Assert.Empty(_notifications.Texts);
         Assert.Empty(_audit.Failed);
         Assert.Empty(_throttle.Counted);
