@@ -754,29 +754,135 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-007: one report stands per credential, so a second report against the
-    /// same one is refused rather than restarting the window.
+    /// AUTH-RECOV-007, `09` `POST /recovery/report-loss`: one report stands per
+    /// credential, so a second report against the same one is refused
+    /// <c>auth.lossreport.pending</c> with the instant its window ends, rather than
+    /// restarting the window.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_RECOV_007_ASecondReportAgainstOneCredentialIsRefusedAsync()
+    public async Task AUTH_RECOV_007_ASecondReportAgainstOneCredentialIsRefusedPendingWithItsWindowAsync()
     {
         SubjectId subject = await AccountAsync();
         AuthenticatorId generator = await EnrolledAsync(subject);
-
+        DateTimeOffset completes = _clock.GetUtcNow() + TimeSpan.FromDays(7);
         _ = await Service.ReportAsync(
             AccessContext.Of(subject),
             generator,
             Source,
             TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromDays(1));
 
-        Assert.Equal(
-            ErrorCodes.LossReportPending,
-            Refused(await Service.ReportAsync(
-                AccessContext.Of(subject),
-                generator,
-                Source,
-                TestContext.Current.CancellationToken)));
+        Error refused = Refusal(await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.LossReportPending, refused.Code);
+        Assert.Equal(completes, refused.Details["invalidatesAt"].GetDateTimeOffset());
+        Assert.Equal(completes, (await _authenticators.FindAsync(generator, TestContext.Current.CancellationToken))!.InvalidatesAt);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, `09` `POST /recovery/report-loss`: a credential a removal that
+    /// would lower the account's reachable assurance already suspended is reported lost
+    /// to no effect, and the report is refused <c>auth.lossreport.pending</c> with the
+    /// instant its window ends, never <c>auth.credential.suspended</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AReportOnACredentialARemovalSuspendedIsRefusedPendingWithItsWindowAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+        Authenticator held = (await _authenticators.FindAsync(generator, TestContext.Current.CancellationToken))!;
+        DateTimeOffset completes = _clock.GetUtcNow() + TimeSpan.FromDays(7);
+        _ = await Service.SuspendAsync(
+            AccessContext.Of(subject),
+            held,
+            Source,
+            TestContext.Current.CancellationToken);
+        int sent = _notifications.Mail.Count;
+
+        Error refused = Refusal(await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.LossReportPending, refused.Code);
+        Assert.Equal(completes, refused.Details["invalidatesAt"].GetDateTimeOffset());
+        Assert.Equal(sent, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, `09` `POST /recovery/report-loss`: a suspended credential whose
+    /// report's row is gone is still one already suspended, and its report is refused
+    /// <c>auth.lossreport.pending</c> with the instant the credential carries.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AReportOnASuspendedCredentialWithNoReportIsRefusedPendingWithItsWindowAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+        Authenticator held = (await _authenticators.FindAsync(generator, TestContext.Current.CancellationToken))!;
+        DateTimeOffset completes = _clock.GetUtcNow() + TimeSpan.FromDays(3);
+        held.Suspend(completes);
+
+        Error refused = Refusal(await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.LossReportPending, refused.Code);
+        Assert.Equal(completes, refused.Details["invalidatesAt"].GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, `09` `POST /recovery/report-loss`: an invalidated credential, and
+    /// one that is not the account's, are reported lost as one the account does not
+    /// hold: <c>auth.credential.notfound</c>, and nothing is suspended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AReportOnAnInvalidatedCredentialOrAnothersIsRefusedNotFoundAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var theirs = AuthenticatorId.New(_clock);
+        AuthenticatorId gone = await EnrolledAsync(subject);
+        _authenticators.Hold(Authenticator.Existing(
+            theirs,
+            new SubjectId(Guid.NewGuid()),
+            Factor.Totp,
+            Label(),
+            AuthenticatorState.Active,
+            _clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            new TotpMaterial(new byte[20], null),
+            null));
+        (await _authenticators.FindAsync(gone, TestContext.Current.CancellationToken))!.Invalidate();
+
+        Error invalidated = Refusal(await Service.ReportAsync(
+            AccessContext.Of(subject),
+            gone,
+            Source,
+            TestContext.Current.CancellationToken));
+        Error anothers = Refusal(await Service.ReportAsync(
+            AccessContext.Of(subject),
+            theirs,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialNotFound, invalidated.Code);
+        Assert.Equal(ErrorCodes.CredentialNotFound, anothers.Code);
+        Assert.Empty(invalidated.Details);
+        Assert.Equal(AuthenticatorState.Active, await StateAsync(theirs));
+        Assert.Null(await _reports.FindAsync(theirs, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -969,6 +1075,11 @@ public sealed class LossReportsTests : IAsyncDisposable
 
     private static ErrorCode Refused<TValue>(Result<TValue> result) =>
         result.Match(_ => default, error => error.Code);
+
+    private static Error Refusal<TValue>(Result<TValue> result) =>
+        result.Match(
+            _ => throw new Xunit.Sdk.XunitException("The report was not refused."),
+            error => error);
 
     private static TValue? Value<TValue>(Result<TValue> result)
         where TValue : class =>

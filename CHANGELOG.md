@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /recovery/report-loss` on an authenticator already suspended, by a loss report
+  or by a removal that would lower reachable assurance, answers 409
+  `auth.lossreport.pending` carrying `details.invalidatesAt`, the end of the window it
+  is under; on one invalidated, or not the account's, it answers 404
+  `auth.credential.notfound`, which the route now declares. It no longer answers
+  `auth.credential.suspended`, and the 409 carried no details before.
 - A suspended authenticator presented at a sign-in or a step-up, whether a loss report
   or a removal that would lower reachable assurance suspended it, is judged first as an
   active one is. Only where what it presented verifies is it refused 422

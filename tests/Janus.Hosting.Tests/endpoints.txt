@@ -1518,6 +1518,7 @@ POST /recovery/report-loss
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
+  404 auth.credential.notfound
   409 auth.lossreport.notpermitted auth.lossreport.pending
 POST /recovery/report-loss/{id}/cancel
   request application/json

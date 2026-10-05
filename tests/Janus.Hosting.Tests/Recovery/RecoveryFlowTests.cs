@@ -224,6 +224,40 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007, `09` `POST /recovery/report-loss`: a report on a credential
+    /// already suspended answers 409 <c>auth.lossreport.pending</c> with the end of the
+    /// window it is under, and a report on a credential the account does not hold
+    /// answers 404 <c>auth.credential.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AReportOnASuspendedCredentialAnswersPendingAndOnNoneNotFoundAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        Browser browser = await RegisteredAsync();
+        AuthenticatorId credential = Enrolled();
+        DateTimeOffset completes = _deployment.Clock.GetUtcNow() + TimeSpan.FromDays(7);
+        _ = await browser.SendAsync("POST", "/recovery/report-loss", ("credentialId", credential.ToString()));
+
+        Answer pending = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss",
+            ("credentialId", credential.ToString()));
+        Answer unknown = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss",
+            ("credentialId", AuthenticatorId.New(_deployment.Clock).ToString()));
+
+        Assert.Equal(StatusCodes.Status409Conflict, pending.Status);
+        Assert.Equal(ErrorCodes.LossReportPending.ToString(), pending.Text("code"));
+        Assert.Equal(
+            completes,
+            pending.Json().GetProperty("details").GetProperty("invalidatesAt").GetDateTimeOffset());
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.CredentialNotFound.ToString(), unknown.Text("code"));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007: nobody at all reports nothing, and the report a browser
     /// holding no session sends is refused before it reaches the account.
     /// </summary>
