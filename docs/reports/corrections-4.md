@@ -5282,3 +5282,34 @@ its commits can be read.
 - Resolved by rule: nothing in this round.
 - Confirmed as built under D-193, nothing changed: questions 218, 227 and 228; the `delegated` gate's one row; the fix of the ranges job's test and the second run of the gate after D-192; the contract test of REF-001 red between a docs commit that adds a code and the code that carries it.
 - Open: questions 229 to 235 (section 4). Not built for them: a presenting call's `required` at a sign-in without the factors already accepted (229); the ended session at a link's return (231); a mounting's codes allowed in a redirect's `error` (232); a log entry for the code a sign-on's derivation was refused with (234); an exemption written into the scan of CONV-DESIGN-004 criterion 2 (235). Questions 230 and 233 park nothing.
+
+**`corrections-4`, after the items of D-194.** Full gate at `fbebd319`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). The pipeline's last run on the pull request covers `c8d188de`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3816 |
+| Contract tests | passed, 148 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1049 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 117 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). No migration since the last gate |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The fast checks ran before the docs commit `69a1aeda` and before every commit after it. The contract tests passed at every merge.
+- No `.git/index.lock` stood in the clone at the start of this round. No git configuration was changed. No commit was rewritten, on the working branch or on a part.
+- Resolved by rule: nothing in this round.
+- Confirmed as built under D-194, nothing changed: questions 230, 232 and 235; `StepUp.cs` stays watched; the messages amended on a part's own branch in the round of D-193 stand.
+- Open: questions 236 to 242 (section 4). Not built for them: the condition under which an ask is before a first factor (236); `available` held on the challenge (237); restricted first factors withheld from `required` (238); the sign-on's five unnamed failures as faults or logged refusals (239); a derivation's fault code as a fault (240); the `error` behind a sign-on's fault logged (241); entry 26 in place of entry 10 (242).
