@@ -591,7 +591,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Accepted(await AcknowledgeAsync(holder, invitation));
 
         Assert.Equal(_clock.GetUtcNow(), session.DowngradedAt);
-        Assert.False(session.Counts(session.AttainedAt));
+        Assert.False(session.Counts(session.DelegatedAt));
         Assert.Equal((1, 1), (_work.Opened, _work.Committed));
     }
 

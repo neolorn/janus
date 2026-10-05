@@ -8,8 +8,9 @@ namespace Janus.Storage.Authentication.Sessions;
 /// </summary>
 /// <remarks>
 /// Implements AUTH-SESS-001, AUTH-SESS-002 and CONV-DESIGN-003. The row holds the
-/// properties the authentication reached and never the factors that reached them, and
-/// it holds the secret by its fingerprint and never the secret.
+/// properties the authentication reached, each as the instant it was last reached, and
+/// never the factors that reached them, and it holds the secret by its fingerprint and
+/// never the secret.
 /// </remarks>
 internal sealed class SessionRecord
 {
@@ -39,16 +40,23 @@ internal sealed class SessionRecord
     /// <summary>The <c>last_seen_at</c> column.</summary>
     public DateTimeOffset LastSeenAt { get; set; }
 
-    /// <summary>The <c>attained</c> column.</summary>
-    public AssuranceLevel Attained { get; set; }
+    /// <summary>
+    /// The <c>delegated_at</c> column: when <c>delegated</c> or above was last reached.
+    /// </summary>
+    public DateTimeOffset DelegatedAt { get; set; }
 
-    /// <summary>The <c>attained_at</c> column.</summary>
-    public DateTimeOffset AttainedAt { get; set; }
+    /// <summary>The <c>aal1_at</c> column: when <c>aal1</c> or above was last reached.</summary>
+    public DateTimeOffset? Aal1At { get; set; }
 
-    /// <summary>The <c>phishing_resistant</c> column.</summary>
-    public bool PhishingResistant { get; set; }
+    /// <summary>The <c>aal2_at</c> column: when <c>aal2</c> or above was last reached.</summary>
+    public DateTimeOffset? Aal2At { get; set; }
 
-    /// <summary>The <c>phishing_resistant_at</c> column.</summary>
+    /// <summary>The <c>aal3_at</c> column: when <c>aal3</c> was last reached.</summary>
+    public DateTimeOffset? Aal3At { get; set; }
+
+    /// <summary>
+    /// The <c>phishing_resistant_at</c> column: when phishing resistance was last reached.
+    /// </summary>
     public DateTimeOffset? PhishingResistantAt { get; set; }
 
     /// <summary>The <c>downgraded_at</c> column.</summary>

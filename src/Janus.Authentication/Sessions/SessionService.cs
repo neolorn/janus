@@ -596,7 +596,7 @@ internal sealed class SessionService(
             live.Subject,
             live.Attained,
             live.PhishingResistant,
-            live.AttainedAt,
+            live.Aal2At,
             live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry,
             captured is null ? null : RedirectValidation.Landing(captured)));
     }

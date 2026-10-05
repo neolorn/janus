@@ -1047,9 +1047,7 @@ table sessions
   column secret_fingerprint bytea not null
   column created_at timestamp with time zone not null
   column last_seen_at timestamp with time zone not null
-  column attained text not null
-  column attained_at timestamp with time zone not null
-  column phishing_resistant boolean not null
+  column delegated_at timestamp with time zone not null
   column phishing_resistant_at timestamp with time zone
   column origin_browser character varying(64) not null
   column origin_os character varying(64) not null
@@ -1065,9 +1063,11 @@ table sessions
   column breakglass_reason text
   column client text
   column downgraded_at timestamp with time zone
-  constraint ck_sessions_attained CHECK ((attained = ANY (ARRAY['aal1'::text, 'aal2'::text, 'aal3'::text, 'delegated'::text])))
+  column aal1_at timestamp with time zone
+  column aal2_at timestamp with time zone
+  column aal3_at timestamp with time zone
   constraint ck_sessions_breakglass_reason CHECK (((breakglass_reason IS NULL) OR (satisfies_every_gate AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
-  constraint ck_sessions_phishing_resistant CHECK ((phishing_resistant = (phishing_resistant_at IS NOT NULL)))
+  constraint ck_sessions_levels CHECK ((((aal1_at IS NULL) OR (aal1_at <= delegated_at)) AND ((aal2_at IS NULL) OR ((aal1_at IS NOT NULL) AND (aal2_at <= aal1_at))) AND ((aal3_at IS NULL) OR ((aal2_at IS NOT NULL) AND (aal3_at <= aal2_at)))))
   constraint ck_sessions_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_sessions_type CHECK ((type = ANY (ARRAY['auth'::text, 'oidc-token'::text, 'per-app'::text])))
   constraint fk_sessions_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT

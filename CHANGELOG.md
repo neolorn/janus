@@ -40,6 +40,21 @@ against the public contract of LIB-API-001.
   200 `factorRequired`, with the factors still to present, until what was accepted
   reaches the strictest of the gates of the policy in force, and 200 `complete` then,
   where the first accepted factor ended the challenge before.
+- A session keeps the instant it last reached each assurance level and the instant it
+  last reached phishing resistance, and a factor presented renews only what it
+  reaches, its own level and every lower one. A password presented alone under a
+  session that reached `aal2` earlier renews `aal1` alone, so an `aal2` gate whose
+  maximum age has passed since then stays unmet, where the password renewed the age
+  of the earlier proof before. A gate is met where its level or one above it, and
+  phishing resistance where it asks for it, were each last reached within its maximum
+  age and after the session's last downgrade. The `sessions` table holds
+  `delegated_at`, `aal1_at`, `aal2_at` and `aal3_at` in place of `attained`,
+  `attained_at` and `phishing_resistant`; the migration carries a session already
+  recorded over with its instant at each level up to the one it holds.
+- `GET /auth/session` answers `lastStrongAuthAt` as the instant `aal2` or above was
+  last reached, and null where the session never reached it, where it answered the
+  instant of the last presentation whatever it reached; `assuranceLevel` is the
+  highest level the session has reached. `SessionDetail.LastStrongAuthAt` is nullable.
 - `PUT /account/identifiers/{id}/replace` naming the value already staged is a
   resend only from the session that staged it (the browser that staged it, or the
   enrolment session that did). From any other session of the account it stages

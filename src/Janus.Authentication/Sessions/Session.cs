@@ -12,9 +12,11 @@ namespace Janus.Authentication.Sessions;
 /// Implements AUTH-SESS-001, AUTH-SESS-002, AUTH-SESS-004 and AUTH-SESS-005. The
 /// record holds the properties an authentication reached and never the factors that
 /// reached them: factor identity is the audit trail's, so adding a factor edits no
-/// rule that reads a session. The break-glass session keeps the reason given at the
-/// credential's use, set when the credential opens it and never changed; no other
-/// session has one (OPS-BOOT-002, D-170).
+/// rule that reads a session. It keeps the instant each assurance level was last
+/// reached and the instant phishing resistance was last reached, and a presentation
+/// renews only what it reaches (D-191). The break-glass session keeps the reason given
+/// at the credential's use, set when the credential opens it and never changed; no
+/// other session has one (OPS-BOOT-002, D-170).
 /// </remarks>
 internal sealed class Session
 {
@@ -37,16 +39,13 @@ internal sealed class Session
         Subject = subject;
         CreatedAt = at;
         LastSeenAt = at;
-        Attained = reached.Level;
-        AttainedAt = at;
-        PhishingResistant = reached.PhishingResistant;
-        PhishingResistantAt = reached.PhishingResistant ? at : null;
         Origin = origin;
         LastSeen = origin;
         IdleExpiry = at + inactivity;
         AbsoluteExpiry = absolute;
         SatisfiesEveryGate = satisfiesEveryGate;
         BreakGlassReason = breakGlassReason;
+        Present(reached, at);
     }
 
     /// <summary>Which session.</summary>
@@ -69,16 +68,37 @@ internal sealed class Session
     /// <summary>When it was last used.</summary>
     public DateTimeOffset LastSeenAt { get; private set; }
 
-    /// <summary>The tier the authentication reached.</summary>
-    public AssuranceLevel Attained { get; private set; }
+    /// <summary>
+    /// The tier the session holds, which is the highest it has reached (AUTH-SESS-001).
+    /// </summary>
+    public AssuranceLevel Attained =>
+        Aal3At is not null
+            ? AssuranceLevel.Aal3
+            : Aal2At is not null
+                ? AssuranceLevel.Aal2
+                : Aal1At is not null
+                    ? AssuranceLevel.Aal1
+                    : AssuranceLevel.Delegated;
 
-    /// <summary>When that tier was reached.</summary>
-    public DateTimeOffset AttainedAt { get; private set; }
+    /// <summary>
+    /// When <c>delegated</c> or above was last reached, which every authentication
+    /// reaches.
+    /// </summary>
+    public DateTimeOffset DelegatedAt { get; private set; }
 
-    /// <summary>Whether what reached it resisted credential relay.</summary>
-    public bool PhishingResistant { get; private set; }
+    /// <summary>When <c>aal1</c> or above was last reached, or nothing where it never was.</summary>
+    public DateTimeOffset? Aal1At { get; private set; }
 
-    /// <summary>When that was last proved.</summary>
+    /// <summary>When <c>aal2</c> or above was last reached, or nothing where it never was.</summary>
+    public DateTimeOffset? Aal2At { get; private set; }
+
+    /// <summary>When <c>aal3</c> was last reached, or nothing where it never was.</summary>
+    public DateTimeOffset? Aal3At { get; private set; }
+
+    /// <summary>Whether the session has reached anything resisting credential relay.</summary>
+    public bool PhishingResistant => PhishingResistantAt is not null;
+
+    /// <summary>When phishing resistance was last reached, or nothing where it never was.</summary>
     public DateTimeOffset? PhishingResistantAt { get; private set; }
 
     /// <summary>Where it began.</summary>
@@ -97,9 +117,9 @@ internal sealed class Session
     public DateTimeOffset? EndedAt { get; private set; }
 
     /// <summary>
-    /// When it was last downgraded, or nothing where it never was. What it attained
-    /// stays as it was reached, and a gate counts it only where it was attained after
-    /// this instant (AUTH-SESS-009, AUTH-STEP-002).
+    /// When it was last downgraded, or nothing where it never was. The instants of the
+    /// levels and of phishing resistance stay as they were reached, and a gate counts
+    /// one only where it lies after this instant (AUTH-SESS-009, AUTH-STEP-002).
     /// </summary>
     public DateTimeOffset? DowngradedAt { get; private set; }
 
@@ -174,10 +194,11 @@ internal sealed class Session
     /// <param name="subject">Whose session it is.</param>
     /// <param name="createdAt">When it began.</param>
     /// <param name="lastSeenAt">When it was last used.</param>
-    /// <param name="attained">The tier it reached.</param>
-    /// <param name="attainedAt">When it reached that tier.</param>
-    /// <param name="phishingResistant">Whether it reached that resisting relay.</param>
-    /// <param name="phishingResistantAt">When it did.</param>
+    /// <param name="delegatedAt">When it last reached <c>delegated</c> or above.</param>
+    /// <param name="aal1At">When it last reached <c>aal1</c> or above, or nothing.</param>
+    /// <param name="aal2At">When it last reached <c>aal2</c> or above, or nothing.</param>
+    /// <param name="aal3At">When it last reached <c>aal3</c>, or nothing.</param>
+    /// <param name="phishingResistantAt">When it last reached phishing resistance, or nothing.</param>
     /// <param name="origin">Where it began.</param>
     /// <param name="lastSeen">Where it was last used.</param>
     /// <param name="idleExpiry">When it lapses without use.</param>
@@ -196,9 +217,10 @@ internal sealed class Session
         SubjectId subject,
         DateTimeOffset createdAt,
         DateTimeOffset lastSeenAt,
-        AssuranceLevel attained,
-        DateTimeOffset attainedAt,
-        bool phishingResistant,
+        DateTimeOffset delegatedAt,
+        DateTimeOffset? aal1At,
+        DateTimeOffset? aal2At,
+        DateTimeOffset? aal3At,
         DateTimeOffset? phishingResistantAt,
         SessionOrigin origin,
         SessionOrigin lastSeen,
@@ -218,7 +240,7 @@ internal sealed class Session
             spine,
             type,
             subject,
-            new Assurance(attained, phishingResistant),
+            new Assurance(AssuranceLevel.Delegated, PhishingResistant: false),
             origin,
             createdAt,
             TimeSpan.Zero,
@@ -227,7 +249,10 @@ internal sealed class Session
             breakGlassReason)
         {
             LastSeenAt = lastSeenAt,
-            AttainedAt = attainedAt,
+            DelegatedAt = delegatedAt,
+            Aal1At = aal1At,
+            Aal2At = aal2At,
+            Aal3At = aal3At,
             PhishingResistantAt = phishingResistantAt,
             LastSeen = lastSeen,
             IdleExpiry = idleExpiry,
@@ -286,7 +311,12 @@ internal sealed class Session
         // it ends when the record does, whatever its own idle clock says
         // (AUTH-SESS-012 AC7, AUTH-OIDC-003).
         // AUTH-SESS-009: a handle on a record that stands downgraded is downgraded from
-        // its first instant, so deriving one lifts nothing a presentation has not.
+        // its first instant, so deriving one lifts nothing a presentation has not. The
+        // record stands downgraded where the level it holds, or the phishing resistance
+        // it holds, was last reached up to its last downgrade.
+        bool lifted = Counts(LastReached(Attained) ?? DelegatedAt)
+            && (PhishingResistantAt is not { } resisted || Counts(resisted));
+
         return new Session(
             id,
             Spine,
@@ -300,7 +330,7 @@ internal sealed class Session
             SatisfiesEveryGate,
             BreakGlassReason)
         {
-            DowngradedAt = Counts(AttainedAt) ? DowngradedAt : at,
+            DowngradedAt = lifted ? DowngradedAt : at,
         };
     }
 
@@ -322,43 +352,71 @@ internal sealed class Session
     }
 
     /// <summary>
-    /// A combination was presented on the session, which writes exactly what it
-    /// reached and never more.
+    /// A combination was presented on the session, which writes the instant of each
+    /// level it reaches, its own and every lower one, and of phishing resistance where
+    /// it reaches it, and changes no instant of what it does not reach (AUTH-SESS-001).
     /// </summary>
     /// <param name="reached">What was presented.</param>
     /// <param name="at">When.</param>
     public void Present(Assurance reached, DateTimeOffset at)
     {
-        if (reached.Level > Attained)
+        DelegatedAt = at;
+
+        if (reached.Level >= AssuranceLevel.Aal1)
         {
-            Attained = reached.Level;
+            Aal1At = at;
         }
 
-        AttainedAt = at;
+        if (reached.Level >= AssuranceLevel.Aal2)
+        {
+            Aal2At = at;
+        }
+
+        if (reached.Level >= AssuranceLevel.Aal3)
+        {
+            Aal3At = at;
+        }
 
         if (reached.PhishingResistant)
         {
-            PhishingResistant = true;
             PhishingResistantAt = at;
         }
     }
 
     /// <summary>
-    /// Downgrades the session: what it attained up to this instant passes no gate until
-    /// a combination the policy in force permits is presented, which lifts it
-    /// (AUTH-SESS-009).
+    /// When a level or one above it was last reached. A presentation writes every level
+    /// below the one it reaches, so the instant kept for a level is the last instant
+    /// that level or a higher one was reached (AUTH-STEP-002 step 1).
+    /// </summary>
+    /// <param name="level">The level.</param>
+    /// <returns>The instant, or nothing where the session never reached the level.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is none of chapter 10 section 5.4.</exception>
+    public DateTimeOffset? LastReached(AssuranceLevel level) =>
+        level switch
+        {
+            AssuranceLevel.Delegated => DelegatedAt,
+            AssuranceLevel.Aal1 => Aal1At,
+            AssuranceLevel.Aal2 => Aal2At,
+            AssuranceLevel.Aal3 => Aal3At,
+            _ => throw new ArgumentOutOfRangeException(nameof(level), level, "The level is none the catalogue lists."),
+        };
+
+    /// <summary>
+    /// Downgrades the session: what it reached up to this instant passes no gate until
+    /// a combination the policy in force permits is presented, and what that
+    /// presentation reaches counts from then (AUTH-SESS-009).
     /// </summary>
     /// <param name="at">When the policy in force tightened.</param>
     public void Downgrade(DateTimeOffset at) => DowngradedAt = at;
 
     /// <summary>
-    /// Whether a proof made at an instant counts at a gate: one attained after the
-    /// session's last downgrade does, and one attained up to it does not
+    /// Whether what was reached at an instant counts at a gate: what was reached after
+    /// the session's last downgrade does, and what was reached up to it does not
     /// (AUTH-STEP-002 step 1).
     /// </summary>
-    /// <param name="attainedAt">When the proof was made.</param>
+    /// <param name="reachedAt">When it was reached.</param>
     /// <returns>Whether a gate counts it.</returns>
-    public bool Counts(DateTimeOffset attainedAt) => DowngradedAt is not { } downgraded || attainedAt > downgraded;
+    public bool Counts(DateTimeOffset reachedAt) => DowngradedAt is not { } downgraded || reachedAt > downgraded;
 
     /// <summary>
     /// The session ended, by logout, by revocation, or because the account left

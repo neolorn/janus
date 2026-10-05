@@ -598,8 +598,8 @@ public sealed class StepUpTests : IDisposable
 
         Assert.Equal((StepUpOutcome.Present, true), (asked.Outcome, asked.Downgraded));
         Assert.Equal(
-            (AssuranceLevel.Aal2, Noon, true, (DateTimeOffset?)Noon),
-            (session.Attained, session.AttainedAt, session.PhishingResistant, session.PhishingResistantAt));
+            (AssuranceLevel.Aal2, (DateTimeOffset?)Noon, (DateTimeOffset?)Noon, (DateTimeOffset?)Noon),
+            (session.Attained, session.Aal1At, session.Aal2At, session.PhishingResistantAt));
 
         session.Present(reached, Noon + TimeSpan.FromMinutes(3));
 
@@ -635,6 +635,69 @@ public sealed class StepUpTests : IDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-001 AC3, AUTH-STEP-002 AC3: a presentation writes the instant of each
+    /// level it reaches, its own and every lower one, and of phishing resistance where
+    /// it reaches it, and changes no instant of what it does not reach; so a bare
+    /// password under a session that reached <c>aal2</c> earlier meets an
+    /// <c>aal1</c> gate and no <c>aal2</c> gate whose maximum age has passed, and two
+    /// factors that resist no relay renew <c>aal2</c> and not phishing resistance.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_001_AC3_APresentationRenewsOnlyWhatItReaches()
+    {
+        HeldFactors held = Held(password: true, Factor.Totp, Factor.Passkey);
+        Session session = Signed(new Assurance(AssuranceLevel.Aal2, PhishingResistant: true));
+        DateTimeOffset password = Noon + TimeSpan.FromMinutes(10);
+        DateTimeOffset generated = Noon + TimeSpan.FromMinutes(20);
+
+        session.Present(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false), password);
+
+        StepUpOutcome single = On(GateLevel.Aal1, phishingResistant: false, Noon + TimeSpan.FromMinutes(16));
+        StepUpOutcome aged = On(GateLevel.Aal2, phishingResistant: false, Noon + TimeSpan.FromMinutes(16));
+
+        Assert.Equal(
+            (AssuranceLevel.Aal2, password, (DateTimeOffset?)password, (DateTimeOffset?)Noon, null, (DateTimeOffset?)Noon),
+            (session.Attained, session.DelegatedAt, session.Aal1At, session.Aal2At, session.Aal3At, session.PhishingResistantAt));
+        Assert.Equal((StepUpOutcome.Satisfied, StepUpOutcome.Present), (single, aged));
+
+        session.Present(new Assurance(AssuranceLevel.Aal2, PhishingResistant: false), generated);
+
+        Assert.Equal(
+            (generated, (DateTimeOffset?)generated, (DateTimeOffset?)generated, null, (DateTimeOffset?)Noon),
+            (session.DelegatedAt, session.Aal1At, session.Aal2At, session.Aal3At, session.PhishingResistantAt));
+        Assert.Equal(
+            (StepUpOutcome.Satisfied, StepUpOutcome.Present),
+            (On(GateLevel.Aal2, phishingResistant: false, Noon + TimeSpan.FromMinutes(21)),
+                On(GateLevel.Aal2, phishingResistant: true, Noon + TimeSpan.FromMinutes(21))));
+
+        StepUpOutcome On(GateLevel level, bool phishingResistant, DateTimeOffset at) =>
+            StepUp.On(session, Gate(level, phishingResistant), held, at).Outcome;
+    }
+
+    /// <summary>
+    /// AUTH-SESS-009 (D-191): what a presentation reaches after a downgrade counts from
+    /// then and lifts nothing it does not reach, so a bare password under a downgraded
+    /// session that reached <c>aal2</c> before meets an <c>aal1</c> gate and leaves an
+    /// <c>aal2</c> gate unmet for the downgrade alone.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_009_AC6_APresentationAfterADowngradeLiftsOnlyWhatItReaches()
+    {
+        HeldFactors held = Held(password: true, Factor.Totp);
+        Session session = Signed(new Assurance(AssuranceLevel.Aal2, PhishingResistant: false));
+
+        session.Downgrade(Noon + TimeSpan.FromMinutes(1));
+        session.Present(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false), Noon + TimeSpan.FromMinutes(2));
+
+        StepUpChallenge single = StepUp.On(session, Gate(GateLevel.Aal1, phishingResistant: false), held, Noon + TimeSpan.FromMinutes(3));
+        StepUpChallenge strong = StepUp.On(session, Gate(GateLevel.Aal2, phishingResistant: false), held, Noon + TimeSpan.FromMinutes(3));
+
+        Assert.Equal(StepUpOutcome.Satisfied, single.Outcome);
+        Assert.Equal((StepUpOutcome.Present, true), (strong.Outcome, strong.Downgraded));
+        Assert.Equal(Noon, session.Aal2At);
+    }
+
+    /// <summary>
     /// AUTH-SESS-009 AC5: a session derived from a record that stands downgraded passes
     /// no gate either, and one derived after a presentation lifted the downgrade does.
     /// </summary>
@@ -663,6 +726,32 @@ public sealed class StepUpTests : IDisposable
 
         static Session Derived(Session record, DateTimeOffset at) =>
             record.Derive(SessionId.New(TimeProvider.System), SessionType.PerApp, Origin(), at, TimeSpan.FromDays(1));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-009 AC5 (D-191): a bare password presented on a downgraded record that
+    /// reached <c>aal2</c> before lifts nothing of <c>aal2</c>, so a session derived
+    /// from it afterwards passes no <c>aal2</c> gate.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_009_AC5_ASessionDerivedAfterABarePasswordOnADowngradedRecordPassesNoAal2Gate()
+    {
+        HeldFactors held = Held(password: true, Factor.Totp);
+        Session record = Signed(new Assurance(AssuranceLevel.Aal2, PhishingResistant: false));
+
+        record.Downgrade(Noon + TimeSpan.FromMinutes(1));
+        record.Present(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false), Noon + TimeSpan.FromMinutes(2));
+
+        Session derived = record.Derive(
+            SessionId.New(TimeProvider.System),
+            SessionType.PerApp,
+            Origin(),
+            Noon + TimeSpan.FromMinutes(3),
+            TimeSpan.FromDays(1));
+
+        Assert.Equal(
+            StepUpOutcome.Present,
+            StepUp.On(derived, Gate(GateLevel.Aal2, phishingResistant: false), held, Noon + TimeSpan.FromMinutes(4)).Outcome);
     }
 
     /// <summary>
