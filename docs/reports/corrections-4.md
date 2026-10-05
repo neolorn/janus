@@ -4545,7 +4545,7 @@ its commits can be read.
 | Changelog line present | passed |
 | Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). Of the three migrations since the last gate it lists `KeyEachIdentifierRemovalByItsOwnIdentifier` (`pk_identifier_removals` dropped and added on `removal_id`, `removal_id` set not null) and `KeepWhenAnEnrolmentSessionShowedRecoveryCodes` (`ck_recovery_links_codes_shown` added); `KeepTheEnrolmentSessionThatStagedAReplace` lists nothing |
 | Dependency vulnerability alerting | passed |
-| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history: one finding at `a8843c12`, a migration's identifier in `IdentifierStoreTests`, allowed in `c364231b` (section 3); no finding after it |
 
 - From the docs commit `a6297785` to the merge of `part/bot-defence` (`0cb54693`), every commit fails one contract test, `SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource`, for the two `10` rows that part builds.
 - One description on the working branch was over 72 characters (the report commit of questions 188 and 189). It was not pushed; it was reworded, and the five commits above it were written again over it with the same trees, authors and dates. The merge hashes this report gives are the ones that stand.
