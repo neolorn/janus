@@ -331,6 +331,13 @@ against the public contract of LIB-API-001.
   origin whose host is written in Unicode, and the reverse, where before the two were
   compared as written and the start refused. The relying party identifier in force,
   configured or derived, is the ASCII form.
+- Each origin of `webauthn.origins` and `webauthn.relatedorigins` is held in its
+  serialization, the form a browser writes: its scheme, its host in that ASCII form,
+  and its port only where it is not the scheme's default. A WebAuthn ceremony's origin
+  is matched against the origins so held, so a deployment that writes an origin with
+  its host in Unicode, with the default port or with a trailing slash admits the
+  ceremonies a browser runs there, where before it started and refused each of them.
+  `GET /.well-known/webauthn` lists the related origins in the same form.
 - The rules of the Public Suffix List the conversion sets aside are fixed when a
   release's list is committed, and a test of the release pins them by name: a list
   that sets one aside more, or one fewer, fails it until the pin is reviewed with the
@@ -739,6 +746,11 @@ against the public contract of LIB-API-001.
   `location.database.refresh`. A file that cannot be read whole is refused and the copy
   held before it kept. While the file is missing, refused or stale, a session is shown
   without a location and `degradation` is raised once a window.
+- The location file's degradations carry their scope: `AlertRaised` and the alert's
+  record name `location.database.absent`, `location.database.stale` or
+  `location.database.refresh` as the scope of the `degradation` raised, as every other
+  scoped degradation does, where before the name was only part of the deduplication
+  key.
 - The daily `holiday-list` job raises `holiday-list-exhausted` when no date in
   `privacy.holidays` falls beyond `maintenance.expiry.warninglead`, an empty list
   included. Deadlines are counted on the dates the list holds; the alert only asks for
@@ -3233,3 +3245,11 @@ against the public contract of LIB-API-001.
   signal does not fire and `degradation` is raised under `botdefence.ranges.absent` or
   `botdefence.ranges.stale`, until the deployment supplies a file or takes the signal
   out of the set.
+- The `datacenter-ranges` job raises what it finds, so a deployment that receives no
+  registration hears of it. A read of the range file that fails (the file could not be
+  opened, or was refused whole) raises `degradation` under `botdefence.ranges.refresh`
+  where it fails and keeps the copy held. While `datacenterRange` is among
+  `abuse.botdefence.signals`, each run of the job raises `degradation` under
+  `botdefence.ranges.absent` where no file is held, or under `botdefence.ranges.stale`
+  where the one held is older than `abuse.botdefence.ranges.maxage`; the raise where a
+  registration is judged stays.

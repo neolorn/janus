@@ -24,26 +24,6 @@ namespace Janus.Core;
 /// </remarks>
 internal sealed class KeyRing : IKeyRing
 {
-    /// <summary>
-    /// The name the mail server's key is refused under.
-    /// </summary>
-    internal const string MailServerSecret = "mailServerSecret";
-
-    /// <summary>
-    /// The name the key-encryption key is refused under.
-    /// </summary>
-    internal const string KeyEncryptionKeysName = "keyEncryptionKeys";
-
-    /// <summary>
-    /// The name the fingerprint key is refused under.
-    /// </summary>
-    internal const string FingerprintKeysName = "fingerprintKeys";
-
-    /// <summary>
-    /// The name the maintenance credential is refused under.
-    /// </summary>
-    internal const string MaintenanceCredentialName = "maintenanceCredential";
-
     private const int Filling = 0;
 
     private const int Filled = 1;
@@ -104,7 +84,7 @@ internal sealed class KeyRing : IKeyRing
 
         return _keyEncryptionKeys is KeyEncryptionKeys held
             ? Result.Success(use(held))
-            : Result.Failure<TValue>(Unavailable(KeyEncryptionKeysName));
+            : Result.Failure<TValue>(KeyRingSecrets.Unavailable(KeyRingSecrets.KeyEncryptionKeysName));
     }
 
     /// <inheritdoc/>
@@ -121,7 +101,7 @@ internal sealed class KeyRing : IKeyRing
                 ErrorCodes.StartupSecretUnavailable,
                 new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                 {
-                    ["key"] = JsonSerializer.SerializeToElement(KeyEncryptionKeysName),
+                    ["key"] = JsonSerializer.SerializeToElement(KeyRingSecrets.KeyEncryptionKeysName),
                     ["version"] = JsonSerializer.SerializeToElement(version),
                 }));
     }
@@ -135,7 +115,7 @@ internal sealed class KeyRing : IKeyRing
 
         return _fingerprintKeys is FingerprintKeys held
             ? Result.Success(use(held))
-            : Result.Failure<TValue>(Unavailable(FingerprintKeysName));
+            : Result.Failure<TValue>(KeyRingSecrets.Unavailable(KeyRingSecrets.FingerprintKeysName));
     }
 
     /// <inheritdoc/>
@@ -147,7 +127,7 @@ internal sealed class KeyRing : IKeyRing
 
         return _maintenanceCredential is byte[] held
             ? Result.Success(use(held))
-            : Result.Failure<TValue>(Unavailable(MaintenanceCredentialName));
+            : Result.Failure<TValue>(KeyRingSecrets.Unavailable(KeyRingSecrets.MaintenanceCredentialName));
     }
 
     /// <inheritdoc/>
@@ -160,7 +140,7 @@ internal sealed class KeyRing : IKeyRing
 
         if (!_credentials.TryGetValue(provider, out HeldCredential? held))
         {
-            return Result.Failure<TValue>(Unavailable(Named(provider)));
+            return Result.Failure<TValue>(KeyRingSecrets.Unavailable(KeyRingSecrets.Named(provider)));
         }
 
         ProviderCredential lent = held.Issuer is string issuer && held.KeyId is string keyId
@@ -186,23 +166,8 @@ internal sealed class KeyRing : IKeyRing
 
         return _mailServerSecret is byte[] secret
             ? Result.Success(use(secret))
-            : Result.Failure<TValue>(Unavailable(MailServerSecret));
+            : Result.Failure<TValue>(KeyRingSecrets.Unavailable(KeyRingSecrets.MailServerSecret));
     }
-
-    /// <summary>
-    /// The name a social provider's credential is refused under.
-    /// </summary>
-    /// <param name="provider">The provider's name.</param>
-    /// <returns>The name, <c>socialProvider.&lt;provider&gt;</c>.</returns>
-    internal static string Named(string provider) => "socialProvider." + provider;
-
-    /// <summary>
-    /// The refusal of a secret the ring cannot answer.
-    /// </summary>
-    /// <param name="key">The secret, as <c>details.key</c> names it.</param>
-    /// <returns>The failure.</returns>
-    internal static Error Unavailable(string key) =>
-        Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement(key));
 
     /// <summary>
     /// Holds the key-encryption key, every version copied into an array of the ring's own.

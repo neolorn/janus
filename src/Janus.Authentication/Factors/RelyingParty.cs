@@ -46,12 +46,15 @@ internal sealed class RelyingParty
     public string Id { get; }
 
     /// <summary>
-    /// The origins a ceremony may run from, each of which the identifier sits over.
+    /// The origins a ceremony may run from, each of which the identifier sits over,
+    /// each held in its serialization, which a ceremony's origin is matched against
+    /// ordinally.
     /// </summary>
     public IReadOnlyList<string> Origins { get; }
 
     /// <summary>
-    /// The further origins the allowlist is served from, on their own domains.
+    /// The further origins the allowlist is served from, on their own domains, each
+    /// held in its serialization.
     /// </summary>
     public IReadOnlyList<string> RelatedOrigins { get; }
 
@@ -144,7 +147,11 @@ internal sealed class RelyingParty
                 "a browser reads no more than "
                 + LabelLimit.ToString(CultureInfo.InvariantCulture)
                 + " of them from an allowlist")
-            : new RelyingParty(resolved, [.. origins], [.. relatedOrigins], [.. algorithms]);
+            : new RelyingParty(
+                resolved,
+                [.. origins.Select(Serialized)],
+                [.. relatedOrigins.Select(Serialized)],
+                [.. algorithms]);
     }
 
     /// <summary>
@@ -196,25 +203,38 @@ internal sealed class RelyingParty
 
     // A host the suffix list cannot read has no registrable domain, so no identifier
     // sits over it and no label of it can be counted. What is read is its ASCII form.
-    private static string Host(string origin)
+    private static string Host(string origin) => Ascii(origin, Parsed(origin));
+
+    // The serialization of an origin, which a browser writes into a ceremony's client
+    // data and its URL parser gives an entry of the allowlist: the scheme, the host in
+    // its ASCII form, and the port only where it is not the scheme's default.
+    private static string Serialized(string origin)
     {
-        if (!Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) || parsed.Host.Length == 0)
-        {
-            throw Refused(
+        Uri parsed = Parsed(origin);
+        string held = parsed.Scheme + Uri.SchemeDelimiter + Ascii(origin, parsed);
+
+        return parsed.IsDefaultPort
+            ? held
+            : held + ":" + parsed.Port.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static Uri Parsed(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) && parsed.Host.Length != 0
+            ? parsed
+            : throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "origin",
                 origin,
                 "it is not an absolute origin with a host");
-        }
 
-        return PublicSuffixList.TryAscii(parsed.Host, out string ascii)
+    private static string Ascii(string origin, Uri parsed) =>
+        PublicSuffixList.TryAscii(parsed.Host, out string ascii)
             ? ascii
             : throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "origin",
                 origin,
                 "its host has no ASCII form and so no registrable domain");
-    }
 
     private static string Identifier(string identifier) =>
         PublicSuffixList.TryAscii(identifier, out string ascii)

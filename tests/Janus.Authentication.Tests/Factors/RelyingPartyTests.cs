@@ -117,6 +117,61 @@ public sealed class RelyingPartyTests
     }
 
     /// <summary>
+    /// AUTH-FACT-010: each configured origin is held in its serialization, the form a
+    /// browser writes into a ceremony's client data: its scheme, its host in the ASCII
+    /// form the conversion gives, and its port only where it is not the scheme's
+    /// default.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AConfiguredOriginIsHeldInItsSerialization() =>
+        Assert.Equal(
+            [
+                "https://app.xn--bcher-kva.de",
+                "https://id.xn--bcher-kva.de",
+                "https://id.xn--bcher-kva.de:8443",
+                "https://xn--bcher-kva.de",
+            ],
+            Settled(
+                "xn--bcher-kva.de",
+                [
+                    "https://app.bücher.de",
+                    "HTTPS://ID.Bücher.de:443",
+                    "https://id.xn--bcher-kva.de:8443",
+                    "https://BÜCHER.de/",
+                ]).Origins);
+
+    /// <summary>
+    /// AUTH-FACT-010: a related origin is held in its serialization as a configured one
+    /// is.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_ARelatedOriginIsHeldInItsSerialization() =>
+        Assert.Equal(
+            ["https://xn--bcher-kva.de", "https://example.net:8443"],
+            RelyingParty.Of(
+                    "example.com",
+                    ["https://app.example.com"],
+                    ["https://Bücher.de:443", "https://EXAMPLE.net:8443/"],
+                    Algorithms)
+                .RelatedOrigins);
+
+    /// <summary>
+    /// AUTH-FACT-012 AC1: the well-known document lists each configured related origin
+    /// in its serialization, the form a browser's URL parser gives an entry before it
+    /// compares it with the caller's origin.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_012_AC1_TheDocumentListsEachRelatedOriginInItsSerialization() =>
+        Assert.Equal(
+            """{"origins":["https://xn--bcher-kva.de","https://example.org:8443"]}""",
+            RelyingParty.Of(
+                    "example.com",
+                    ["https://app.example.com"],
+                    ["https://bücher.de", "https://example.org:8443"],
+                    Algorithms)
+                .Allowlist());
+
+    /// <summary>
     /// AUTH-FACT-012 AC1: the well-known document lists exactly the configured
     /// related origins.
     /// </summary>

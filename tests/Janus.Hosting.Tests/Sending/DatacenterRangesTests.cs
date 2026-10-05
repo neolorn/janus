@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ public sealed class DatacenterRangesTests
     private const string Job = "datacenter-ranges";
     private const string Absent = "botdefence.ranges.absent";
     private const string Stale = "botdefence.ranges.stale";
+    private const string Refresh = "botdefence.ranges.refresh";
 
     private static readonly AccessContext Watcher = AccessContext.Of(
         SystemPrincipal.ForDeployment(Job, "AUTH-ABUSE-008", SystemOperation.Monitoring));
@@ -128,7 +130,8 @@ public sealed class DatacenterRangesTests
 
     /// <summary>
     /// AUTH-ABUSE-008 AC3: a source that cannot open its file, with no copy read before,
-    /// leaves no range file read: the signal does not fire and the absence is raised.
+    /// leaves no range file read: the signal does not fire, and the read that failed and
+    /// the absence it leaves are raised, as the location file's are (INT-GEN-006).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -137,7 +140,8 @@ public sealed class DatacenterRangesTests
         _source.Refusal = Error.From(ErrorCodes.RequestMalformed);
 
         Assert.False(await ContainedAsync(Ranges, "198.51.100.7"));
-        Degraded(Absent, Assert.Single(_events.Of<AlertRaised>()));
+        Assert.Equal([Refresh, Absent], _events.Of<AlertRaised>().Select(raised => raised.Scope));
+        Assert.All(_events.Of<AlertRaised>(), raised => Degraded(raised.Scope!, raised));
     }
 
     /// <summary>
@@ -179,7 +183,7 @@ public sealed class DatacenterRangesTests
 
         _source.Text = Listed + "\n192.0.2.0\t192.0.2.255";
 
-        await Ranges.RefreshAsync(Watcher, TestContext.Current.CancellationToken);
+        await RefreshedAsync(Ranges);
 
         Assert.True(await ContainedAsync(Ranges, "192.0.2.4"));
         Assert.Equal(2, _source.Opened);
@@ -223,28 +227,154 @@ public sealed class DatacenterRangesTests
     }
 
     /// <summary>
-    /// AUTH-ABUSE-008: a failed refresh keeps the copy held, which goes on answering
-    /// until it is stale, and then the signal does not fire and the staleness is raised.
+    /// AUTH-ABUSE-008 AC6: a refresh that could not open the file raises
+    /// <c>degradation</c> under <c>botdefence.ranges.refresh</c> at the refresh and keeps
+    /// the copy held, which goes on answering until it is stale; then the run of the job
+    /// raises the staleness beside the refresh that failed, and where a registration is
+    /// judged the signal does not fire and the staleness is raised again.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_008_AFailedRefreshKeepsTheCopyHeldUntilItIsStaleAsync()
+    public async Task AUTH_ABUSE_008_AC6_AFailedRefreshIsRaisedAndKeepsTheCopyHeldUntilItIsStaleAsync()
     {
         Assert.True(await ContainedAsync(Ranges, "198.51.100.7"));
 
         _source.Refusal = Error.From(ErrorCodes.RequestMalformed);
 
-        await Ranges.RefreshAsync(Watcher, TestContext.Current.CancellationToken);
+        await RefreshedAsync(Ranges);
 
         Assert.True(await ContainedAsync(Ranges, "198.51.100.7"));
-        Assert.Empty(_events.Of<AlertRaised>());
+        Degraded(Refresh, Assert.Single(_events.Of<AlertRaised>()));
 
         _clock.Advance(TimeSpan.FromDays(31));
 
-        await Ranges.RefreshAsync(Watcher, TestContext.Current.CancellationToken);
+        await RefreshedAsync(Ranges);
 
         Assert.False(await ContainedAsync(Ranges, "198.51.100.7"));
-        Degraded(Stale, Assert.Single(_events.Of<AlertRaised>()));
+        Assert.Equal([Refresh, Refresh, Stale, Stale], _events.Of<AlertRaised>().Select(raised => raised.Scope));
+        Assert.All(_events.Of<AlertRaised>(), raised => Degraded(raised.Scope!, raised));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC6: a refresh whose file is refused whole raises
+    /// <c>degradation</c> under <c>botdefence.ranges.refresh</c> and keeps the copy held,
+    /// and it is raised whether or not <c>datacenterRange</c> is among the signals, since
+    /// the scope is the refresh's and not the signal's (chapter 10 section 5.23).
+    /// </summary>
+    /// <param name="counted">Whether the signal is among those the deployment counts.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_ABUSE_008_AC6_ARefreshWhoseFileIsRefusedWholeIsRaisedAndKeepsTheCopyHeldAsync(bool counted)
+    {
+        Assert.True(await ContainedAsync(Ranges, "198.51.100.7"));
+
+        Counting(counted);
+        _source.Text = Listed + "\n192.0.2.255\t192.0.2.0";
+
+        await RefreshedAsync(Ranges);
+
+        Degraded(Refresh, Assert.Single(_events.Of<AlertRaised>()));
+        Assert.True(await ContainedAsync(Ranges, "198.51.100.7"));
+        Assert.False(await ContainedAsync(Ranges, "192.0.2.4"));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC6: while <c>datacenterRange</c> is among the signals, each run of
+    /// the job with no range source declared raises the absence, though no registration
+    /// arrives, and there is no refresh to fail.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC6_EachRunWithNoRangeSourceRaisesTheAbsenceThoughNoRegistrationArrivesAsync()
+    {
+        for (int run = 0; run < 3; run++)
+        {
+            await RefreshedAsync(Unsupplied);
+        }
+
+        Assert.Equal(3, _events.Of<AlertRaised>().Count);
+        Assert.All(_events.Of<AlertRaised>(), raised => Degraded(Absent, raised));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC6: each run of the job whose source gives no file to read raises
+    /// the refresh that failed and the absence it leaves.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC6_EachRunWithNoFileReadRaisesTheAbsenceThoughNoRegistrationArrivesAsync()
+    {
+        _source.Refusal = Error.From(ErrorCodes.RequestMalformed);
+
+        await RefreshedAsync(Ranges);
+        await RefreshedAsync(Ranges);
+
+        Assert.Equal([Refresh, Absent, Refresh, Absent], _events.Of<AlertRaised>().Select(raised => raised.Scope));
+        Assert.All(_events.Of<AlertRaised>(), raised => Degraded(raised.Scope!, raised));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC6: each run of the job that leaves held a file older than
+    /// <c>abuse.botdefence.ranges.maxage</c> by its own date raises the staleness,
+    /// though no registration arrives; a file exactly that old is fresh and raises
+    /// nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC6_EachRunWithAStaleFileRaisesTheStalenessThoughNoRegistrationArrivesAsync()
+    {
+        _source.Text = Listed.Replace("# 2026-03-01", "# 2026-01-30", StringComparison.Ordinal);
+
+        await RefreshedAsync(Ranges);
+
+        Assert.Empty(_events.Of<AlertRaised>());
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        await RefreshedAsync(Ranges);
+        await RefreshedAsync(Ranges);
+
+        Assert.Equal(2, _events.Of<AlertRaised>().Count);
+        Assert.All(_events.Of<AlertRaised>(), raised => Degraded(Stale, raised));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC6, OPS-OBS-002: a deployment that took <c>datacenterRange</c>
+    /// out of <c>abuse.botdefence.signals</c> hears nothing of the file's absence or
+    /// staleness from the job.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC6_WithTheSignalOutOfTheSetARunRaisesNeitherAbsenceNorStalenessAsync()
+    {
+        Counting(counted: false);
+
+        await RefreshedAsync(Unsupplied);
+
+        _source.Text = Listed.Replace("# 2026-03-01", "# 2026-01-01", StringComparison.Ordinal);
+
+        await RefreshedAsync(Ranges);
+
+        Assert.Empty(_events.Of<AlertRaised>());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC6: the job <c>datacenter-ranges</c> answers what its run
+    /// answers, so a degradation that could not be raised fails the run and is never
+    /// lost.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC6_ARunWhoseDegradationCannotBeRaisedFailsAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.RequestMalformed);
+
+        Assert.Equal(
+            ErrorCodes.RequestMalformed,
+            (await Unsupplied.RefreshAsync(Watcher, TestContext.Current.CancellationToken))
+                .Match<ErrorCode?>(() => null, error => error.Code));
     }
 
     /// <summary>
@@ -272,7 +402,7 @@ public sealed class DatacenterRangesTests
         _source.Text = Listed.Replace("198.51.100.0\t198.51.100.255", "198.51.100.0\t198.51.100.127", StringComparison.Ordinal)
             + "\n" + refused;
 
-        await Ranges.RefreshAsync(Watcher, TestContext.Current.CancellationToken);
+        await RefreshedAsync(Ranges);
 
         Assert.True(await ContainedAsync(Ranges, "198.51.100.200"));
         Assert.Equal(2, _source.Opened);
@@ -281,7 +411,8 @@ public sealed class DatacenterRangesTests
     /// <summary>
     /// AUTH-ABUSE-008: a file that does not say when it was produced cannot be judged
     /// against <c>abuse.botdefence.ranges.maxage</c>, and is refused whole: none is
-    /// held, the signal does not fire and the absence is raised.
+    /// held, the signal does not fire, and the read that failed and the absence it
+    /// leaves are raised.
     /// </summary>
     /// <param name="first">The first line of the file.</param>
     /// <returns>The work of the test.</returns>
@@ -294,7 +425,7 @@ public sealed class DatacenterRangesTests
         _source.Text = Listed.Replace("# 2026-03-01", first, StringComparison.Ordinal);
 
         Assert.False(await ContainedAsync(Ranges, "198.51.100.7"));
-        Degraded(Absent, Assert.Single(_events.Of<AlertRaised>()));
+        Assert.Equal([Refresh, Absent], _events.Of<AlertRaised>().Select(raised => raised.Scope));
     }
 
     private static void Degraded(string scope, AlertRaised raised)
@@ -308,4 +439,16 @@ public sealed class DatacenterRangesTests
         (await ranges.ContainsAsync(address, TestContext.Current.CancellationToken)).Match(
             inside => inside,
             error => throw new Xunit.Sdk.XunitException($"The ask was refused: {error.Code}."));
+
+    private static async Task RefreshedAsync(DatacenterRanges ranges) =>
+        (await ranges.RefreshAsync(Watcher, TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The run failed: {error.Code}."));
+
+    private void Counting(bool counted) =>
+        _configuration.Set(
+            Settings.AbuseBotDefenceSignals,
+            (IReadOnlySet<BotDefenceSignal>)(counted
+                ? new HashSet<BotDefenceSignal> { BotDefenceSignal.DatacenterRange, BotDefenceSignal.RepeatedAttempts }
+                : new HashSet<BotDefenceSignal> { BotDefenceSignal.RepeatedAttempts }));
 }

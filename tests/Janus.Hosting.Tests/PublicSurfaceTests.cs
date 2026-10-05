@@ -710,24 +710,29 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-007 AC7 (D-189): no constructor or factory of the hosting project
-    /// names the implementation of a seam: the access gate, the key ring or the mail
+    /// CONV-DESIGN-007 AC7 (D-189, D-190): no type of the hosting project names the
+    /// implementation of a seam anywhere: the access gate, the key ring or the mail
     /// server in use. No constructor of a type of the project takes one, and no file of
-    /// the project asks the container for one, names one as a type or makes one. What
-    /// the service that fills the key ring needs of the ring and of the mail server in
-    /// use beyond their public contracts it asks of the internal contract the core
-    /// declares for the filling of the one and the recording of the other at the start,
-    /// which the core implements and registers by its method.
+    /// the project names one outside a comment, in a constructor, a factory or a body,
+    /// for a constant or a static member as for a type asked, named or made. What the
+    /// service that fills the key ring needs of the ring and of the mail server in use
+    /// beyond their public contracts it asks of the internal contract the core declares
+    /// for the filling of the one and the recording of the other at the start, which
+    /// the core implements and registers by its method; the names of the secrets the
+    /// ring holds and the refusal of a secret not available it reads from a static
+    /// class the core declares beside that contract, and the ring's implementation
+    /// offers no static member to read.
     /// </summary>
     [Fact]
-    public void CONV_DESIGN_007_AC7_NoConstructorOrFactoryOfTheHostingProjectNamesASeamsImplementation()
+    public void CONV_DESIGN_007_AC7_NoTypeOfTheHostingProjectNamesASeamsImplementationAnywhere()
     {
         Type[] seams = [typeof(Janus.Authorization.Gate.AccessGate), typeof(KeyRing), typeof(MailServerInUse)];
         var asked = new Regex(
-            @"(?:<\s*|\btypeof\s*\(\s*|\bnew\s+)(?:\w+\s*\.\s*)*(?:" + string.Join('|', seams.Select(seam => seam.Name)) + @")\b",
+            @"\b(?:" + string.Join('|', seams.Select(seam => seam.Name)) + @")\b",
             RegexOptions.CultureInvariant,
             TimeSpan.FromSeconds(5));
         Type filling = typeof(IKeyRingFilling);
+        Type names = typeof(KeyRingSecrets);
 
         IEnumerable<string> taken = Load(Mounting)
             .GetTypes()
@@ -743,6 +748,18 @@ public sealed class PublicSurfaceTests
 
         Assert.Empty(taken);
         Assert.Empty(named);
+        Assert.True(names is { IsAbstract: true, IsSealed: true, IsVisible: false });
+        Assert.Equal(filling.Assembly, names.Assembly);
+        Assert.Equal(filling.Namespace, names.Namespace);
+        Assert.Empty(seams.SelectMany(seam => seam
+            .GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .Where(member => member switch
+            {
+                FieldInfo field => !field.IsPrivate,
+                MethodBase method => !method.IsPrivate,
+                _ => false,
+            })
+            .Select(member => seam.Name + "." + member.Name)));
         Assert.True(filling is { IsInterface: true, IsVisible: false });
         Assert.Equal(typeof(KeyRingFilling), Assert.Single(Implementations(), filling.IsAssignableFrom));
         Assert.Contains(

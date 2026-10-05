@@ -65,6 +65,40 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// AUTH-ABUSE-008 AC6, LIB-HOST-001 AC7: in a deployment that declared no range
+    /// source and counts <c>datacenterRange</c>, a pass of the worker leaves
+    /// <c>degradation</c> on record under <c>botdefence.ranges.absent</c>, raised by the
+    /// run of <c>datacenter-ranges</c> itself, though no registration arrived.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC6_ARunOfTheRangesJobRaisesTheAbsenceThoughNoRegistrationArrivesAsync()
+    {
+        await ForgetEarlierRunsAsync();
+
+        DateTimeOffset at = Authorization.Deployment.Noon.AddDays(3);
+
+        await using ServiceProvider services = Deployed(host, at);
+
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            1,
+            await connection.ExecuteScalarAsync<int>(
+                """
+                SELECT count(*)::int FROM identity.raised_alerts
+                WHERE condition = 'degradation' AND scope = 'botdefence.ranges.absent' AND raised_at = @at
+                """,
+                new { at }));
+    }
+
+    /// <summary>
     /// OPS-OBS-003 AC1: a session past its lifetime, a one-time code and a recovery token
     /// past their expiry, and a given-up identifier past its undo window are gone after
     /// one pass of the worker, which nobody started.
