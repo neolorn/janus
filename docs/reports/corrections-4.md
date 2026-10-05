@@ -1683,6 +1683,23 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no change to `endpoints.txt`, no path of the truth-table change check.
 - Questions 211 and 212.
 
+### `part/assurance` (D-191), merged as `aa8e5bf9`: questions 203 to 205
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 205, the session record: it keeps the instant each level and phishing resistance was last reached; a presentation writes its level and every lower one, and phishing resistance where it reaches it, and nothing else; a gate is met where a level at or above its own, and phishing resistance where asked, were last reached within its maximum age and after the last downgrade; the `reauthenticate` residual is judged the same way; `GET /auth/session` keeps its shape | `91774d4c` | AUTH-SESS-001, AUTH-SESS-009, AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_SESS_001_AC3_ABarePasswordLeavesTheInstantOfAal2UnchangedAndAnAgedAal2GateUnmetAsync`, `StepUpTests.AUTH_SESS_001_AC3_APresentationRenewsOnlyWhatItReaches`, `StepUpTests.AUTH_SESS_009_AC6_APresentationAfterADowngradeLiftsOnlyWhatItReaches`, `StepUpTests.AUTH_SESS_009_AC5_ASessionDerivedAfterABarePasswordOnADowngradedRecordPassesNoAal2Gate`, `SessionServiceTests.AUTH_SESS_001_ASessionSaysTheHighestLevelItReachedAndWhenItLastReachedAal2Async`, `SessionStoreTests.AUTH_SESS_001_AC3_ABarePasswordIsCarriedOntoTheRowAsTheInstantOfAal1AloneAsync`, `SessionStoreTests.AUTH_SESS_001_ASessionRecordedBeforeIsCarriedOverWithItsInstantAtEachLevelItHoldsAsync` |
+| Question 205, the host's report: `AttainedAssurance` gives `Aal1At`, `Aal2At`, `Aal3At`, `PhishingResistantAt` and `Reachable` (public, in place of `Level`, `PhishingResistant` and `AttainedAt`); a report reads where `Reachable` is a defined level and no instant is after now, and meets a gate where a level at or above the gate's, and phishing resistance where asked, was last reached within the maximum age; the suite's own provider reports so for the scenarios of `10` section 5.30; four truth-table rows | `78d544e8` | LIB-HOST-004, AUTH-STEP-002, AUTHZ-GATE-005 | `StepUpGatesTests.LIB_HOST_004_AC4_AReportMeetsAnAal2GateOnlyWhereAal2OrAal3WasReachedWithinItsMaximumAgeAsync`, `StepUpGatesTests.LIB_HOST_004_AC4_AReportThatDoesNotReadMeetsNoGateAsync`, `StepUpGatesTests.LIB_HOST_004_AProviderReportingNoPhishingResistanceMeetsNoPhishingResistantGateAsync`, `StepUpGatesTests.LIB_HOST_004_AProviderReportingAnOlderProofIsRefusedWithTheGateAsync`, `StepUpGatesTests.LIB_HOST_004_AProviderReportingTheGateMetAdmitsTheActionAsync`, the step-up theory of `TruthTableTests`, the conformance suite's own tests |
+| Questions 203 and 204: each 200 of a step-up reports what the factors accepted on its challenge reach together; `complete` once the strictest gate is reached or no combination still offered has a factor left to present; only a call that presents a factor writes the session | `a57a48ff` | AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_STEP_002_AC4d_APasswordAloneIsAnsweredFactorRequiredReportingAal1AndRenewsAal1AloneAsync`, `AuthenticationServiceTests.AUTH_STEP_002_AStepUpNoCombinationCanCompleteIsAnsweredCompleteWithWhatWasReachedAndEndsAsync`, `AuthenticationServiceTests.AUTH_STEP_002_ATextCodeAskedForAtAStepUpWritesNothingIntoTheSessionAsync`, `AuthenticationServiceTests.AUTH_STEP_002_AC4c_APasswordAtOneCallAndAGeneratedCodeAtTheNextPassAGateDeclaredAal2Async` |
+
+- Question 205's test was written first and failed: the bare password moved the session's one instant from 12:00 to 12:06 with the level still `aal2`. The lead is confirmed.
+- The tests of the host's report name members that did not exist, so they did not compile before the change and were not seen failing.
+- Questions 203 and 204: the test of criterion 4d and the test of a step-up no combination can complete failed before the change, each reporting `aal2`, the highest the session had reached, where the factors accepted reach `aal1`. The test of a `phoneCode` ask passed before and after.
+- Migration `20261005074038_KeepTheInstantASessionLastReachedEachLevel`: renames `attained_at` to `delegated_at`; adds `aal1_at`, `aal2_at`, `aal3_at`; fills them by one hand-written `UPDATE` from the level the row held; drops `attained` and `phishing_resistant` with their two constraints; adds `ck_sessions_levels` (a level's instant stands only where the lower one does and is never later than it). Its `Down` adds the two columns back, fills them by a hand-written `UPDATE`, and sets them not null. The snapshot merged without a conflict, so it was not regenerated; the model holds no pending change after the merge. Its test names it by `nameof`.
+- Public surface: `AttainedAssurance` (constructor, `Deconstruct`, the four instants; the three earlier members removed) and `SessionDetail.LastStrongAuthAt`, each with its changelog line.
+- The judgement of a gate from a session (`StepUp`, in `Janus.Authentication`) changed in `91774d4c` with no truth-table change: it is outside what CONV-VCS-004 names as permission logic, and the change check passed. The judgement from a host's report (`Janus.Authorization`) changed in `78d544e8` with its four rows.
+- Of the integration classes the part ran, six were run at its third commit only, not at its first.
+- Questions 213 to 217.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4529,6 +4546,58 @@ part of 389 (3) and waits with 389 on question 48.
 - **Readings.**
   1. As it is: the endpoint contract covers what a route answers in a body.
   2. The codes a redirect carries are declared on the return routes and held by the contract test.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**213. Tier 3. AUTH-SESS-012 and AUTH-SESS-009 criterion 5: the instants of a derived session.**
+
+- **Item.** Question 205.
+- **The gap.** A derived session "inherits the record's assurance properties". No chapter says whether its instants are the record's own or the instant of derivation.
+- **What the code does.** As before: the derived session takes the instant of derivation as the instant of every level the record holds, and of phishing resistance where the record holds it. It stands downgraded unless the record's highest level, and its phishing resistance, each count after the record's last downgrade.
+- **Parked.** Carrying the record's own instants into a derived session.
+- **Answer:** pending.
+
+**214. Tier 2. AUTH-SESS-001, the migration: `phishing_resistant_at` of a session already recorded.**
+
+- **Item.** Question 205.
+- **What the code does.** The row already held `phishing_resistant_at`, the instant phishing resistance was reached, beside the flag. The migration leaves it as it is.
+- **What the owner's answer says.** The session's instant becomes the instant "of phishing resistance where it reached it".
+- **Readings.**
+  1. As built: the instant the row already held is kept. It is never later than the session's instant.
+  2. It is overwritten with the session's instant.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**215. Tier 2. AUTH-SESS-001: an instant for `delegated`.**
+
+- **Item.** Question 205.
+- **What the code does.** The record keeps `DelegatedAt` (the column `delegated_at`, the renamed `attained_at`, not null), renewed by every presentation as the lowest level. `delegated` is a level of `10` section 5.4 and an enrolment gate can require it (AUTH-STEP-007).
+- **What the specification says.** LIB-HOST-004 names `Aal1At`, `Aal2At` and `Aal3At`; D-191 speaks of "each assurance level".
+- **Readings.**
+  1. As built.
+  2. No such instant: a `delegated` requirement is read from the session's creation.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**216. Tier 2. `09` `GET /auth/session` and LIB-API: `LastStrongAuthAt` nullable.**
+
+- **Item.** Question 205.
+- **What the code does.** `SessionDetail.LastStrongAuthAt` (public) and the route's `lastStrongAuthAt` are nullable, null where the session never reached `aal2`. Before, the member was not nullable and held the session's one instant. The public surface file and the changelog carry it.
+- **What the specification says.** `09` gives the member as null where never; D-191 makes it the instant `aal2` or above was last reached and says the route keeps its shape.
+- **Readings.**
+  1. As built.
+  2. The member stays not nullable, which leaves no value for a session that never reached `aal2`.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**217. Tier 2. AUTH-FACT-002 and `09` `POST /auth/step-up`: what the 200 of a `phoneCode` ask reports.**
+
+- **Item.** Questions 203 and 204.
+- **What the code does.** A `phoneCode` ask at a step-up whose number answers `risk` is answered 200 reporting the highest level the session has reached and whether it reached phishing resistance, as before. A call that presents a factor now reports what the factors accepted on the challenge reach together.
+- **What the specification says.** D-191: "a `phoneCode` ask is answered as AUTH-FACT-002 states". `09` does not say what level that 200 reports.
+- **Readings.**
+  1. As it is.
+  2. It reports what the factors accepted on the challenge reach, as every other 200 of the route does.
 - **Parked.** Reading 2.
 - **Answer:** pending.
 
