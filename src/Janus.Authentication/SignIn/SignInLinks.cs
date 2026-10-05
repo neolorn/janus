@@ -248,11 +248,13 @@ internal sealed class SignInLinks(
 
     /// <summary>
     /// Texts the code of a second step to the account's number, issued for the one
-    /// sign-in or step-up it was asked for.
+    /// sign-in or step-up it was asked for and for the one credential it names.
     /// </summary>
     /// <param name="challenge">What the handle of that sign-in or step-up hashes to.</param>
-    /// <param name="subject">Whose account.</param>
-    /// <param name="factor">The second step the code is.</param>
+    /// <param name="credential">
+    /// The credential the code is issued for, of the account texted and of the second
+    /// step the code is.
+    /// </param>
     /// <param name="source">The address the ask came from.</param>
     /// <param name="language">The language the ask was made in.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -268,20 +270,24 @@ internal sealed class SignInLinks(
     /// purpose <c>secondfactor</c>. Where the carrier reports a recent change of SIM or
     /// of network for the number, nothing is issued and nothing goes out, the
     /// consideration is recorded, and the caller is told so, since what the ask is
-    /// answered with then depends on where it was made (AUTH-FACT-002 AC7).
+    /// answered with then depends on where it was made (AUTH-FACT-002 AC7). The code's
+    /// record names the credential it is issued for, which is what it is judged against
+    /// when it is presented (AUTH-FACT-004 AC7).
     /// </remarks>
     public async ValueTask<Result<bool>> SendSecondStepAsync(
         [NeverLogged] byte[] challenge,
-        SubjectId subject,
-        Factor factor,
+        Authenticator credential,
         string source,
         string language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(language);
 
+        SubjectId subject = credential.Subject;
+        Factor factor = credential.Factor;
         Error? failure = null;
 
         TimeSpan lifetime = (await configuration
@@ -357,6 +363,7 @@ internal sealed class SignInLinks(
                     subject,
                     factor,
                     email: null,
+                    credential.Id,
                     code,
                     browser: null,
                     challenge,
@@ -647,6 +654,7 @@ internal sealed class SignInLinks(
                     subject,
                     channel.Factor,
                     email,
+                    credential: null,
                     code,
                     Fingerprint(browser),
                     challenge: null,

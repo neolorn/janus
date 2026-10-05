@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using Janus.Authentication.SignIn;
 using Janus.Core;
 using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +15,9 @@ namespace Janus.Storage.Authentication.SignIn;
 /// Implements AUTH-FACT-003 and CONV-ENUM-001. One is outstanding per account per
 /// catalogue entry, which the unique index holds rather than a read before a write:
 /// asking again replaces what went before, so an older message is never a second way
-/// in.
+/// in. A second step's code names the credential it was issued for and no other row
+/// names one (AUTH-FACT-004); no foreign key holds the name, since a code outlives a
+/// credential removed since it was sent and is refused by its absence.
 /// </remarks>
 internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<PendingSignInRecord>
 {
@@ -22,6 +26,15 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
 
     /// <summary>The column the code sent beside the link is held in.</summary>
     public const string CodeColumn = "enc_code";
+
+    // AUTH-FACT-004: the spellings of the entries whose code names a credential.
+    private static readonly string[] NamingCredential =
+    [
+        .. Enum.GetValues<Factor>()
+            .Where(PendingSignIn.NamesCredential)
+            .Select(VocabularyConverter<Factor>.Write)
+            .Order(StringComparer.Ordinal),
+    ];
 
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<PendingSignInRecord> builder)
@@ -43,6 +56,9 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
                 "ck_signin_links_factor",
                 Vocabulary.Admits<Factor>("factor"));
             table.HasCheckConstraint("ck_signin_links_wrong_attempts", "wrong_attempts >= 0");
+            table.HasCheckConstraint(
+                "ck_signin_links_credential",
+                $"(credential IS NOT NULL) = ({Vocabulary.Admits("factor", NamingCredential)})");
 
             table.HasCheckConstraint(
                 "ck_signin_links_subject_not_max_uuid",
@@ -66,6 +82,10 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
         builder.Property(pending => pending.Email)
             .HasColumnName("email")
             .HasConversion(email => email!.Value.Value, value => new IdentifierId(value));
+
+        builder.Property(pending => pending.Credential)
+            .HasColumnName("credential")
+            .HasConversion(credential => credential!.Value.Value, value => new AuthenticatorId(value));
 
         builder.Property(pending => pending.Code).HasColumnName(CodeColumn);
 

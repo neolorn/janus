@@ -248,8 +248,7 @@ internal sealed class AuthenticationService(
     /// </summary>
     /// <param name="factor">The entry.</param>
     /// <returns>Whether it is asked for.</returns>
-    public static bool Asks(Factor factor) =>
-        FactorCatalogue.Delivered.Contains(factor) && FactorCatalogue.Of(factor).CanBeSecondFactor;
+    public static bool Asks(Factor factor) => PendingSignIn.NamesCredential(factor);
 
     /// <summary>
     /// Asks for the code of a second step the library texts, for a sign-in a first
@@ -284,7 +283,9 @@ internal sealed class AuthenticationService(
     /// (AUTH-STEP-002, D-187, D-188). An ask after a first factor, or under a session,
     /// that names a suspended number sends nothing and is refused
     /// <c>auth.credential.suspended</c>, counting nothing, since an ask presents no
-    /// factor (AUTH-RECOV-007 AC8, D-190).
+    /// factor (AUTH-RECOV-007 AC8, D-190). The code an ask sends is issued for one
+    /// credential, which its record names (AUTH-FACT-004): of the account's active
+    /// credentials of the entry, the one offered first (IDN-ATTR-008).
     /// </remarks>
     public async ValueTask<Result<SignInProgress?>> AskAsync(
         string challenge,
@@ -310,9 +311,11 @@ internal sealed class AuthenticationService(
 
         IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
             .ConfigureAwait(false);
-        bool usable = enrolled.Any(credential => credential.IsUsable && credential.Factor == factor);
+        Authenticator? issuedFor = SecondStep.Preferred(
+            enrolled.Where(credential => credential.IsUsable && credential.Factor == factor));
 
-        if (!usable && !enrolled.Any(credential => credential.IsAwaitingInvalidation && credential.Factor == factor))
+        if (issuedFor is null
+            && !enrolled.Any(credential => credential.IsAwaitingInvalidation && credential.Factor == factor))
         {
             return Result.Success<SignInProgress?>(null);
         }
@@ -334,13 +337,13 @@ internal sealed class AuthenticationService(
         // AUTH-RECOV-007 AC8: the ask names a suspended number, after a first factor or
         // under a session, so its caller is told so. Nothing is sent, and nothing is
         // counted or recorded, an ask presenting no factor.
-        if (!usable)
+        if (issuedFor is null)
         {
             return Result.Failure<SignInProgress?>(Error.From(ErrorCodes.CredentialSuspended));
         }
 
         bool sent = (await links
-                .SendSecondStepAsync(open.Fingerprint, subject, factor, source, language, cancellationToken)
+                .SendSecondStepAsync(open.Fingerprint, issuedFor, source, language, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<bool>(error, ref failure));
 
@@ -1532,8 +1535,8 @@ internal sealed class AuthenticationService(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
-        // AUTH-FACT-004 AC7, AUTH-RECOV-007: a code is judged against the credential it
-        // was sent for only once it is right, so only the right one learns that the
+        // AUTH-FACT-004 AC7, AUTH-RECOV-007: a code is judged against the credential its
+        // record names only once it is right, so only the right one learns that the
         // credential is gone or suspended: it is spent, and the refusal is a failed
         // attempt whose record and counts commit with the spend.
         if (await UnansweredAsync(held, cancellationToken).ConfigureAwait(false) is Error unanswered)
@@ -1561,32 +1564,28 @@ internal sealed class AuthenticationService(
     }
 
     // AUTH-FACT-004 AC7, AUTH-RECOV-007: what refuses a right code of a second step the
-    // library texts, read from the credential it was sent for, which is a credential of
-    // its factor the account held when it went out. Where none of those stands active,
-    // one suspended by a loss report, or by a removal that would lower reachable
-    // assurance, answers that it is suspended; where each has been removed or
+    // library texts, read from the one credential its record names from its issue,
+    // whatever other credential of the factor the account holds. Where that credential
+    // is suspended, by a loss report or by a removal that would lower reachable
+    // assurance, the code answers that it is suspended; where it has been removed or
     // invalidated since, the code is refused as one sent to an address given up since
-    // is. A code of any other entry was sent for no credential.
+    // is. A code of any other entry names no credential.
     private async ValueTask<Error?> UnansweredAsync(PendingSignIn held, CancellationToken cancellationToken)
     {
-        if (!Asks(held.Factor))
+        if (held.Credential is not AuthenticatorId named)
         {
             return null;
         }
 
-        Authenticator[] sentFor =
-        [
-            .. (await authenticators.OfAsync(held.Subject, cancellationToken).ConfigureAwait(false))
-                .Where(credential => credential.Factor == held.Factor && credential.AddedAt <= held.IssuedAt),
-        ];
+        Authenticator? issuedFor = await authenticators.FindAsync(named, cancellationToken).ConfigureAwait(false);
 
-        if (sentFor.Any(credential => credential.IsUsable))
+        if (issuedFor is { IsUsable: true })
         {
             return null;
         }
 
         return Error.From(
-            sentFor.Any(credential => credential.IsAwaitingInvalidation)
+            issuedFor is { IsAwaitingInvalidation: true }
                 ? ErrorCodes.CredentialSuspended
                 : ErrorCodes.FactorRejected);
     }

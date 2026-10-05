@@ -1568,6 +1568,267 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-004 AC7: a text code is judged against the credential its record names,
+    /// whatever other credential of the factor the account holds. Another one, held from
+    /// before the code was sent and suspended then, so that the code was issued for the
+    /// first alone, is active again when the code is presented and does not answer for
+    /// the first, removed or invalidated since: the wrong code is refused as any wrong
+    /// code is, and the right one is spent and refused <c>auth.factor.rejected</c>, the
+    /// refused step-up factor recorded and counted, and the session is not raised.
+    /// </summary>
+    /// <param name="removed">Whether the credential was removed, or invalidated.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_FACT_004_AC7_AnotherCredentialHeldWhenATextCodeWasSentDoesNotAnswerForItsOwnAtAStepUpAsync(
+        bool removed)
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Authenticator named = Held(subject, Factor.PhoneCode);
+        Authenticator other = Held(subject, Factor.PhoneCode);
+        other.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await AskedAsync(began.Challenge, subject, session);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        await GoneAsync(named, removed);
+        other.Restore();
+        _work.Reset();
+
+        ErrorCode? wrong = Refused(await SteppedAsync(Other(code)));
+        ErrorCode? right = Refused(await SteppedAsync(code));
+
+        Assert.True(other.IsUsable);
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong);
+        Assert.Equal(ErrorCodes.FactorRejected, right);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([Factor.PhoneCode, Factor.PhoneCode], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(
+            2,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal(
+            AssuranceLevel.Aal1,
+            (await _live.FindAsync(session, TestContext.Current.CancellationToken))?.Attained);
+        Assert.Equal((2, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(string value) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                new FactorPresentation(Factor.PhoneCode) { Value = value },
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC7: where the account holds two active credentials of the factor
+    /// when a text code is asked for, the code's record names one of them, and the code
+    /// is judged against that one alone. Once it is removed or invalidated the right
+    /// code is spent and refused <c>auth.factor.rejected</c>, the refused step-up factor
+    /// recorded and counted, whatever the other still is.
+    /// </summary>
+    /// <param name="removed">Whether the credential was removed, or invalidated.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_FACT_004_AC7_ARightTextCodeIsRefusedOnceTheCredentialItsRecordNamesIsGoneWhateverOtherIsActiveAsync(
+        bool removed)
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Authenticator[] held = [Held(subject, Factor.PhoneCode), Held(subject, Factor.PhoneCode)];
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await AskedAsync(began.Challenge, subject, session);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        AuthenticatorId? named =
+            (await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken))?.Credential;
+        Authenticator issuedFor = Assert.Single(held, credential => credential.Id == named);
+        await GoneAsync(issuedFor, removed);
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.PhoneCode) { Value = code },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(Assert.Single(held, credential => credential.Id != named).IsUsable);
+        Assert.Equal(ErrorCodes.FactorRejected, refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([Factor.PhoneCode], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal(
+            AssuranceLevel.Aal1,
+            (await _live.FindAsync(session, TestContext.Current.CancellationToken))?.Attained);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC7: a text code is judged against the credential its record names
+    /// and no other, so the removal of another credential of the factor the account
+    /// held does not refuse it: the right code is accepted and the session is raised.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AC7_ARightTextCodeIsAcceptedWhileTheCredentialItsRecordNamesStandsWhateverOtherIsGoneAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Authenticator[] held = [Held(subject, Factor.PhoneCode), Held(subject, Factor.PhoneCode)];
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await AskedAsync(began.Challenge, subject, session);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        AuthenticatorId? named =
+            (await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken))?.Credential;
+        await GoneAsync(Assert.Single(held, credential => credential.Id != named), removed: true);
+
+        Result<SignInProgress> stepped = await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.PhoneCode) { Value = code },
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(Refused(stepped));
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC7: at a sign-in's second step the right text code whose own
+    /// credential was removed or invalidated since it was sent is spent and refused
+    /// <c>auth.factor.rejected</c>, a failed authentication recorded and counted, and
+    /// nobody is signed in, although another credential of the factor, held from before
+    /// the code was sent, is active when it is presented.
+    /// </summary>
+    /// <param name="removed">Whether the credential was removed, or invalidated.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_FACT_004_AC7_AnotherCredentialHeldWhenATextCodeWasSentDoesNotAnswerForItsOwnAtASignInAsync(
+        bool removed)
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Authenticator named = Held(subject, Factor.PhoneCode);
+        Authenticator other = Held(subject, Factor.PhoneCode);
+        other.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        Remembered(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        _ = await AskedAsync(began.Challenge, stepping: null);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        await GoneAsync(named, removed);
+        other.Restore();
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await PresentAsync(began.Challenge, Factor.PhoneCode, code));
+
+        Assert.True(other.IsUsable);
+        Assert.Equal(ErrorCodes.FactorRejected, refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.PhoneCode)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2, AUTH-FACT-004: the right text code whose own credential is
+    /// suspended since it was sent is spent and refused
+    /// <c>auth.credential.suspended</c> at a step-up, the refused factor recorded and
+    /// counted, although another credential of the factor, held from before the code was
+    /// sent, is active when it is presented.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ATextCodeWhoseOwnCredentialIsSuspendedIsRefusedSuspendedAtAStepUpWhateverElseIsHeldAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Authenticator named = Held(subject, Factor.PhoneCode);
+        Authenticator other = Held(subject, Factor.PhoneCode);
+        other.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await AskedAsync(began.Challenge, subject, session);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        named.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        other.Restore();
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.PhoneCode) { Value = code },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(other.IsUsable);
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([Factor.PhoneCode], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal(
+            AssuranceLevel.Aal1,
+            (await _live.FindAsync(session, TestContext.Current.CancellationToken))?.Attained);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2, AUTH-FACT-004: at a sign-in's second step the right text code
+    /// whose own credential is suspended since it was sent is spent and refused
+    /// <c>auth.credential.suspended</c>, a failed authentication recorded and counted,
+    /// although another credential of the factor, held from before the code was sent, is
+    /// active when it is presented.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ATextCodeWhoseOwnCredentialIsSuspendedIsRefusedSuspendedAtASignInWhateverElseIsHeldAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Authenticator named = Held(subject, Factor.PhoneCode);
+        Authenticator other = Held(subject, Factor.PhoneCode);
+        other.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        Remembered(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        _ = await AskedAsync(began.Challenge, stepping: null);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        named.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        other.Restore();
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await PresentAsync(began.Challenge, Factor.PhoneCode, code));
+
+        Assert.True(other.IsUsable);
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.PhoneCode)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC8: a text code asked for after a first factor, naming a
     /// suspended number, sends nothing and is refused
     /// <c>auth.credential.suspended</c>. The ask presents no factor, so nothing is
@@ -3759,7 +4020,11 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             });
 
     private void Holds(SubjectId subject, Factor factor, bool isPreferred = false) =>
-        _authenticators.Hold(Authenticator.Existing(
+        _ = Held(subject, factor, isPreferred);
+
+    private Authenticator Held(SubjectId subject, Factor factor, bool isPreferred = false)
+    {
+        var held = Authenticator.Existing(
             AuthenticatorId.New(_clock),
             subject,
             factor,
@@ -3773,7 +4038,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             factor is Factor.SecurityKey
                 ? new WebAuthnMaterial(new byte[] { 1 }, new byte[] { 2 }, -7, "example.test", 0, false, false)
                 : null,
-            isPreferred));
+            isPreferred);
+
+        _authenticators.Hold(held);
+
+        return held;
+    }
 
     // AUTH-RECOV-007: the account's credentials of one factor as a loss report, or a
     // removal that would lower reachable assurance, leaves them: suspended, with the
@@ -3821,14 +4091,21 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                      .Where(credential => credential.Subject == subject && credential.Factor == factor)
                      .ToArray())
         {
-            if (removed)
-            {
-                await _authenticators.RemoveAsync(held.Id, TestContext.Current.CancellationToken);
-            }
-            else
-            {
-                held.Invalidate();
-            }
+            await GoneAsync(held, removed);
+        }
+    }
+
+    // One credential as a removal that completes at once leaves it, gone, or as the end
+    // of a window does, invalidated.
+    private async ValueTask GoneAsync(Authenticator held, bool removed)
+    {
+        if (removed)
+        {
+            await _authenticators.RemoveAsync(held.Id, TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            held.Invalidate();
         }
     }
 

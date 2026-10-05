@@ -874,9 +874,11 @@ public sealed class ModelTests
             // Not an account field: a link or a code the library sent for a sign-in,
             // one per account per catalogue entry, spent on presentation
             // (AUTH-FACT-016, REG-SESS-003), with the email it went to (REG-DOM-001) and,
-            // for a second step's code, the sign-in or step-up it answers (AUTH-FACT-002).
+            // for a second step's code, the sign-in or step-up it answers (AUTH-FACT-002)
+            // and the credential it was issued for (AUTH-FACT-004).
             "signin_links.browser",
             "signin_links.challenge",
+            "signin_links.credential",
             "signin_links.email",
             "signin_links.enc_code",
             "signin_links.expires_at",
