@@ -7,14 +7,14 @@ using Janus.Core;
 namespace Janus.Authentication.Factors;
 
 /// <summary>
-/// What a step-up gate asks of a session, and what the account may present to reach
-/// it.
+/// What a step-up gate asks of a session, and whether the session meets it.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-STEP-002, AUTH-STEP-004, AUTH-STEP-005, AUTH-STEP-006,
-/// AUTH-STEP-007 and AUTH-STEP-008. The decision reads the session record and the
-/// account's reachable assurance; the offer reads which of the account's factors can
-/// be presented. Neither asks what a factor is called.
+/// Implements AUTH-STEP-002 step 1, AUTH-STEP-004, AUTH-STEP-005, AUTH-STEP-006,
+/// AUTH-STEP-007 and AUTH-STEP-008. The judgement reads the session record and the
+/// account's reachable assurance, and is permission logic (CONV-VCS-004). What a gate
+/// the session does not meet offers the account is <see cref="StepUpOffer"/>'s, which
+/// admits and refuses nothing. Neither asks what a factor is called.
 /// </remarks>
 internal static class StepUp
 {
@@ -117,6 +117,32 @@ internal static class StepUp
             now);
     }
 
+    /// <summary>
+    /// Every combination a set of factors makes, whatever each reaches: one factor that
+    /// begins an authentication, and at most one that stands beside it, nothing in the
+    /// table reaching further with a third.
+    /// </summary>
+    /// <param name="factors">The factors to combine.</param>
+    /// <returns>The combinations.</returns>
+    /// <exception cref="ArgumentNullException">The set is absent.</exception>
+    public static IReadOnlyList<IReadOnlyList<Factor>> Combinations(IReadOnlySet<Factor> factors)
+    {
+        ArgumentNullException.ThrowIfNull(factors);
+
+        List<Factor> primaries =
+            [.. factors.Where(factor => FactorCatalogue.Of(factor).CanBePrimary).Order()];
+        List<Factor> seconds =
+            [.. factors.Where(factor => FactorCatalogue.Of(factor).CanBeSecondFactor).Order()];
+
+        return
+        [
+            .. primaries.Select(primary => (IReadOnlyList<Factor>)[primary]),
+            .. primaries.SelectMany(
+                _ => seconds,
+                (primary, second) => (IReadOnlyList<Factor>)[primary, second]),
+        ];
+    }
+
     private static StepUpChallenge Answered(
         Session session,
         Gate gate,
@@ -143,39 +169,7 @@ internal static class StepUp
         // last reached up to its last downgrade asks the person to authenticate again.
         bool downgraded = Proved(session, gate, required, phishingResistant, now, sinceDowngrade: false);
 
-        IReadOnlyList<IReadOnlyList<Factor>> offered =
-            [.. Combinations(held.Usable).Where(combination => Meets(combination, required, phishingResistant))];
-
-        if (offered.Count > 0)
-        {
-            return new StepUpChallenge(
-                StepUpOutcome.Present,
-                required,
-                phishingResistant,
-                gate.MaximumAge,
-                offered,
-                null)
-            {
-                Downgraded = downgraded,
-            };
-        }
-
-        // Three answers and never a bare refusal: the account has never held what the
-        // gate asks; it holds it and cannot present it; or it is already waiting for
-        // the report it made to complete (AUTH-STEP-002).
-        StepUpOutcome outcome = !Reaches(reachable, required, phishingResistant)
-            ? StepUpOutcome.Enrol
-            : held.LossCompletes is null
-                ? StepUpOutcome.ReportLoss
-                : StepUpOutcome.LossPending;
-
-        return new StepUpChallenge(
-            outcome,
-            required,
-            phishingResistant,
-            gate.MaximumAge,
-            [],
-            outcome is StepUpOutcome.LossPending ? held.LossCompletes : null)
+        return StepUpOffer.To(held, required, phishingResistant, gate.MaximumAge, reachable) with
         {
             Downgraded = downgraded,
         };
@@ -227,34 +221,6 @@ internal static class StepUp
             // for less than one factor (AUTH-STEP-002a).
             _ => reachable.Level < AssuranceLevel.Aal1 ? AssuranceLevel.Aal1 : reachable.Level,
         };
-
-    // A combination is one factor that begins an authentication, and at most one that
-    // stands beside it: nothing in the table reaches further with a third.
-    private static IReadOnlyList<IReadOnlyList<Factor>> Combinations(IReadOnlySet<Factor> factors)
-    {
-        List<Factor> primaries =
-            [.. factors.Where(factor => FactorCatalogue.Of(factor).CanBePrimary).Order()];
-        List<Factor> seconds =
-            [.. factors.Where(factor => FactorCatalogue.Of(factor).CanBeSecondFactor).Order()];
-
-        return
-        [
-            .. primaries.Select(primary => (IReadOnlyList<Factor>)[primary]),
-            .. primaries.SelectMany(
-                _ => seconds,
-                (primary, second) => (IReadOnlyList<Factor>)[primary, second]),
-        ];
-    }
-
-    private static bool Meets(
-        IReadOnlyList<Factor> combination,
-        AssuranceLevel required,
-        bool phishingResistant) =>
-        Assurance.Proved(Properties(combination)) is { } proved
-        && Reaches(proved, required, phishingResistant);
-
-    private static bool Reaches(Assurance reached, AssuranceLevel required, bool phishingResistant) =>
-        reached.Level >= required && (!phishingResistant || reached.PhishingResistant);
 
     private static IReadOnlyCollection<FactorProperties> Properties(IReadOnlyList<Factor> combination) =>
         [.. combination.Select(FactorCatalogue.Of)];
