@@ -173,6 +173,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a session that reached a lower level since, beside the gate's level past its maximum age",
             Decided.StepUpRequired),
         ("a session whose proof was reached only before its last downgrade", Decided.StepUpRequired),
+        ("a session derived from a record that meets the gate", Decided.Allowed),
+        (
+            "a session derived within the gate's maximum age from a record whose proof is older than it",
+            Decided.StepUpRequired),
+        (
+            "a session derived after its record's last downgrade, the record's proof reached only before it",
+            Decided.StepUpRequired),
     ];
 
     // An action bound to a consent-based purpose, on a sensitive type, which asks the
@@ -285,10 +292,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-005, AUTH-STEP-002 AC3, AUTH-SESS-001 AC3,
-    /// AUTH-SESS-009: every case of the sessions' table decides the way the table says
-    /// through the single check, and both renderings of the filter answer the same: the
-    /// record listed where the session meets the gate, and the filter refused with the
-    /// code the check answers where it does not.
+    /// AUTH-SESS-009, AUTH-SESS-012 AC8: every case of the sessions' table decides the
+    /// way the table says through the single check, and both renderings of the filter
+    /// answer the same: the record listed where the session meets the gate, and the
+    /// filter refused with the code the check answers where it does not.
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="decided">What it decides.</param>
@@ -300,11 +307,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Decided decided)
     {
         Case written = await WriteBoundAsync();
-        Session carried = Proving(written.Account, scenario);
+        IReadOnlyList<Session> proving = Proving(written.Account, scenario);
+        Session carried = proving[^1];
 
-        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        foreach (Session kept in proving)
         {
-            await KeptAsync(scope.ServiceProvider, carried);
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            await KeptAsync(scope.ServiceProvider, kept);
         }
 
         Assert.Equal(decided, await ChecksAsync(written, carried: carried));
@@ -1146,8 +1156,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // What the session of each case of the sessions' table last reached, and when,
     // against the strict gate: two factors, phishing-resistant, five minutes old at
-    // most. Each case leaves unmet the one thing its row names and nothing else.
-    private static Session Proving(SubjectId caller, string scenario)
+    // most. Each case leaves unmet the one thing its row names and nothing else. The
+    // request arrives on the last session a case answers; a derived session comes
+    // after the record it stands on (AUTH-SESS-012).
+    private static IReadOnlyList<Session> Proving(SubjectId caller, string scenario)
     {
         DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
         DateTimeOffset aged = Deployment.Noon - TimeSpan.FromMinutes(6);
@@ -1157,35 +1169,61 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         switch (scenario)
         {
             case "a session that meets the gate":
-                return Begun(caller, met, recent);
+                return [Begun(caller, met, recent)];
 
             case "a session below the level the gate asks":
-                return Begun(caller, lower, recent);
+                return [Begun(caller, lower, recent)];
 
             case "a session that was not phishing-resistant, at a gate asking it":
-                return Begun(caller, met with { PhishingResistant = false }, recent);
+                return [Begun(caller, met with { PhishingResistant = false }, recent)];
 
             case "a session whose proof is older than the gate's maximum age":
-                return Begun(caller, met, aged);
+                return [Begun(caller, met, aged)];
 
             case "a session that reached a lower level since, beside the gate's level past its maximum age":
                 Session renewed = Begun(caller, met, aged);
 
                 renewed.Present(lower, recent);
 
-                return renewed;
+                return [renewed];
 
             case "a session whose proof was reached only before its last downgrade":
                 Session downgraded = Begun(caller, met, recent);
 
                 downgraded.Downgrade(Deployment.Noon - TimeSpan.FromSeconds(30));
 
-                return downgraded;
+                return [downgraded];
+
+            case "a session derived from a record that meets the gate":
+                Session standing = Begun(caller, met, recent);
+
+                return [standing, Derived(standing, Deployment.Noon - TimeSpan.FromSeconds(30))];
+
+            case "a session derived within the gate's maximum age from a record whose proof is older than it":
+                Session old = Begun(caller, met, aged);
+
+                return [old, Derived(old, recent)];
+
+            case "a session derived after its record's last downgrade, the record's proof reached only before it":
+                Session lowered = Begun(caller, met, Deployment.Noon - TimeSpan.FromMinutes(3));
+
+                lowered.Downgrade(Deployment.Noon - TimeSpan.FromMinutes(2));
+
+                return [lowered, Derived(lowered, recent)];
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "The table has no such case.");
         }
     }
+
+    // The session another application establishes from a record (AUTH-SESS-012).
+    private static Session Derived(Session record, DateTimeOffset at) =>
+        record.Derive(
+            SessionId.New(TimeProvider.System),
+            SessionType.PerApp,
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            at,
+            TimeSpan.FromDays(7));
 
     // AUTHZ-GROUP-001, CONV-DESIGN-003 AC10: a change of members that changes nothing is
     // decided as any other, the gate asked at its step and again inside the unit of work

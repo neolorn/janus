@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A session another application establishes from the session record takes the instant
+  the record last reached each assurance level and phishing resistance, and the
+  record's last downgrade, where it took the instant it was established as the
+  instant of every level the record held. Opening another application therefore
+  renews no proof: a gate whose maximum age has passed since the record reached its
+  level stays unmet there, and proof the record reached before its last downgrade
+  passes no gate.
 - The signature counter of a WebAuthn assertion is checked wherever the counter
   presented or the one stored is above zero, as WebAuthn Level 3 section 7.2 states: a
   counter not above the stored one is refused 422 `auth.webauthn.countermismatch` and
