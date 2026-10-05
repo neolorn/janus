@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- In an enrolment session whose second step has shown no recovery codes,
+  `POST /account/recoverycodes/exported` records nothing and answers 403
+  `authz.denied`, before any other refusal and before the restriction is asked,
+  where it set `exportedAt` on the set the account already held. In process
+  `ICredentials.MarkRecoveryCodesExportedAsync(EnrolmentSessionId, ...)` refuses the
+  same way.
 - A factor refused 422 `auth.credential.suspended` at a sign-in or a step-up is a
   failed attempt: it is counted against the source and the account and recorded as
   every other refusal of a presented factor is.

@@ -982,48 +982,69 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-008 AC4, D-188: the report of an export is one of the operations an
-    /// enrolment session reaches, and it sets the export against the set of the
-    /// account the session was opened for.
+    /// AUTH-RECOV-006 AC6, D-190: in an enrolment session whose second step has shown
+    /// no codes, the report of an export is refused <c>authz.denied</c> and records
+    /// nothing: the set the account already holds stays unexported, the session stays
+    /// open and no unit of work is begun.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_FACT_008_AC4_TheEnrolmentSessionReportsAnExportAsync()
+    public async Task AUTH_RECOV_006_AC6_AReportBeforeTheSecondStepShowedCodesIsDeniedAndRecordsNothingAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
         _ = await ConfirmedAsync(subject, session);
         EnrolmentSession opened = await OpenedAsync(subject);
-
-        Accepted(await Service.MarkRecoveryCodesExportedAsync(
-            opened.Id,
-            TestContext.Current.CancellationToken));
-
-        Assert.Equal(
-            _clock.GetUtcNow(),
-            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
-        Assert.NotNull(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
-    }
-
-    /// <summary>
-    /// IDN-ACCT-007 AC2, D-188: the gate is asked for the restriction when an
-    /// enrolment session reports an export too, so a restricted account's set stays
-    /// unexported.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsEnrolmentSessionRecordsNoExportAsync()
-    {
-        (SubjectId subject, SessionId session) = await SignedInAsync();
-        _ = await ConfirmedAsync(subject, session);
-        EnrolmentSession opened = await OpenedAsync(subject);
-        _restriction.Restrict(subject);
+        _work.Reset();
 
         ErrorCode refused = Refused(await Service.MarkRecoveryCodesExportedAsync(
             opened.Id,
             TestContext.Current.CancellationToken));
 
-        Assert.Equal(ErrorCodes.Restricted, refused);
+        Assert.Equal(ErrorCodes.Denied, refused);
         Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+        Assert.NotNull(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-006 AC6, D-190: that refusal is decided before any other and before
+    /// the restriction is asked, so a restricted account, and one that holds no set, is
+    /// answered <c>authz.denied</c> there and neither <c>authz.restricted</c> nor
+    /// <c>auth.factor.notenrolled</c>.
+    /// </summary>
+    /// <param name="restricted">Whether the account's processing is restricted.</param>
+    /// <param name="holdsCodes">Whether the account holds a recovery-code set.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public async Task AUTH_RECOV_006_AC6_TheReportIsDeniedBeforeAnyOtherRefusalAndTheRestrictionAsync(
+        bool restricted,
+        bool holdsCodes)
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        if (holdsCodes)
+        {
+            _ = await ConfirmedAsync(subject, session);
+        }
+
+        EnrolmentSession opened = await OpenedAsync(subject);
+        if (restricted)
+        {
+            _restriction.Restrict(subject);
+        }
+
+        bool asked = false;
+        _restriction.Admitted = _ => asked = true;
+
+        ErrorCode refused = Refused(await Service.MarkRecoveryCodesExportedAsync(
+            opened.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Denied, refused);
+        Assert.False(asked);
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))?.ExportedAt);
     }
 
     /// <summary>

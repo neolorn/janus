@@ -656,12 +656,14 @@ internal sealed class CredentialService(
             return Result.Failure(Error.From(ErrorCodes.SessionExpired));
         }
 
-        // AUTH-RECOV-006, D-189: where the session's second step showed the codes, the
-        // report is what completes the enrolment.
+        // AUTH-RECOV-006, D-189, D-190: where the session's second step showed the codes,
+        // the report is what completes the enrolment. Before it has shown any, the
+        // session reaches the report for no set: it is refused before any other refusal
+        // and before the restriction is asked, and records nothing, since an export of
+        // a set the person did not see in this session would be a false one.
         return await enrolments.ShowedCodesAsync(enrolment, cancellationToken).ConfigureAwait(false)
             ? await EnrolmentReportedAsync(opened, cancellationToken).ConfigureAwait(false)
-            : await ExportReportedAsync(AccessContext.Of(opened.Subject), opened.Subject, cancellationToken)
-                .ConfigureAwait(false);
+            : Result.Failure(Error.From(ErrorCodes.Denied));
     }
 
     /// <inheritdoc/>
@@ -1198,11 +1200,9 @@ internal sealed class CredentialService(
         return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    // AUTH-FACT-008, IDN-ACCT-007: the report of an export that completes no enrolment
-    // session, whoever made it. It asks no step-up, and it asks the gate about the
-    // restriction under a session and under an enrolment session alike, since the
-    // report is a change to the set's record that the restriction's exemptions do not
-    // name.
+    // AUTH-FACT-008, IDN-ACCT-007: the report of an export made under a session. It
+    // asks no step-up, and it asks the gate about the restriction, since the report is
+    // a change to the set's record that the restriction's exemptions do not name.
     private async ValueTask<Result> ExportReportedAsync(
         AccessContext context,
         SubjectId subject,
