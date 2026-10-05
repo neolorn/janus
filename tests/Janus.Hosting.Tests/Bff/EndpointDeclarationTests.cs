@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Credentials;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Xunit;
@@ -216,6 +218,43 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
                 taken.Where(Typed).Select(parameter => (parameter.Name, parameter.ParameterType)),
                 Declared(endpoint).Select(value => ((string?)value.Name, value.Type)));
         }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-006 AC5 and CONV-DESIGN-004 AC2: a navigation route binds no typed
+    /// value. Each route that declares a code its redirect carries declares no typed
+    /// route or query value, has no route value in its pattern, and its handler takes
+    /// each query value as text that may be absent, so the framework refuses none of
+    /// them before the handler judges it.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AC5_ANavigationRouteBindsNoTypedValue()
+    {
+        var nullability = new NullabilityInfoContext();
+        int navigations = 0;
+
+        foreach (RouteEndpoint endpoint in _deployment.Endpoints.OfType<RouteEndpoint>())
+        {
+            if (EndpointDeclaration.Of(endpoint) is not { Carried.Count: > 0 })
+            {
+                continue;
+            }
+
+            ParameterInfo[] taken = endpoint.Metadata.GetMetadata<MethodInfo>()!.GetParameters();
+
+            Assert.Empty(Declared(endpoint));
+            Assert.Empty(endpoint.RoutePattern.Parameters);
+            Assert.DoesNotContain(taken, Typed);
+            Assert.DoesNotContain(taken, parameter => parameter.ParameterType.IsValueType
+                && parameter.ParameterType != typeof(CancellationToken));
+            Assert.All(
+                taken.Where(parameter => parameter.ParameterType == typeof(string)),
+                parameter => Assert.Equal(NullabilityState.Nullable, nullability.Create(parameter).ReadState));
+
+            navigations++;
+        }
+
+        Assert.Equal(2 + (2 * ProviderRoutes.Named.Count), navigations);
     }
 
     /// <summary>
