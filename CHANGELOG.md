@@ -746,6 +746,11 @@ against the public contract of LIB-API-001.
   `location.database.refresh`. A file that cannot be read whole is refused and the copy
   held before it kept. While the file is missing, refused or stale, a session is shown
   without a location and `degradation` is raised once a window.
+- The location file's degradations carry their scope: `AlertRaised` and the alert's
+  record name `location.database.absent`, `location.database.stale` or
+  `location.database.refresh` as the scope of the `degradation` raised, as every other
+  scoped degradation does, where before the name was only part of the deduplication
+  key.
 - The daily `holiday-list` job raises `holiday-list-exhausted` when no date in
   `privacy.holidays` falls beyond `maintenance.expiry.warninglead`, an empty list
   included. Deadlines are counted on the dates the list holds; the alert only asks for

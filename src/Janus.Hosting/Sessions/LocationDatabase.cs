@@ -143,6 +143,6 @@ internal sealed class LocationDatabase(
 
     private async ValueTask<Result> RaisedAsync(string scope, CancellationToken cancellationToken) =>
         await alerts
-            .RaiseAsync(Alerts.Of(AlertCondition.Degradation, scope, time.GetUtcNow()), cancellationToken)
+            .RaiseAsync(Alerts.Scoped(AlertCondition.Degradation, scope, time.GetUtcNow()), cancellationToken)
             .ConfigureAwait(false);
 }
