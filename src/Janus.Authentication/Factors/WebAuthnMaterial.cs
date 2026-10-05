@@ -16,7 +16,7 @@ namespace Janus.Authentication.Factors;
 /// </param>
 /// <param name="Counter">
 /// The signature counter the authenticator last reported, and nothing where it
-/// supplies none. A counter moving backwards indicates a cloned credential.
+/// supplies none. A counter that does not advance indicates a cloned credential.
 /// </param>
 /// <param name="BackupEligible">Whether the credential may be synced.</param>
 /// <param name="BackupState">Whether it currently is.</param>

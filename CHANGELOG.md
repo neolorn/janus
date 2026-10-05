@@ -10,6 +10,24 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The signature counter of a WebAuthn assertion is checked wherever the counter
+  presented or the one stored is above zero, as WebAuthn Level 3 section 7.2 states: a
+  counter not above the stored one is refused 422 `auth.webauthn.countermismatch` and
+  audited. A counter of zero presented against a stored one above zero is therefore
+  refused, where it was accepted; an equal and a lower counter are refused as before,
+  and a suspended key goes through the same check before it is told it is suspended.
+- A sign-in over a social provider's round trip by a linked credential that is
+  suspended, on a window (a loss report or a removal) or held after the provider's
+  security event, returns the browser with `error=auth.credential.suspended` once the
+  provider vouches, a failed attempt counted and recorded, where it returned
+  `error=auth.factor.rejected`. On an account that is not active it is refused
+  `auth.factor.rejected` as an active credential is.
+- A right `phoneCode` code presented at `POST /auth/factor` or `POST /auth/step-up`
+  after the credential it was sent for was removed or invalidated is spent and refused
+  422 `auth.factor.rejected`, a failed attempt counted and recorded, where it was
+  accepted for as long as the code lived. A credential enrolled after the code was sent
+  does not answer for the one that is gone, and a wrong code is refused as any wrong
+  code is.
 - `POST /auth/step-up` declares 422 `identity.identifier.domainnotallowed`, which it
   answers where a right `emailCode` code was sent to an address a domain lock now
   refuses: the lock is judged after the code, the code is spent, and no failed attempt

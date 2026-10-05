@@ -146,6 +146,45 @@ public sealed class LocationDatabaseTests
     }
 
     /// <summary>
+    /// INT-GEN-006 AC2: the first read a process makes, where an address is resolved, is
+    /// a refresh, and one that fails, the file not opened or refused whole, surfaces as
+    /// a degradation under <c>location.database.refresh</c> at that read, before the
+    /// absence it leaves. The next resolution reads nothing, the read being the job's
+    /// from then on, and raises the absence alone.
+    /// </summary>
+    /// <param name="opened">Whether the file opened and was refused whole, or did not open.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task INT_GEN_006_AC2_TheFirstReadAProcessMakesThatFailsSurfacesAsADegradationAsync(bool opened)
+    {
+        if (opened)
+        {
+            _source.Text = Listed + "\n192.0.2.255\t192.0.2.0\tEG\t\t\t";
+        }
+        else
+        {
+            _source.Refusal = Error.From(ErrorCodes.RequestMalformed);
+        }
+
+        Assert.Null(await ResolvedAsync(Database, "198.51.100.7"));
+
+        Assert.Equal(1, _source.Opened);
+        Assert.Equal(
+            ["location.database.refresh", "location.database.absent"],
+            _events.Of<AlertRaised>().Select(raised => raised.Scope));
+        Degraded("location.database.refresh", _events.Of<AlertRaised>()[0]);
+
+        Assert.Null(await ResolvedAsync(Database, "198.51.100.7"));
+
+        Assert.Equal(1, _source.Opened);
+        Assert.Equal(
+            ["location.database.refresh", "location.database.absent", "location.database.absent"],
+            _events.Of<AlertRaised>().Select(raised => raised.Scope));
+    }
+
+    /// <summary>
     /// INT-GEN-006 AC2: the refresh runs from the job with nobody asking, and what it
     /// reads replaces the copy held.
     /// </summary>

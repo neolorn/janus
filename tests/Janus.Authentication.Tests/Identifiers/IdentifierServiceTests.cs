@@ -4043,11 +4043,11 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-007 AC9 (D-190): a link is judged again on the row as its lock is
-    /// taken, so a press that finds the replace staged afresh for another session
-    /// meanwhile opens nothing: the new address's link and the displaced address's
-    /// confirmation are each answered <c>auth.code.expired</c> and counted against
-    /// the source, and the replace as staged afresh proves nothing by them.
+    /// REG-IDENT-007 AC11 (D-191): a press that read the replace's row before it was
+    /// restaged and locked it after is judged again under the lock. Its link no longer
+    /// matches, so the new address's link and the displaced address's confirmation are
+    /// each answered <c>auth.code.expired</c> and counted against the source, and the
+    /// replace as staged afresh proves nothing by them.
     /// </summary>
     /// <param name="confirmation">
     /// Whether the link pressed is the displaced address's confirmation, where
@@ -4056,7 +4056,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task REG_IDENT_007_AC9_APressThatFindsTheReplaceStagedAfreshMeanwhileOpensNothingAsync(bool confirmation)
+    public async Task REG_IDENT_007_AC11_APressThatLocksTheReplaceAfterARestagingIsJudgedAgainAndProvesNothingAsync(bool confirmation)
     {
         _configuration.Set(Settings.IdentifiersEmailMax, 1);
         IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);

@@ -404,6 +404,63 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-014 AC3 (WebAuthn Level 3 section 7.2): the check applies where either
+    /// counter is above nought, so a counter of nought presented against a stored one
+    /// above it is not above the stored value: it is rejected and audited, and the
+    /// stored counter is left as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC3_ACounterOfNoughtAgainstAStoredCounterIsRejectedAndAuditedAsync()
+    {
+        SubjectId subject = Subject();
+        AuthenticatorId id = await EnrolledAsync(subject, Registration() with { Counter = 9 });
+
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 0 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Authenticator held = (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(
+            ("auth.credential.countermismatch", subject, id),
+            Assert.Single(_audit.Records.Select(record => (record.Item1.ToString(), record.Item2, record.Item3))));
+        Assert.Equal((9u, null), (held.WebAuthn!.Counter, held.LastUsedAt));
+        Assert.Equal((1, 0), (_work.Committed, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC3: where nothing is stored, a first counter above nought is above
+    /// the stored value, so it is accepted and recorded, and the same counter presented
+    /// again has not advanced.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC3_AFirstCounterAboveNoughtIsRecordedAndTheSameOneAgainIsRejectedAsync()
+    {
+        AuthenticatorId id = await EnrolledAsync(Subject(), Registration() with { Counter = 0 });
+
+        ErrorCode? first = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 5 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+        ErrorCode? again = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 5 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(first);
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, again);
+        Assert.Equal(
+            5u,
+            (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
+    }
+
+    /// <summary>
     /// AUTH-FACT-014: an authenticator that keeps no counter reports nought at every
     /// assertion, which the check passes over rather than reading as a clone.
     /// </summary>
@@ -850,6 +907,42 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.Null(key.LastUsedAt);
         Assert.False(_work.Open);
         Assert.Single(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC9, AUTH-FACT-014 AC3: a suspended key goes through the counter
+    /// check an active one does, first. One whose counter did not advance, equal to the
+    /// stored one, below it, or nought against a stored one, is refused
+    /// <c>auth.webauthn.countermismatch</c> and audited as an active key's is, and is
+    /// told nothing of the suspension.
+    /// </summary>
+    /// <param name="counter">The counter the assertion carries, against a stored 9.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(9u)]
+    [InlineData(8u)]
+    [InlineData(0u)]
+    public async Task AUTH_RECOV_007_AC9_ASuspendedKeyWhoseCounterDidNotAdvanceIsRefusedACounterMismatchAsync(
+        uint counter)
+    {
+        SubjectId subject = Subject();
+        AuthenticatorId id = await EnrolledAsync(subject, Registration() with { Counter = 9 });
+        Authenticator key = (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+        key.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = counter },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(
+            ("auth.credential.countermismatch", subject, id),
+            Assert.Single(_audit.Records.Select(record => (record.Item1.ToString(), record.Item2, record.Item3))));
+        Assert.Equal((9u, null), (key.WebAuthn!.Counter, key.LastUsedAt));
+        Assert.Equal((1, 0), (_work.Committed, _work.RolledBack));
+        Assert.False(_work.Open);
     }
 
     /// <summary>

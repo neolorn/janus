@@ -256,6 +256,41 @@ public sealed class DatacenterRangesTests
     }
 
     /// <summary>
+    /// AUTH-ABUSE-008 AC6: the first read a process makes, where a registration is
+    /// judged, is a refresh, and one that fails, the file not opened or refused whole,
+    /// raises <c>degradation</c> under <c>botdefence.ranges.refresh</c> at that read,
+    /// before the absence it leaves. The next registration reads nothing, the read being
+    /// the job's from then on, and raises the absence alone.
+    /// </summary>
+    /// <param name="opened">Whether the file opened and was refused whole, or did not open.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_ABUSE_008_AC6_TheFirstReadAProcessMakesThatFailsIsRaisedAsARefreshThatFailsAsync(bool opened)
+    {
+        if (opened)
+        {
+            _source.Text = Listed + "\n192.0.2.255\t192.0.2.0";
+        }
+        else
+        {
+            _source.Refusal = Error.From(ErrorCodes.RequestMalformed);
+        }
+
+        Assert.False(await ContainedAsync(Ranges, "198.51.100.7"));
+
+        Assert.Equal(1, _source.Opened);
+        Assert.Equal([Refresh, Absent], _events.Of<AlertRaised>().Select(raised => raised.Scope));
+        Degraded(Refresh, _events.Of<AlertRaised>()[0]);
+
+        Assert.False(await ContainedAsync(Ranges, "198.51.100.7"));
+
+        Assert.Equal(1, _source.Opened);
+        Assert.Equal([Refresh, Absent, Absent], _events.Of<AlertRaised>().Select(raised => raised.Scope));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-008 AC6: a refresh whose file is refused whole raises
     /// <c>degradation</c> under <c>botdefence.ranges.refresh</c> and keeps the copy held,
     /// and it is raised whether or not <c>datacenterRange</c> is among the signals, since
