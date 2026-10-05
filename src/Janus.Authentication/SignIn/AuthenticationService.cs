@@ -772,21 +772,22 @@ internal sealed class AuthenticationService(
     /// <param name="source">The address the attempt came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// What the session now reaches, and the factors still to present where those
-    /// accepted so far do not reach the gate; or the refusal.
+    /// What the factors accepted so far reach together, and the factors still to present
+    /// where they do not reach the gate; or the refusal.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-STEP-001, AUTH-STEP-002 step 2 and AC4c, AUTH-ABUSE-001 and
+    /// Implements AUTH-STEP-001, AUTH-STEP-002 step 2, AC4c and AC4d, AUTH-ABUSE-001 and
     /// CONV-LOG-005. A refused step-up factor is a failed authentication: it answers to
     /// the delay a sign-in answers to, counted against the same source and the same
     /// account, and the session it is presented on exempts it from nothing, since a
     /// session in someone else's hands is what a step-up is asked of. A step-up is
     /// called once per factor: each accepted factor is held on its challenge with those
-    /// accepted before it, the session is raised to what they reach together, and the
-    /// challenge ends once the session meets the strictest of the policy's gates, which
-    /// is the gate of a step-up that names no action, or once nothing more can be
-    /// presented towards it (D-187, D-190).
+    /// accepted before it, what they reach together is written into the session and
+    /// answered, and the challenge ends once the session meets the strictest of the
+    /// policy's gates, which is the gate of a step-up that names no action, or once no
+    /// combination still offered can be completed with the factors accepted (D-187,
+    /// D-190, D-191).
     /// </remarks>
     public async ValueTask<Result<SignInOutcome>> RaiseAsync(
         AccessContext context,
@@ -934,14 +935,23 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
         }
 
-        // The challenge holds the factors until together they reach the gate, and no
-        // longer: one left behind would let a later factor stand beside them again.
+        // AUTH-STEP-002 step 2 (D-191): the step-up goes on asking until the gate is
+        // reached, or until no combination still offered can be completed with the
+        // factors accepted, which is one with a factor yet to present. The challenge
+        // holds the factors no longer than that: one left behind would let a later
+        // factor stand beside them again.
         List<Factor> required = reached
             ? []
             : [.. asked.Combinations
-                .SelectMany(combination => combination)
-                .Distinct()
-                .Except(holding.Presented)];
+                .Select(combination => combination.Except(holding.Presented))
+                .SelectMany(left => left)
+                .Distinct()];
+
+        // What the call answers with is what the factors accepted on the challenge
+        // reach together, which is what it wrote, and never what the session reached
+        // before them (AUTH-STEP-002 AC4d).
+        Assurance together = Assurance.Proved(Properties(holding.Presented))
+            ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
 
         if (required.Count is 0)
         {
@@ -957,8 +967,8 @@ internal sealed class AuthenticationService(
         return Result.Success(new SignInOutcome(
             new SignInProgress(
                 required.Count is 0 ? SignInStatus.Complete : SignInStatus.FactorRequired,
-                live.Attained,
-                live.PhishingResistant,
+                together.Level,
+                together.PhishingResistant,
                 required,
                 TrustDeviceOffered: false,
                 raised.Id,

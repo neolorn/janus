@@ -789,6 +789,117 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC4d: at a step-up whose strictest gate asks <c>aal2</c>, on an
+    /// account holding a second step, a password alone is answered
+    /// <c>factorRequired</c> reporting <c>aal1</c>, which is what the factors accepted
+    /// reach and not what the session reached earlier, and renews the instant of
+    /// <c>aal1</c> alone.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AC4d_APasswordAloneIsAnsweredFactorRequiredReportingAal1AndRenewsAal1AloneAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        SessionId held = Opened(subject, AssuranceLevel.Aal2);
+        Session session = Assert.IsType<Session>(await _live.FindAsync(held, TestContext.Current.CancellationToken));
+        (DateTimeOffset? aal2At, DateTimeOffset? aal3At, DateTimeOffset? resistedAt) =
+            (session.Aal2At, session.Aal3At, session.PhishingResistantAt);
+
+        _clock.Advance(TimeSpan.FromMinutes(6));
+
+        SignInProgress answered = Reached(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            held,
+            (await BeganAsync(Address)).Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (SignInStatus.FactorRequired, AssuranceLevel.Aal1, false),
+            (answered.Status, answered.AssuranceLevel, answered.PhishingResistant));
+        Assert.Equal([Factor.Totp], answered.Required);
+        Assert.Equal(_clock.GetUtcNow(), session.Aal1At);
+        Assert.Equal((aal2At, aal3At, resistedAt), (session.Aal2At, session.Aal3At, session.PhishingResistantAt));
+        Assert.NotNull(aal2At);
+        Assert.NotEqual(session.Aal1At, session.Aal2At);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 step 2: a step-up no combination still offered can be completed at
+    /// is answered <c>complete</c> with what the factors accepted reach, short of the
+    /// gate, and its challenge ends.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AStepUpNoCombinationCanCompleteIsAnsweredCompleteWithWhatWasReachedAndEndsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Declares(new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        SessionId held = Opened(subject, AssuranceLevel.Aal2);
+        SignInChallenge began = await BeganAsync(Address);
+
+        _clock.Advance(TimeSpan.FromMinutes(6));
+
+        Result<SignInProgress> first = await SteppedAsync();
+        Result<SignInProgress> again = await SteppedAsync();
+
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal1, false),
+            (Reached(first).Status, Reached(first).AssuranceLevel, Reached(first).PhishingResistant));
+        Assert.Empty(Reached(first).Required);
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            (await Guard.PassedAsync(subject, held, StepUpAction.AccountSuspend, TestContext.Current.CancellationToken))?.Code);
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(again));
+
+        ValueTask<Result<SignInProgress>> SteppedAsync() =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                held,
+                began.Challenge,
+                new FactorPresentation(Factor.Password) { Value = Secret },
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 step 2: only a call that presents a factor writes the session, so a
+    /// text code asked for at a step-up, which presents none, leaves every instant of
+    /// the session as it was.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_ATextCodeAskedForAtAStepUpWritesNothingIntoTheSessionAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+
+        SessionId held = Opened(subject);
+        Session session = Assert.IsType<Session>(await _live.FindAsync(held, TestContext.Current.CancellationToken));
+        (DateTimeOffset, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?) before =
+            (session.DelegatedAt, session.Aal1At, session.Aal2At, session.Aal3At, session.PhishingResistantAt);
+        SignInChallenge began = await BeganAsync(Address);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        SignInProgress? asked = (await AskedAsync(began.Challenge, subject, held)).Match(
+            progress => progress,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Null(asked);
+        _ = Assert.Single(_notifications.Texts);
+        Assert.Equal(
+            before,
+            (session.DelegatedAt, session.Aal1At, session.Aal2At, session.Aal3At, session.PhishingResistantAt));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong try at a sign-in code is decided in
     /// its caller's unit of work, which it leaves open with the count written on the
     /// code's record for the caller to commit.

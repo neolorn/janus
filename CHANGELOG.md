@@ -40,6 +40,12 @@ against the public contract of LIB-API-001.
   200 `factorRequired`, with the factors still to present, until what was accepted
   reaches the strictest of the gates of the policy in force, and 200 `complete` then,
   where the first accepted factor ended the challenge before.
+- Each 200 of `POST /auth/step-up` reports in `assuranceLevel` and
+  `phishingResistant` what the factors accepted on the challenge reach together,
+  where it reported the highest level the session had ever reached: a password alone
+  under a session that reached `aal2` earlier is answered `aal1`. The answer is
+  `complete` once the strictest gate is reached or once no combination still offered
+  can be completed with the factors accepted, and the challenge ends then.
 - A session keeps the instant it last reached each assurance level and the instant it
   last reached phishing resistance, and a factor presented renews only what it
   reaches, its own level and every lower one. A password presented alone under a
