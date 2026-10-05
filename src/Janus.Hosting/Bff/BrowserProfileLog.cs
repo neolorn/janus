@@ -265,17 +265,19 @@ internal static partial class BrowserProfileLog
     public static partial void ProviderExchangeRejected(ILogger log, string correlationId, Factor provider);
 
     /// <summary>
-    /// A provider the deployment has not declared, or whose discovery document could
-    /// not be read or names nowhere to sign in.
+    /// A round trip that could not reach or read its provider: the discovery document,
+    /// which may also name nowhere to sign in, the published keys or the token
+    /// endpoint (IDN-LIFE-012 AC6).
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="correlationId">What resolves the request.</param>
     /// <param name="provider">Which provider.</param>
+    /// <param name="part">The part that could not be reached or read.</param>
     [LoggerMessage(
         EventId = 21,
         Level = LogLevel.Error,
-        Message = "A sign-in at {Provider} could not be started: it is not declared or its discovery document could not be read ({CorrelationId}).")]
-    public static partial void ProviderUnavailable(ILogger log, string correlationId, Factor provider);
+        Message = "A round trip at {Provider} could not reach or read the provider's {Part} ({CorrelationId}).")]
+    public static partial void ProviderUnavailable(ILogger log, string correlationId, Factor provider, string part);
 
     /// <summary>
     /// A request answered with a refusal, by the code the answer carried
@@ -320,4 +322,17 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Warning,
         Message = "A source went over its request limit and is held until {Lifts} ({CorrelationId}).")]
     public static partial void SourceOverLimit(ILogger log, string correlationId, DateTimeOffset lifts);
+
+    /// <summary>
+    /// A round trip started at a provider the deployment does not declare
+    /// (IDN-LIFE-012).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="provider">Which provider.</param>
+    [LoggerMessage(
+        EventId = 25,
+        Level = LogLevel.Warning,
+        Message = "A round trip was started at {Provider}, which the deployment does not declare ({CorrelationId}).")]
+    public static partial void ProviderUndeclared(ILogger log, string correlationId, Factor provider);
 }

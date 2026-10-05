@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A social provider's round trip whose provider cannot be reached or read, at its
+  discovery document, its published keys or its token endpoint, returns the browser
+  with `error=auth.provider.unavailable`, counts no failed attempt, records no failed
+  authentication and raises `degradation` under `provider.unavailable:<provider>` with
+  details `provider` and `part` (`discovery`, `keys` or `token`). An unreadable
+  document at the start returned `error=auth.factor.notpermitted` before, and a token
+  endpoint that gave no response or no JSON was answered as a fault. The start at a
+  provider the deployment does not declare still returns `auth.factor.notpermitted`.
 - A registration continued with a social provider before the age step is done returns
   the browser with `error=identity.registration.incomplete`, where it returned
   `error=identity.affirmation.required`.
