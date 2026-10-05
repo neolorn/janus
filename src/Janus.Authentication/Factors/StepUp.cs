@@ -193,21 +193,26 @@ internal static class StepUp
         bool sinceDowngrade) =>
         session.SatisfiesEveryGate
         || (session.LastReached(required) is { } reached
-            && Counted(session, reached, gate, now, sinceDowngrade)
+            && Counted(session, reached, gate, required, now, sinceDowngrade)
             && (!phishingResistant
                 || (session.PhishingResistantAt is { } resisted
-                    && Counted(session, resisted, gate, now, sinceDowngrade))));
+                    && Counted(session, resisted, gate, required, now, sinceDowngrade))));
 
     // AUTH-STEP-002 step 1: a level at or above the gate's, and phishing resistance
     // where the gate asks for it, each count where they were last reached within the
-    // maximum age and after the session's last downgrade (AUTH-SESS-001).
+    // maximum age and after the session's last downgrade (AUTH-SESS-001). A gate whose
+    // level is delegated asks no maximum age, the one factor that reaches that level
+    // never being offered at a step-up, and counts what was reached however long ago
+    // (AUTH-STEP-007, D-192).
     private static bool Counted(
         Session session,
         DateTimeOffset at,
         Gate gate,
+        AssuranceLevel required,
         DateTimeOffset now,
         bool sinceDowngrade) =>
-        Within(at, gate.MaximumAge, now) && (!sinceDowngrade || session.Counts(at));
+        (required is AssuranceLevel.Delegated || Within(at, gate.MaximumAge, now))
+        && (!sinceDowngrade || session.Counts(at));
 
     private static bool Within(DateTimeOffset at, TimeSpan age, DateTimeOffset now) =>
         now - at <= age;

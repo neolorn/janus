@@ -262,6 +262,69 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-012 AC8: a per-app session established an hour after its record last
+    /// reached <c>aal2</c> passes no <c>aal2</c> gate whose maximum age is thirty
+    /// minutes; one established after its record was downgraded passes no gate on proof
+    /// reached before that downgrade; and establishing either changes no instant of its
+    /// record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC8_ADerivedSessionTakesItsRecordsInstantsAndLastDowngradeAsync()
+    {
+        var gate = new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(30));
+        var held = new HeldFactors(
+            new[] { Factor.Passkey }.ToFrozenSet(),
+            new[] { Factor.Passkey }.ToFrozenSet(),
+            null);
+
+        IssuedSession aged = await BegunAsync(Subject(), [Factor.Passkey]);
+
+        _clock.Advance(TimeSpan.FromMinutes(59));
+
+        IssuedSession lowered = await BegunAsync(Subject(), [Factor.Passkey]);
+        Session agedRecord = _sessions.Behind(aged.Secret)!;
+        Session loweredRecord = _sessions.Behind(lowered.Secret)!;
+
+        loweredRecord.Downgrade(_clock.GetUtcNow() + TimeSpan.FromSeconds(30));
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        DateTimeOffset?[] agedBefore = Instants(agedRecord);
+        DateTimeOffset?[] loweredBefore = Instants(loweredRecord);
+
+        Session late = _sessions.Behind(Value(await Service.DeriveAsync(
+            aged.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken)).Secret)!;
+        Session after = _sessions.Behind(Value(await Service.DeriveAsync(
+            lowered.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken)).Secret)!;
+
+        StepUpChallenge onLate = StepUp.On(late, gate, held, _clock.GetUtcNow());
+        StepUpChallenge onAfter = StepUp.On(after, gate, held, _clock.GetUtcNow());
+
+        Assert.Equal((StepUpOutcome.Present, false), (onLate.Outcome, onLate.Downgraded));
+        Assert.Equal((StepUpOutcome.Present, true), (onAfter.Outcome, onAfter.Downgraded));
+        Assert.Equal(agedBefore, Instants(late));
+        Assert.Equal(loweredBefore, Instants(after));
+        Assert.Equal(agedBefore, Instants(agedRecord));
+        Assert.Equal(loweredBefore, Instants(loweredRecord));
+
+        static DateTimeOffset?[] Instants(Session session) =>
+        [
+            session.DelegatedAt,
+            session.Aal1At,
+            session.Aal2At,
+            session.Aal3At,
+            session.PhishingResistantAt,
+            session.DowngradedAt,
+        ];
+    }
+
+    /// <summary>
     /// AUTH-SESS-005 AC1: a customer session used at least once every ninety days
     /// expires only at three hundred and sixty-five days from sign-in.
     /// </summary>

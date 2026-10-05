@@ -359,7 +359,8 @@ internal sealed class AuthenticationService(
 
         if (stepping is not null)
         {
-            return await WithoutTextsAsync(subject, session, cancellationToken).ConfigureAwait(false);
+            return await WithoutTextsAsync(subject, session, open.Presented, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // AUTH-FACT-002b AC6: the entries a text carries ride the one number, so the
@@ -1143,10 +1144,14 @@ internal sealed class AuthenticationService(
     // The ask is answered as a sign-in's is (D-188): with the factors of the
     // combinations left, or with none where the session already meets that gate, and
     // it is refused only where no combination is left, with the gate and what the
-    // account does next.
+    // account does next. Whether the session meets the gate is judged from the session
+    // (AUTH-STEP-002 step 1); what the answer reports is what the factors accepted on
+    // the challenge reach together, as every 200 of a step-up does, and never what the
+    // session reached before them (AUTH-STEP-002 AC4e, D-192).
     private async ValueTask<Result<SignInProgress?>> WithoutTextsAsync(
         SubjectId subject,
         SessionId? session,
+        IReadOnlyCollection<Factor> accepted,
         CancellationToken cancellationToken)
     {
         if (session is not SessionId raising
@@ -1177,10 +1182,13 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInProgress?>(StepUpRefusal.Of(left));
         }
 
+        Assurance together = Assurance.Proved(Properties(accepted))
+            ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
+
         return Result.Success<SignInProgress?>(new SignInProgress(
             required.Count is 0 ? SignInStatus.Complete : SignInStatus.FactorRequired,
-            live.Attained,
-            live.PhishingResistant,
+            together.Level,
+            together.PhishingResistant,
             required,
             TrustDeviceOffered: false,
             Session: null,

@@ -10,6 +10,27 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A step-up gate whose level is `delegated`, which is what enrolling asks of an account
+  that reaches no more, asks no maximum age: the session counts however long ago it
+  reached that level, where it was refused 403 `auth.stepup.required` once the maximum
+  age the policy gives `factor:enrol` had passed. A social-only account therefore sets
+  a password from a session of any age with no presentation, and the enrolment is
+  notified to every recorded channel. What the session reached up to its last
+  downgrade still passes no gate, and a gate at any other level asks its maximum age
+  as before.
+- `POST /auth/step-up` asked for a text code and answered 200, the number's signal
+  having withheld the code, reports in `assuranceLevel` and `phishingResistant` what
+  the factors accepted on the challenge reach together, `delegated` and not
+  phishing-resistant where none was accepted, as every other 200 of a step-up does. It
+  reported what the session had attained. Whether the session already meets the gate,
+  and so whether `required` is empty, is still judged from the session.
+- A session another application establishes from the session record takes the instant
+  the record last reached each assurance level and phishing resistance, and the
+  record's last downgrade, where it took the instant it was established as the
+  instant of every level the record held. Opening another application therefore
+  renews no proof: a gate whose maximum age has passed since the record reached its
+  level stays unmet there, and proof the record reached before its last downgrade
+  passes no gate.
 - The signature counter of a WebAuthn assertion is checked wherever the counter
   presented or the one stored is above zero, as WebAuthn Level 3 section 7.2 states: a
   counter not above the stored one is refused 422 `auth.webauthn.countermismatch` and

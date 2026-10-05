@@ -155,6 +155,36 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("no provider", Decided.StepUpUnavailable),
     ];
 
+    // An action bound to a step-up gate, judged from the library's own session where it
+    // carries the request and is the acting person's own: what the session last reached,
+    // and when, against the gate (AUTHZ-TEST-001 AC1, AUTH-STEP-002 step 1,
+    // AUTH-SESS-001, AUTH-SESS-009). The record, the grant and the gate are the step-up
+    // table's, so what decides is the session alone, and a list asked under the action
+    // is refused with the code the check answers (AUTHZ-TEST-001 AC2, AUTHZ-GATE-005).
+    // These rows are the library's own and no scenario of chapter 10 section 5.30, since
+    // the conformance suite judges a step-up from a host's report alone.
+    private static readonly (string Scenario, Decided Decided)[] Sessions =
+    [
+        ("a session that meets the gate", Decided.Allowed),
+        ("a session below the level the gate asks", Decided.StepUpRequired),
+        ("a session that was not phishing-resistant, at a gate asking it", Decided.StepUpRequired),
+        ("a session whose proof is older than the gate's maximum age", Decided.StepUpRequired),
+        (
+            "a session that reached a lower level since, beside the gate's level past its maximum age",
+            Decided.StepUpRequired),
+        ("a session whose proof was reached only before its last downgrade", Decided.StepUpRequired),
+        (
+            "a session that reached delegated alone, the level whose own gate asks no maximum age",
+            Decided.StepUpRequired),
+        ("a session derived from a record that meets the gate", Decided.Allowed),
+        (
+            "a session derived within the gate's maximum age from a record whose proof is older than it",
+            Decided.StepUpRequired),
+        (
+            "a session derived after its record's last downgrade, the record's proof reached only before it",
+            Decided.StepUpRequired),
+    ];
+
     // An action bound to a consent-based purpose, on a sensitive type, which asks the
     // written consent of the record's data subject against the document the purpose
     // names. The caller holds the grant in every case, so what decides is the consent,
@@ -187,6 +217,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The step-up table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> StepUpCases => Read(StepUps);
+
+    /// <summary>
+    /// The sessions' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> SessionCases => Read(Sessions);
 
     /// <summary>
     /// The operations' table as the run reads it.
@@ -256,6 +291,38 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(decided, await ChecksAsync(written, reporting));
         Assert.Equal(decided, await ExpressionAdmitsAsync(written, reporting));
         Assert.Equal(decided, await FragmentAdmitsAsync(written, reporting));
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-005, AUTH-STEP-002 AC3, AUTH-SESS-001 AC3,
+    /// AUTH-SESS-009, AUTH-SESS-012 AC8: every case of the sessions' table decides the
+    /// way the table says through the single check, and both renderings of the filter
+    /// answer the same: the record listed where the session meets the gate, and the
+    /// filter refused with the code the check answers where it does not.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(SessionCases))]
+    public async Task AUTHZ_TEST_001_AC2_EverySessionCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteBoundAsync();
+        IReadOnlyList<Session> proving = Proving(written.Account, scenario);
+        Session carried = proving[^1];
+
+        foreach (Session kept in proving)
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            await KeptAsync(scope.ServiceProvider, kept);
+        }
+
+        Assert.Equal(decided, await ChecksAsync(written, carried: carried));
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written, carried: carried));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written, carried: carried));
     }
 
     /// <summary>
@@ -488,16 +555,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static async Task<Expression<Func<HostDocument, bool>>> ExpressionAsync(
         Case written,
         HostContext reading) =>
-        Rendered(await FilteredAsync(written, reading, deployment: null));
+        Rendered(await FilteredAsync(written, reading, deployment: null, carried: null));
 
     // The expression the gate renders for the case, or the refusal it answers before
     // rendering one (AUTHZ-GATE-005).
     private static async Task<Result<Expression<Func<HostDocument, bool>>>> FilteredAsync(
         Case written,
         HostContext reading,
-        IServiceProvider? deployment)
+        IServiceProvider? deployment,
+        Session? carried)
     {
         await using AsyncServiceScope scope = (deployment ?? written.Host.Services).CreateAsyncScope();
+
+        Arrived(scope.ServiceProvider, carried);
 
         return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
@@ -507,6 +577,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 written.Deployment.Organization,
                 Sources(reading),
                 TestContext.Current.CancellationToken);
+    }
+
+    // The session a request arrived on, as the resolution stage leaves it for every
+    // stage after it (BFF-ORDER-001 stage 5); a case that names none arrives on none.
+    private static void Arrived(IServiceProvider request, Session? carried)
+    {
+        if (carried is not null)
+        {
+            request.GetRequiredService<RequestSession>().Resolved(carried);
+        }
     }
 
     private static TheoryData<string, Decided> Read((string Scenario, Decided Decided)[] table)
@@ -557,11 +637,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
-    private async Task<Decided> ChecksAsync(Case written, IServiceProvider? deployment = null) =>
+    private async Task<Decided> ChecksAsync(
+        Case written,
+        IServiceProvider? deployment = null,
+        Session? carried = null) =>
         await RaisedOrAsync(async () =>
         {
             await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
             await using HostContext reading = host.Context();
+
+            Arrived(scope.ServiceProvider, carried);
 
             Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .RequireAsync(
@@ -574,12 +659,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             return outcome.Match(() => Decided.Allowed, Refused);
         });
 
-    private async Task<Decided> ExpressionAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
+    private async Task<Decided> ExpressionAdmitsAsync(
+        Case written,
+        IServiceProvider? deployment = null,
+        Session? carried = null) =>
         await RaisedOrAsync(async () =>
         {
             await using HostContext reading = host.Context();
 
-            return await (await FilteredAsync(written, reading, deployment)).Match(
+            return await (await FilteredAsync(written, reading, deployment, carried)).Match(
                 async expression => await reading.Documents
                     .Where(expression)
                     .AnyAsync(
@@ -590,13 +678,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 refused => Task.FromResult(Refused(refused)));
         });
 
-    private async Task<Decided> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
+    private async Task<Decided> FragmentAdmitsAsync(
+        Case written,
+        IServiceProvider? deployment = null,
+        Session? carried = null) =>
         await RaisedOrAsync(async () =>
         {
             Result<SqlFilter> rendered;
 
             await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
             {
+                Arrived(scope.ServiceProvider, carried);
+
                 rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                     .FragmentAsync(
                         AccessContext.Of(written.Account),
@@ -1018,18 +1111,31 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // a change of members asks.
     private static async Task<SessionId> SteppedUpAsync(IServiceProvider services, SubjectId caller)
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-
-        var session = Session.Begin(
-            SessionId.New(TimeProvider.System),
+        Session session = Begun(
             caller,
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Deployment.Noon - TimeSpan.FromMinutes(1));
+
+        await KeptAsync(services, session);
+
+        return session.Id;
+    }
+
+    private static Session Begun(SubjectId caller, Assurance reached, DateTimeOffset at) =>
+        Session.Begin(
+            SessionId.New(TimeProvider.System),
+            caller,
+            reached,
             new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
-            Deployment.Noon - TimeSpan.FromMinutes(1),
+            at,
             TimeSpan.FromDays(7),
             TimeSpan.FromDays(30),
             breakGlassReason: null);
 
+    // The session as the store keeps it, which is where the gate reads it from.
+    private static async Task KeptAsync(IServiceProvider services, Session session)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
 
         await work.BeginAsync(cancellationToken);
@@ -1038,9 +1144,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         // does not have until its first session asks for it.
         ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
 
-        if (await keys.FindBySubjectAsync(caller, cancellationToken) is null)
+        if (await keys.FindBySubjectAsync(session.Subject, cancellationToken) is null)
         {
-            await keys.CreateAsync(caller, cancellationToken);
+            await keys.CreateAsync(session.Subject, cancellationToken);
         }
 
         await services.GetRequiredService<ISessionStore>().AddAsync(
@@ -1049,9 +1155,85 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             RandomNumberGenerator.GetBytes(32),
             cancellationToken);
         await work.CommitAsync(cancellationToken);
-
-        return session.Id;
     }
+
+    // What the session of each case of the sessions' table last reached, and when,
+    // against the strict gate: two factors, phishing-resistant, five minutes old at
+    // most. Each case leaves unmet the one thing its row names and nothing else, but
+    // the case of delegated alone, which reaches nothing the gate asks: a gate whose
+    // level is delegated asks no maximum age (AUTH-STEP-007), no gate bound to an
+    // action states that level (AUTH-STEP-002a), and so what such a session reached
+    // passes none of them however lately. The request arrives on the last session a
+    // case answers; a derived session comes after the record it stands on
+    // (AUTH-SESS-012).
+    private static IReadOnlyList<Session> Proving(SubjectId caller, string scenario)
+    {
+        DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
+        DateTimeOffset aged = Deployment.Noon - TimeSpan.FromMinutes(6);
+        var met = new Assurance(AssuranceLevel.Aal2, PhishingResistant: true);
+        var lower = new Assurance(AssuranceLevel.Aal1, PhishingResistant: true);
+
+        switch (scenario)
+        {
+            case "a session that meets the gate":
+                return [Begun(caller, met, recent)];
+
+            case "a session below the level the gate asks":
+                return [Begun(caller, lower, recent)];
+
+            case "a session that was not phishing-resistant, at a gate asking it":
+                return [Begun(caller, met with { PhishingResistant = false }, recent)];
+
+            case "a session whose proof is older than the gate's maximum age":
+                return [Begun(caller, met, aged)];
+
+            case "a session that reached a lower level since, beside the gate's level past its maximum age":
+                Session renewed = Begun(caller, met, aged);
+
+                renewed.Present(lower, recent);
+
+                return [renewed];
+
+            case "a session whose proof was reached only before its last downgrade":
+                Session downgraded = Begun(caller, met, recent);
+
+                downgraded.Downgrade(Deployment.Noon - TimeSpan.FromSeconds(30));
+
+                return [downgraded];
+
+            case "a session that reached delegated alone, the level whose own gate asks no maximum age":
+                return [Begun(caller, new Assurance(AssuranceLevel.Delegated, PhishingResistant: false), recent)];
+
+            case "a session derived from a record that meets the gate":
+                Session standing = Begun(caller, met, recent);
+
+                return [standing, Derived(standing, Deployment.Noon - TimeSpan.FromSeconds(30))];
+
+            case "a session derived within the gate's maximum age from a record whose proof is older than it":
+                Session old = Begun(caller, met, aged);
+
+                return [old, Derived(old, recent)];
+
+            case "a session derived after its record's last downgrade, the record's proof reached only before it":
+                Session lowered = Begun(caller, met, Deployment.Noon - TimeSpan.FromMinutes(3));
+
+                lowered.Downgrade(Deployment.Noon - TimeSpan.FromMinutes(2));
+
+                return [lowered, Derived(lowered, recent)];
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "The table has no such case.");
+        }
+    }
+
+    // The session another application establishes from a record (AUTH-SESS-012).
+    private static Session Derived(Session record, DateTimeOffset at) =>
+        record.Derive(
+            SessionId.New(TimeProvider.System),
+            SessionType.PerApp,
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            at,
+            TimeSpan.FromDays(7));
 
     // AUTHZ-GROUP-001, CONV-DESIGN-003 AC10: a change of members that changes nothing is
     // decided as any other, the gate asked at its step and again inside the unit of work
@@ -1241,42 +1423,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         IServiceProvider services = scope.ServiceProvider;
 
-        var session = Session.Begin(
-            SessionId.New(TimeProvider.System),
+        Session session = Begun(
             caller,
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
-            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
-            Deployment.Noon - ago,
-            TimeSpan.FromDays(7),
-            TimeSpan.FromDays(30),
-            breakGlassReason: null);
+            Deployment.Noon - ago);
 
         if (downgraded)
         {
             session.Downgrade(Deployment.Noon - (ago / 2));
         }
 
-        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+        await KeptAsync(services, session);
 
-        await work.BeginAsync(cancellationToken);
-
-        // A session is kept under its person's key, which an account written directly
-        // does not have until its first session asks for it.
-        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
-
-        if (await keys.FindBySubjectAsync(caller, cancellationToken) is null)
-        {
-            await keys.CreateAsync(caller, cancellationToken);
-        }
-
-        await services.GetRequiredService<ISessionStore>().AddAsync(
-            session,
-            RandomNumberGenerator.GetBytes(32),
-            RandomNumberGenerator.GetBytes(32),
-            cancellationToken);
-        await work.CommitAsync(cancellationToken);
-
-        services.GetRequiredService<RequestSession>().Resolved(session);
+        Arrived(services, session);
 
         IAccessGate gate = services.GetRequiredService<IAccessGate>();
 

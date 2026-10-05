@@ -277,7 +277,10 @@ internal sealed class Session
 
     /// <summary>
     /// A session of another kind standing on this record, which inherits what the
-    /// record proved and ends when the record does.
+    /// record proved and ends when the record does. It takes the instant the record
+    /// last reached each level and phishing resistance, and the record's last
+    /// downgrade, never the instant it is derived at, since deriving presents nothing
+    /// (AUTH-SESS-012).
     /// </summary>
     /// <param name="id">The identifier issued for it.</param>
     /// <param name="type">Which kind.</param>
@@ -310,19 +313,15 @@ internal sealed class Session
         // The derived session is a handle on the record, not a credential of its own:
         // it ends when the record does, whatever its own idle clock says
         // (AUTH-SESS-012 AC7, AUTH-OIDC-003).
-        // AUTH-SESS-009: a handle on a record that stands downgraded is downgraded from
-        // its first instant, so deriving one lifts nothing a presentation has not. The
-        // record stands downgraded where the level it holds, or the phishing resistance
-        // it holds, was last reached up to its last downgrade.
-        bool lifted = Counts(LastReached(Attained) ?? DelegatedAt)
-            && (PhishingResistantAt is not { } resisted || Counts(resisted));
-
+        // AUTH-SESS-012 AC8, AUTH-SESS-009: the handle proves what the record proved,
+        // when the record proved it, so opening another application renews no proof
+        // and lifts no downgrade.
         return new Session(
             id,
             Spine,
             type,
             Subject,
-            new Assurance(Attained, PhishingResistant),
+            new Assurance(AssuranceLevel.Delegated, PhishingResistant: false),
             origin,
             at,
             inactivity,
@@ -330,7 +329,12 @@ internal sealed class Session
             SatisfiesEveryGate,
             BreakGlassReason)
         {
-            DowngradedAt = lifted ? DowngradedAt : at,
+            DelegatedAt = DelegatedAt,
+            Aal1At = Aal1At,
+            Aal2At = Aal2At,
+            Aal3At = Aal3At,
+            PhishingResistantAt = PhishingResistantAt,
+            DowngradedAt = DowngradedAt,
         };
     }
 
