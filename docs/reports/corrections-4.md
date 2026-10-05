@@ -1804,6 +1804,21 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no change to `endpoints.txt`, no truth-table row.
 - Questions 236 to 238.
 
+### `part/signon` (D-194), merged as `7ff8b21d`: questions 231, 233 and 234
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Questions 233 and 234: at the push every error is a fault; at the exchange a 400 `invalid_grant` is a refusal and every other error a fault; an authorization response's `server_error` or `temporarily_unavailable` is a fault, `login_required` pushes again, any other `error` is a refusal; a derivation refused is a refusal; each refusal returns the browser with `auth.session.expired` and logs, in entry 26 at Information, the `error` or the library's code it carried inside | `17230f9d` | BFF-SESS-006, BFF-ERR-001, BFF-LOG-001 | `SignOnTests.BFF_ERR_001_AC5_AnErrorThePushReadsIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AnErrorOfTheExchangeOtherThanInvalidGrantIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AnAuthorizationResponseOfTheProvidersOwnFailureIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AnExchangeRefusedInvalidGrantReturnsTheBrowserExpiredAndIsLoggedAsync`, `SignOnTests.BFF_ERR_001_AC5_AnAuthorizationResponsesOtherErrorReturnsTheBrowserExpiredAndIsLoggedAsync`, `SignOnTests.BFF_ERR_001_AC5_ADerivationRefusedReturnsTheBrowserExpiredAndItsCodeIsLoggedAsync`, `SignOnTests.AUTH_OIDC_006_AC2_ARequestThePushRefusesIsNotForwardedAsync`, `SignOnTests.BFF_SESS_006_ABrowserWithNoRecordIsSentToSignInAsync`, `SignOnTests.BFF_SESS_006_AReturnThatFailsReturnsTheBrowserExpiredAsync` |
+| Question 231: a link's return whose session ended is answered 403 `auth.session.csrfinvalid`; the branch of the link's return that answered `auth.session.expired`, which no request reaches, is removed | `da54883b` | IDN-LIFE-012 | `ProviderSignInTests.IDN_LIFE_012_AReturnToLinkAfterItsSessionEndedFindsNoAttemptAsync` |
+
+- The four tests asked for first were written and run before any change. `invalid_client` at the push, `invalid_client` at the exchange and `server_error` on the authorization response each failed: 302 where 500 was expected. `invalid_grant` at the exchange returned the browser expired already and failed on the log entry, which did not exist.
+- Replaced by these: `SignOnTests.BFF_SESS_006_APushRefusedInItsProtocolsShapeReturnsTheBrowserExpiredAsync` and `SignOnTests.BFF_SESS_006_AnExchangeRefusedInItsProtocolsShapeReturnsTheBrowserExpiredAsync`, which held the rule of D-193. `SignOnTests.BFF_SESS_006_AReturnWhoseSessionIsNotDerivedReturnsTheBrowserExpiredAsync` is renamed to the derivation test above.
+- A 401 carrying `invalid_grant` at the exchange is a fault: a 400 alone is the refusal.
+- Question 231: the test of the 403 passed as built. The continuation's declared codes and `endpoints.txt` did not change: the route declares one list for every intent, and `09` still gives `auth.session.expired` to a registration's continuation, which returns it.
+- The changelog's unreleased line of D-193 lost its last sentence, which said a 4xx naming its `error` returns the browser.
+- No migration, no public surface line, no change to `endpoints.txt`, no truth-table row. `CHANGELOG.md` conflicted at the merge; both sides are kept.
+- Questions 239 to 242.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4920,6 +4935,50 @@ part of 389 (3) and waits with 389 on question 48.
 - **Readings.**
   1. As built.
   2. The restricted entries are withheld from that list too where the signal answered `risk`.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**239. Tier 2. BFF-ERR-001 criterion 5: the sign-on's failures the criterion names neither a refusal nor a fault.**
+
+- **Item.** Questions 233 and 234.
+- **What the code does.** Five failures return the browser with `auth.session.expired`, as before, and write no entry 26: (1) the application's client is in no registry, at the start and the return (entry 12, Error); (2) the client's secret cannot be read (entry 14 at the push, entry 11 at the exchange); (3) the return carries neither `code` nor `error`; (4) the identity token the exchange returned does not hold up or names no session (entry 11); (5) the provider's published keys cannot be read (entry 11).
+- **What the specification says.** Criterion 5 lists none of them. `11` section 7.5, under a fault, has the operator check that the client the host declares is registered.
+- **Readings.**
+  1. As it is.
+  2. (1), (2), (4) and (5) are faults; (3) is a refusal.
+  3. Each is a refusal and writes entry 26, for which no chapter gives a code.
+- **Parked.** Readings 2 and 3.
+- **Answer:** pending.
+
+**240. Tier 2. BFF-ERR-001 criterion 5: a derivation that fails with a code that is a fault's.**
+
+- **Item.** Question 234.
+- **What the code does.** Every failure of the derivation is a refusal: the browser returns expired and the code is logged in entry 26. That holds for a code answered 500 anywhere else (`system.fault` of a unit of work that cannot begin or commit, `auth.policy.unregistered`).
+- **What the specification says.** "a derivation the library refuses with a code of its own is a refusal"; a fault on a navigation answers 500, never `error`.
+- **Readings.**
+  1. As it is.
+  2. A code whose status is 500 is a fault.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**241. Tier 2. `11` section 7.5, BFF-LOG-001: what a fault of the sign-on logs.**
+
+- **Item.** Question 233.
+- **What the code does.** A fault is thrown, and the fault log keeps a thrown fault by its type and frames, never its message (CONV-LOG-003). The `error` behind it (`invalid_client`, `server_error`) is logged nowhere by name.
+- **What the specification says.** `11` section 7.5: "Read the fault's logged detail by its correlation identifier".
+- **Readings.**
+  1. As it is.
+  2. The `error` behind a fault is logged too.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**242. Tier 2. BFF-LOG-001: the entries a refusal already wrote, beside entry 26.**
+
+- **Item.** Question 234.
+- **What the code does.** A refused authorization response writes entry 10 (Warning), as before, and entry 26 (Information). A 400 `invalid_grant` writes entry 11 (Warning), as before, and entry 26.
+- **Readings.**
+  1. As it is.
+  2. Entry 26 takes the place of entry 10.
 - **Parked.** Reading 2.
 - **Answer:** pending.
 
