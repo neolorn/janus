@@ -644,7 +644,7 @@ request, the error translation stage refuses it **400** `api.request.malformed`,
 none binds a typed value (D-193).
 
 *Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187, D-192,
-D-193*
+D-193, D-194*
 
 **Acceptance criteria**
 1. No type derives from `ControllerBase`.
@@ -660,9 +660,10 @@ D-193*
    that made it. A body its protocol shapes, with no `code` (the provider's `/oidc/*`
    endpoints, the RFC 8935 answers of the Google security-event route), is outside this
    criterion, and so is a path outside the library's mount, which is the host's. A
-   redirect of a navigation route whose `error` carries a code the route neither
-   declares nor answers by its mounting fails the test that made it; the machine
-   callback's redirect, whose `error` is the provider's own, is outside this sentence.
+   redirect of a navigation route whose `error` carries a code the route does not
+   declare it carries fails the test that made it, since what a mounting answers is a
+   body and never rides in `error` (D-194); the machine callback's redirect, whose
+   `error` is the provider's own, is outside this sentence.
 5. A route or query value that does not parse as its type answers 400
    `api.request.malformed` naming it; on a navigation route, which takes its values as
    text, the handler returns the browser with that code in `error` (the sign-on with

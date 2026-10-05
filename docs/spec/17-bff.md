@@ -144,7 +144,7 @@ applications SHALL re-establish silently through the authentication application
 AUTH-OIDC-006), acting as a **confidential client** of the library's provider, and SHALL
 retain no token afterwards.
 
-*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193*
+*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -166,13 +166,15 @@ session takes the record's instants and last downgrade, never the instant of der
 person signs in at the authentication application and the flow repeats. The sign-on is a
 navigation route (BFF-ERR-001): a `state` that is absent, unbound or not the one the
 browser was sent out with is refused with `auth.session.csrfinvalid` and sent nowhere;
-any other refusal, whatever code it was refused with inside, returns the browser with
-302, to `returnTo` at the start and to the stored return address at the return, with
-`error` `auth.session.expired`, while a fault stays a fault: where no pre-authentication
-session can be issued, or where a push or an exchange cannot reach the authentication
-application, is answered a 5xx, or reads no answer in its protocol's shape (BFF-ERR-002,
-D-193); a start from a browser with no pre-authentication session issues one
-(BFF-CSRF-005a, D-192).
+any other refusal returns the browser with 302, to `returnTo` at the start and to the
+stored return address at the return, with `error` `auth.session.expired`, the `error` or
+the library's own code it carried inside logged beside it (BFF-LOG-001, D-194), while a
+fault stays a fault: where no pre-authentication session can be issued, or where a push
+or an exchange cannot reach the authentication application, is answered a 5xx, or reads
+no answer in its protocol's shape (BFF-ERR-002, D-193); every error the push reads,
+every error of the exchange but a 400 `invalid_grant`, and an authorization response's
+`server_error` or `temporarily_unavailable` are faults too (D-194); a start from a
+browser with no pre-authentication session issues one (BFF-CSRF-005a, D-192).
 
 **Values (D-166).** The client is the one the host declares for this application
 (`SignOnClient`, LIB-HOST-001). Its secret is the one the library generated for that
@@ -635,7 +637,7 @@ structured data and a correlation identifier. Rendered prose SHALL NOT cross it,
 the BFF SHALL NOT return HTML intended for a person to read — including framework
 default error pages.
 
-*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193*
+*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194*
 
 A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
 trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
@@ -646,8 +648,9 @@ those `09` lists for it, which its routes declare (CONV-DESIGN-006), and nothing
 a refusal's `details` crosses, save `retryAt` (BFF-ABUSE-001, D-192). A fault on a
 navigation route is no refusal: it is answered as BFF-ERR-002 answers every fault, never
 returned in `error` (D-193). The log records the route, the provider where there is one,
-and the trace, never the provider's authorization `code`, the `state` or anything the
-provider wrote.
+and the trace, never the provider's authorization `code`, the `state` or anything a
+social provider wrote; the sign-on logs the `error`, or the library's own code, that its
+refusal carried inside, its provider being the library's own (BFF-SESS-006, D-194).
 
 **Acceptance criteria**
 1. No response body contains a user-facing sentence.
@@ -655,9 +658,13 @@ provider wrote.
 3. Every code appears in `10-reference.md`.
 4. A navigation's redirect carries `error`, `retryAt` beside a throttled or restriction
    refusal, and nothing else of the refusal's `details`.
-5. A fault on a navigation route answers 500 `system.fault`, never `error`; a sign-on
-   refusal other than its `state`'s returns `error` `auth.session.expired`, whatever
-   code refused it.
+5. A fault on a navigation route answers 500 `system.fault`, never `error`. At the
+   sign-on every error the push reads, every error of the exchange but a 400
+   `invalid_grant`, and an authorization response's `server_error` or
+   `temporarily_unavailable` are faults; a 400 `invalid_grant`, an authorization
+   response's other `error` but `login_required`, and a derivation the library refuses
+   return `error` `auth.session.expired`, the code carried inside logged at Information
+   beside it.
 
 ---
 

@@ -379,6 +379,18 @@ provider the deployment does not declare answers `auth.factor.notpermitted` at t
 trip, and its security events are refused, Google's with `invalid_issuer` and Apple's
 with `integration.callback.rejected` (`09` section 10, IDN-LIFE-012a, D-192).
 
+### 7.5 Sign-on
+
+An application answering 500 `system.fault` at `GET /auth/signon` or its return is a
+fault: the authentication application unreachable or failing (a 5xx, an answer not in
+its protocol's shape, `server_error` or `temporarily_unavailable` on the authorization
+response), the push or the exchange refused for the deployment's own client or request,
+or no pre-authentication session issued. Read the fault's logged detail by its
+correlation identifier, and check that the client the host declares (`SignOnClient`) is
+registered with its exact `redirect_uri` (LIB-HOST-001). A sign-on that keeps returning
+`auth.session.expired` logs, at Information, the code that refused it inside; read that
+the same way (BFF-SESS-006, BFF-LOG-001, D-194).
+
 
 
 ## 8. Security incidents

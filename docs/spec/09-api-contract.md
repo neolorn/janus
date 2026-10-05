@@ -555,6 +555,11 @@ assurance.
 }
 ```
 
+`required` names what is left to present, never a factor already accepted on the
+challenge: at a sign-in, the second steps the challenge offers once a first factor is
+accepted, and where a second step was accepted before any first factor, the first
+factors of the challenge's `available` (D-193, D-194).
+
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
 (AUTH-FACT-015). A trusted-device cookie presented on a later sign-in satisfies the
@@ -630,7 +635,7 @@ carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
 requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
-AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193*
+AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -808,21 +813,29 @@ answers **302** to the provider's `/oidc/authorize` carrying `client_id` and
 which is followed only as a path of this application. `GET /auth/signon/return` answers
 **302** to the stored return address with the session cookies set. A start from a
 browser with no pre-authentication session issues one (BFF-CSRF-005a). The sign-on is a
-navigation route (BFF-ERR-001): a refusal other than its `state`'s, whatever code it was
-refused with inside, returns the browser with **302**, to `returnTo` at the start and to
-the stored return address at the return, carrying `error` `auth.session.expired` placed
-before any fragment, which both routes declare (BFF-SESS-006, CONV-DESIGN-006, D-192,
-D-193). An `error` `login_required` at the return is no failure: the return pushes again
-without `prompt=none` and answers **302** to `/oidc/authorize` (BFF-SESS-006). A fault
-stays a fault, answered **500** `system.fault` (BFF-ERR-002), the pipeline's answer,
-which no route declares: where no pre-authentication session can be issued, or where the
-push or the exchange cannot reach the authentication application, is answered a 5xx, or
-reads no answer in its protocol's shape (D-193).
+navigation route (BFF-ERR-001): a refusal other than its `state`'s returns the browser
+with **302**, to `returnTo` at the start and to the stored return address at the return,
+carrying `error` `auth.session.expired` placed before any fragment, which both routes
+declare (BFF-SESS-006, CONV-DESIGN-006, D-192, D-193). An `error` `login_required` at
+the return is no failure: the return pushes again without `prompt=none` and answers
+**302** to `/oidc/authorize` (BFF-SESS-006). A fault stays a fault, answered **500**
+`system.fault` (BFF-ERR-002), the pipeline's answer, which no route declares: where no
+pre-authentication session can be issued, or where the push or the exchange cannot reach
+the authentication application, is answered a 5xx, or reads no answer in its protocol's
+shape (D-193). At the push every error the authentication application answers is a
+fault, since it refuses the deployment's own client or request; at the exchange a 400
+whose `error` is `invalid_grant` (RFC 6749 section 5.2) is a refusal and every other
+error a fault, a 4xx whose body names no `error` among them; an authorization response's
+`error` is a refusal, save `login_required`, which pushes again, and `server_error` and
+`temporarily_unavailable` (RFC 6749 section 4.1.2.1), which are faults; a derivation the
+library refuses with a code of its own is a refusal. The `error`, or the library's own
+code, that a refusal carried inside is logged at Information beside the one returned
+(BFF-LOG-001, D-194).
 
 **403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`; the
 browser is sent nowhere
 
-*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193*
+*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194*
 
 ---
 
@@ -1407,14 +1420,16 @@ administrative-organization account, whose floor is `aal2`, AUTH-SESS-005b) and
 step not done), `auth.session.expired`, `identity.identifier.invalid`,
 `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed` and
 `auth.restriction.exceeded`; to link, `auth.factor.notpermitted`,
-`auth.stepup.required`, `authz.restricted`, `authz.denied` and `auth.session.expired`.
+`auth.stepup.required`, `authz.restricted` and `authz.denied`; a link's return whose
+session has ended finds no attempt and is answered **403** below (D-194).
 
 **303**: to the provider, to the continuation, or back to `returnTo`
-**403**: `auth.session.csrfinvalid`, where no attempt is bound to the browser, it names
-another provider, or its `state` does not match; the browser is sent nowhere
+**403**: `auth.session.csrfinvalid`, where no attempt is bound to the browser (among
+them a link's return whose session has ended, D-194), it names another provider, or its
+`state` does not match; the browser is sent nowhere
 
 *Source: IDN-LIFE-012, REG-IDENT-008, BFF-MACH-001, BFF-CSRF-005a, BFF-ABUSE-001, D-166,
-D-191, D-192, D-193*
+D-191, D-192, D-193, D-194*
 
 ---
 

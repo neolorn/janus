@@ -14771,6 +14771,8 @@ BFF-STEP-001 (criterion 2); `18` FE-API-004 (the step-up prompt); `20` REG-IDENT
 
 > **Amended.** Question 212: a link's gate is asked at the round trip's start and again on its return; every intent's return carries `auth.factor.rejected`, a provider's own error or a missing code counting nothing; at the token endpoint only `invalid_grant` is the code refused, every other failure the provider unavailable; a fault on a navigation stays a fault; a navigation route binds no typed value; 211: an account holds at most one `phoneCode` credential (D-193).
 
+> **Amended.** Question 212: a redirect's `error` carries only the codes its route declares it carries; CONV-DESIGN-006 criterion 4 no longer admits a mounting's answers there; a link's return whose session has ended is answered 403 `auth.session.csrfinvalid`, so the continuation no longer lists `auth.session.expired` for a link (D-194).
+
 **Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-191 (question 205, the migration keeps the instant of phishing resistance a row already held; question 203, what the 200 of a `phoneCode` ask at a step-up reports), D-183 (question 46, the step-up rows of the truth table cover a gate judged from a session too)
 
 **TL;DR.** Building D-191 proved three defects by tests written first (205, 209, 210),
@@ -14954,6 +14956,8 @@ BFF-ERR-001 (body, new criterion 4), BFF-ABUSE-001 (body, criterion 4); `18` FE-
 
 ## D-193 — Corrections-4 questions 218 to 228: the answers after D-192 was built
 
+> **Amended.** Question 221: a link's return whose session has ended finds no attempt and is answered 403 `auth.session.csrfinvalid`, so `auth.session.expired` is no longer listed for it; 225 and 226: at the sign-on's push every error is a fault, and at its exchange every error but `invalid_grant`, and an authorization response's `server_error` or `temporarily_unavailable`, the code a refusal carried inside being logged (D-194).
+
 **Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-192 (question 212, where a link's gate is asked, the codes a registration's return carries, what a provider that cannot be read is, that a navigation route binds no typed value, and that a fault on a navigation stays a fault; question 211, which credential a code names)
 
 **TL;DR.** Building D-192 raised eleven questions; none reverses it. A link's gate is
@@ -15087,6 +15091,104 @@ codes), `POST /auth/step-up` (the `phoneCode` ask, `maxAge`), `GET /auth/signon`
 `auth.factor.notpermitted`, `auth.provider.unavailable`, section 5a (`provider:link`);
 `11` section 7.4; `17` BFF-SESS-006 (body), BFF-ERR-001 (body, new criterion 5),
 BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7).
+
+---
+
+## D-194 — Corrections-4 questions 229 to 235: the answers after D-193 was built
+
+**Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-193 (question 221, a link's return after the session ended; questions 225 and 226, which answers at the sign-on's push and exchange are refusals), D-192 (question 212, a redirect's `error` carries only codes its route declares, and a link's return whose session has ended is answered 403)
+
+**TL;DR.** Building D-193 raised seven questions, each answered narrowly; one corrects a
+flaw in D-193 itself. At the sign-on, D-193 made every refusal return "sign in again",
+which would loop for ever where the deployment's own client is refused: now only
+`invalid_grant` at the exchange, an authorization response's `error` other than
+`login_required` and the provider's own failures, or a derivation the library refuses, is
+a refusal, and every other error of the push or the exchange is a fault, the same split
+question 223 drew for a social provider (233, 234). The code the refusal carried inside is
+logged (234). A link's return whose session ended finds no attempt and is answered 403, as
+for any unbound return, so `09` and `10` no longer list `auth.session.expired` there
+(231). A redirect's `error` carries only codes its route declares (232). `required` names
+what is left to present (229). 230 and 235 stand as built.
+
+**The questions.** Questions 229 to 235 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names its question; the chapters
+carry the full rule.
+
+**The sign-on (questions 233 and 234).**
+
+- **233 and 234. Which answers are refusals, and what is logged.** At the push every error
+  the authentication application answers is a fault: it refuses the deployment's own
+  client or request, nothing the person did. At the exchange, a 400 whose `error` is
+  `invalid_grant` is a refusal (the code spent, expired, or not this client's, RFC 6749
+  section 5.2), and every other error a fault (`invalid_client` and the others, a 5xx, a
+  4xx whose body names no `error`, which is no answer in its protocol's shape). An
+  authorization response carrying an `error` is a refusal, save `login_required`, which
+  pushes again, and `server_error` and `temporarily_unavailable` (RFC 6749 section
+  4.1.2.1), which are the provider's own failures and so faults; a derivation the library
+  refuses with a code of its own is a refusal. Each refusal returns the browser with
+  `auth.session.expired`, and the `error`, or the library's own code, that it carried
+  inside is logged at Information beside it (BFF-LOG-001 criterion 2, BFF-ERR-001
+  criterion 5, `11` section 7.5): the provider is the library's own, so what it wrote may
+  be logged, unlike a social provider's (BFF-ERR-001). This corrects D-193's "whatever
+  code it was refused with inside": a refused client would have sent every person round
+  "sign in again" with nothing raised. *Rejected:* every 4xx a refusal (the same loop);
+  the inside code logged nowhere (no operator could tell why sign-ons fail).
+
+**The provider round trip (questions 231 and 232).**
+
+- **231. A link's return after the session ended.** A link's attempt is bound to the
+  session, so once the session has ended no attempt is found, and the return is answered
+  as every return with no attempt bound to the browser is: 403 `auth.session.csrfinvalid`,
+  sent nowhere (BFF-ERR-001). The continuation's list in `09` no longer gives
+  `auth.session.expired` to a link; the start keeps it for a link begun with no session.
+  The gate asked again on the return covers a step-up that has aged and the policy and
+  restriction in force, not an ended session. *Rejected:* returning the browser expired
+  (with no attempt found there is no return address to send it to, and nothing proves the
+  return is this browser's).
+- **232. A mounting's codes in a redirect's `error`.** As built: a redirect's `error`
+  carries only codes its route declares it carries; what a mounting answers is a body and
+  never rides in `error`. CONV-DESIGN-006 criterion 4 said "neither declares nor answers
+  by its mounting" of a redirect, words a verification round of D-192 added; they now read
+  "does not declare it carries".
+
+**Second steps (question 229).**
+
+- **229. `required` at a sign-in after a second step accepted first.** `required` names
+  what is left to present, never a factor already accepted: at a sign-in, the second steps
+  the challenge offers once a first factor is accepted, and where a second step was
+  accepted before any first factor, the first factors of the challenge's `available` (`09`
+  `/auth/factor`). Whether a sign-in should verify a second step before a first factor at
+  all (it lets a caller test second-step codes without the password, within the throttles)
+  is a wider question, recorded for the Milestone 1 exit review and not decided here.
+  *Rejected:* every usable second step, the accepted one among them (it asks again for
+  what was accepted); `required` left empty (it names nothing the person can present).
+
+**Confirmed as built (questions 230 and 235).**
+
+- **230. A commit that only moves lines out of a watched file.** As built: CONV-VCS-004
+  binds a change under review, the pull request's range, not each commit (D-187 question
+  100); a move that leaves the judgement unchanged owes no row.
+- **235. The exemption.** As built: the check of CONV-DESIGN-004 criterion 2 already
+  passes a navigation handler's values, which are plain text it does not match, and the
+  test that a navigation route binds no typed value holds the rule; nothing is to be
+  exempted in the check: CONV-DESIGN-004 criterion 2's carve-out (D-193) states its scope
+  and asks for no code.
+
+**What the run reported besides.** Where D-193 said "as built" and it was not: a 5xx from
+the authentication application returned the browser expired (225, 226), and a provider
+return under a delay was answered `auth.factor.rejected` before `auth.throttled` (222);
+both are fixed. `StepUp.cs` still holds more than step 1 (the level a gate is read at,
+reachable assurance and the combinations it reads), all of which the gate's judgement
+uses, so it stays watched. A helper amended two messages on its own unpushed, unmerged
+branch; nothing anyone holds was rewritten, and it stands.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `08` CONV-DESIGN-006 (criterion 4); `09` `POST /auth/factor`
+(`required`), `GET /auth/signon` · `GET /auth/signon/return`,
+`GET /auth/providers/{provider}` (the codes `error` carries, the 403); `10`
+`auth.session.expired`, `auth.session.csrfinvalid`; `11` section 7.5 (new); `17`
+BFF-SESS-006 (body), BFF-ERR-001 (body, criterion 5).
 
 ---
 
@@ -15293,6 +15395,7 @@ BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7
 | Corrections-4 questions 202 to 210: the answers after D-190 was built | D-191 |
 | Corrections-4 questions 211 to 217 and the truth-table ruling after D-191 | D-192 |
 | Corrections-4 questions 218 to 228: the answers after D-192 was built | D-193 |
+| Corrections-4 questions 229 to 235: the answers after D-193 was built | D-194 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
