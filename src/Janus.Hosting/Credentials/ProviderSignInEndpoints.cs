@@ -69,7 +69,7 @@ internal static class ProviderSignInEndpoints
                     ErrorCodes.ProviderUnavailable,
                     ErrorCodes.SessionExpired,
                     ErrorCodes.RegistrationSignedIn))
-                .Produces(StatusCodes.Status302Found);
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapGet(
                 Start + route + Returned,
@@ -97,7 +97,7 @@ internal static class ProviderSignInEndpoints
                     ErrorCodes.StepUpRequired,
                     ErrorCodes.Restricted,
                     ErrorCodes.Denied))
-                .Produces(StatusCodes.Status302Found);
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapMethods(
                 Return + route + Returned,

@@ -113,14 +113,14 @@ internal sealed class ProviderSignIn(
 
         if (intent is null || !Intents.TryGetValue(intent, out ProviderIntent intended))
         {
-            return Back(destination, Error.From(ErrorCodes.RequestMalformed));
+            return Back(context, destination, Error.From(ErrorCodes.RequestMalformed));
         }
 
         // A browser already signed in has nothing to sign in to, and goes where it was
         // going, as it does from the sign-on (BFF-SESS-006 AC1).
         if (intended is ProviderIntent.SignIn && browser.Live is not null)
         {
-            return Results.Redirect(destination);
+            return SeeOther(context, destination);
         }
 
         Error? failure = null;
@@ -131,7 +131,7 @@ internal sealed class ProviderSignIn(
 
         if (failure is not null)
         {
-            return Back(destination, failure);
+            return Back(context, destination, failure);
         }
 
         // API-CONV-003: a provider the deployment does not declare is a factor that is
@@ -140,7 +140,7 @@ internal sealed class ProviderSignIn(
         {
             BrowserProfileLog.ProviderUndeclared(log, context.TraceIdentifier, provider);
 
-            return Back(destination, Error.From(ErrorCodes.FactorNotPermitted));
+            return Back(context, destination, Error.From(ErrorCodes.FactorNotPermitted));
         }
 
         ProviderMetadata configured = (await providers.SignInAsync(provider, cancellationToken).ConfigureAwait(false))
@@ -169,7 +169,7 @@ internal sealed class ProviderSignIn(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Results.Redirect(Authorization(declared, configured.Authorization!, configured, state, nonce, verifier));
+        return SeeOther(context, Authorization(declared, configured.Authorization!, configured, state, nonce, verifier));
     }
 
     /// <summary>
@@ -226,7 +226,7 @@ internal sealed class ProviderSignIn(
         {
             BrowserProfileLog.ProviderRefused(log, context.TraceIdentifier, provider);
 
-            return Back(attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
+            return Back(context, attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
         }
 
         // AUTH-ABUSE-001: an address that has earned a delay is sent back before the
@@ -236,7 +236,7 @@ internal sealed class ProviderSignIn(
                 .ConfigureAwait(false)
             is Error delayed)
         {
-            return Back(attempt.ReturnTo, delayed);
+            return Back(context, attempt.ReturnTo, delayed);
         }
 
         Error? unavailable = null;
@@ -260,7 +260,7 @@ internal sealed class ProviderSignIn(
                 .ProviderRefusedAsync(provider, RequestOrigin.Source(context.Request), cancellationToken)
                 .ConfigureAwait(false);
 
-            return Back(attempt.ReturnTo, refused);
+            return Back(context, attempt.ReturnTo, refused);
         }
 
         return attempt.Intent switch
@@ -301,12 +301,23 @@ internal sealed class ProviderSignIn(
                 ? returnTo
                 : "/";
 
+    // Chapter 09: the round trip answers 303 wherever it sends the browser, to the
+    // provider, on to where it was going or back to where it started, so what follows
+    // is a read whatever the request was.
+    private static IResult SeeOther(HttpContext context, string location)
+    {
+        context.Response.StatusCode = StatusCodes.Status303SeeOther;
+        context.Response.Headers.Location = location;
+
+        return Results.Empty;
+    }
+
     // CONV-CONTENT-001: the browser comes back to where it started with the code of
     // what refused it, and the frontend says what that means.
     // AUTH-ABUSE-002 AC2: a refusal naming the instant its wait lifts, as every
     // throttled refusal does, carries that instant after the code and before any
     // fragment.
-    private static IResult Back(string destination, Error refusal)
+    private static IResult Back(HttpContext context, string destination, Error refusal)
     {
         int fragment = destination.IndexOf('#', StringComparison.Ordinal);
         string path = fragment < 0 ? destination : destination[..fragment];
@@ -320,7 +331,7 @@ internal sealed class ProviderSignIn(
             query += "&retryAt=" + Uri.EscapeDataString(instant);
         }
 
-        return Results.Redirect(path + separator + query + rest);
+        return SeeOther(context, path + separator + query + rest);
     }
 
     private static string Challenge([NeverLogged] string verifier) =>
@@ -454,7 +465,7 @@ internal sealed class ProviderSignIn(
         if (refusal.Code != ErrorCodes.ProviderUnavailable
             || !refusal.Details.TryGetValue(ProviderKeys.Part, out JsonElement part))
         {
-            return Back(destination, refusal);
+            return Back(context, destination, refusal);
         }
 
         string named = ProviderRoutes.NameOf(provider);
@@ -476,6 +487,7 @@ internal sealed class ProviderSignIn(
             .ConfigureAwait(false);
 
         return Back(
+            context,
             destination,
             raised.Match(() => Error.From(ErrorCodes.ProviderUnavailable), unraised => unraised));
     }
@@ -643,7 +655,7 @@ internal sealed class ProviderSignIn(
     {
         if (browser.FirstContact?.Registration is not RegistrationSessionId session)
         {
-            return Back(destination, Error.From(ErrorCodes.SessionExpired));
+            return Back(context, destination, Error.From(ErrorCodes.SessionExpired));
         }
 
         SessionOrigin origin = RequestOrigin.Of(context.Request);
@@ -663,18 +675,18 @@ internal sealed class ProviderSignIn(
 
         if (failure is not null)
         {
-            return Back(destination, failure);
+            return Back(context, destination, failure);
         }
 
         if (!provided.Linked)
         {
-            return Results.Redirect(destination);
+            return SeeOther(context, destination);
         }
 
         if ((await registration.AbandonAsync(session, null, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error unended)
         {
-            return Back(destination, unended);
+            return Back(context, destination, unended);
         }
 
         return await SignedInAsync(
@@ -696,7 +708,7 @@ internal sealed class ProviderSignIn(
     {
         if (browser.Context is not AccessContext holder || browser.Live is not Session live)
         {
-            return Back(destination, Error.From(ErrorCodes.SessionExpired));
+            return Back(context, destination, Error.From(ErrorCodes.SessionExpired));
         }
 
         Result linked = await credentials
@@ -710,8 +722,8 @@ internal sealed class ProviderSignIn(
             .ConfigureAwait(false);
 
         return linked.Match(
-            () => Results.Redirect(destination),
-            refused => Back(destination, refused));
+            () => SeeOther(context, destination),
+            refused => Back(context, destination, refused));
     }
 
     // BFF-CSRF-005a AC3, AUTH-SESS-006: the session pair is written and what the
@@ -729,7 +741,7 @@ internal sealed class ProviderSignIn(
 
         if (failure is not null)
         {
-            return Back(destination, failure);
+            return Back(context, destination, failure);
         }
 
         if (reached.Session is IssuedSession issued)
@@ -743,6 +755,6 @@ internal sealed class ProviderSignIn(
             }
         }
 
-        return Results.Redirect(destination);
+        return SeeOther(context, destination);
     }
 }

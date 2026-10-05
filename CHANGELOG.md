@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The start and the continuation of a social provider's round trip answer 303 wherever
+  they send the browser, where they answered 302.
 - A social provider's round trip whose provider cannot be reached or read, at its
   discovery document, its published keys or its token endpoint, returns the browser
   with `error=auth.provider.unavailable`, counts no failed attempt, records no failed

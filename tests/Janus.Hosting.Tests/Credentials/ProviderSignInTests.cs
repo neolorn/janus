@@ -109,7 +109,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
 
-        Assert.Equal(StatusCodes.Status302Found, landed.Status);
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
         Assert.Equal(Page, landed.Location);
         Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/auth/session")).Status);
 
@@ -243,7 +243,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
 
-        Assert.Equal(StatusCodes.Status302Found, landed.Status);
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
         Assert.Equal(Page + "?error=" + ErrorCodes.CredentialSuspended, landed.Location);
         Assert.Equal(StatusCodes.Status401Unauthorized, (await browser.SendAsync("GET", "/auth/session")).Status);
         Assert.Equal((subject, Factor.Google), _deployment.SessionAudit.Failed[^1]);
@@ -677,7 +677,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
             "GET",
             "/auth/providers/google?" + query + "&returnTo=" + Uri.EscapeDataString(Page));
 
-        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(StatusCodes.Status303SeeOther, refused.Status);
         Assert.Equal(Page + "?error=" + code, refused.Location);
         Assert.Empty(refused.Body);
         Assert.Equal(0, _deployment.ProviderAttempts.Count);
@@ -731,6 +731,43 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         Assert.Equal(TimeSpan.Zero, lifts.Offset);
         Assert.True(lifts > _deployment.Clock.GetUtcNow());
         _ = Assert.Single(_deployment.Mail.Taken);
+    }
+
+    /// <summary>
+    /// Chapter 09: the round trip answers 303 wherever it sends the browser: to the
+    /// provider, back to where it started with a refusal's code, and on to where it was
+    /// going once the round trip is done.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_TheRoundTripAnswersSeeOtherWhereverItSendsTheBrowserAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        var browser = new Browser(_deployment);
+        Answer unstarted = await browser.SendAsync("GET", Start("google", "unlink"));
+        Answer started = await browser.SendAsync("GET", Start("google", "signin"));
+        Answer refused = await ReturnedAsync(
+            browser,
+            "google",
+            Where(started),
+            new ProviderPerson(GoogleSubject) { Forged = true });
+        Answer landed = await ReturnedAsync(
+            browser,
+            "google",
+            Where(await browser.SendAsync("GET", Start("google", "signin"))),
+            new ProviderPerson(GoogleSubject));
+        Answer already = await browser.SendAsync("GET", Start("google", "signin"));
+
+        Assert.Equal(Page + "?error=" + ErrorCodes.RequestMalformed, unstarted.Location);
+        Assert.Equal(Page + "?error=" + ErrorCodes.FactorRejected, refused.Location);
+        Assert.Equal(Page, landed.Location);
+        Assert.Equal(Page, already.Location);
+        Assert.All(
+            new[] { unstarted, started, refused, landed, already },
+            answered => Assert.Equal(StatusCodes.Status303SeeOther, answered.Status));
     }
 
     /// <summary>
