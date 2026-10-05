@@ -504,6 +504,15 @@ internal sealed class IdentifierService(
 
             waiting = confirming;
 
+            // REG-IDENT-007 (D-190): a replace staged afresh while the press waited for
+            // the lock answers nothing sent before it, so the token is judged again on
+            // the row as it is held.
+            if (!Displaced(waiting, fingerprint))
+            {
+                return Result.Failure<LinkLanding>(
+                    await CountedAsync(pressing, Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false));
+            }
+
             // REG-IDENT-007, D-187: the confirmation answers from a record of its own,
             // read under its lock after the verification's. A press past its lifetime
             // changes nothing on that record or the verification; it is counted against
@@ -596,6 +605,14 @@ internal sealed class IdentifierService(
         {
             return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match(() => Result.Success(new LinkLanding(Verified: false, sameBrowser, Code: null)), Result.Failure<LinkLanding>);
+        }
+
+        // REG-IDENT-007 (D-190): as for the confirmation, a link sent before the replace
+        // was staged afresh opens nothing, whichever browser presses it.
+        if (staged.Link is not byte[] sent || !CryptographicOperations.FixedTimeEquals(sent, fingerprint))
+        {
+            return Result.Failure<LinkLanding>(
+                await CountedAsync(pressing, Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false));
         }
 
         // The press proved the value, so the code that would have is ended with it.
@@ -1279,9 +1296,9 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMixedScript));
         }
 
-        // REG-IDENT-007 AC8 (D-189): a replace of another value is refused while one is
-        // staged; a repeated replace of the staged value is a resend, judged again below
-        // under the staged replace's row lock.
+        // REG-IDENT-007 AC8 (D-189, D-190): a replace of another value is refused while
+        // one is staged; a repeated replace of the staged value is a resend or stages it
+        // afresh, judged again below under the staged replace's row lock.
         if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false)
                 is PendingVerification listed
             && !Repeats(listed, canonical))
@@ -1323,7 +1340,9 @@ internal sealed class IdentifierService(
         // judged under its lock, taken before the code's send is counted.
         await directory.LockValuesAsync([(changing.Kind, canonical)], cancellationToken).ConfigureAwait(false);
 
-        if (again is not null)
+        // REG-IDENT-007 (D-190): the repeat is a resend only from the session that staged
+        // the replace. From any other it falls through and is staged afresh below.
+        if (again is not null && StagedBy(again, session, enrolment))
         {
             return await ResentAsync(again, changing, source, cancellationToken).ConfigureAwait(false);
         }
@@ -1348,7 +1367,20 @@ internal sealed class IdentifierService(
             session is not null && held.NoticeSetWithout(identifier).Count is 0,
             time.GetUtcNow());
 
-        await pending.AddAsync(waiting, cancellationToken).ConfigureAwait(false);
+        // REG-IDENT-007 AC9 (D-190): a replace staged afresh takes the row of the staging
+        // before it, held above, and none of what that one proved. Each record it asks
+        // for below replaces the one sent before it, and the confirmation it no longer
+        // asks for is ended, so nothing sent before it answers.
+        if (again is null)
+        {
+            await pending.AddAsync(waiting, cancellationToken).ConfigureAwait(false);
+        }
+        else if (!waiting.OldMustConfirm)
+        {
+            await codes
+                .EndAsync(PendingVerification.ConfirmationHolder(identifier), cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         // REG-SESS-005, AUTH-ABUSE-004: a held or reserved value is staged as a fresh
         // one is, and a send the restrictions refuse stages nothing either way.
@@ -1380,9 +1412,10 @@ internal sealed class IdentifierService(
         return Result.Success();
     }
 
-    // REG-IDENT-007 AC8 (D-189): a repeated replace of the staged value sends again each
-    // of the replace's records not yet spent, the new address's code and, where the
-    // displaced address must confirm and has not, its confirmation. Each is a send of
+    // REG-IDENT-007 AC8 (D-189, D-190): a repeated replace of the staged value, from the
+    // session that staged it, sends again each of the replace's records not yet spent,
+    // the new address's code and, where the displaced address must confirm and has
+    // not, its confirmation. Each is a send of
     // its purpose counted by the restrictions, and one they refuse sends neither. The
     // caller holds the staged replace's row and the value's lock.
     private async ValueTask<Result> ResentAsync(
@@ -1425,6 +1458,14 @@ internal sealed class IdentifierService(
 
     private static bool Repeats(PendingVerification staged, string canonical) =>
         staged.IsReplacement && string.Equals(staged.Staged.Canonical, canonical, StringComparison.Ordinal);
+
+    // REG-IDENT-007 (D-190): whether the session asking is the one that staged the
+    // replace, which is the browser REG-SESS-003 binds it to or the enrolment session
+    // that staged it. A replace that kept neither was staged by none that can ask.
+    private static bool StagedBy(PendingVerification staged, SessionId? session, EnrolmentSessionId? enrolment) =>
+        session is SessionId browser
+            ? staged.Browser == browser
+            : enrolment is EnrolmentSessionId opened && staged.Enrolment == opened;
 
     // AUTHZ-GATE-006, D-183: the restriction asked again inside the unit of work, where
     // the gate judges it with the account's row held. An enrolment session is not asked

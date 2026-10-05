@@ -734,6 +734,57 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC9 and chapter 09 (D-190): a repeated replace naming the staged
+    /// value from another session of the account is a send the restrictions count,
+    /// refused 429 <c>auth.restriction.exceeded</c> inside the minute the first holds
+    /// the address for; past it the replace is staged afresh for the asking session
+    /// and answers 202. The link sent before it then answers 422
+    /// <c>auth.code.expired</c>, and a press of the new link shows the code in the
+    /// browser that staged first and verifies in the asking session's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC9_ARepeatedReplaceFromAnotherSessionIsStagedAfreshForItAsync()
+    {
+        const string replaced = "replaced@example.test";
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+        Browser staging = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        string changing = "/account/identifiers/"
+            + (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken))
+                .All
+                .Single(held => held.Kind is IdentifierKind.Email)
+                .Id
+                .Value;
+        _ = await staging.SendAsync("PUT", changing + "/replace", ("value", replaced));
+        string before = Flow.Token(_deployment, IdentifierKind.Email);
+        Browser asking = await SignedInAgainAsync(subject);
+        Answer early = await asking.SendAsync("PUT", changing + "/replace", ("value", replaced));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Answer afresh = await asking.SendAsync("PUT", changing + "/replace", ("value", replaced));
+
+        string sent = Flow.Token(_deployment, IdentifierKind.Email);
+        Answer elsewhere = await staging.SendAsync("POST", changing + "/verify", ("linkToken", sent), ("press", true));
+        string code = Flow.Code(_deployment, IdentifierKind.Email);
+        Answer spent = await staging.SendAsync("POST", changing + "/verify", ("linkToken", before), ("press", true));
+        Answer pressed = await asking.SendAsync("POST", changing + "/verify", ("linkToken", sent), ("press", true));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, early.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, afresh.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, spent.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), spent.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, elsewhere.Status);
+        Assert.Equal(code, elsewhere.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
+        Assert.Contains(
+            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
+            held => string.Equals(held.Canonical, replaced, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// FE-ACCT-001 AC4: the declaration decides what a preference set holds, so a key
     /// the host never declared is neither answered with nor taken.
     /// </summary>

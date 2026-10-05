@@ -338,6 +338,60 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC9 (D-190): a replace staged afresh is carried onto the row of the
+    /// staging before it: the session it is now staged for, whether the displaced
+    /// address must confirm, when it was staged, and neither link the earlier staging
+    /// had sent.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC9_AReplaceStagedAfreshIsCarriedOntoTheRowOfTheStagingBeforeItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var opened = EnrolmentSessionId.New(TimeProvider.System);
+        var staged = IdentifierId.New(TimeProvider.System);
+        string value = Fresh("afresh");
+        var before = PendingVerification.ToReplace(
+            subject,
+            browser: null,
+            enrolment: null,
+            StagedIdentity.Of(staged, IdentifierKind.Email, value, value),
+            oldMustConfirm: true,
+            Noon);
+        byte[] link = RandomNumberGenerator.GetBytes(Fingerprint.Length);
+        before.AskedOld(RandomNumberGenerator.GetBytes(Fingerprint.Length));
+        before.Staged.Linked(link);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(before, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext restaging = database.Context())
+        {
+            await Store(restaging).RecordAsync(
+                PendingVerification.ToReplace(
+                    subject,
+                    browser: null,
+                    opened,
+                    StagedIdentity.Of(staged, IdentifierKind.Email, value, value),
+                    oldMustConfirm: false,
+                    Noon.AddMinutes(5)),
+                TestContext.Current.CancellationToken);
+            await restaging.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        PendingVerification? afresh = await Store(reading).FindAsync(staged, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(afresh);
+        Assert.Equal((opened, false, Noon.AddMinutes(5)), (afresh.Enrolment, afresh.OldMustConfirm, afresh.StagedAt));
+        Assert.Null(afresh.OldLink);
+        Assert.Null(await Store(reading).FindByLinkAsync(link, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// REG-IDENT-004 (D-188): the sweep locks its candidates, which it can do only inside
     /// a transaction, so one asked for outside any is a fault and deletes nothing.
     /// </summary>

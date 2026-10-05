@@ -10,6 +10,18 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `PUT /account/identifiers/{id}/replace` naming the value already staged is a
+  resend only from the session that staged it (the browser that staged it, or the
+  enrolment session that did). From any other session of the account it stages
+  the replace afresh for the asking session, where it sent the earlier staging's
+  records again: the code, the link and the old address's confirmation sent
+  before it answer nothing (a press of either link is answered 422
+  `auth.code.expired`), what they had proved is forgotten, a press of the new
+  link verifies only in the asking session's browser, and each new record is a
+  send the restrictions count and refuse with 429 `auth.restriction.exceeded`,
+  which leaves the earlier staging as it stood. A replace an enrolment session
+  staged before the session that staged it was kept is staged afresh the first
+  time that session repeats it.
 - The verification link of a replace an enrolment session staged opens on the
   authentication application's landing origin, where that session is held, and a
   press of it there (`POST /account/identifiers/{id}/verify` with `linkToken` and
