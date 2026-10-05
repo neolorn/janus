@@ -357,6 +357,64 @@ public sealed class StepUpTests : IDisposable
                 .Outcome);
 
     /// <summary>
+    /// AUTH-STEP-002 AC3, AUTH-STEP-007: a gate whose level is <c>delegated</c> asks no
+    /// maximum age, so the session of a social-only account that reached that level
+    /// longer ago than the gate's maximum age is not challenged to set a password.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC3_AGateWhoseLevelIsDelegatedAsksNoMaximumAge() =>
+        Assert.Equal(
+            StepUpOutcome.Satisfied,
+            StepUp.ToEnrol(
+                    Signed(new Assurance(AssuranceLevel.Delegated, PhishingResistant: false)),
+                    Gate(GateLevel.Reachable, phishingResistant: false),
+                    Held(password: false, Factor.Google),
+                    Factor.Password,
+                    Noon + Recency + TimeSpan.FromDays(1))
+                .Outcome);
+
+    /// <summary>
+    /// AUTH-STEP-002 AC3, AUTH-SESS-009: a gate whose level is <c>delegated</c> asks no
+    /// maximum age and still counts nothing the session reached up to its last
+    /// downgrade.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC3_AGateWhoseLevelIsDelegatedCountsNothingReachedUpToTheLastDowngrade()
+    {
+        Session downgraded = Signed(new Assurance(AssuranceLevel.Delegated, PhishingResistant: false));
+
+        downgraded.Downgrade(Noon);
+
+        StepUpChallenge asked = StepUp.ToEnrol(
+            downgraded,
+            Gate(GateLevel.Reachable, phishingResistant: false),
+            Held(password: false, Factor.Google),
+            Factor.Password,
+            Noon + Recency + TimeSpan.FromDays(1));
+
+        Assert.NotEqual(StepUpOutcome.Satisfied, asked.Outcome);
+        Assert.True(asked.Downgraded);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC3, AUTH-STEP-007: only a gate whose level is <c>delegated</c>
+    /// asks no maximum age, so an enrolment gated at a level above it is challenged
+    /// once the session last reached that level longer ago than the maximum age.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC3_AnEnrolmentGateAboveDelegatedAsksItsMaximumAge()
+    {
+        Session session = Signed(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false));
+        Gate gate = Gate(GateLevel.Reachable, phishingResistant: false);
+        HeldFactors held = Held(password: true);
+
+        Assert.Equal(StepUpOutcome.Satisfied, StepUp.ToEnrol(session, gate, held, Factor.Passkey, Noon + Recency).Outcome);
+        Assert.Equal(
+            StepUpOutcome.Present,
+            StepUp.ToEnrol(session, gate, held, Factor.Passkey, Noon + Recency + TimeSpan.FromSeconds(1)).Outcome);
+    }
+
+    /// <summary>
     /// AUTH-STEP-008 invariant 3: from every account state and for every gate, the
     /// answer is a move and never a bare refusal, and an offer never comes empty.
     /// </summary>

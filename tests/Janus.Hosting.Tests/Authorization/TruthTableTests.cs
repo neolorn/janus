@@ -173,6 +173,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a session that reached a lower level since, beside the gate's level past its maximum age",
             Decided.StepUpRequired),
         ("a session whose proof was reached only before its last downgrade", Decided.StepUpRequired),
+        (
+            "a session that reached delegated alone, the level whose own gate asks no maximum age",
+            Decided.StepUpRequired),
         ("a session derived from a record that meets the gate", Decided.Allowed),
         (
             "a session derived within the gate's maximum age from a record whose proof is older than it",
@@ -1156,9 +1159,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // What the session of each case of the sessions' table last reached, and when,
     // against the strict gate: two factors, phishing-resistant, five minutes old at
-    // most. Each case leaves unmet the one thing its row names and nothing else. The
-    // request arrives on the last session a case answers; a derived session comes
-    // after the record it stands on (AUTH-SESS-012).
+    // most. Each case leaves unmet the one thing its row names and nothing else, but
+    // the case of delegated alone, which reaches nothing the gate asks: a gate whose
+    // level is delegated asks no maximum age (AUTH-STEP-007), no gate bound to an
+    // action states that level (AUTH-STEP-002a), and so what such a session reached
+    // passes none of them however lately. The request arrives on the last session a
+    // case answers; a derived session comes after the record it stands on
+    // (AUTH-SESS-012).
     private static IReadOnlyList<Session> Proving(SubjectId caller, string scenario)
     {
         DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
@@ -1193,6 +1200,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 downgraded.Downgrade(Deployment.Noon - TimeSpan.FromSeconds(30));
 
                 return [downgraded];
+
+            case "a session that reached delegated alone, the level whose own gate asks no maximum age":
+                return [Begun(caller, new Assurance(AssuranceLevel.Delegated, PhishingResistant: false), recent)];
 
             case "a session derived from a record that meets the gate":
                 Session standing = Begun(caller, met, recent);

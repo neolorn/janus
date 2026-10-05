@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A step-up gate whose level is `delegated`, which is what enrolling asks of an account
+  that reaches no more, asks no maximum age: the session counts however long ago it
+  reached that level, where it was refused 403 `auth.stepup.required` once the maximum
+  age the policy gives `factor:enrol` had passed. A social-only account therefore sets
+  a password from a session of any age with no presentation, and the enrolment is
+  notified to every recorded channel. What the session reached up to its last
+  downgrade still passes no gate, and a gate at any other level asks its maximum age
+  as before.
 - `POST /auth/step-up` asked for a text code and answered 200, the number's signal
   having withheld the code, reports in `assuranceLevel` and `phishingResistant` what
   the factors accepted on the challenge reach together, `delegated` and not

@@ -234,6 +234,46 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-007 AC5: a social-only account whose session began longer ago than
+    /// the maximum age the policy gives <c>factor:enrol</c> sets a password with no
+    /// presentation, the gate's level being <c>delegated</c>, which asks no maximum
+    /// age, and the enrolment is notified to every recorded channel.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_AC5_ASocialOnlyAccountSetsAPasswordFromASessionOlderThanTheGatesMaximumAgeAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        await _authenticators.LinkAsync(
+            Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, Label("Google"), Noon),
+            "provider-subject",
+            TestContext.Current.CancellationToken);
+
+        IssuedSession issued = Value(await Sessions.BeginAsync(
+            subject,
+            [Factor.Google],
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        _clock.Advance(
+            Janus.Core.Policies.SystemDefault.Gates[StepUpAction.FactorEnrol].MaximumAge + TimeSpan.FromMinutes(1));
+        _notifications.Sent.Clear();
+        _events.Published.Clear();
+
+        Result set = await Service.SetPasswordAsync(
+            Authority(subject, issued.Id),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(set.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.NotEmpty(_notifications.Mail);
+        Assert.NotEmpty(_notifications.Texts);
+        Assert.Equal(FactorCatalogue.Password, Assert.Single(_events.Of<CredentialEnrolled>()).Kind);
+    }
+
+    /// <summary>
     /// AUTH-STEP-007 AC2: a password-only customer enrols a passkey on the strength of
     /// the password, because the gate is the lower of what the account reaches and what
     /// the credential contributes.
