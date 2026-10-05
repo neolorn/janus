@@ -162,6 +162,25 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-006 AC3: both routes of the sign-on declare the one code chapter 09
+    /// gives them to carry in the query member <c>error</c> of their redirect, and
+    /// answer it in no body.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_006_AC3_TheSignOnDeclaresTheCodeItsRedirectCarries()
+    {
+        RouteEndpoint[] mounted = [.. _deployment.Endpoints.OfType<RouteEndpoint>()];
+
+        foreach (string route in new[] { "GET /auth/signon", "GET /auth/signon/return" })
+        {
+            Assert.Equal([ErrorCodes.SessionExpired], Carried(mounted, route));
+            Assert.DoesNotContain(
+                ErrorCodes.SessionExpired,
+                EndpointDeclaration.Of(Assert.Single(mounted, candidate => Named(candidate) == route))!.Codes);
+        }
+    }
+
+    /// <summary>
     /// CONV-DESIGN-006: an endpoint declares a code it carries once.
     /// </summary>
     [Fact]

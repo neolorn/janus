@@ -15,7 +15,9 @@ namespace Janus.Hosting.Bff;
 /// Implements BFF-SESS-006, BFF-SESS-003 and BFF-OWN-001. Both are safe methods
 /// reached as top-level navigations, so neither carries a synchronizer token and what
 /// stands in its place on the return is the state the browser was sent out with, bound
-/// to the pre-authentication session (BFF-CSRF-005a). They are mounted with the rest of
+/// to the pre-authentication session (BFF-CSRF-005a). They are a navigation, so each
+/// declares the code chapter 09 gives it to carry in the query member <c>error</c> of
+/// its redirect (BFF-ERR-001, CONV-DESIGN-006). They are mounted with the rest of
 /// the library, behind the same pipeline, and a host adds nothing to make them work.
 /// </remarks>
 internal static class SignOnEndpoints
@@ -31,10 +33,10 @@ internal static class SignOnEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = endpoints.MapGet(SignOn.StartPath, StartAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(ErrorCodes.SessionExpired))
             .Produces(StatusCodes.Status302Found);
         _ = endpoints.MapGet(SignOn.ReturnPath, ReturnAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.SessionCsrfInvalid))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(ErrorCodes.SessionExpired))
             .Produces(StatusCodes.Status302Found);
 
         return endpoints;

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -274,8 +275,9 @@ public sealed class SignOnTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-006 AC2: a request the provider will not take when it is pushed
-    /// forwards the browser nowhere and is recorded.
+    /// AUTH-OIDC-006 AC2 and chapter 09: a request the provider will not take when it
+    /// is pushed sends the browser to no provider and is recorded; the browser is
+    /// returned to where it was going with the code of a session that is not there.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -294,12 +296,120 @@ public sealed class SignOnTests
 
         Answer refused = await new Browser(deployment).SendAsync("GET", Start);
 
-        Assert.Null(refused.Location);
-        Assert.Equal(
-            ErrorCodes.SessionExpired.ToString(),
-            refused.Json().GetProperty("code").GetString());
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
         Assert.Contains((LogLevel.Warning, 14), deployment.SignOnLog.Entries);
         Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 and BFF-CSRF-005a AC1: a start from a browser that carries no
+    /// pre-authentication session is issued one, and the sign-on is bound to it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_CSRF_005a_AC1_AStartWithNoPreAuthenticationSessionIsIssuedOneAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Answer forwarded = await new Browser(deployment).SendAsync("GET", Start);
+
+        Assert.Equal(StatusCodes.Status302Found, forwarded.Status);
+        Assert.Contains(
+            forwarded.SetCookie,
+            written => written.StartsWith(BrowserCookies.PreAuthentication + "=", StringComparison.Ordinal));
+        _ = Assert.Single(deployment.Contacts.All, contact => contact.SignOn is not null);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 and chapter 09: a start the deployment cannot make, its client
+    /// being in no registry, returns the browser to where it was going with the code
+    /// of a session that is not there, and answers no body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AStartThatFailsReturnsTheBrowserExpiredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Answer refused = await new Browser(deployment).SendAsync(
+            "GET",
+            "/auth/signon?returnTo=" + Uri.EscapeDataString(Page + "#keys"));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired + "#keys", refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Contains((LogLevel.Error, 12), deployment.SignOnLog.Entries);
+        Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 and chapter 09: a return whose state is the browser's and which
+    /// fails otherwise, the provider refusing, no code coming back or the code not
+    /// being one the provider trades, returns the browser to the stored return address
+    /// with the code of a session that is not there, establishes nothing and answers
+    /// no body.
+    /// </summary>
+    /// <param name="answered">What the provider returned the browser with, beside its state.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("error=access_denied")]
+    [InlineData("error=server_error&code=a-code")]
+    [InlineData("")]
+    [InlineData("code=a-code-the-provider-never-issued")]
+    public async Task BFF_SESS_006_AReturnThatFailsReturnsTheBrowserExpiredAsync(string answered)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        Answer refused = await arriving.SendAsync(
+            "GET",
+            "/auth/signon/return?state="
+            + Uri.EscapeDataString(Parameter("?" + deployment.Provider.Carried[^1], "state"))
+            + "&" + answered);
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 AC5 and chapter 09: a record revoked while the browser was on its
+    /// way back establishes nothing, and the browser is returned to the stored return
+    /// address with the code of a session that is not there.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AReturnOnARevokedRecordReturnsTheBrowserExpiredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        await deployment.Sessions.EndSpineAsync(
+            Spine(deployment),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Answer refused = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp && held.EndedAt is null);
     }
 
     /// <summary>

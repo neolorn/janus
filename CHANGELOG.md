@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /auth/signon` and `GET /auth/signon/return` are a navigation: a failure other
+  than the state returns the browser with 302, to `returnTo` at the start and to the
+  stored return address at the return, carrying `error=auth.session.expired` before any
+  fragment, where it answered 401 `auth.session.expired` in a body. Both routes declare
+  the code under their redirect. A return whose state is absent, unbound or mismatched
+  is still refused 403 `auth.session.csrfinvalid` and sent nowhere.
 - The start and the continuation of a social provider's round trip answer 303 wherever
   they send the browser, where they answered 302.
 - A social provider's round trip whose provider cannot be reached or read, at its
