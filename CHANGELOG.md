@@ -10,6 +10,20 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A suspended authenticator presented at a sign-in or a step-up, whether a loss report
+  or a removal that would lower reachable assurance suspended it, is judged first as an
+  active one is. Only where what it presented verifies is it refused 422
+  `auth.credential.suspended`: a code its generator gives, which spends no step; an
+  assertion that passes every check of an active key, which writes no counter; a right
+  text code sent before the number was suspended, which is spent. Each is a failed
+  attempt, counted and recorded. A wrong code or a failed assertion is refused as it
+  is for an active authenticator, where a suspended generator's own code was refused
+  `auth.code.invalid` and a suspended key's assertion `auth.factor.rejected`, and a
+  right text code sent before the suspension was accepted.
+- A `phoneCode` code asked for at `POST /auth/factor` after a first factor, or at
+  `POST /auth/step-up`, for a number that is suspended sends nothing and is answered
+  422 `auth.credential.suspended`, counting nothing and recording no failed attempt,
+  where it was answered 202. An ask before a first factor is answered 202 as before.
 - `POST /auth/step-up` is called once for each factor on one challenge: the factors
   accepted are held on the challenge and the session is raised with them together, so
   a password at one call and a generator's code at the next reach AAL2. The answer is

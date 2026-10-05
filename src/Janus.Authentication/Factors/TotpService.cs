@@ -238,7 +238,8 @@ internal sealed class TotpService(
     /// The credential the code belonged to, or the failure where no usable generator
     /// of the account accepts it. A code whose step has been spent is refused as
     /// replayed, so the person is told to wait for the next one rather than that
-    /// their code is wrong.
+    /// their code is wrong. A code a suspended generator of the account gives is
+    /// refused <c>auth.credential.suspended</c> and spends no step (AUTH-RECOV-007).
     /// </returns>
     public async ValueTask<Result<AuthenticatorId>> PresentAsync(
         SubjectId subject,
@@ -249,6 +250,8 @@ internal sealed class TotpService(
             await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false);
         List<Authenticator> generators =
             [.. held.Where(credential => credential.IsUsable && credential.Totp is not null)];
+        List<Authenticator> suspended =
+            [.. held.Where(credential => credential.IsAwaitingInvalidation && credential.Totp is not null)];
 
         DateTimeOffset now = time.GetUtcNow();
         int drift = await DriftAsync(cancellationToken).ConfigureAwait(false);
@@ -267,21 +270,24 @@ internal sealed class TotpService(
             }
 
             // D-166 X3: the step is judged again on the row under its lock, so the same
-            // code presented twice at once is accepted once and replayed once.
+            // code presented twice at once is accepted once and replayed once, and a
+            // generator suspended since the read spends no step (AUTH-RECOV-007).
             Authenticator? locked = await authenticators.FindForUpdateAsync(generator.Id, cancellationToken)
                 .ConfigureAwait(false);
-            long? consumed = locked is { IsUsable: true, Totp: not null }
+            long? consumed = locked is { Totp: not null } && (locked.IsUsable || locked.IsAwaitingInvalidation)
                 ? TotpCodes.Accepts(locked.Totp, code, now, drift)
                 : null;
 
-            if (consumed is not long accepted)
+            if (consumed is not long accepted || !locked!.IsUsable)
             {
                 await work.RollbackAsync().ConfigureAwait(false);
 
-                return Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)));
+                return Result.Failure<AuthenticatorId>(Error.From(consumed is null
+                    ? Refusal(generators, code, now, drift)
+                    : ErrorCodes.CredentialSuspended));
             }
 
-            locked!.Consumed(accepted);
+            locked.Consumed(accepted);
             locked.Used(now);
             await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
 
@@ -294,7 +300,13 @@ internal sealed class TotpService(
             return Result.Success(generator.Id);
         }
 
-        return Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)));
+        // AUTH-RECOV-007: a suspended generator is judged as an active one is, so the
+        // code it gives is told apart from a wrong one, and from one whose step is
+        // spent, only to whoever holds the generator. It spends no step.
+        return Result.Failure<AuthenticatorId>(Error.From(
+            suspended.Any(generator => TotpCodes.Accepts(generator.Totp!, code, now, drift) is not null)
+                ? ErrorCodes.CredentialSuspended
+                : Refusal([.. generators, .. suspended], code, now, drift)));
     }
 
     // A code that would be valid but for its step having been spent is a replay, and

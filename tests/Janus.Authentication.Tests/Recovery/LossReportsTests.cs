@@ -494,9 +494,10 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-007 AC2: a suspended generator is no longer presentable, so a sign-in
-    /// that offers its code is refused and a gate that would have counted it is not
-    /// reached.
+    /// AUTH-RECOV-007 AC2: a suspended generator is no longer presentable and no longer
+    /// counted towards a gate. Presented anyway it is judged as an active one would be:
+    /// the code it gives is refused <c>auth.credential.suspended</c>, and a code whose
+    /// step is spent is refused as an active generator's is.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -504,18 +505,19 @@ public sealed class LossReportsTests : IAsyncDisposable
     {
         SubjectId subject = await AccountAsync();
         AuthenticatorId generator = await EnrolledAsync(subject);
-        string code = Code(generator);
-
+        string spent = Code(generator);
         _ = await Service.ReportAsync(
             AccessContext.Of(subject),
             generator,
             Source,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(
-            ErrorCodes.CodeInvalid,
-            Refused(await Totp.PresentAsync(subject, code, TestContext.Current.CancellationToken)));
+        ErrorCode? replayed = Refused(await Totp.PresentAsync(subject, spent, TestContext.Current.CancellationToken));
+        _clock.Advance(TimeSpan.FromSeconds(3 * TotpCodes.StepSeconds));
+        ErrorCode? given = Refused(await Totp.PresentAsync(subject, Code(generator), TestContext.Current.CancellationToken));
 
+        Assert.Equal(ErrorCodes.CodeReplayed, replayed);
+        Assert.Equal(ErrorCodes.CredentialSuspended, given);
         Assert.DoesNotContain(Factor.Totp, await UsableAsync(subject));
     }
 

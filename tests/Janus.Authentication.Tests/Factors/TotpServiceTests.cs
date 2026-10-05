@@ -255,6 +255,59 @@ public sealed class TotpServiceTests : IAsyncDisposable
         Assert.Equal(1, _work.RolledBack);
     }
 
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a suspended generator is judged as an active one would be.
+    /// The code it gives is refused <c>auth.credential.suspended</c> and spends no
+    /// step, and a code it does not give is refused as any wrong code is.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedGeneratorIsRefusedSuspendedOnlyWhereItsCodeVerifiesAsync()
+    {
+        SubjectId subject = Subject();
+        TotpEnrolment enrolment = await EnrolledAsync(subject);
+        Authenticator generator =
+            (await _authenticators.FindAsync(enrolment.Id, TestContext.Current.CancellationToken))!;
+        (long? consumed, DateTimeOffset? used) = (generator.Totp!.ConsumedStep, generator.LastUsedAt);
+        string code = Code(enrolment, Now);
+        generator.Suspend(Now + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? right = Refusal(await Service.PresentAsync(subject, code, TestContext.Current.CancellationToken));
+        ErrorCode? wrong = Refusal(await Service.PresentAsync(
+            subject,
+            string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, right);
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong);
+        Assert.Equal(consumed, generator.Totp!.ConsumedStep);
+        Assert.Equal(used, generator.LastUsedAt);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a generator suspended while its code waited for the lock is
+    /// refused <c>auth.credential.suspended</c>, and the refusal ends the unit of work
+    /// it was decided in with nothing committed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_AGeneratorSuspendedMeanwhileIsRefusedSuspendedAsync()
+    {
+        SubjectId subject = Subject();
+        TotpEnrolment enrolment = await EnrolledAsync(subject);
+        string code = Code(enrolment, Now);
+        _authenticators.Locking = credential => credential.Suspend(Now + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(subject, code, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
     private static CredentialLabel Label() =>
         CredentialLabel.Of(new DeviceDescription("Firefox", "Fedora"));
 
