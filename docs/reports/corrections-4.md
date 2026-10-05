@@ -5009,3 +5009,34 @@ its commits can be read.
 - The fast checks ran before the docs commit `9caa47e5` and before each report commit after it.
 - An empty `.git/index.lock`, two hours old, with no git process running, stood in the clone at the first commit of this round; it was deleted. No git configuration was changed.
 - Open: questions 211 to 217 (section 4). Not built for them: naming the credential on a pending code's row (211); declaring the codes a provider's return carries in its redirect (212); carrying the record's own instants into a derived session (213); the report of a `phoneCode` ask's 200 at a step-up (217). Questions 214, 215 and 216 park nothing.
+
+**`corrections-4`, after the items of D-192.** Full gate at `73ed3f17`, run locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). It ran twice: the first run, at `64f9fdd7`, failed one integration test of 1049, with every other job passing. The pipeline's last run on the pull request covers `b4966f33`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3720 |
+| Contract tests | passed, 148 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1049 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 117 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). For the one migration since the last gate, `NameTheCredentialASecondStepCodeIsIssuedFor`, it lists the `DELETE` of every pending `phoneCode` code from `identity.signin_links` and `ck_signin_links_credential` added |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The first run's failure: `BackgroundJobsTests.AUTH_ABUSE_008_AC6_ARunOfTheRangesJobRaisesTheAbsenceThoughNoRegistrationArrivesAsync`. The job `alert-dispatch` runs in the same pass as `datacenter-ranges`; where it took its turn after it, it carried the condition and removed its row, and the test counted the waiting row alone. `73ed3f17` has the test count the condition waiting or carried. No product code changed. `eb1d0dda`, which cleared the alert ledger before the pass after the same failure in the gate after D-190, did not reach this cause; its clearing is what makes the carried count exact.
+- The fast checks ran before the docs commit `b2cb16a6` and before every commit after it. The contract test of REF-001 was red from `b2cb16a6` until the merge `d17a4519`, as section 1 says.
+- An empty `.git/index.lock`, an hour old, with no git process running, stood in the clone at the start of this round; it was deleted. No git configuration was changed.
+- Resolved by rule: nothing in this round. Two records the navigation part handed back as resolved by rule change an answer and stand as questions 227 and 228.
+- Open: questions 218 to 228 (section 4). Not built for them: the link's three codes at a provider start and the check of a navigation's redirect against its declaration (221); another code for a registration's refused return (222); a token endpoint's 5xx as unavailable (223); the translation stage's return of a navigation that cannot bind (224); a start no pre-authentication session could be issued for (225); a sign-on's fault returned as expired (226); `required` of an ask without the factors already accepted (219); a `delegated` gate's refusal without `maxAge` (220). Questions 218, 227 and 228 park nothing.
