@@ -76,6 +76,12 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     {
         await ForgetEarlierRunsAsync();
 
+        // A pass of another test, at a later instant of its own, would fold this one's raise.
+        await using (NpgsqlConnection earlier = await host.OpenAsync())
+        {
+            await earlier.ExecuteAsync("DELETE FROM identity.alerts;");
+        }
+
         DateTimeOffset at = Authorization.Deployment.Noon.AddDays(3);
 
         await using ServiceProvider services = Deployed(host, at);
