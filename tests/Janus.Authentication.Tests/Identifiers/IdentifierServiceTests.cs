@@ -3566,6 +3566,176 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC8 (D-189): a repeated replace naming the staged value is a resend
+    /// on the same staged replace: it sends again the new address's code and, where the
+    /// displaced address must confirm and has not, its confirmation, and is answered as
+    /// the first was. The code sent last is the one that answers.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC8_ARepeatedReplaceOfTheStagedValueSendsItsRecordsAgainAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId session = Stepped();
+        await ReplacingAsync(email, session, Second);
+        _work.Reset();
+
+        await ReplacingAsync(email, session, Second);
+
+        Assert.Equal(2, Sent(MessageKind.VerificationLink));
+        Assert.Equal(2, Sent(MessageKind.IdentifierChangeConfirm));
+        Assert.Equal(email, Assert.Single(_pending.All).Identifier);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(_notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Values["code"], Code(email));
+        Assert.Null(Waiting(email).OldConfirmedAt);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC8 (D-189): a resend sends again only the records not yet spent.
+    /// Where the displaced address has confirmed, the new address's code alone is sent
+    /// again; where the new address has verified, the confirmation alone is.
+    /// </summary>
+    /// <param name="confirmed">
+    /// Whether the displaced address confirmed before the resend, where otherwise the
+    /// new address verified before it.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task REG_IDENT_007_AC8_ARepeatedReplaceSendsNoRecordAlreadySpentAsync(bool confirmed)
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId session = Stepped();
+        await ReplacingAsync(email, session, Second);
+        if (confirmed)
+        {
+            Accepted(await Service.LandAsync(
+                session: null,
+                _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token(),
+                press: true,
+                Source,
+                TestContext.Current.CancellationToken));
+        }
+        else
+        {
+            await VerifiedAsync(email, session);
+        }
+
+        await ReplacingAsync(email, session, Second);
+
+        Assert.Equal(confirmed ? 2 : 1, Sent(MessageKind.VerificationLink));
+        Assert.Equal(confirmed ? 1 : 2, Sent(MessageKind.IdentifierChangeConfirm));
+        Assert.Equal(confirmed, Waiting(email).OldConfirmedAt is not null);
+        Assert.Equal(!confirmed, Waiting(email).Staged.IsVerified);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC8, AUTH-ABUSE-004 (D-189): a resend the restrictions refuse is
+    /// refused as a first send is, its unit of work is rolled back, and the staged
+    /// replace keeps the records it had.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC8_ARepeatedReplaceTheRestrictionsRefuseSendsNothingAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId session = Stepped();
+        await ReplacingAsync(email, session, Second);
+        string code = Code(email);
+        _work.Reset();
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        ErrorCode refused = Refused(await Service.ReplaceAsync(
+            Acting,
+            session,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, refused);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(1, Sent(MessageKind.VerificationLink));
+        Assert.Equal(1, Sent(MessageKind.IdentifierChangeConfirm));
+        Assert.Equal(code, Code(email));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC8 (D-188, D-189): a resend of a replace holds the staged replace's
+    /// row while it writes: the row is locked inside the unit of work before anything is
+    /// sent again.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC8_ARepeatedReplaceHoldsTheStagedRowBeforeItWritesAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId session = Stepped();
+        await ReplacingAsync(email, session, Second);
+        var held = new List<(IdentifierId Row, int Sent, bool Open)>();
+        _pending.Locking = identifier => held.Add((identifier, _notifications.Mail.Count, _work.Open));
+        int sent = _notifications.Mail.Count;
+
+        await ReplacingAsync(email, session, Second);
+
+        Assert.Equal([(email, sent, true)], held);
+        Assert.Equal(sent + 2, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC8 (D-189): the staged value is judged again under the row's lock,
+    /// so a repeated replace that finds a replace of another value staged meanwhile is
+    /// refused <c>identity.change.pending</c>, sends nothing and rolls its unit of work
+    /// back.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC8_AReplaceOfAnotherValueStagedMeanwhileIsRefusedPendingAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId session = Stepped();
+        await ReplacingAsync(email, session, Second);
+        int sent = _notifications.Mail.Count;
+        _work.Reset();
+        _pending.Locking = identifier =>
+        {
+            _pending.Locking = null;
+            _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask().GetAwaiter().GetResult();
+            _pending.AddAsync(
+                    PendingVerification.ToReplace(
+                        _person,
+                        session,
+                        enrolment: null,
+                        StagedIdentity.Of(identifier, IdentifierKind.Email, Third, Third),
+                        oldMustConfirm: true,
+                        _clock.GetUtcNow()),
+                    TestContext.Current.CancellationToken)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        };
+
+        ErrorCode refused = Refused(await Service.ReplaceAsync(
+            Acting,
+            session,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.ChangePending, refused);
+        Assert.Equal(sent, _notifications.Mail.Count);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// REG-SESS-003 AC6, AUTH-ABUSE-001: the codes of an account's identifier are counted
     /// and throttled as a registration's are. A refused code is counted against the
     /// source and the identifier, and while the delay stands a further code is refused
@@ -4191,6 +4361,19 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         return fingerprint;
     }
+
+    private async Task ReplacingAsync(IdentifierId identifier, SessionId session, string value)
+    {
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            session,
+            identifier,
+            value,
+            Source,
+            TestContext.Current.CancellationToken));
+    }
+
+    private int Sent(MessageKind kind) => _notifications.Mail.Count(sent => sent.Message == kind);
 
     private async Task AddedAsync(string value)
     {

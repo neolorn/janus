@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A repeated `PUT /account/identifiers/{id}/replace` naming the value already staged
+  is a resend, where it was refused 409 `identity.change.pending`: it sends again the
+  new address's code and, where the displaced address must confirm and has not, its
+  confirmation, each counted by the sending restrictions and refused by them with 429
+  `auth.restriction.exceeded`, and answers 202 as the first did. A replace naming
+  another value is still refused 409 `identity.change.pending`.
 - In an enrolment session, `POST /account/identifiers/{id}/verify` reaches only the
   pending verification of the replace that session staged. A code that names any other
   answers 422 `auth.code.invalid` and a press that names any other answers 422

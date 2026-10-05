@@ -1271,7 +1271,12 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMixedScript));
         }
 
-        if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false) is not null)
+        // REG-IDENT-007 AC8 (D-189): a replace of another value is refused while one is
+        // staged; a repeated replace of the staged value is a resend, judged again below
+        // under the staged replace's row lock.
+        if (await pending.FindAsync(identifier, cancellationToken).ConfigureAwait(false)
+                is PendingVerification listed
+            && !Repeats(listed, canonical))
         {
             return Result.Failure(Error.From(ErrorCodes.ChangePending));
         }
@@ -1292,9 +1297,28 @@ internal sealed class IdentifierService(
             return Result.Failure(since);
         }
 
+        // CONV-DESIGN-003: the set's lock first, as for a code, then the staged replace's
+        // row, which a resend holds while it writes (REG-IDENT-007, D-189).
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        PendingVerification? again = await pending.FindForUpdateAsync(identifier, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (again is not null && !Repeats(again, canonical))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.ChangePending));
+        }
+
         // REG-SESS-005, CONV-DESIGN-003: whether the new value is held or reserved is
         // judged under its lock, taken before the code's send is counted.
         await directory.LockValuesAsync([(changing.Kind, canonical)], cancellationToken).ConfigureAwait(false);
+
+        if (again is not null)
+        {
+            return await ResentAsync(again, changing, source, cancellationToken).ConfigureAwait(false);
+        }
 
         // CONV-DESIGN-003: a replace by a value the account holds already writes nothing,
         // so its unit of work is rolled back and answered as any other.
@@ -1347,6 +1371,52 @@ internal sealed class IdentifierService(
 
         return Result.Success();
     }
+
+    // REG-IDENT-007 AC8 (D-189): a repeated replace of the staged value sends again each
+    // of the replace's records not yet spent, the new address's code and, where the
+    // displaced address must confirm and has not, its confirmation. Each is a send of
+    // its purpose counted by the restrictions, and one they refuse sends neither. The
+    // caller holds the staged replace's row and the value's lock.
+    private async ValueTask<Result> ResentAsync(
+        PendingVerification staged,
+        HeldIdentifier changing,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        bool code = !staged.Staged.IsVerified;
+        bool confirmation = staged.OldMustConfirm && staged.OldConfirmedAt is null;
+
+        // CONV-DESIGN-003: a replace with no record left to send again writes nothing.
+        if (!code && !confirmation)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
+
+        if (code && await AskAsync(staged, source, cancellationToken).ConfigureAwait(false) is Error refused)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refused);
+        }
+
+        if (confirmation
+            && await AskOldAsync(staged, changing, source, cancellationToken).ConfigureAwait(false) is Error asked)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(asked);
+        }
+
+        await pending.RecordAsync(staged, cancellationToken).ConfigureAwait(false);
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(Result.Success, Result.Failure);
+    }
+
+    private static bool Repeats(PendingVerification staged, string canonical) =>
+        staged.IsReplacement && string.Equals(staged.Staged.Canonical, canonical, StringComparison.Ordinal);
 
     // AUTHZ-GATE-006, D-183: the restriction asked again inside the unit of work, where
     // the gate judges it with the account's row held. An enrolment session is not asked
