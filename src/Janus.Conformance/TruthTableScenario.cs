@@ -141,7 +141,7 @@ public enum TruthTableScenario
 
     /// <summary>
     /// A grant on the record, at an action bound to a step-up gate, where the assurance
-    /// report was not attained phishing-resistant.
+    /// report never reached phishing resistance.
     /// </summary>
     [JsonStringEnumMemberName("stepup-phishingresistance-unmet")]
     StepUpPhishingResistanceUnmet = 19,

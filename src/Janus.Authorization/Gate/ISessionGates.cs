@@ -44,7 +44,7 @@ internal interface ISessionGates
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing where the session meets the gate; <c>reauthenticate</c> where it would but
-    /// for proof attained before its last downgrade (AUTH-SESS-009); otherwise
+    /// for proof last reached before its last downgrade (AUTH-SESS-009); otherwise
     /// <c>stepup</c>.
     /// </returns>
     ValueTask<CapabilityResidual?> ResidualAsync(AccessContext context, string gate, CancellationToken cancellationToken);

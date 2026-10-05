@@ -1,15 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -86,7 +92,9 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Assert.Equal(SessionType.Auth, read.Type);
         Assert.Equal(AssuranceLevel.Aal2, read.Attained);
         Assert.True(read.PhishingResistant);
-        Assert.Equal(Noon, read.PhishingResistantAt);
+        Assert.Equal(
+            (Noon, (DateTimeOffset?)Noon, (DateTimeOffset?)Noon, null, (DateTimeOffset?)Noon),
+            (read.DelegatedAt, read.Aal1At, read.Aal2At, read.Aal3At, read.PhishingResistantAt));
         Assert.Equal(Noon, read.CreatedAt);
         Assert.Equal(Noon + TimeSpan.FromDays(1), read.IdleExpiry);
         Assert.Equal(Noon + TimeSpan.FromDays(30), read.AbsoluteExpiry);
@@ -474,6 +482,130 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-SESS-001 AC3: a bare password presented under a session that reached
+    /// <c>aal2</c> earlier is carried onto the row as the instant of <c>aal1</c> alone;
+    /// the instants of <c>aal2</c> and of phishing resistance read back as they were
+    /// reached, and the level the session holds is still the highest it has reached.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_001_AC3_ABarePasswordIsCarriedOntoTheRowAsTheInstantOfAal1AloneAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject, phishingResistant: true);
+        DateTimeOffset later = Noon + TimeSpan.FromHours(1);
+
+        await WrittenAsync(record);
+
+        await using (StoreContext changing = database.Context())
+        {
+            Session held = Assert.IsType<Session>(
+                await Store(changing).FindAsync(record.Id, TestContext.Current.CancellationToken));
+
+            held.Present(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false), later);
+
+            await Store(changing).RecordAsync(held, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (later, (DateTimeOffset?)later, (DateTimeOffset?)Noon, null, (DateTimeOffset?)Noon),
+            (read.DelegatedAt, read.Aal1At, read.Aal2At, read.Aal3At, read.PhishingResistantAt));
+        Assert.Equal((AssuranceLevel.Aal2, true), (read.Attained, read.PhishingResistant));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-001 (D-191): a session recorded while the row kept one level and one
+    /// instant is carried over with that instant as the instant of each level up to the
+    /// one it holds, and of no level above it; the instant it last reached phishing
+    /// resistance stands as the row kept it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_001_ASessionRecordedBeforeIsCarriedOverWithItsInstantAtEachLevelItHoldsAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("session_levels");
+        string carrying;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            carrying = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(KeepTheInstantASessionLastReachedEachLevel), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, carrying) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        var values = new
+        {
+            subject = Subjects.New().Value,
+            social = Guid.CreateVersion7(),
+            single = Guid.CreateVersion7(),
+            strong = Guid.CreateVersion7(),
+            first = new byte[] { 1 },
+            second = new byte[] { 2 },
+            third = new byte[] { 3 },
+            place = Array.Empty<byte>(),
+            at = Noon,
+            later = Noon.AddHours(1),
+            expiry = Noon.AddDays(1),
+        };
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@subject, 'active', @at);
+            INSERT INTO identity.sessions
+                (id, spine, type, subject, secret_fingerprint, created_at, last_seen_at,
+                 attained, attained_at, phishing_resistant, phishing_resistant_at,
+                 origin_browser, origin_os, origin_place, last_seen_browser, last_seen_os, last_seen_place,
+                 idle_expiry, absolute_expiry, satisfies_every_gate)
+            VALUES
+                (@social, @social, 'auth', @subject, @first, @at, @at,
+                 'delegated', @at, FALSE, NULL, '', '', @place, '', '', @place, @expiry, @expiry, FALSE),
+                (@single, @single, 'auth', @subject, @second, @at, @at,
+                 'aal1', @later, FALSE, NULL, '', '', @place, '', '', @place, @expiry, @expiry, FALSE),
+                (@strong, @strong, 'auth', @subject, @third, @at, @at,
+                 'aal2', @later, TRUE, @at, '', '', @place, '', '', @place, @expiry, @expiry, FALSE);
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(carrying, TestContext.Current.CancellationToken);
+        }
+
+        DateTimeOffset later = values.later;
+
+        Assert.Equal((Noon, null, null, null, null), await CarriedAsync(values.social));
+        Assert.Equal((later, later, null, null, null), await CarriedAsync(values.single));
+        Assert.Equal((later, later, later, null, Noon), await CarriedAsync(values.strong));
+
+        async Task<(DateTimeOffset, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?)> CarriedAsync(Guid id)
+        {
+            (DateTime Lowest, DateTime? Aal1, DateTime? Aal2, DateTime? Aal3, DateTime? Resistant) row =
+                await connection.QuerySingleAsync<(DateTime, DateTime?, DateTime?, DateTime?, DateTime?)>(
+                    "SELECT delegated_at, aal1_at, aal2_at, aal3_at, phishing_resistant_at FROM identity.sessions WHERE id = @id",
+                    new { id });
+
+            return (Read(row.Lowest), Instant(row.Aal1), Instant(row.Aal2), Instant(row.Aal3), Instant(row.Resistant));
+        }
+
+        static DateTimeOffset Read(DateTime instant) => new(DateTime.SpecifyKind(instant, DateTimeKind.Utc));
+
+        static DateTimeOffset? Instant(DateTime? instant) => instant is DateTime read ? Read(read) : null;
+    }
+
+    /// <summary>
     /// Ending an account's sessions leaves another account's standing, which is what
     /// makes a suspension an operation on one person and not on the deployment.
     /// </summary>
@@ -548,8 +680,10 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Assert.Equal(
             [tightened, tightened, null, null],
             new[] { held?.DowngradedAt, another?.DowngradedAt, left?.DowngradedAt, untouched?.DowngradedAt });
-        Assert.Equal((first.Attained, first.AttainedAt), (held?.Attained, held?.AttainedAt));
-        Assert.False(held?.Counts(first.AttainedAt));
+        Assert.Equal(
+            (first.Attained, first.DelegatedAt, first.Aal1At, first.Aal2At, first.Aal3At, first.PhishingResistantAt),
+            (held?.Attained, held?.DelegatedAt, held?.Aal1At, held?.Aal2At, held?.Aal3At, held?.PhishingResistantAt));
+        Assert.False(held?.Counts(first.DelegatedAt));
     }
 
     /// <summary>

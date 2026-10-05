@@ -58,6 +58,36 @@ against the public contract of LIB-API-001.
   200 `factorRequired`, with the factors still to present, until what was accepted
   reaches the strictest of the gates of the policy in force, and 200 `complete` then,
   where the first accepted factor ended the challenge before.
+- Each 200 of `POST /auth/step-up` reports in `assuranceLevel` and
+  `phishingResistant` what the factors accepted on the challenge reach together,
+  where it reported the highest level the session had ever reached: a password alone
+  under a session that reached `aal2` earlier is answered `aal1`. The answer is
+  `complete` once the strictest gate is reached or once no combination still offered
+  can be completed with the factors accepted, and the challenge ends then.
+- A session keeps the instant it last reached each assurance level and the instant it
+  last reached phishing resistance, and a factor presented renews only what it
+  reaches, its own level and every lower one. A password presented alone under a
+  session that reached `aal2` earlier renews `aal1` alone, so an `aal2` gate whose
+  maximum age has passed since then stays unmet, where the password renewed the age
+  of the earlier proof before. A gate is met where its level or one above it, and
+  phishing resistance where it asks for it, were each last reached within its maximum
+  age and after the session's last downgrade. The `sessions` table holds
+  `delegated_at`, `aal1_at`, `aal2_at` and `aal3_at` in place of `attained`,
+  `attained_at` and `phishing_resistant`; the migration carries a session already
+  recorded over with its instant at each level up to the one it holds.
+- `GET /auth/session` answers `lastStrongAuthAt` as the instant `aal2` or above was
+  last reached, and null where the session never reached it, where it answered the
+  instant of the last presentation whatever it reached; `assuranceLevel` is the
+  highest level the session has reached. `SessionDetail.LastStrongAuthAt` is nullable.
+- `AttainedAssurance` reports `Aal1At`, `Aal2At`, `Aal3At` and `PhishingResistantAt`,
+  each the instant it was last reached and null where it never was, beside
+  `Reachable`, in place of `Level`, `PhishingResistant` and `AttainedAt`. A gate is
+  judged from a host's report as it is from a session: it is met only where the
+  provider answers, no instant is after now, a level at or above the gate's was last
+  reached within its maximum age, and phishing resistance too where the gate asks for
+  it. A report meets an `aal2` gate only where its `Aal2At` or `Aal3At` lies within
+  the gate's maximum age, whatever its `Aal1At`. An `IAssuranceProvider` written
+  against the earlier members reports the instants in their place.
 - `PUT /account/identifiers/{id}/replace` naming the value already staged is a
   resend only from the session that staged it (the browser that staged it, or the
   enrolment session that did). From any other session of the account it stages

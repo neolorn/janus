@@ -110,7 +110,7 @@ internal sealed class StepUpGates(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The residual of chapter 10 section 5.20: <c>reauthenticate</c> where the acting
-    /// person's own session would meet the gate but for proof attained before its last
+    /// person's own session would meet the gate but for proof last reached before its last
     /// downgrade (AUTH-SESS-009), <c>stepup</c> for a gate otherwise unmet.
     /// </returns>
     public async ValueTask<CapabilityResidual?> ResidualAsync(
@@ -147,17 +147,44 @@ internal sealed class StepUpGates(
             _ => attained is { Reachable: > AssuranceLevel.Aal1 } report ? report.Reachable : AssuranceLevel.Aal1,
         };
 
-    // AUTH-STEP-002: a report reads where its levels are levels of chapter 10 section 5.4
-    // and its proof was made no later than now.
+    // LIB-HOST-004 AC4: a report reads where its reachable assurance is a level of
+    // chapter 10 section 5.4 and none of its instants is after now.
     private static bool Reads(AttainedAssurance attained, DateTimeOffset now) =>
-        Enum.IsDefined(attained.Level)
-        && Enum.IsDefined(attained.Reachable)
-        && attained.AttainedAt <= now;
+        Enum.IsDefined(attained.Reachable)
+        && !(attained.Aal1At > now)
+        && !(attained.Aal2At > now)
+        && !(attained.Aal3At > now)
+        && !(attained.PhishingResistantAt > now);
 
+    // AUTH-STEP-002 step 1: a level at or above the gate's, and phishing resistance
+    // where the gate asks for it, were each last reached within the maximum age.
     private static bool Meets(AttainedAssurance attained, Core.Gate cost, AssuranceLevel required, DateTimeOffset now) =>
-        attained.Level >= required
-        && (!cost.PhishingResistant || attained.PhishingResistant)
-        && now - attained.AttainedAt <= cost.MaximumAge;
+        LastReached(attained, required) is { } reached
+        && now - reached <= cost.MaximumAge
+        && (!cost.PhishingResistant
+            || (attained.PhishingResistantAt is { } resisted && now - resisted <= cost.MaximumAge));
+
+    // The latest instant a level at or above the one asked was reached, which the
+    // instant of a level below it never is (LIB-HOST-004 AC4).
+    private static DateTimeOffset? LastReached(AttainedAssurance attained, AssuranceLevel required)
+    {
+        DateTimeOffset? last = null;
+
+        if (required <= AssuranceLevel.Aal1)
+        {
+            last = Later(last, attained.Aal1At);
+        }
+
+        if (required <= AssuranceLevel.Aal2)
+        {
+            last = Later(last, attained.Aal2At);
+        }
+
+        return Later(last, attained.Aal3At);
+    }
+
+    private static DateTimeOffset? Later(DateTimeOffset? one, DateTimeOffset? other) =>
+        one is null || other > one ? other ?? one : one;
 
     // Chapter 09: every auth.stepup.required carries the gate, the outcome and the
     // combinations; a host's report offers none, since the host's own sign-in is what

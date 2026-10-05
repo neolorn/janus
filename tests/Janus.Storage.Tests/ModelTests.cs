@@ -820,17 +820,20 @@ public sealed class ModelTests
             "sends.spent",
             "sends.spent_versions",
 
-            // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
+            // Sessions: the spine of AUTH-SESS-001, the instant it last reached each level
+            // and phishing resistance (AUTH-SESS-001, AUTH-SESS-002), the
             // fingerprint of its secret (AUTH-SESS-003), where it was used from with
             // the place under the key (AUTH-SESS-013), the client a registration
             // captured (REG-SESS-008), and when it was last downgraded (AUTH-SESS-009).
+            "sessions.aal1_at",
+            "sessions.aal2_at",
+            "sessions.aal3_at",
             "sessions.absolute_expiry",
-            "sessions.attained",
-            "sessions.attained_at",
             "sessions.breakglass_reason",
             "sessions.client",
             "sessions.created_at",
             "sessions.csrf_fingerprint",
+            "sessions.delegated_at",
             "sessions.downgraded_at",
             "sessions.ended_at",
             "sessions.id",
@@ -842,7 +845,6 @@ public sealed class ModelTests
             "sessions.origin_browser",
             "sessions.origin_os",
             "sessions.origin_place",
-            "sessions.phishing_resistant",
             "sessions.phishing_resistant_at",
             "sessions.satisfies_every_gate",
             "sessions.secret_fingerprint",

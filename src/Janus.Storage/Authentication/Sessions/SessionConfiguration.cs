@@ -37,15 +37,15 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
             table.HasCheckConstraint(
                 "ck_sessions_type",
                 Vocabulary.Admits<SessionType>("type"));
-            table.HasCheckConstraint(
-                "ck_sessions_attained",
-                Vocabulary.Admits<AssuranceLevel>("attained"));
 
-            // AUTH-SESS-002: what was reached resisting relay was reached at an
-            // instant, and what was not reached has none.
+            // AUTH-SESS-001 (D-191): a presentation writes the instant of each level it
+            // reaches, its own and every lower one, so a level holds an instant only
+            // where the level below holds one no earlier.
             table.HasCheckConstraint(
-                "ck_sessions_phishing_resistant",
-                "phishing_resistant = (phishing_resistant_at IS NOT NULL)");
+                "ck_sessions_levels",
+                "(aal1_at IS NULL OR aal1_at <= delegated_at)"
+                + " AND (aal2_at IS NULL OR (aal1_at IS NOT NULL AND aal2_at <= aal1_at))"
+                + " AND (aal3_at IS NULL OR (aal2_at IS NOT NULL AND aal3_at <= aal2_at))");
 
             // OPS-BOOT-002, D-170: only the session the break-glass credential opens,
             // and one derived from it, keeps the reason given at its use.
@@ -87,12 +87,10 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
         builder.Property(session => session.CreatedAt).HasColumnName("created_at");
         builder.Property(session => session.LastSeenAt).HasColumnName("last_seen_at");
 
-        builder.Property(session => session.Attained)
-            .HasColumnName("attained")
-            .HasConversion(new VocabularyConverter<AssuranceLevel>());
-
-        builder.Property(session => session.AttainedAt).HasColumnName("attained_at");
-        builder.Property(session => session.PhishingResistant).HasColumnName("phishing_resistant");
+        builder.Property(session => session.DelegatedAt).HasColumnName("delegated_at");
+        builder.Property(session => session.Aal1At).HasColumnName("aal1_at");
+        builder.Property(session => session.Aal2At).HasColumnName("aal2_at");
+        builder.Property(session => session.Aal3At).HasColumnName("aal3_at");
         builder.Property(session => session.PhishingResistantAt).HasColumnName("phishing_resistant_at");
         builder.Property(session => session.DowngradedAt).HasColumnName("downgraded_at");
 

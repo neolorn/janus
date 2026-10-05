@@ -1282,7 +1282,7 @@ GET /auth/session
       subject: string
       assuranceLevel: AssuranceLevel
       phishingResistant: boolean
-      lastStrongAuthAt: DateTimeOffset
+      lastStrongAuthAt: DateTimeOffset?
       expiresAt: DateTimeOffset
       landing: string
   401 auth.session.expired

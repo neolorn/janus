@@ -977,6 +977,44 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-001, chapter 09 <c>GET /auth/session</c> (D-191): a session says the
+    /// highest level it has reached and the instant it last reached <c>aal2</c> or
+    /// above, which a bare password presented since leaves as it was, and nothing where
+    /// it never reached it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_001_ASessionSaysTheHighestLevelItReachedAndWhenItLastReachedAal2Async()
+    {
+        SubjectId single = Subject();
+        SubjectId strong = Subject();
+        IssuedSession weak = await BegunAsync(single, [Factor.Password]);
+        IssuedSession held = await BegunAsync(strong, [Factor.Password, Factor.Totp]);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        IssuedSession presented = Value(await Service.PresentAsync(
+            _sessions.Behind(held.Secret)!,
+            [Factor.Password],
+            TestContext.Current.CancellationToken));
+        SessionDetail never = Value(await Service.ReadAsync(
+            AccessContext.Of(single),
+            weak.Id,
+            TestContext.Current.CancellationToken));
+        SessionDetail earlier = Value(await Service.ReadAsync(
+            AccessContext.Of(strong),
+            presented.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (AssuranceLevel.Aal1, false, null),
+            (never.AssuranceLevel, never.PhishingResistant, never.LastStrongAuthAt));
+        Assert.Equal(
+            (AssuranceLevel.Aal2, false, Noon),
+            (earlier.AssuranceLevel, earlier.PhishingResistant, earlier.LastStrongAuthAt));
+    }
+
+    /// <summary>
     /// AUTH-SESS-011 AC1: revoking one account's sessions leaves every other session
     /// intact.
     /// </summary>

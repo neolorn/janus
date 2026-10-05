@@ -201,15 +201,17 @@ Janus.Core.AttachedInvitation.Roles.get -> System.Collections.Generic.IReadOnlyL
 Janus.Core.AttachedInvitation.Roles.init -> void
 Janus.Core.AttainedAssurance
 Janus.Core.AttainedAssurance.<Clone>$() -> Janus.Core.AttainedAssurance!
-Janus.Core.AttainedAssurance.AttainedAssurance(Janus.Core.AssuranceLevel Level, bool PhishingResistant, System.DateTimeOffset AttainedAt, Janus.Core.AssuranceLevel Reachable) -> void
-Janus.Core.AttainedAssurance.AttainedAt.get -> System.DateTimeOffset
-Janus.Core.AttainedAssurance.AttainedAt.init -> void
-Janus.Core.AttainedAssurance.Deconstruct(out Janus.Core.AssuranceLevel Level, out bool PhishingResistant, out System.DateTimeOffset AttainedAt, out Janus.Core.AssuranceLevel Reachable) -> void
+Janus.Core.AttainedAssurance.Aal1At.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.Aal1At.init -> void
+Janus.Core.AttainedAssurance.Aal2At.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.Aal2At.init -> void
+Janus.Core.AttainedAssurance.Aal3At.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.Aal3At.init -> void
+Janus.Core.AttainedAssurance.AttainedAssurance(System.DateTimeOffset? Aal1At, System.DateTimeOffset? Aal2At, System.DateTimeOffset? Aal3At, System.DateTimeOffset? PhishingResistantAt, Janus.Core.AssuranceLevel Reachable) -> void
+Janus.Core.AttainedAssurance.Deconstruct(out System.DateTimeOffset? Aal1At, out System.DateTimeOffset? Aal2At, out System.DateTimeOffset? Aal3At, out System.DateTimeOffset? PhishingResistantAt, out Janus.Core.AssuranceLevel Reachable) -> void
 Janus.Core.AttainedAssurance.Equals(Janus.Core.AttainedAssurance? other) -> bool
-Janus.Core.AttainedAssurance.Level.get -> Janus.Core.AssuranceLevel
-Janus.Core.AttainedAssurance.Level.init -> void
-Janus.Core.AttainedAssurance.PhishingResistant.get -> bool
-Janus.Core.AttainedAssurance.PhishingResistant.init -> void
+Janus.Core.AttainedAssurance.PhishingResistantAt.get -> System.DateTimeOffset?
+Janus.Core.AttainedAssurance.PhishingResistantAt.init -> void
 Janus.Core.AttainedAssurance.Reachable.get -> Janus.Core.AssuranceLevel
 Janus.Core.AttainedAssurance.Reachable.init -> void
 Janus.Core.AuditAction
@@ -2603,17 +2605,17 @@ Janus.Core.SessionDetail
 Janus.Core.SessionDetail.<Clone>$() -> Janus.Core.SessionDetail!
 Janus.Core.SessionDetail.AssuranceLevel.get -> Janus.Core.AssuranceLevel
 Janus.Core.SessionDetail.AssuranceLevel.init -> void
-Janus.Core.SessionDetail.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.AssuranceLevel AssuranceLevel, out bool PhishingResistant, out System.DateTimeOffset LastStrongAuthAt, out System.DateTimeOffset ExpiresAt, out string? Landing) -> void
+Janus.Core.SessionDetail.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.AssuranceLevel AssuranceLevel, out bool PhishingResistant, out System.DateTimeOffset? LastStrongAuthAt, out System.DateTimeOffset ExpiresAt, out string? Landing) -> void
 Janus.Core.SessionDetail.Equals(Janus.Core.SessionDetail? other) -> bool
 Janus.Core.SessionDetail.ExpiresAt.get -> System.DateTimeOffset
 Janus.Core.SessionDetail.ExpiresAt.init -> void
 Janus.Core.SessionDetail.Landing.get -> string?
 Janus.Core.SessionDetail.Landing.init -> void
-Janus.Core.SessionDetail.LastStrongAuthAt.get -> System.DateTimeOffset
+Janus.Core.SessionDetail.LastStrongAuthAt.get -> System.DateTimeOffset?
 Janus.Core.SessionDetail.LastStrongAuthAt.init -> void
 Janus.Core.SessionDetail.PhishingResistant.get -> bool
 Janus.Core.SessionDetail.PhishingResistant.init -> void
-Janus.Core.SessionDetail.SessionDetail(Janus.Core.SubjectId Subject, Janus.Core.AssuranceLevel AssuranceLevel, bool PhishingResistant, System.DateTimeOffset LastStrongAuthAt, System.DateTimeOffset ExpiresAt, string? Landing) -> void
+Janus.Core.SessionDetail.SessionDetail(Janus.Core.SubjectId Subject, Janus.Core.AssuranceLevel AssuranceLevel, bool PhishingResistant, System.DateTimeOffset? LastStrongAuthAt, System.DateTimeOffset ExpiresAt, string? Landing) -> void
 Janus.Core.SessionDetail.Subject.get -> Janus.Core.SubjectId
 Janus.Core.SessionDetail.Subject.init -> void
 Janus.Core.SessionId

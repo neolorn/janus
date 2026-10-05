@@ -140,7 +140,7 @@ internal static class StepUp
         }
 
         // AUTH-SESS-009, AUTHZ-GATE-005: a gate the session would meet but for proof it
-        // attained up to its last downgrade asks the person to authenticate again.
+        // last reached up to its last downgrade asks the person to authenticate again.
         bool downgraded = Proved(session, gate, required, phishingResistant, now, sinceDowngrade: false);
 
         IReadOnlyList<IReadOnlyList<Factor>> offered =
@@ -192,15 +192,15 @@ internal static class StepUp
         DateTimeOffset now,
         bool sinceDowngrade) =>
         session.SatisfiesEveryGate
-        || (session.Attained >= required
-            && Counted(session, session.AttainedAt, gate, now, sinceDowngrade)
+        || (session.LastReached(required) is { } reached
+            && Counted(session, reached, gate, now, sinceDowngrade)
             && (!phishingResistant
-                || (session.PhishingResistant
-                    && session.PhishingResistantAt is { } proved
-                    && Counted(session, proved, gate, now, sinceDowngrade))));
+                || (session.PhishingResistantAt is { } resisted
+                    && Counted(session, resisted, gate, now, sinceDowngrade))));
 
-    // AUTH-STEP-002 step 1: a proof counts where it was earned within the maximum age
-    // and after the session's last downgrade.
+    // AUTH-STEP-002 step 1: a level at or above the gate's, and phishing resistance
+    // where the gate asks for it, each count where they were last reached within the
+    // maximum age and after the session's last downgrade (AUTH-SESS-001).
     private static bool Counted(
         Session session,
         DateTimeOffset at,

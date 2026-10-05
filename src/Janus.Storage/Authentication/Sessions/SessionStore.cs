@@ -79,9 +79,10 @@ internal sealed class SessionStore(
                 CsrfFingerprint = csrfFingerprint,
                 CreatedAt = session.CreatedAt,
                 LastSeenAt = session.LastSeenAt,
-                Attained = session.Attained,
-                AttainedAt = session.AttainedAt,
-                PhishingResistant = session.PhishingResistant,
+                DelegatedAt = session.DelegatedAt,
+                Aal1At = session.Aal1At,
+                Aal2At = session.Aal2At,
+                Aal3At = session.Aal3At,
                 PhishingResistantAt = session.PhishingResistantAt,
                 DowngradedAt = session.DowngradedAt,
                 OriginBrowser = session.Origin.Device.Browser,
@@ -127,9 +128,10 @@ internal sealed class SessionStore(
         try
         {
             record.LastSeenAt = session.LastSeenAt;
-            record.Attained = session.Attained;
-            record.AttainedAt = session.AttainedAt;
-            record.PhishingResistant = session.PhishingResistant;
+            record.DelegatedAt = session.DelegatedAt;
+            record.Aal1At = session.Aal1At;
+            record.Aal2At = session.Aal2At;
+            record.Aal3At = session.Aal3At;
             record.PhishingResistantAt = session.PhishingResistantAt;
             record.LastSeenBrowser = session.LastSeen.Device.Browser;
             record.LastSeenOs = session.LastSeen.Device.Os;
@@ -287,9 +289,10 @@ internal sealed class SessionStore(
         record.Subject,
         record.CreatedAt,
         record.LastSeenAt,
-        record.Attained,
-        record.AttainedAt,
-        record.PhishingResistant,
+        record.DelegatedAt,
+        record.Aal1At,
+        record.Aal2At,
+        record.Aal3At,
         record.PhishingResistantAt,
         Origin(
             dataKey,
