@@ -1633,6 +1633,23 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface, no path of the truth-table change check.
 - Question 202.
 
+### `part/suspended` (D-190), merged as `bc785f26`: questions 190 to 193
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 193: the factors a step-up accepts are held on its challenge with those accepted before; the session is raised with them together; the challenge ends once the session meets the strictest of the policy's gates or nothing more can be presented; until then the answer is 200 `factorRequired` with the factors still to present | `115548df` | AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_STEP_002_AC4c_APasswordAtOneCallAndAGeneratedCodeAtTheNextPassAGateDeclaredAal2Async` |
+| Question 190: a suspended generator's code and a suspended key's assertion are judged as an active one's and refused 422 `auth.credential.suspended` only where they verify, counted and recorded, spending no step and writing no counter; a right delivered code whose credential was suspended since is spent and refused so; a `phoneCode` ask after a first factor or under a session naming a suspended number sends, counts and records nothing and is 422 `auth.credential.suspended`; a preferred method not active is not offered | `154adbd0` | AUTH-RECOV-007, AUTH-FACT-002, IDN-ATTR-008 | `TotpServiceTests.AUTH_RECOV_007_AC2_ASuspendedGeneratorIsRefusedSuspendedOnlyWhereItsCodeVerifiesAsync`, `TotpServiceTests.AUTH_RECOV_007_AC2_AGeneratorSuspendedMeanwhileIsRefusedSuspendedAsync`, `WebAuthnServiceTests.AUTH_RECOV_007_AC2_ASuspendedKeyIsRefusedSuspendedOnlyWhereItsAssertionIsAcceptedAsync`, `WebAuthnServiceTests.AUTH_RECOV_007_AC2_AKeySuspendedMeanwhileIsRefusedSuspendedAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ASuspendedGeneratorsCodeIsRefusedSuspendedAndCountedAtASignInAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ASuspendedGeneratorsCodeIsRefusedSuspendedAndCountedAtAStepUpAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ASuspendedPasskeysAssertionIsRefusedSuspendedOnlyWhereItVerifiesAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ASuspendedPasskeyOfAnotherAccountIsRefusedAsAnyWrongCredentialIsAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC2_ATextCodeOfANumberSuspendedSinceIsSpentAndRefusedSuspendedAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC8_AnAskAfterAFirstFactorNamingASuspendedNumberSendsNothingAndCountsNothingAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC8_AnAskUnderASessionNamingASuspendedNumberSendsNothingAndCountsNothingAsync`, `AuthenticationServiceTests.AUTH_RECOV_007_AC8_AnAskBeforeAFirstFactorIsAnsweredAsEveryAskIsWhateverTheAccountHoldsAsync`, `AuthenticationServiceTests.IDN_ATTR_008_AC4_APreferredMethodThatIsNotActiveIsNotOfferedAtASignInAndTheOthersAreAsync`, `AuthenticationServiceTests.IDN_ATTR_008_AC4_APreferredMethodThatIsNotActiveIsNotOfferedAtAGateAndTheOthersAreAsync`, `LossReportsTests.AUTH_RECOV_007_AC2_ASuspendedCredentialIsRejectedAtSignInAsync` |
+| Question 192: a report on a credential that has a report, or that a removal suspended, is 409 `auth.lossreport.pending` with `details.invalidatesAt`; on one invalidated or not the account's, 404 `auth.credential.notfound`; the route declares it and answers `auth.credential.suspended` no longer | `0f520c17` | AUTH-RECOV-007 | `LossReportsTests.AUTH_RECOV_007_ASecondReportAgainstOneCredentialIsRefusedPendingWithItsWindowAsync`, `LossReportsTests.AUTH_RECOV_007_AReportOnACredentialARemovalSuspendedIsRefusedPendingWithItsWindowAsync`, `LossReportsTests.AUTH_RECOV_007_AReportOnASuspendedCredentialWithNoReportIsRefusedPendingWithItsWindowAsync`, `LossReportsTests.AUTH_RECOV_007_AReportOnAnInvalidatedCredentialOrAnothersIsRefusedNotFoundAsync`, `RecoveryFlowTests.AUTH_RECOV_007_AReportOnASuspendedCredentialAnswersPendingAndOnNoneNotFoundAsync` |
+| Question 191: `POST /auth/step-up` declares 422 `identity.identifier.domainnotallowed`; the service already judged the lock after the code, kept the spend and counted no failure | `1e426126` | REG-DOM-001, AUTH-FACT-004 | `AuthenticationServiceTests.REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesIsSpentAndCountsNoFailureAsync`, `AuthenticationServiceTests.REG_DOM_001_AWrongEmailCodeAtAStepUpUnderADomainLockLearnsNothingOfTheLockAsync`, `SignInFlowTests.REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesAnswersTheLocksCodeAsync` |
+
+- Question 193's test failed before any change: the second call on the challenge was refused `auth.factor.rejected`, the first accepted factor having removed the challenge. The lead is confirmed.
+- Before `154adbd0` a right `phoneCode` code whose number was suspended after it was sent was accepted.
+- `LossReportsTests.AUTH_RECOV_007_AC2_ASuspendedCredentialIsRejectedAtSignInAsync` asserted `auth.code.invalid` for a suspended generator's own code; it now asserts `auth.code.replayed` for the spent step and `auth.credential.suspended` for a fresh code.
+- Six tests passed before the change: the two of IDN-ATTR-008 criterion 4, the ask before a first factor, another account's suspended passkey, and the two service tests of question 191.
+- `WebAuthnService.AssertAsync` (internal) takes the account its ceremony was opened for in place of the flag that said it was identified.
+- No integration test class was added or changed. No migration, no public surface, no path of the truth-table change check.
+- Questions 203 to 210.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4394,6 +4411,74 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: every read that fails is a refresh that fails.
   2. Only the job's read raises `botdefence.ranges.refresh`; the read at a registration raises the absence alone.
 - **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**203. Tier 3. AUTH-STEP-002 step 2 and criterion 4c, `09` `POST /auth/step-up`: what a call answers, and what it writes, before the accepted factors reach the gate.**
+
+- **Item.** Question 193.
+- **The gap.** The factors are held "until together they reach the gate". For a step-up that names no action the gate is the strictest of the policy's gates (D-187). No chapter says whether the session is raised at each call or only once the gate is reached.
+- **What the code does.** Each call raises the session to what the factors accepted so far prove, as before, and answers 200 `factorRequired` with the factors still to present until the strictest gate is met, then `complete`. So a password alone at a step-up on an account that holds a second step now answers `factorRequired`; it answered `complete` before.
+- **Parked.** Writing the session only once the gate is reached.
+- **Answer:** pending.
+
+**204. Tier 3. AUTH-STEP-002: a step-up whose accepted factors do not reach the gate and for which nothing more can be presented.**
+
+- **Item.** Question 193.
+- **The gap.** No chapter says what this answers.
+- **What the code does.** As before the change: 200 `complete` with what the session attained, and the challenge ends. An ask in the same state is answered 403 `auth.stepup.required` with its outcome.
+- **Parked.** Any other answer.
+- **Answer:** pending.
+
+**205. Tier 3. AUTH-STEP-002 criterion 4: a bare password at a step-up under a session that attained more.**
+
+- **Item.** Met while building question 193. Read from the code only; no test confirms or refutes it.
+- **The lead.** `Session.Present` never lowers what the session attained and always sets the instant it attained it. `SessionService.PresentAsync` calls it with what the presented factors prove. If that is the whole of it, a password alone presented at a step-up under a session that attained `aal2` earlier renews the age of that proof, against "a bare password passes no gate".
+- **Parked.** Nothing built. The reading is to be confirmed by a test before anything is changed.
+- **Answer:** pending.
+
+**206. Tier 2. AUTH-RECOV-007 criterion 8 against IDN-LIFE-009b: a `phoneCode` ask naming a suspended number where the policy does not permit `phoneCode`.**
+
+- **Item.** Question 190.
+- **What the code does.** The policy is judged first: 202, nothing sent. The suspended answer is given only where the policy permits the factor.
+- **Readings.**
+  1. As built.
+  2. 422 `auth.credential.suspended` whatever the policy permits.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**207. Tier 2. `09` `POST /recovery/report-loss`: a report on a credential a provider's security event holds.**
+
+- **Item.** Question 192.
+- **What the code does.** Such a credential is suspended with no instant of invalidation and no report (IDN-LIFE-012a). A report on it is answered 404 `auth.credential.notfound`, on the `10` row's "no active credential by that identifier". No test pins it.
+- **Readings.**
+  1. As built.
+  2. The report opens on it (202).
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**208. Tier 2. AUTH-RECOV-007: a suspended social credential whose provider vouches.**
+
+- **Item.** Question 190.
+- **What the code does.** A social credential suspended on a window (a loss report or a removal) whose provider vouches is refused `auth.factor.rejected`, as before and as one a provider's event holds is. The codes the callback route declares were not examined.
+- **Readings.**
+  1. As it is.
+  2. The provider's vouching is a proof that verifies, so the answer is `auth.credential.suspended`, declared on the callback route.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**209. Tier 3. AUTH-FACT-002: a delivered code presented after the credential of its factor is gone.**
+
+- **Item.** Met while building question 190. Read from the code only; no test confirms or refutes it.
+- **The lead.** A delivered code is judged without looking at the account's credential of that factor, but for the suspended check of question 190. If that is the whole of it, a right `phoneCode` code sent before the account's `phoneCode` credential was removed or invalidated is still accepted within the code's lifetime.
+- **Parked.** Nothing built. The reading is to be confirmed by a test before anything is changed.
+- **Answer:** pending.
+
+**210. Tier 3. AUTH-RECOV-007 against AUTH-FACT-014 criterion 3: a suspended key whose signature counter did not advance.**
+
+- **Item.** Question 190.
+- **The gap.** "Judged first as an active one would be" does not say whether the counter is part of what verifies.
+- **What the code does.** A suspended key runs every check an active one does, the counter included: one whose counter did not advance is refused `auth.webauthn.countermismatch` and audited as an active key's is, and only one that passes every check is told it is suspended.
+- **Parked.** Refusing as suspended before the counter is judged.
 - **Answer:** pending.
 
 ## 5. Gate result
