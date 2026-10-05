@@ -3245,3 +3245,11 @@ against the public contract of LIB-API-001.
   signal does not fire and `degradation` is raised under `botdefence.ranges.absent` or
   `botdefence.ranges.stale`, until the deployment supplies a file or takes the signal
   out of the set.
+- The `datacenter-ranges` job raises what it finds, so a deployment that receives no
+  registration hears of it. A read of the range file that fails (the file could not be
+  opened, or was refused whole) raises `degradation` under `botdefence.ranges.refresh`
+  where it fails and keeps the copy held. While `datacenterRange` is among
+  `abuse.botdefence.signals`, each run of the job raises `degradation` under
+  `botdefence.ranges.absent` where no file is held, or under `botdefence.ranges.stale`
+  where the one held is older than `abuse.botdefence.ranges.maxage`; the raise where a
+  registration is judged stays.
