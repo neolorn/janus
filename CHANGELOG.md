@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /auth/providers/{provider}` started to link declares, under its redirect, the
+  codes of the link's gate it asks before the browser leaves: `auth.stepup.required`,
+  `authz.restricted` and `authz.denied`, beside `auth.factor.notpermitted` for a
+  provider the policy in force does not permit. The return asks the same gate again
+  before it links. `POST /account/link/{provider}` declares the 422
+  `auth.factor.notpermitted` it answers for such a provider.
 - At a social provider's token endpoint only a 400 whose `error` is `invalid_grant`
   refuses the code the browser carried: `auth.factor.rejected`, counted and recorded.
   Every other answer but a success holding an identity token returns the browser with

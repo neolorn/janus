@@ -1247,6 +1247,128 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's gate is asked again on the return, before
+    /// it links. A session that met the step-up when the browser left and no longer
+    /// meets it when the provider returns it is returned with the code of that, and
+    /// nothing is linked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAsksForTheStepUpAgainAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/begin",
+            ("label", "This phone"));
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", new OtpNet.Totp(OtpNet.Base32Encoding.ToBytes(begun.Text("secret"))).ComputeTotp(
+                _deployment.Clock.GetUtcNow().UtcDateTime)));
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.StepUpRequired, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's gate is asked again on the return, before
+    /// it links. A provider the policy in force permitted when the browser left and no
+    /// longer permits when it returns is not linked: the browser is returned with the
+    /// code of a factor that is not permitted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAsksThePolicyInForceAgainAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        _deployment.Configuration.Set(Settings.PolicyDefault, WithoutGoogle());
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.FactorNotPermitted, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's gate is asked again on the return, before
+    /// it links. An account restricted since the browser left is not linked: the
+    /// browser is returned with the code of that.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAsksTheRestrictionAgainAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        _deployment.Restriction.Restrict(_deployment.Directory.Created[^1].Subject);
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.Restricted, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a start to link asks the link's gate before the
+    /// browser leaves. A provider the policy in force does not permit is not started:
+    /// the browser is returned with the code of a factor that is not permitted,
+    /// nothing is bound and no provider is called, and the route that answers whether
+    /// the account may link answers the same code in its body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AStartToLinkAProviderThePolicyDoesNotPermitIsNotStartedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Configuration.Set(Settings.PolicyDefault, WithoutGoogle());
+
+        int called = _deployment.SocialProviders.Calls;
+        Answer asked = await browser.SendAsync("POST", "/account/link/google");
+        Answer started = await browser.SendAsync("GET", Start("google", "link"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, asked.Status);
+        Assert.Equal(ErrorCodes.FactorNotPermitted.ToString(), asked.Text("code"));
+        Assert.Equal(StatusCodes.Status303SeeOther, started.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.FactorNotPermitted, started.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+        Assert.Equal(called, _deployment.SocialProviders.Calls);
+        Assert.Empty(_deployment.SessionAudit.Failed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a start to link from a restricted account is not
+    /// started: the browser is returned with the code of that and nothing is bound.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AStartToLinkFromARestrictedAccountIsNotStartedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Restriction.Restrict(_deployment.Directory.Created[^1].Subject);
+
+        Answer started = await browser.SendAsync("GET", Start("google", "link"));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, started.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.Restricted, started.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012: unlinking a provider the account holds no identity at is answered
     /// as the absence it is.
     /// </summary>
@@ -1309,6 +1431,14 @@ public sealed class ProviderSignInTests : IAsyncDisposable
                 Assert.Equal(part, alert.Raised.Details["part"].GetString());
             });
     }
+
+    // The system's policy with Google taken out of the factors it permits.
+    private static Policy WithoutGoogle() =>
+        Policies.SystemDefault with
+        {
+            LoginFactors = new HashSet<Factor>(
+                Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Google)),
+        };
 
     private static string Start(string provider, string intent) =>
         "/auth/providers/" + provider + "?intent=" + intent + "&returnTo=" + Uri.EscapeDataString(Page);

@@ -132,6 +132,9 @@ public sealed class EndpointDeclarationTests : IAsyncDisposable
             ErrorCodes.ProviderUnavailable,
             ErrorCodes.SessionExpired,
             ErrorCodes.RegistrationSignedIn,
+            ErrorCodes.StepUpRequired,
+            ErrorCodes.Restricted,
+            ErrorCodes.Denied,
         ];
         ErrorCode[] continuation =
         [
