@@ -36,6 +36,12 @@ paths = ['''^\Qtests/Janus.Storage.Tests/Privacy/ConsentStoreTests.cs\E$''']
 regexes = ['''^20261004022141_KeepARecordForEachGrant$''']
 
 [[allowlists]]
+description = "a migration's identifier in a test, not a credential"
+condition = "AND"
+paths = ['''^\Qtests/Janus.Storage.Tests/IdentifierStoreTests.cs\E$''']
+regexes = ['''^20261004125537_ClaimAnOutboxRowBeforeItIsDelivered$''']
+
+[[allowlists]]
 description = "SHA-1 hashes of leaked passwords (AUTH-PASS-004)"
 condition = "AND"
 regexTarget = "line"
