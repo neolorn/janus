@@ -838,8 +838,9 @@ public static class ErrorCodes
     public static ErrorCode WebAuthnAlgorithmNotAllowed { get; } = ErrorCode.Parse("auth.webauthn.algorithmnotallowed");
 
     /// <summary>
-    /// The signature counter moved backwards, which is what a cloned credential looks
-    /// like. Remove the credential and enrol again.
+    /// The signature counter did not advance, where it or the stored value is above
+    /// nought, which is what a cloned credential looks like. Remove the credential and
+    /// enrol again.
     /// </summary>
     /// <remarks>Implements AUTH-FACT-014, chapter 10 section 1.2.</remarks>
     public static ErrorCode WebAuthnCounterMismatch { get; } = ErrorCode.Parse("auth.webauthn.countermismatch");

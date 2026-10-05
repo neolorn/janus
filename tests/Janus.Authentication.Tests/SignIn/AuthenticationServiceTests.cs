@@ -1196,6 +1196,44 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007 AC9, AUTH-FACT-014 AC3: at a sign-in a suspended passkey whose
+    /// assertion verifies and whose counter equals the stored one is refused
+    /// <c>auth.webauthn.countermismatch</c>, not as suspended: the refusal's record, the
+    /// failed authentication's record and the failure's count commit together, and the
+    /// stored counter is left as it stood.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC9_ASuspendedPasskeyWhoseCounterDidNotAdvanceIsRefusedACounterMismatchAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        AuthenticatorId held = Keyed(subject, key, counter: 9);
+        Suspends(subject, Factor.Passkey);
+        Remembered(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Asserted(key, began.WebAuthn.Challenge, counter: 9) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        (AuditAction action, SubjectId audited, AuthenticatorId named) = Assert.Single(_credentials.Records);
+        Authenticator? after = await _authenticators.FindAsync(held, TestContext.Current.CancellationToken);
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(("auth.credential.countermismatch", subject, held), (action.ToString(), audited, named));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal((9u, null), (after?.WebAuthn?.Counter, after?.LastUsedAt));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC2: a suspended passkey of another account, answering this
     /// sign-in with an assertion that verifies, is refused as any wrong credential is, so
     /// its state is told to nobody but the account that holds it.

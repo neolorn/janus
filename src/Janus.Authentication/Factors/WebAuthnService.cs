@@ -348,8 +348,8 @@ internal sealed class WebAuthnService(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The credential that answered, or the failure where it is unusable, was enrolled
-    /// under another relying party, verified nobody, or reported a counter that moved
-    /// backwards. A suspended credential that passes every one of those checks is
+    /// under another relying party, verified nobody, or reported a counter that did not
+    /// advance. A suspended credential that passes every one of those checks is
     /// refused <c>auth.credential.suspended</c>, nothing written of it (AUTH-RECOV-007).
     /// </returns>
     /// <exception cref="ArgumentNullException">The assertion is absent.</exception>
@@ -480,11 +480,17 @@ internal sealed class WebAuthnService(
             : Result.Success(locked);
     }
 
-    // A counter that did not advance is a credential that exists twice. An authenticator
-    // that keeps no counter reports nought every time, which is the absence the chapter
-    // excludes and not a counter standing still.
-    private static bool Moved(WebAuthnAssertion assertion, WebAuthnMaterial held) =>
-        Kept(assertion.Counter) && Kept(held.Counter) && assertion.Counter <= held.Counter;
+    // AUTH-FACT-014 AC3, WebAuthn Level 3 section 7.2: where the counter presented or
+    // the one stored is above nought, a counter not above the stored one is a credential
+    // that may exist twice: an equal one, a lower one, and nought against a stored one.
+    // An authenticator that keeps no counter reports nought every time and has none
+    // stored, which is the case the check passes over.
+    private static bool Moved(WebAuthnAssertion assertion, WebAuthnMaterial held)
+    {
+        uint stored = held.Counter ?? 0;
+
+        return (Kept(assertion.Counter) || Kept(stored)) && assertion.Counter <= stored;
+    }
 
     /// <summary>
     /// The account's credentials that were enrolled under a relying party identifier

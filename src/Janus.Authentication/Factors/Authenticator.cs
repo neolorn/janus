@@ -253,7 +253,7 @@ internal sealed class Authenticator
 
     /// <summary>
     /// The signature counter the authenticator reported, which is recorded so that one
-    /// moving backwards is caught.
+    /// that does not advance is caught.
     /// </summary>
     /// <param name="counter">What the authenticator reported.</param>
     /// <exception cref="InvalidOperationException">The credential holds no key.</exception>
