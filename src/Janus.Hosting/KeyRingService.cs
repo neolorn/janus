@@ -72,21 +72,21 @@ internal sealed class KeyRingService(
         filling.HoldKeyEncryptionKeys((await declared
                 .ReadKeyEncryptionKeysAsync(cancellationToken)
                 .ConfigureAwait(false))
-            .Match(keys => keys, _ => Missing<KeyEncryptionKeys>(KeyRing.KeyEncryptionKeysName)));
+            .Match(keys => keys, _ => Missing<KeyEncryptionKeys>(KeyRingSecrets.KeyEncryptionKeysName)));
         filling.HoldFingerprintKeys((await declared
                 .ReadFingerprintKeysAsync(cancellationToken)
                 .ConfigureAwait(false))
             .Match(
                 keys => keys.Versions.Values.Any(version => version.Length < FingerprintKeys.MinimumLength)
-                    ? Missing<FingerprintKeys>(KeyRing.FingerprintKeysName)
+                    ? Missing<FingerprintKeys>(KeyRingSecrets.FingerprintKeysName)
                     : keys,
-                _ => Missing<FingerprintKeys>(KeyRing.FingerprintKeysName)));
+                _ => Missing<FingerprintKeys>(KeyRingSecrets.FingerprintKeysName)));
         filling.HoldMaintenanceCredential((await declared
                 .ReadMaintenanceCredentialAsync(cancellationToken)
                 .ConfigureAwait(false))
             .Match(
-                credential => credential.IsEmpty ? Missing<ReadOnlyMemory<byte>>(KeyRing.MaintenanceCredentialName) : credential,
-                _ => Missing<ReadOnlyMemory<byte>>(KeyRing.MaintenanceCredentialName)));
+                credential => credential.IsEmpty ? Missing<ReadOnlyMemory<byte>>(KeyRingSecrets.MaintenanceCredentialName) : credential,
+                _ => Missing<ReadOnlyMemory<byte>>(KeyRingSecrets.MaintenanceCredentialName)));
 
         // LIB-HOST-001: a declaration that is not a social provider, or one declared
         // twice, is refused by name after this; the credential read is the one of each
@@ -97,7 +97,7 @@ internal sealed class KeyRingService(
             .Distinct())
         {
             string name = ProviderRoutes.NameOf(provider);
-            Error unavailable = KeyRing.Unavailable(KeyRing.Named(name));
+            Error unavailable = KeyRingSecrets.Unavailable(KeyRingSecrets.Named(name));
             Result<ProviderCredential> read = await declared
                 .ReadProviderCredentialAsync(name, cancellationToken)
                 .ConfigureAwait(false);
@@ -165,7 +165,7 @@ internal sealed class KeyRingService(
 
         // LIB-HOST-001: the adapter's key, read where the adapter is chosen and nowhere
         // else; one the source cannot answer, or answers empty, stops the start.
-        Error unavailable = KeyRing.Unavailable(KeyRing.MailServerSecret);
+        Error unavailable = KeyRingSecrets.Unavailable(KeyRingSecrets.MailServerSecret);
         Result<ReadOnlyMemory<byte>> read = await Declared()
             .ReadMailServerSecretAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -226,7 +226,7 @@ internal sealed class KeyRingService(
     private static TValue Missing<TValue>(string key) =>
         throw new StartupException(
             "A secret the deployment runs on cannot be read from the secret source, or is not one the library can use.",
-            KeyRing.Unavailable(key));
+            KeyRingSecrets.Unavailable(key));
 
     private static ReadOnlyMemory<byte> Unread(Error failure) =>
         throw new StartupException("The mail server's key cannot be read from the secret source.", failure);
