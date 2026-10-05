@@ -341,6 +341,7 @@ public sealed class ModelTests
             "identifier_removals.identifier_id",
             "identifier_removals.is_locked",
             "identifier_removals.kind",
+            "identifier_removals.removal_id",
             "identifier_removals.removed_at",
             "identifier_removals.subject",
             "identifier_removals.undo_fingerprint",
@@ -351,6 +352,7 @@ public sealed class ModelTests
             // REG-IDENT-007, REG-SESS-003).
             "identifier_verifications.browser",
             "identifier_verifications.enc_staged",
+            "identifier_verifications.enrolment",
             "identifier_verifications.identifier_id",
             "identifier_verifications.is_replacement",
             "identifier_verifications.link",

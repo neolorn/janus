@@ -316,12 +316,25 @@ internal interface IIdentifierDirectory
     ValueTask<GivenUpIdentifier?> GivenUpAsync(byte[] undo, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts a removed identifier back, verified exactly as it was. What asks has judged
-    /// the kind's maximum against the account's verified identifiers, so it is not
-    /// judged again here (REG-IDENT-006).
+    /// Puts back the value one removal holds, verified exactly as it was, and gives
+    /// that removal up; every other removal of the same identifier stands. Where the
+    /// identifier it came from was removed, the identifier is restored; what asks has
+    /// judged the kind's maximum against the account's verified identifiers, so it is
+    /// not judged again here. Where the identifier stands, the value moves back onto it
+    /// and the verified value it then holds is displaced into a removal of its own, as
+    /// a replace displaces one; an unverified value is displaced and held by nothing
+    /// (REG-IDENT-006).
     /// </summary>
-    /// <param name="id">Which identifier.</param>
+    /// <param name="undo">The fingerprint of the undo link's token, which names the removal.</param>
+    /// <param name="at">When the value is put back.</param>
+    /// <param name="expiresAt">When the undo of a value this displaces stops working.</param>
+    /// <param name="displacedUndo">The fingerprint of the token that undoes a value this displaces.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of putting it back.</returns>
-    ValueTask TakeBackAsync(IdentifierId id, CancellationToken cancellationToken);
+    /// <returns>Whether a verified value was displaced into a removal of its own.</returns>
+    ValueTask<bool> TakeBackAsync(
+        byte[] undo,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] displacedUndo,
+        CancellationToken cancellationToken);
 }

@@ -177,7 +177,12 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
             Assert.NotNull(await directory.GivenUpAsync(undo, TestContext.Current.CancellationToken));
 
-            await directory.TakeBackAsync(given, TestContext.Current.CancellationToken);
+            Assert.False(await directory.TakeBackAsync(
+                undo,
+                Noon.AddHours(2),
+                Noon.AddHours(74),
+                RandomNumberGenerator.GetBytes(32),
+                TestContext.Current.CancellationToken));
             await restoring.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -255,6 +260,52 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
         Assert.Equal(subject, await OwnerAsync(IdentifierKind.Email, Canonicalised(old)));
         Assert.NotNull(await directory.GivenUpAsync(second, TestContext.Current.CancellationToken));
         Assert.Equal(subject, await ReservedToAsync(Canonicalised(replacement), Noon.AddHours(3)));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC10: an identifier replaced twice within the window, through three
+    /// distinct values, stands behind two removal rows, each keyed by an identifier of
+    /// its own and naming the identifier it came from. Both displaced values are
+    /// reserved, and each undo restores the value its own row holds: the undo of the
+    /// second replace displaces the third value into a row of its own and leaves the
+    /// first row as it stands, and the undo of the first then restores the first value.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC10_AnIdentifierReplacedTwiceStandsBehindTwoRemovalRowsAsync()
+    {
+        string old = Canonicalised(Fresh("Omar"));
+        string middle = Canonicalised(Fresh("Omar.Middle"));
+        string last = Canonicalised(Fresh("Omar.Last"));
+        byte[] first = RandomNumberGenerator.GetBytes(32);
+        byte[] second = RandomNumberGenerator.GetBytes(32);
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId id = await HeldPrimaryAsync(subject, old);
+        await ReplacedAsync(subject, id, middle, Noon.AddHours(1), first);
+        await ReplacedAsync(subject, id, last, Noon.AddHours(2), second);
+
+        int rows = await RemovalRowsAsync(id);
+        SubjectId? reservedOld = await ReservedToAsync(old, Noon.AddHours(3));
+        SubjectId? reservedMiddle = await ReservedToAsync(middle, Noon.AddHours(3));
+        bool displacedLast = await TakenBackAsync(second, Noon.AddHours(3));
+        SubjectId? holdsMiddle = await OwnerAsync(IdentifierKind.Email, middle);
+        SubjectId? reservedLast = await ReservedToAsync(last, Noon.AddHours(4));
+        SubjectId? stillReservedOld = await ReservedToAsync(old, Noon.AddHours(4));
+        bool displacedMiddle = await TakenBackAsync(first, Noon.AddHours(4));
+
+        Assert.Equal(2, rows);
+        Assert.Equal(subject, reservedOld);
+        Assert.Equal(subject, reservedMiddle);
+        Assert.True(displacedLast);
+        Assert.Equal(subject, holdsMiddle);
+        Assert.Equal(subject, reservedLast);
+        Assert.Equal(subject, stillReservedOld);
+        Assert.True(displacedMiddle);
+        Assert.Equal(subject, await OwnerAsync(IdentifierKind.Email, old));
+        Assert.Null(await ReservedToAsync(old, Noon.AddHours(5)));
+        Assert.Equal(subject, await ReservedToAsync(middle, Noon.AddHours(5)));
+        Assert.Equal(subject, await ReservedToAsync(last, Noon.AddHours(5)));
+        Assert.Equal(2, await RemovalRowsAsync(id));
     }
 
     /// <summary>
@@ -599,6 +650,32 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             undo,
             TestContext.Current.CancellationToken);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // The undo of one removal row: its value moved back onto the identifier it came
+    // from, and what the identifier then held displaced into a row of its own.
+    private async Task<bool> TakenBackAsync(byte[] undo, DateTimeOffset at)
+    {
+        await using StoreContext context = database.Context();
+
+        bool displaced = await Directory(context).TakeBackAsync(
+            undo,
+            at,
+            at.AddHours(72),
+            RandomNumberGenerator.GetBytes(32),
+            TestContext.Current.CancellationToken);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return displaced;
+    }
+
+    private async Task<int> RemovalRowsAsync(IdentifierId origin)
+    {
+        await using StoreContext context = database.Context();
+
+        return await context.IdentifierRemovals.CountAsync(
+            row => row.Origin == origin,
+            TestContext.Current.CancellationToken);
     }
 
     // A verified address beside the account's verified primary, so it is free to leave.

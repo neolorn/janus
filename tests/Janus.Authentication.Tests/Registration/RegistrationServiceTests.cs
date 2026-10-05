@@ -977,6 +977,124 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code for an identifier the session does not hold is
+    /// answered <c>auth.code.invalid</c> and counted against the source of the request
+    /// alone, and that count is the one write the refusal commits; while that source's
+    /// delay stands a further code is refused with the instant it lifts.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodeForAnIdentifierTheSessionDoesNotHoldIsCountedAgainstItsSourceAsync()
+    {
+        const string presenting = "203.0.113.46";
+        RegistrationSessionId session = await AwaitingAsync();
+        var unheld = new IdentifierId(Guid.NewGuid());
+        _work.Reset();
+
+        ErrorCode first = Refused(await Service.VerifyAsync(session, unheld, "000000", presenting, TestContext.Current.CancellationToken));
+        int committed = _work.OutermostCommitted;
+        int rolledBack = _work.RolledBack;
+
+        for (int tried = 1; tried < Settings.AbuseThrottleThreshold.Default; tried++)
+        {
+            _ = Refused(await Service.VerifyAsync(session, unheld, "000000", presenting, TestContext.Current.CancellationToken));
+        }
+
+        Error held = Failed(await Service.VerifyAsync(session, unheld, "000000", presenting, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, first);
+        Assert.Equal(1, committed);
+        Assert.Equal(0, rolledBack);
+        Assert.Equal([(ThrottleScope.Source, presenting)], _throttle.Counted);
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code presented past its lifetime is answered
+    /// <c>auth.code.expired</c> and counted against the source alone, and against no
+    /// identifier.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodePastItsLifetimeIsCountedAgainstItsSourceAloneAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string code = Code(session, IdentifierKind.Email);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+
+        ErrorCode refused = Refused(await Service.VerifyAsync(session, staged, code, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+        Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code presented past its attempt cap is counted
+    /// against the source alone, so the identifier's count stands at the wrong codes
+    /// that reached the cap and no further.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string code = Code(session, IdentifierKind.Email);
+        string wrong = string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        for (int tried = 0; tried < Settings.CodeVerificationAttempts.Default; tried++)
+        {
+            Waited();
+            _ = Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken));
+        }
+
+        int counted = _throttle.Failures.Count;
+        Waited();
+        ErrorCode refused = Refused(await Service.VerifyAsync(session, staged, code, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.Equal(2 * Settings.CodeVerificationAttempts.Default, counted);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures.Skip(counted));
+    }
+
+    /// <summary>
+    /// REG-SESS-003 (D-189): every press is first held to the delay of its source, the
+    /// press of a link that would verify included, and a link merely opened is held to
+    /// none.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_APressThatWouldVerifyIsHeldToItsSourcesDelayAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        string token = Token(IdentifierKind.Email);
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            _ = Failed(await Service.LandAsync(
+                session,
+                "a-token-no-registration-sent",
+                press: true,
+                Source,
+                TestContext.Current.CancellationToken));
+        }
+
+        Error held = Failed(await Service.LandAsync(session, token, press: true, Source, TestContext.Current.CancellationToken));
+        bool verifiedWhileHeld = Identity(session, IdentifierKind.Email).IsVerified;
+        LinkLanding opened = Ok(await Service.LandAsync(session, token, press: false, Source, TestContext.Current.CancellationToken));
+        _clock.Advance(Settings.AbuseThrottleDelayInitial.Default);
+        LinkLanding pressed = Ok(await Service.LandAsync(session, token, press: true, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.False(verifiedWhileHeld);
+        Assert.False(opened.Verified);
+        Assert.True(pressed.Verified);
+        Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001, REG-SESS-001: every count and delay of a registration uses the
     /// source of the request in hand, never the address its begin arrived on: a code
     /// asked for and a wrong try from another source are counted against that source,
@@ -2744,17 +2862,18 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a code presented for an identifier the session does not
-    /// stage counts nothing, so the refusal rolls the unit of work back.
+    /// CONV-DESIGN-003 AC5, REG-SESS-003 AC6 (D-189): a code presented for an identifier
+    /// the session does not stage is counted against its source, so the refusal commits
+    /// that count alone, with no rollback.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ACodeForNoStagedIdentifierIsRolledBackAsync()
+    public async Task CONV_DESIGN_003_AC5_ACodeForNoStagedIdentifierCommitsItsCountAloneAsync()
     {
         RegistrationSessionId session = await AwaitingAsync();
         _work.Reset();
 
         Assert.Equal(
-            ErrorCodes.RegistrationIncomplete,
+            ErrorCodes.CodeInvalid,
             Refused(await Service.VerifyAsync(
                 session,
                 IdentifierId.New(_clock),
@@ -2763,8 +2882,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
     }
 
     /// <summary>

@@ -770,6 +770,28 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code for an identifier the session does not hold is
+    /// answered 422 <c>auth.code.invalid</c>, and the identifier the session does hold
+    /// is left waiting.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodeForAnIdentifierTheSessionDoesNotHoldIsAnsweredInvalidAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+        string identifier = Flow.Waiting(await browser.SendAsync("GET", "/register"), IdentifierKind.Email);
+
+        Answer presented = await browser.SendAsync(
+            "POST",
+            "/register/verify/" + Guid.CreateVersion7().ToString("D"),
+            ("code", "000000"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, presented.Status);
+        Assert.Equal(ErrorCodes.CodeInvalid.ToString(), presented.Text("code"));
+        Assert.Equal(identifier, Flow.Waiting(await browser.SendAsync("GET", "/register"), IdentifierKind.Email));
+    }
+
+    /// <summary>
     /// REG-SESS-003 AC6, REG-SESS-001 AC2: a press of a link token that opens nothing,
     /// from a browser holding no registration session, is taken without that session's
     /// cookie, answered 422 <c>auth.code.expired</c> and counted against the source of

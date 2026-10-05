@@ -129,6 +129,7 @@ internal sealed class PendingVerificationStoreInMemory : IPendingVerificationSto
         PendingVerification.Existing(
             pending.Subject,
             pending.Browser,
+            pending.Enrolment,
             StagedIdentity.Existing(
                 pending.Staged.Id,
                 pending.Staged.Kind,

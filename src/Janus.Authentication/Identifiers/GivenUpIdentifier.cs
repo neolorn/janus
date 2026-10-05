@@ -4,9 +4,9 @@ using Janus.Core;
 namespace Janus.Authentication.Identifiers;
 
 /// <summary>
-/// An identifier an account gave up, as the undo reads it.
+/// A value an account gave up, by a removal or a replace, as the undo reads it.
 /// </summary>
-/// <param name="Id">Which identifier it was.</param>
+/// <param name="Id">The identifier the value came from.</param>
 /// <param name="Subject">Whose it was.</param>
 /// <param name="Kind">Which of the three kinds it is.</param>
 /// <param name="Entered">The form the person entered.</param>

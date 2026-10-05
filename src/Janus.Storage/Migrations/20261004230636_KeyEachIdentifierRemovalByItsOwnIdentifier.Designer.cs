@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-partial class StoreContextModelSnapshot : ModelSnapshot
+[Migration("20261004230636_KeyEachIdentifierRemovalByItsOwnIdentifier")]
+partial class KeyEachIdentifierRemovalByItsOwnIdentifier
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -771,10 +774,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<Guid?>("Browser")
                     .HasColumnType("uuid")
                     .HasColumnName("browser");
-
-                b.Property<Guid?>("Enrolment")
-                    .HasColumnType("uuid")
-                    .HasColumnName("enrolment");
 
                 b.Property<bool>("IsReplacement")
                     .HasColumnType("boolean")
@@ -1677,10 +1676,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("approver");
 
-                b.Property<DateTimeOffset?>("CodesShownAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("codes_shown_at");
-
                 b.Property<DateTimeOffset>("ExpiresAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
@@ -1732,8 +1727,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("recovery_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_recovery_links_approver_not_max_uuid", "approver <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
-
-                        t.HasCheckConstraint("ck_recovery_links_codes_shown", "codes_shown_at IS NULL OR session IS NOT NULL");
 
                         t.HasCheckConstraint("ck_recovery_links_expiry", "expires_at > issued_at");
 

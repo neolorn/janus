@@ -139,17 +139,6 @@ internal interface IIdentifierStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Finds the removal of one identifier, which is what an undo reads once the link
-    /// has named it.
-    /// </summary>
-    /// <param name="id">Which identifier's removal.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The removal, or nothing where the identifier was not given up.</returns>
-    ValueTask<IdentifierRemoval?> FindRemovalAsync(
-        IdentifierId id,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Records that an account gave an identifier up, which holds the value out of
     /// reach for as long as the undo is good for. A removal row of the same kind and
     /// value whose window ran out before this removal, not yet swept, is replaced; the
@@ -161,13 +150,13 @@ internal interface IIdentifierStore
     ValueTask RecordRemovalAsync(IdentifierRemoval removal, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Gives a removal record up, which is what an undo does once the identifier is
-    /// back on the account.
+    /// Gives a removal record up, which is what an undo does once its value is back on
+    /// the account. Every other removal of the same identifier stands (REG-IDENT-006).
     /// </summary>
-    /// <param name="id">Which identifier's removal.</param>
+    /// <param name="id">Which removal.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of giving it up.</returns>
-    ValueTask DiscardRemovalAsync(IdentifierId id, CancellationToken cancellationToken);
+    ValueTask DiscardRemovalAsync(IdentifierRemovalId id, CancellationToken cancellationToken);
 
     /// <summary>
     /// Releases every value whose undo window has run out.

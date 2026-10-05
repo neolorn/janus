@@ -99,6 +99,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
                 PendingVerification.ToReplace(
                     subject,
                     browser: null,
+                    enrolment: null,
                     StagedIdentity.Of(identifier, IdentifierKind.Email, replacing, replacing),
                     oldMustConfirm: false,
                     Noon.AddMinutes(2)),
@@ -301,6 +302,42 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC3 (D-189): a replace keeps the enrolment session that staged it,
+    /// and one a session staged keeps none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AReplaceKeepsTheEnrolmentSessionThatStagedItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var opened = EnrolmentSessionId.New(TimeProvider.System);
+        var staged = IdentifierId.New(TimeProvider.System);
+        string value = Fresh("enrolled");
+        IdentifierId elsewhere = await StagedAsync(subject, replacing: true);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(
+                PendingVerification.ToReplace(
+                    subject,
+                    browser: null,
+                    opened,
+                    StagedIdentity.Of(staged, IdentifierKind.Email, value, value),
+                    oldMustConfirm: false,
+                    Noon),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            opened,
+            (await Store(reading).FindAsync(staged, TestContext.Current.CancellationToken))?.Enrolment);
+        Assert.Null((await Store(reading).FindAsync(elsewhere, TestContext.Current.CancellationToken))?.Enrolment);
+    }
+
+    /// <summary>
     /// REG-IDENT-004 (D-188): the sweep locks its candidates, which it can do only inside
     /// a transaction, so one asked for outside any is a fault and deletes nothing.
     /// </summary>
@@ -337,7 +374,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
 
         await Store(writing).AddAsync(
             replacing
-                ? PendingVerification.ToReplace(subject, browser: null, identity, oldMustConfirm: true, Noon)
+                ? PendingVerification.ToReplace(subject, browser: null, enrolment: null, identity, oldMustConfirm: true, Noon)
                 : PendingVerification.ToAdd(subject, browser: null, identity, Noon),
             TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

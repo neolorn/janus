@@ -1313,6 +1313,7 @@ Janus.Core.IGroups.RemoveMemberAsync(Janus.Core.AccessContext! context, Janus.Co
 Janus.Core.IIdentifiers
 Janus.Core.IIdentifiers.AbandonAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.AddAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierKind kind, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IIdentifiers.LandAsync(Janus.Core.EnrolmentSessionId enrolment, string! linkToken, bool press, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LinkLanding!>>
 Janus.Core.IIdentifiers.LandAsync(Janus.Core.SessionId? session, string! linkToken, bool press, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LinkLanding!>>
 Janus.Core.IIdentifiers.MakePrimaryAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierId identifier, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>

@@ -121,6 +121,7 @@ internal sealed class PendingVerificationStore(
             Identifier = pending.Identifier,
             Subject = pending.Subject,
             Browser = pending.Browser,
+            Enrolment = pending.Enrolment,
             IsReplacement = pending.IsReplacement,
             OldMustConfirm = pending.OldMustConfirm,
             StagedAt = pending.StagedAt,
@@ -295,6 +296,7 @@ internal sealed class PendingVerificationStore(
         return PendingVerification.Existing(
             record.Subject,
             record.Browser,
+            record.Enrolment,
             Read(document),
             record.IsReplacement,
             record.OldMustConfirm,

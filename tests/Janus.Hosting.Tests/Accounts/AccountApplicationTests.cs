@@ -642,6 +642,47 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC8 and chapter 09 (D-189): a repeated replace naming the staged
+    /// value is a send the restrictions count, refused 429
+    /// <c>auth.restriction.exceeded</c> inside the minute the first holds the address
+    /// for; past it the resend answers 202 as the first did and sends the new address
+    /// its code again. One naming another value answers 409
+    /// <c>identity.change.pending</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC8_ARepeatedReplaceAnswersAsTheFirstAndAnotherValueIsPendingAsync()
+    {
+        const string replaced = "replaced@example.test";
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string path = "/account/identifiers/"
+            + (await _deployment.Identifiers.HeldAsync(Registered(), TestContext.Current.CancellationToken))
+                .All
+                .Single(held => held.Kind is IdentifierKind.Email)
+                .Id
+                .Value
+            + "/replace";
+        Answer first = await browser.SendAsync("PUT", path, ("value", replaced));
+        string code = Flow.Code(_deployment, IdentifierKind.Email);
+        Answer early = await browser.SendAsync("PUT", path, ("value", replaced));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Answer again = await browser.SendAsync("PUT", path, ("value", replaced));
+        Answer another = await browser.SendAsync("PUT", path, ("value", Second));
+
+        Assert.Equal(StatusCodes.Status202Accepted, first.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, early.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, again.Status);
+        Assert.NotEqual(code, Flow.Code(_deployment, IdentifierKind.Email));
+        Assert.Equal(StatusCodes.Status409Conflict, another.Status);
+        Assert.Equal(ErrorCodes.ChangePending.ToString(), another.Text("code"));
+        Assert.Equal(replaced, Assert.Single(_deployment.Pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
     /// FE-ACCT-001 AC4: the declaration decides what a preference set holds, so a key
     /// the host never declared is neither answered with nor taken.
     /// </summary>

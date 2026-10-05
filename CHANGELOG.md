@@ -38,6 +38,42 @@ against the public contract of LIB-API-001.
   `GenerateRecoveryCodesAsync`, `LinkableAsync`, `LinkAsync` and `UnlinkAsync`
   refuse an enrolment session's authority `authz.denied` before anything is read,
   whether the session stands or has ended.
+- A repeated `POST /account/identifiers` whose pending verification was swept or
+  abandoned between the read of the account's identifiers and the lock of its row now
+  proceeds as a fresh add, judged against the maximum, staged and sent its code, where
+  it answered 202 and staged and sent nothing.
+- A repeated `PUT /account/identifiers/{id}/replace` naming the value already staged
+  is a resend, where it was refused 409 `identity.change.pending`: it sends again the
+  new address's code and, where the displaced address must confirm and has not, its
+  confirmation, each counted by the sending restrictions and refused by them with 429
+  `auth.restriction.exceeded`, and answers 202 as the first did. A replace naming
+  another value is still refused 409 `identity.change.pending`.
+- In an enrolment session, `POST /account/identifiers/{id}/verify` reaches only the
+  pending verification of the replace that session staged. A code that names any other
+  answers 422 `auth.code.invalid` and a press that names any other answers 422
+  `auth.code.expired`, each counted against the request's source.
+  `IIdentifiers.LandAsync` gains an overload that takes the enrolment session, and a
+  migration adds the `enrolment` column to `identity.identifier_verifications`.
+- `POST /register/verify/{id}` and `POST /account/identifiers/{id}/verify` hold every
+  code and every press to the delay of the request's source first, the press that
+  opens a verification included, where a registration link's press that would verify
+  was held to none. A wrong code is counted against the source and the identifier; a
+  code past its lifetime or its attempt cap is now counted against the source alone.
+  A code whose `{id}` names nothing the session or the account holds is answered 422
+  `auth.code.invalid`, held to that delay and counted against the source, where the
+  registration route answered `identity.registration.incomplete` and neither route
+  counted it. A displaced address's confirmation pressed past its lifetime is still
+  422 `auth.code.expired` and is now counted against the source.
+- An identifier replaced twice within `identifier.change.coolingoff` keeps both
+  displaced values reserved, each behind a removal of its own, and each undo link
+  restores its own value, where the second replace overwrote the first removal and
+  spent its link. `POST /account/identifiers/{id}/undo` and `IIdentifiers.UndoAsync`
+  move the value back onto an identifier that now holds another value and displace
+  that value as a replace does: it is reserved for a window of its own and the
+  account's other channels are sent its undo link. The migration
+  `KeyEachIdentifierRemovalByItsOwnIdentifier` gives each row of
+  `identity.identifier_removals` a key of its own, `removal_id`, and keeps
+  `identifier_id` as the identifier the value came from.
 - An enrolment session reaches the routes `POST /enrol/begin` lists and no other
   credential route: `ICredentials.RemoveAsync`, `UpgradeKeyAsync`,
   `GenerateRecoveryCodesAsync`, `LinkableAsync` and `UnlinkAsync` refuse it

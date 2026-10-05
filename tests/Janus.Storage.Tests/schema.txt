@@ -401,13 +401,15 @@ table identifier_removals
   column expires_at timestamp with time zone not null
   column undo_fingerprint bytea not null
   column fingerprint_version integer not null
+  column removal_id uuid not null
   constraint ck_identifier_removals_fingerprint CHECK ((octet_length(fingerprint) = 32))
   constraint ck_identifier_removals_kind CHECK ((kind = ANY (ARRAY['email'::text, 'phone'::text, 'username'::text])))
   constraint ck_identifier_removals_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_identifier_removals_window CHECK ((expires_at > removed_at))
   constraint fk_identifier_removals_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
-  constraint pk_identifier_removals PRIMARY KEY (identifier_id)
+  constraint pk_identifier_removals PRIMARY KEY (removal_id)
   index ix_identifier_removals_expires_at using btree (expires_at)
+  index ix_identifier_removals_identifier using btree (identifier_id)
   index ix_identifier_removals_subject using btree (subject)
   index ux_identifier_removals_fingerprint unique using btree (kind, fingerprint)
   index ux_identifier_removals_undo unique using btree (undo_fingerprint)
@@ -422,6 +424,7 @@ table identifier_verifications
   column link bytea
   column staged_at timestamp with time zone not null
   column enc_staged bytea not null
+  column enrolment uuid
   constraint ck_identifier_verifications_link CHECK (((link IS NULL) OR (octet_length(link) = 32)))
   constraint ck_identifier_verifications_old CHECK ((is_replacement OR ((NOT old_must_confirm) AND (old_confirmed_at IS NULL) AND (old_link IS NULL))))
   constraint ck_identifier_verifications_old_link CHECK (((old_link IS NULL) OR (octet_length(old_link) = 32)))

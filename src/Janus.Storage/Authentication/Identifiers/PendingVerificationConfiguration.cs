@@ -63,6 +63,12 @@ internal sealed class PendingVerificationConfiguration
             .HasColumnName("browser")
             .HasConversion(session => session!.Value.Value, value => new SessionId(value));
 
+        // REG-IDENT-007 (D-189): the enrolment session a replace was staged from, which
+        // is the only enrolment session its code is taken from.
+        builder.Property(pending => pending.Enrolment)
+            .HasColumnName("enrolment")
+            .HasConversion(session => session!.Value.Value, value => new EnrolmentSessionId(value));
+
         builder.Property(pending => pending.IsReplacement).HasColumnName("is_replacement");
         builder.Property(pending => pending.OldMustConfirm).HasColumnName("old_must_confirm");
         builder.Property(pending => pending.OldConfirmedAt).HasColumnName("old_confirmed_at");
