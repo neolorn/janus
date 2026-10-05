@@ -556,6 +556,21 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-002 AC1: Continue with a provider before the age step is done returns
+    /// the browser with the code of a step whose predecessor is incomplete.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_002_AC1_AProviderRegistrationBeforeTheAgeStepReturnsIncompleteAsync()
+    {
+        Browser browser = await Flow.BegunAsync(_deployment);
+
+        Answer landed = await ProvidedAsync(browser, "google", new ProviderPerson(GoogleSubject, Gmail, true));
+
+        Assert.Equal("/register?error=" + ErrorCodes.RegistrationIncomplete, landed.Location);
+    }
+
+    /// <summary>
     /// REG-IDENT-008 AC1: Continue with Google on a gmail.com address, over the round
     /// trip, reaches the confirm step with the address verified and no code sent.
     /// </summary>

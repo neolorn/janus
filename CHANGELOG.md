@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A registration continued with a social provider before the age step is done returns
+  the browser with `error=identity.registration.incomplete`, where it returned
+  `error=identity.affirmation.required`.
 - The start and the continuation of a social provider's round trip declare the codes
   they carry in the query member `error` of their redirect, and the endpoint contract
   lists them under that redirect.
