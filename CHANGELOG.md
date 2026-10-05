@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `ErrorCodes.ProviderUnavailable`, the code `auth.provider.unavailable`: a social
+  provider's round trip could not reach or read the provider. It maps to 502, which
+  no response bears, since only a navigation's redirect carries the code in `error`.
 - The signature counter of a WebAuthn assertion is checked wherever the counter
   presented or the one stored is above zero, as WebAuthn Level 3 section 7.2 states: a
   counter not above the stored one is refused 422 `auth.webauthn.countermismatch` and

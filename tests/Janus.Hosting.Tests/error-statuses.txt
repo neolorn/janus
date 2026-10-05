@@ -24,6 +24,7 @@ auth.password.blocklisted 422
 auth.password.toolong 422
 auth.password.tooshort 422
 auth.policy.graceexpired 403
+auth.provider.unavailable 502
 auth.recovery.channelnotonaccount 422
 auth.recovery.reasonrequired 422
 auth.recovery.selfapproval 422

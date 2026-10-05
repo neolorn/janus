@@ -204,6 +204,11 @@ internal static class ApiStatus
         // it, and 10 section 6 reserves 429 for what carries Retry-After.
         [ErrorCodes.Throttled] = StatusCodes.Status429TooManyRequests,
         [ErrorCodes.RestrictionExceeded] = StatusCodes.Status429TooManyRequests,
+
+        // A dependency outside the deployment that could not be reached or read. Only
+        // a navigation's redirect carries the code, so no response bears the status
+        // (10 section 6).
+        [ErrorCodes.ProviderUnavailable] = StatusCodes.Status502BadGateway,
     }.ToFrozenDictionary();
 
     /// <summary>

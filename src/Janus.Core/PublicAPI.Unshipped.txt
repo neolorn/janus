@@ -4036,6 +4036,7 @@ static Janus.Core.ErrorCodes.PhotoTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyGraceExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyUnregistered.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceAdministratorOnly.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ProviderUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceUndeclared.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
