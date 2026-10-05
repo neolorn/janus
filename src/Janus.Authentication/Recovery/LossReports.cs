@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -82,7 +83,12 @@ internal sealed class LossReports(
     /// <param name="credential">Which credential.</param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>When the window ends, or what refused the report.</returns>
+    /// <returns>
+    /// When the window ends; or what refused the report: <c>auth.credential.notfound</c>
+    /// for a credential invalidated or not the account's, and
+    /// <c>auth.lossreport.pending</c>, carrying <c>invalidatesAt</c>, for one already
+    /// suspended by a report or by a removal that would lower reachable assurance.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<LossReported>> ReportAsync(
         AccessContext context,
@@ -118,19 +124,36 @@ internal sealed class LossReports(
         Authenticator? held = await authenticators.FindAsync(credential, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held is null || held.Subject != subject || !held.Confirmed)
+        // `09` POST /recovery/report-loss (D-190): a credential invalidated, or not the
+        // account's, is one the account holds no active credential by.
+        if (held is null
+            || held.Subject != subject
+            || !held.Confirmed
+            || held.State is AuthenticatorState.Invalidated)
         {
             return Result.Failure<LossReported>(Error.From(ErrorCodes.CredentialNotFound));
         }
 
-        if (await reports.FindAsync(credential, cancellationToken).ConfigureAwait(false) is not null)
+        // AUTH-RECOV-007 (D-190): one already suspended, by a report or by a removal
+        // that would lower reachable assurance, is told when its window ends, which the
+        // report states and the credential carries with it.
+        DateTimeOffset? pending =
+            (await reports.FindAsync(credential, cancellationToken).ConfigureAwait(false))?.InvalidatesAt
+            ?? held.InvalidatesAt;
+
+        if (pending is DateTimeOffset invalidatesAt)
         {
-            return Result.Failure<LossReported>(Error.From(ErrorCodes.LossReportPending));
+            return Result.Failure<LossReported>(Error.From(
+                ErrorCodes.LossReportPending,
+                "invalidatesAt",
+                JsonSerializer.SerializeToElement(invalidatesAt)));
         }
 
+        // A credential a provider's event holds has no window and is not active
+        // (IDN-LIFE-012a), so no report is opened on it.
         if (held.State is not AuthenticatorState.Active)
         {
-            return Result.Failure<LossReported>(Error.From(ErrorCodes.CredentialSuspended));
+            return Result.Failure<LossReported>(Error.From(ErrorCodes.CredentialNotFound));
         }
 
         return await SuspendAsync(context, held, source, cancellationToken).ConfigureAwait(false);

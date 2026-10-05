@@ -295,14 +295,16 @@ internal sealed class WebAuthnService(
     /// </summary>
     /// <param name="answered">What the browser sent back.</param>
     /// <param name="challenge">The value the sign-in was opened with.</param>
-    /// <param name="identified">Whether the ceremony was opened for an account it named.</param>
+    /// <param name="account">
+    /// The account the ceremony was opened for, or nothing where it named none.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The credential that answered, or the refusal.</returns>
     /// <exception cref="ArgumentNullException">The answer is absent.</exception>
     public async ValueTask<Result<Authenticator>> AssertAsync(
         AuthenticatorAssertion answered,
         string challenge,
-        bool identified,
+        SubjectId? account,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(answered);
@@ -334,7 +336,8 @@ internal sealed class WebAuthnService(
 
         return refusal is not null
             ? Result.Failure<Authenticator>(refusal)
-            : await PresentAsync(assertion, identified, cancellationToken).ConfigureAwait(false);
+            : await JudgedAsync(assertion, identified: account is not null, account, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -346,21 +349,35 @@ internal sealed class WebAuthnService(
     /// <returns>
     /// The credential that answered, or the failure where it is unusable, was enrolled
     /// under another relying party, verified nobody, or reported a counter that moved
-    /// backwards.
+    /// backwards. A suspended credential that passes every one of those checks is
+    /// refused <c>auth.credential.suspended</c>, nothing written of it (AUTH-RECOV-007).
     /// </returns>
     /// <exception cref="ArgumentNullException">The assertion is absent.</exception>
-    public async ValueTask<Result<Authenticator>> PresentAsync(
+    public ValueTask<Result<Authenticator>> PresentAsync(
         WebAuthnAssertion assertion,
         bool identified,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(assertion);
 
+        return JudgedAsync(assertion, identified, account: null, cancellationToken);
+    }
+
+    // The account is the one the ceremony was opened for, where its caller knows it: a
+    // suspended credential's state is told to no other (AUTH-RECOV-007).
+    private async ValueTask<Result<Authenticator>> JudgedAsync(
+        WebAuthnAssertion assertion,
+        bool identified,
+        SubjectId? account,
+        CancellationToken cancellationToken)
+    {
         Authenticator? held = await authenticators
             .ByCredentialAsync(assertion.CredentialId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held is null || !held.IsUsable || held.WebAuthn is null)
+        // AUTH-RECOV-007: a suspended credential is judged as an active one is, every
+        // check below included, and is told to be suspended only once all of them pass.
+        if (held?.WebAuthn is null || !(held.IsUsable || held.IsAwaitingInvalidation))
         {
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }
@@ -411,7 +428,7 @@ internal sealed class WebAuthnService(
         Authenticator? locked = await authenticators.FindForUpdateAsync(held.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        if (locked is not { IsUsable: true, WebAuthn: not null })
+        if (locked?.WebAuthn is null || !(locked.IsUsable || locked.IsAwaitingInvalidation))
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -427,6 +444,19 @@ internal sealed class WebAuthnService(
         {
             await audit.RecordedAsync(CounterMoved, held.Subject, held.Id, now, cancellationToken)
                 .ConfigureAwait(false);
+        }
+        else if (!locked.IsUsable)
+        {
+            // AUTH-RECOV-007: the assertion verified and its counter advanced, so the
+            // credential's state is what refuses it, and nothing is written of it. Its
+            // state is told only to the account the ceremony was opened for: answering
+            // another's, it is refused as any wrong credential is.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<Authenticator>(Error.From(
+                account is SubjectId named && locked.Subject != named
+                    ? ErrorCodes.FactorRejected
+                    : ErrorCodes.CredentialSuspended));
         }
         else
         {

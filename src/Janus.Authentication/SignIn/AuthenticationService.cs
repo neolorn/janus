@@ -281,7 +281,10 @@ internal sealed class AuthenticationService(
     /// what is left to present, which an anonymous caller is never told. At a step-up,
     /// whose challenge names no action, what is left is judged against the strictest of
     /// the policy's gates, field by field, and answered as a sign-in's ask is
-    /// (AUTH-STEP-002, D-187, D-188).
+    /// (AUTH-STEP-002, D-187, D-188). An ask after a first factor, or under a session,
+    /// that names a suspended number sends nothing and is refused
+    /// <c>auth.credential.suspended</c>, counting nothing, since an ask presents no
+    /// factor (AUTH-RECOV-007 AC8, D-190).
     /// </remarks>
     public async ValueTask<Result<SignInProgress?>> AskAsync(
         string challenge,
@@ -300,9 +303,16 @@ internal sealed class AuthenticationService(
         if (!Asks(factor)
             || open?.Subject is not SubjectId subject
             || (stepping is SubjectId asking ? asking != subject : open.Presented.Count is 0)
-            || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false) is not AccountState.Active
-            || !(await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false))
-                .Any(credential => credential.IsUsable && credential.Factor == factor))
+            || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false) is not AccountState.Active)
+        {
+            return Result.Success<SignInProgress?>(null);
+        }
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+        bool usable = enrolled.Any(credential => credential.IsUsable && credential.Factor == factor);
+
+        if (!usable && !enrolled.Any(credential => credential.IsAwaitingInvalidation && credential.Factor == factor))
         {
             return Result.Success<SignInProgress?>(null);
         }
@@ -319,6 +329,14 @@ internal sealed class AuthenticationService(
             return failure is null
                 ? Result.Success<SignInProgress?>(null)
                 : Result.Failure<SignInProgress?>(failure);
+        }
+
+        // AUTH-RECOV-007 AC8: the ask names a suspended number, after a first factor or
+        // under a session, so its caller is told so. Nothing is sent, and nothing is
+        // counted or recorded, an ask presenting no factor.
+        if (!usable)
+        {
+            return Result.Failure<SignInProgress?>(Error.From(ErrorCodes.CredentialSuspended));
         }
 
         bool sent = (await links
@@ -753,14 +771,22 @@ internal sealed class AuthenticationService(
     /// <param name="presented">The factor and what proves it.</param>
     /// <param name="source">The address the attempt came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>What the session now reaches, or the refusal.</returns>
+    /// <returns>
+    /// What the session now reaches, and the factors still to present where those
+    /// accepted so far do not reach the gate; or the refusal.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-STEP-001, AUTH-ABUSE-001 and CONV-LOG-005. A refused step-up
-    /// factor is a failed authentication: it answers to the delay a sign-in answers
-    /// to, counted against the same source and the same account, and the session it
-    /// is presented on exempts it from nothing, since a session in someone else's
-    /// hands is what a step-up is asked of.
+    /// Implements AUTH-STEP-001, AUTH-STEP-002 step 2 and AC4c, AUTH-ABUSE-001 and
+    /// CONV-LOG-005. A refused step-up factor is a failed authentication: it answers to
+    /// the delay a sign-in answers to, counted against the same source and the same
+    /// account, and the session it is presented on exempts it from nothing, since a
+    /// session in someone else's hands is what a step-up is asked of. A step-up is
+    /// called once per factor: each accepted factor is held on its challenge with those
+    /// accepted before it, the session is raised to what they reach together, and the
+    /// challenge ends once the session meets the strictest of the policy's gates, which
+    /// is the gate of a step-up that names no action, or once nothing more can be
+    /// presented towards it (D-187, D-190).
     /// </remarks>
     public async ValueTask<Result<SignInOutcome>> RaiseAsync(
         AccessContext context,
@@ -848,6 +874,21 @@ internal sealed class AuthenticationService(
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
+        Error? failure = null;
+
+        // AUTH-STEP-002 step 2: the step-up names no action, so what it goes on asking
+        // for is read from the strictest of the policy's gates, before the unit of work
+        // begins, since the carrier's signal may be asked for it (AUTH-FACT-002b).
+        StepUpChallenge asked = (await guard
+                .ChallengeUnnamedAsync(asking, session, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<StepUpChallenge>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInOutcome>(failure);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -855,20 +896,36 @@ internal sealed class AuthenticationService(
         }
 
         // D-166 X3: the challenge is held under its lock from before the session is
-        // raised until it is removed, so a second raise on it waits and is refused.
-        if (await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false) is null)
+        // raised until it is recorded or removed, so a second raise on it waits, and
+        // one that finds it gone is refused.
+        Challenge? holding = await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (holding is null)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
         }
 
-        Error? failure = null;
+        // AUTH-STEP-002 step 2 (D-190): the factor accepted at this call joins those the
+        // challenge holds from the calls before it, and the session is raised to what
+        // they reach together.
+        foreach (Factor accepted in open.Presented)
+        {
+            holding.Accepted(accepted);
+        }
+
+        await challenges.RecordAsync(holding, cancellationToken).ConfigureAwait(false);
 
         IssuedSession? raised = (await sessions
-                .PresentAsync(live, open.Presented, cancellationToken)
+                .PresentAsync(live, holding.Presented, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => (IssuedSession?)value, error => Withheld<IssuedSession?>(error, ref failure));
+
+        bool reached = failure is null
+            && (await guard.ReachedAsync(live, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<bool>(error, ref failure));
 
         if (failure is not null || raised is null)
         {
@@ -877,7 +934,19 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
         }
 
-        await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+        // The challenge holds the factors until together they reach the gate, and no
+        // longer: one left behind would let a later factor stand beside them again.
+        List<Factor> required = reached
+            ? []
+            : [.. asked.Combinations
+                .SelectMany(combination => combination)
+                .Distinct()
+                .Except(holding.Presented)];
+
+        if (required.Count is 0)
+        {
+            await challenges.RemoveAsync(holding.Fingerprint, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -887,10 +956,10 @@ internal sealed class AuthenticationService(
 
         return Result.Success(new SignInOutcome(
             new SignInProgress(
-                SignInStatus.Complete,
+                required.Count is 0 ? SignInStatus.Complete : SignInStatus.FactorRequired,
                 live.Attained,
                 live.PhishingResistant,
-                [],
+                required,
                 TrustDeviceOffered: false,
                 raised.Id,
                 Requirement: null,
@@ -1362,7 +1431,7 @@ internal sealed class AuthenticationService(
         Error? refusal = null;
 
         Authenticator answered = (await webAuthn
-                .AssertAsync(presented.Assertion, open.WebAuthn, identified: true, cancellationToken)
+                .AssertAsync(presented.Assertion, open.WebAuthn, subject, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<Authenticator>(error, ref refusal));
 
@@ -1435,6 +1504,17 @@ internal sealed class AuthenticationService(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
+        // AUTH-RECOV-007: a code sent for a credential suspended since is judged as an
+        // active one's is, so only the right one learns of the suspension: it is spent,
+        // and the refusal is a failed attempt whose record and counts commit with the
+        // spend.
+        if (await SuspendedAsync(subject, presented.Factor, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<bool>(
+                await RefusedAsync(Error.From(ErrorCodes.CredentialSuspended), kept: true, counted, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
         // A right code is spent whatever follows, and the lock is judged only after it,
         // so that a wrong code learns nothing of the lock (REG-DOM-001).
         if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
@@ -1451,6 +1531,21 @@ internal sealed class AuthenticationService(
         open.Accepted(presented.Factor);
 
         return Result.Success(false);
+    }
+
+    // AUTH-RECOV-007: whether the account's credential of a factor is suspended by a
+    // loss report or by a removal that would lower reachable assurance, none of that
+    // factor standing active beside it.
+    private async ValueTask<bool> SuspendedAsync(
+        SubjectId subject,
+        Factor factor,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return !enrolled.Any(credential => credential.IsUsable && credential.Factor == factor)
+            && enrolled.Any(credential => credential.IsAwaitingInvalidation && credential.Factor == factor);
     }
 
     // AUTH-FACT-004, CONV-DESIGN-003: ends the unit of work a right code was spent in

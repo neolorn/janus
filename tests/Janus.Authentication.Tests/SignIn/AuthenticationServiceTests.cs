@@ -140,12 +140,15 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Throttle,
             _notifications,
             Signals,
-            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
+            Guard,
             Codes,
             _configuration,
             _work,
             _clock,
             _randomness);
+
+    private StepUpGuard Guard =>
+        new(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock);
 
     private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
 
@@ -690,6 +693,61 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC4c: a password at one call of a step-up and a generated code at
+    /// the next, against the one challenge, pass a gate declared <c>aal2</c>: the
+    /// password is held on the challenge, which goes on asking, and the code beside it
+    /// raises the session to what the two reach together.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AC4c_APasswordAtOneCallAndAGeneratedCodeAtTheNextPassAGateDeclaredAal2Async()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        Result<SignInProgress> first = await SteppedAsync(new FactorPresentation(Factor.Password) { Value = Secret });
+        Error? between = await Guard.PassedAsync(
+            subject,
+            session,
+            StepUpAction.AccountSuspend,
+            TestContext.Current.CancellationToken);
+        Result<SignInProgress> second = await SteppedAsync(new FactorPresentation(Factor.Totp) { Value = generated });
+
+        Assert.Equal(ErrorCodes.StepUpRequired, between?.Code);
+        Assert.Null(Refused(second));
+        Assert.Null(await Guard.PassedAsync(
+            subject,
+            session,
+            StepUpAction.AccountSuspend,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(
+            (SignInStatus.FactorRequired, AssuranceLevel.Aal1),
+            (Reached(first).Status, Reached(first).AssuranceLevel));
+        Assert.Equal([Factor.Totp], Reached(first).Required);
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, false),
+            (Reached(second).Status, Reached(second).AssuranceLevel, Reached(second).PhishingResistant));
+        Assert.Empty(Reached(second).Required);
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.False(_work.Open);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(FactorPresentation presented) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                presented,
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong try at a sign-in code is decided in
     /// its caller's unit of work, which it leaves open with the count written on the
     /// code's record for the caller to commit.
@@ -840,6 +898,74 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-DOM-001, AUTH-FACT-004: at a step-up a right email code sent to an address the
+    /// domain lock now refuses is answered <c>identity.identifier.domainnotallowed</c>.
+    /// The lock is judged after the code against the address the code was sent to, the
+    /// spend is committed alone, no failure is counted, no refused step-up factor is
+    /// recorded, and the session is not raised.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesIsSpentAndCountsNoFailureAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.EmailCode);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+        string right = Code();
+        LockedElsewhere(subject);
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.EmailCode) { Value = right },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, refused);
+        Assert.False(_work.Open);
+        Assert.Equal((1, 1, 0), (_work.Opened, _work.OutermostCommitted, _work.RolledBack));
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.Null((await _live.FindAsync(session, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// REG-DOM-001, AUTH-FACT-004: at a step-up the lock is judged after the code, so a
+    /// wrong email code presented under a lock is refused as a wrong code is anywhere, a
+    /// refused step-up factor recorded, and learns nothing of the lock.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AWrongEmailCodeAtAStepUpUnderADomainLockLearnsNothingOfTheLockAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.EmailCode);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+        string right = Code();
+        LockedElsewhere(subject);
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.EmailCode) { Value = Other(right) },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, refused);
+        Assert.Equal(
+            1,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+        Assert.Equal([Factor.EmailCode], _audit.StepUpsFailed.Select(failed => failed.Presented));
+    }
+
+    /// <summary>
     /// AUTH-FACT-004: the domain lock is judged after the code, never before it, so a
     /// wrong code presented under a lock is told what a wrong code is told anywhere and
     /// learns nothing of the lock.
@@ -965,6 +1091,299 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.False(_work.Open);
         Assert.Empty(_audit.StepUpsFailed);
         Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: at a sign-in a suspended generator is judged as an active one
+    /// would be. The code it gives is refused <c>auth.credential.suspended</c>, a code it
+    /// does not give is refused as any wrong code is, and each is a failed attempt,
+    /// recorded and counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedGeneratorsCodeIsRefusedSuspendedAndCountedAtASignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Holds(subject, Factor.Totp);
+        Suspends(subject, Factor.Totp);
+        Remembered(subject);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+        SignInChallenge began = await BeganAsync(Address);
+
+        ErrorCode? wrong = Refused(await PresentAsync(began.Challenge, Factor.Totp, Other(generated)));
+        ErrorCode? right = Refused(await PresentAsync(began.Challenge, Factor.Totp, generated));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong);
+        Assert.Equal(ErrorCodes.CredentialSuspended, right);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Totp), (subject, Factor.Totp)], _audit.Failed);
+        Assert.Equal(
+            2,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: at a gate a suspended generator's own code is refused
+    /// <c>auth.credential.suspended</c>, a refused step-up factor recorded and counted,
+    /// and the session is not raised.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedGeneratorsCodeIsRefusedSuspendedAndCountedAtAStepUpAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Holds(subject, Factor.Totp);
+        Suspends(subject, Factor.Totp);
+        SessionId session = Opened(subject);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+        SignInChallenge began = await BeganAsync(Address);
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.Totp) { Value = generated },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused);
+        Assert.Equal([Factor.Totp], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal(
+            AssuranceLevel.Aal1,
+            (await _live.FindAsync(session, TestContext.Current.CancellationToken))?.Attained);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a suspended passkey's assertion is refused
+    /// <c>auth.credential.suspended</c> only where its signature verifies, writing
+    /// neither its counter nor its use; an assertion another key signed is refused as any
+    /// wrong presentation is. Each is a failed attempt.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedPasskeysAssertionIsRefusedSuspendedOnlyWhereItVerifiesAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var forger = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        AuthenticatorId held = Keyed(subject, key, counter: 9);
+        Suspends(subject, Factor.Passkey);
+        Remembered(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        ErrorCode? forged = Refused(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Asserted(forger, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+        ErrorCode? verified = Refused(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Asserted(key, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Authenticator? after = await _authenticators.FindAsync(held, TestContext.Current.CancellationToken);
+        Assert.Equal(ErrorCodes.FactorRejected, forged);
+        Assert.Equal(ErrorCodes.CredentialSuspended, verified);
+        Assert.Equal((9u, null), (after?.WebAuthn?.Counter, after?.LastUsedAt));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey), (subject, Factor.Passkey)], _audit.Failed);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a suspended passkey of another account, answering this
+    /// sign-in with an assertion that verifies, is refused as any wrong credential is, so
+    /// its state is told to nobody but the account that holds it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedPasskeyOfAnotherAccountIsRefusedAsAnyWrongCredentialIsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var other = new SubjectId(Guid.NewGuid());
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        _ = Keyed(other, key, counter: 9);
+        Suspends(other, Factor.Passkey);
+        Remembered(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        ErrorCode? refused = Refused(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Asserted(key, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.FactorRejected, refused);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2, AUTH-FACT-004: a text code sent to a number suspended since is
+    /// judged as an active one's would be. The wrong code is refused as any wrong code
+    /// is; the right one is spent and refused <c>auth.credential.suspended</c>, the spend
+    /// kept with the refused step-up factor's record and count.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ATextCodeOfANumberSuspendedSinceIsSpentAndRefusedSuspendedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        _ = await AskedAsync(began.Challenge, subject, session);
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        Suspends(subject, Factor.PhoneCode);
+        _work.Reset();
+
+        ErrorCode? wrong = Refused(await SteppedAsync(Other(code)));
+        ErrorCode? right = Refused(await SteppedAsync(code));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong);
+        Assert.Equal(ErrorCodes.CredentialSuspended, right);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([Factor.PhoneCode, Factor.PhoneCode], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(
+            2,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.False(_work.Open);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(string value) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                new FactorPresentation(Factor.PhoneCode) { Value = value },
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC8: a text code asked for after a first factor, naming a
+    /// suspended number, sends nothing and is refused
+    /// <c>auth.credential.suspended</c>. The ask presents no factor, so nothing is
+    /// counted and no failed authentication is recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC8_AnAskAfterAFirstFactorNamingASuspendedNumberSendsNothingAndCountsNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Suspends(subject, Factor.PhoneCode);
+        Remembered(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, stepping: null));
+
+        Assert.Equal([Factor.Totp], reached.Required);
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused.Code);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC8: a text code asked for under a session, naming a suspended
+    /// number, sends nothing and is refused <c>auth.credential.suspended</c>, counting
+    /// nothing and recording no refused step-up factor.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC8_AnAskUnderASessionNamingASuspendedNumberSendsNothingAndCountsNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Suspends(subject, Factor.PhoneCode);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, session));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused.Code);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC8: a text code asked for before a first factor is answered as
+    /// every ask is and sends nothing, whatever the account holds, a suspended number
+    /// included.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC8_AnAskBeforeAFirstFactorIsAnsweredAsEveryAskIsWhateverTheAccountHoldsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Suspends(subject, Factor.PhoneCode);
+        SignInChallenge began = await BeganAsync(Address);
+
+        Result<SignInProgress?> asked = await AskedAsync(began.Challenge, stepping: null);
+
+        Assert.True(asked.Match(offered => offered is null, _ => false));
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-008 AC4, AUTH-RECOV-007: a preferred second-step method that is not
+    /// active is not offered at a sign-in's second step, and the challenge offers the
+    /// other active ones.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_008_AC4_APreferredMethodThatIsNotActiveIsNotOfferedAtASignInAndTheOthersAreAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Holds(subject, Factor.Totp);
+        Holds(subject, Factor.SecurityKey, isPreferred: true);
+        Suspends(subject, Factor.SecurityKey);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal(SignInStatus.FactorRequired, reached.Status);
+        Assert.Equal([Factor.Totp], reached.Required);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-008 AC4, AUTH-RECOV-007: a preferred second-step method that is not
+    /// active is not offered at a gate, and the step-up goes on asking for the other
+    /// active ones.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_008_AC4_APreferredMethodThatIsNotActiveIsNotOfferedAtAGateAndTheOthersAreAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        Holds(subject, Factor.Totp);
+        Holds(subject, Factor.SecurityKey, isPreferred: true);
+        Suspends(subject, Factor.SecurityKey);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        SignInProgress reached = Reached(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(SignInStatus.FactorRequired, reached.Status);
+        Assert.Equal([Factor.Totp], reached.Required);
     }
 
     /// <summary>
@@ -2886,6 +3305,18 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         return session.Id;
     }
 
+    // AUTH-STEP-002: the system policy with one action's gate declared, the others as
+    // the policy ships them.
+    private void Declares(Gate declared) =>
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                Gates = Janus.Core.Policies.SystemDefault.Gates.ToDictionary(
+                    gate => gate.Key,
+                    gate => gate.Key is StepUpAction.AccountSuspend ? declared : gate.Value),
+            });
+
     // REG-DOM-001: the account is placed under a lock that admits no address it holds.
     private void LockedElsewhere(SubjectId subject)
     {
@@ -2979,6 +3410,18 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 ? new WebAuthnMaterial(new byte[] { 1 }, new byte[] { 2 }, -7, "example.test", 0, false, false)
                 : null,
             isPreferred));
+
+    // AUTH-RECOV-007: the account's credentials of one factor as a loss report, or a
+    // removal that would lower reachable assurance, leaves them: suspended, with the
+    // instant the window ends.
+    private void Suspends(SubjectId subject, Factor factor)
+    {
+        foreach (Authenticator held in _authenticators.All
+                     .Where(credential => credential.Subject == subject && credential.Factor == factor))
+        {
+            held.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        }
+    }
 
     private static CredentialLabel Label(Factor factor) =>
         CredentialLabel.TryParse(factor.ToString(), out CredentialLabel label)

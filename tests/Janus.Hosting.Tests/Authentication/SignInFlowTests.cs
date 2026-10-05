@@ -605,6 +605,57 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-DOM-001, `09` `POST /auth/step-up`: at a step-up a right email code sent to an
+    /// address the domain lock now refuses answers 422
+    /// <c>identity.identifier.domainnotallowed</c>, and the code is spent: presented
+    /// again it answers as a code that is gone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesAnswersTheLocksCodeAsync()
+    {
+        var locked = new OrganizationId(Guid.NewGuid());
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SignInCode,
+            SendKind.Email,
+            Language,
+            new MessageTemplate("code", "{code}"));
+        Browser owner = await Flow.SignedInAsync(_deployment);
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+        Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        _ = await owner.SendAsync("POST", "/auth/email-otp", ("identifier", Flow.Address));
+        string code = Emailed();
+        _deployment.Memberships.Place(_deployment.Directory.Created[^1].Subject, locked);
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            locked.ToString(),
+            PolicyOverride.None with { EmailDomains = ["elsewhere.test"] });
+
+        Answer refused = await PresentedAsync();
+        Answer again = await PresentedAsync();
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, again.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), again.Text("code"));
+
+        Task<Answer> PresentedAsync() =>
+            owner.SendAsync(
+                "POST",
+                "/auth/step-up",
+                ("challengeId", began.Text("challengeId")),
+                ("factor", "emailCode"),
+                ("value", code));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a sign-in link asked for by text to a
     /// number the carrier reports a recent change for is not sent, and the ask is
     /// answered 202 in the bytes an ask for a number no account holds is answered in.

@@ -184,6 +184,64 @@ internal sealed class StepUpGuard(
         ChallengedAsync(subject, session, action: null, enrolling: null, textsWithheld: true, cancellationToken);
 
     /// <summary>
+    /// What a session's proof amounts to at a step-up that names no action: the
+    /// strictest of the policy's gates, field by field, and the combinations that would
+    /// meet it.
+    /// </summary>
+    /// <param name="subject">Whose account is stepping up.</param>
+    /// <param name="session">The session the step-up raises.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The challenge, met or not, or the refusal where the session is not the
+    /// account's.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTH-STEP-002 step 2 (D-187, D-190). It asks the carrier's signal of
+    /// a number a combination on offer would text, so it is asked outside any unit of
+    /// work (AUTH-FACT-002b).
+    /// </remarks>
+    public ValueTask<Result<StepUpChallenge>> ChallengeUnnamedAsync(
+        SubjectId subject,
+        SessionId session,
+        CancellationToken cancellationToken) =>
+        ChallengedAsync(subject, session, action: null, enrolling: null, textsWithheld: false, cancellationToken);
+
+    /// <summary>
+    /// Whether a session, as its caller holds it and has just raised it, has reached the
+    /// gate of a step-up that names no action, which is the strictest of the policy's
+    /// gates, field by field.
+    /// </summary>
+    /// <param name="live">The session, as raised.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether the gate is met, or the failure where the policy cannot be read.</returns>
+    /// <exception cref="ArgumentNullException">The session is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-STEP-002 step 2 (D-190). It judges the session it is handed and
+    /// reads no other, and asks no signal, so the step-up decides inside its unit of
+    /// work whether the challenge that holds the accepted factors is done with.
+    /// </remarks>
+    public async ValueTask<Result<bool>> ReachedAsync(Session live, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(live);
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(live.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null || Costs(policy, action: null) is not Gate gate)
+        {
+            return Result.Failure<bool>(failure ?? Error.From(ErrorCodes.StepUpRequired));
+        }
+
+        return Result.Success(StepUpRefusal.Met(StepUp.On(
+            live,
+            gate,
+            await HeldAsync(live.Subject, cancellationToken).ConfigureAwait(false),
+            time.GetUtcNow())));
+    }
+
+    /// <summary>
     /// What a named gate costs under the principal's policy, which a gate judged from a
     /// host's report of the caller's session reads (LIB-HOST-004).
     /// </summary>
@@ -265,14 +323,7 @@ internal sealed class StepUpGuard(
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
         }
 
-        IReadOnlyList<Authenticator> enrolled = await authenticators
-            .OfAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        Password? password = await passwords.FindAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        var held = HeldFactors.Of(enrolled, password is not null);
+        HeldFactors held = await HeldAsync(subject, cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = time.GetUtcNow();
         StepUpChallenge challenge = Challenged(live, gate, held, enrolling, now);
 
@@ -291,6 +342,18 @@ internal sealed class StepUpGuard(
         return Result.Success(withheld.Count is 0
             ? challenge
             : Challenged(live, gate, held with { Usable = held.Usable.Except(withheld).ToFrozenSet() }, enrolling, now));
+    }
+
+    private async ValueTask<HeldFactors> HeldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Authenticator> enrolled = await authenticators
+            .OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Password? password = await passwords.FindAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return HeldFactors.Of(enrolled, password is not null);
     }
 
     private static StepUpChallenge Challenged(

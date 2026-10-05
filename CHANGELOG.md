@@ -10,6 +10,36 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/step-up` declares 422 `identity.identifier.domainnotallowed`, which it
+  answers where a right `emailCode` code was sent to an address a domain lock now
+  refuses: the lock is judged after the code, the code is spent, and no failed attempt
+  is counted or recorded.
+- `POST /recovery/report-loss` on an authenticator already suspended, by a loss report
+  or by a removal that would lower reachable assurance, answers 409
+  `auth.lossreport.pending` carrying `details.invalidatesAt`, the end of the window it
+  is under; on one invalidated, or not the account's, it answers 404
+  `auth.credential.notfound`, which the route now declares. It no longer answers
+  `auth.credential.suspended`, and the 409 carried no details before.
+- A suspended authenticator presented at a sign-in or a step-up, whether a loss report
+  or a removal that would lower reachable assurance suspended it, is judged first as an
+  active one is. Only where what it presented verifies is it refused 422
+  `auth.credential.suspended`: a code its generator gives, which spends no step; an
+  assertion that passes every check of an active key, which writes no counter; a right
+  text code sent before the number was suspended, which is spent. Each is a failed
+  attempt, counted and recorded. A wrong code or a failed assertion is refused as it
+  is for an active authenticator, where a suspended generator's own code was refused
+  `auth.code.invalid` and a suspended key's assertion `auth.factor.rejected`, and a
+  right text code sent before the suspension was accepted.
+- A `phoneCode` code asked for at `POST /auth/factor` after a first factor, or at
+  `POST /auth/step-up`, for a number that is suspended sends nothing and is answered
+  422 `auth.credential.suspended`, counting nothing and recording no failed attempt,
+  where it was answered 202. An ask before a first factor is answered 202 as before.
+- `POST /auth/step-up` is called once for each factor on one challenge: the factors
+  accepted are held on the challenge and the session is raised with them together, so
+  a password at one call and a generator's code at the next reach AAL2. The answer is
+  200 `factorRequired`, with the factors still to present, until what was accepted
+  reaches the strictest of the gates of the policy in force, and 200 `complete` then,
+  where the first accepted factor ended the challenge before.
 - A factor refused 422 `auth.credential.suspended` at a sign-in or a step-up is a
   failed attempt: it is counted against the source and the account and recorded as
   every other refusal of a presented factor is.

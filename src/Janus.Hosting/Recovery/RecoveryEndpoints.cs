@@ -51,7 +51,8 @@ internal static class RecoveryEndpoints
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.LossReportNotPermitted, ErrorCodes.LossReportPending))
+                    ErrorCodes.CredentialNotFound, ErrorCodes.LossReportNotPermitted,
+                    ErrorCodes.LossReportPending))
             .Produces<LossReportedView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
             .Declares(EndpointDeclaration

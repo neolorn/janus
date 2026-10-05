@@ -815,6 +815,68 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.False(await SyncedAsync(bound));
     }
 
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a suspended key is judged as an active one would be. An
+    /// assertion that passes every check is refused <c>auth.credential.suspended</c>
+    /// and writes neither its counter nor its use, and one that fails a check is
+    /// refused as that check refuses an active key's.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedKeyIsRefusedSuspendedOnlyWhereItsAssertionIsAcceptedAsync()
+    {
+        AuthenticatorId id = await EnrolledAsync(Subject(), Registration() with { Counter = 9 });
+        Authenticator key = (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+        key.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? accepted = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 10 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+        ErrorCode? unverified = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 10, UserVerified = false },
+            identified: true,
+            TestContext.Current.CancellationToken));
+        ErrorCode? moved = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 8 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, accepted);
+        Assert.Equal(ErrorCodes.WebAuthnUserVerificationRequired, unverified);
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, moved);
+        Assert.Equal(9u, key.WebAuthn!.Counter);
+        Assert.Null(key.LastUsedAt);
+        Assert.False(_work.Open);
+        Assert.Single(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a key suspended while its assertion waited for the lock is
+    /// refused <c>auth.credential.suspended</c>, and the refusal ends the unit of work
+    /// it was decided in with nothing committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_AKeySuspendedMeanwhileIsRefusedSuspendedAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+        _authenticators.Locking = credential => credential.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(
+            Assertion(),
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_audit.Records);
+    }
+
     private static WebAuthnRegistration Registration() =>
         new(
             new byte[] { 1, 2, 3 },
