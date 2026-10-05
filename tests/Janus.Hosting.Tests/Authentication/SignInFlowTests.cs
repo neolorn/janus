@@ -394,6 +394,102 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// `09` `POST /auth/factor`, AUTH-FACT-002 AC7: where a generated code is accepted
+    /// before any first factor, the call that presented it is answered 200
+    /// <c>factorRequired</c> with <c>required</c> naming the first factors of the
+    /// <c>available</c> the challenge opened with, and so is a text code asked for after
+    /// it where the number's signal answers <c>risk</c>, which sends nothing; a first
+    /// factor then completes the sign-in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PostFactor_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync()
+    {
+        await using var reporting = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(reporting);
+
+        reporting.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        reporting.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        _ = await Flow.SignedInAsync(reporting);
+
+        reporting.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = reporting.Directory.Created[^1].Subject;
+
+        reporting.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        reporting.Authenticators.Hold(Held(Factor.Totp, "Generator"));
+
+        var browser = new Browser(reporting);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        string challenge = began.Text("challengeId");
+        string?[] available = Named(began, "available");
+        int sent = reporting.Sms.Taken.Count;
+
+        Answer second = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "totp"),
+            ("value", new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+                .ComputeTotp(reporting.Clock.GetUtcNow().UtcDateTime)));
+        Answer asked = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+        Answer first = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Contains("password", available);
+        Assert.Equal(StatusCodes.Status200OK, second.Status);
+        Assert.Equal("factorRequired", second.Text("status"));
+        Assert.Equal("delegated", second.Text("assuranceLevel"));
+        Assert.Equal(available, Named(second, "required"));
+        Assert.Equal(StatusCodes.Status200OK, asked.Status);
+        Assert.Equal("factorRequired", asked.Text("status"));
+        Assert.Equal(available, Named(asked, "required"));
+        Assert.Equal(sent, reporting.Sms.Taken.Count);
+        Assert.Equal(StatusCodes.Status200OK, first.Status);
+        Assert.Equal("complete", first.Text("status"));
+        Assert.Equal("aal2", first.Text("assuranceLevel"));
+
+        static string?[] Named(Answer answer, string member) =>
+            [.. answer.Json().GetProperty(member).EnumerateArray().Select(factor => factor.GetString())];
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(reporting.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                reporting.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a text code asked for at a step-up,
     /// where the number's signal answers <c>risk</c>, sends nothing and is answered 200
     /// <c>factorRequired</c> naming the factors of the combinations left without the

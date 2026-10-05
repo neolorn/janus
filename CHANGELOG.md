@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /auth/factor` at a sign-in where a second step is accepted before any first
+  factor answers 200 `factorRequired` with `required` naming the first factors of the
+  `available` that `POST /auth/begin` answered, where it named every usable second
+  step the account holds, the one just accepted among them. A text code asked for
+  after it and answered 200, the number's signal having withheld the code, names the
+  same first factors, where it named the second steps not yet accepted or was refused
+  422 `auth.factor.rejected` once none of those was left.
 - The 403 `auth.stepup.required` of a step-up gate that asks no maximum age, one whose
   level is `delegated`, carries `required.maxAge` null, where it carried the age the
   policy gives the action, a limit that gate does not apply. A gate at any other

@@ -194,7 +194,7 @@ internal sealed class AuthenticationService(
         // (AUTH-ABUSE-003, 09 section 3).
         return Result.Success(new SignInChallenge(
             handle.Value,
-            [.. system.LoginFactors.Where(factor => FactorCatalogue.Of(factor).CanBePrimary).Order()],
+            Available(system),
             new WebAuthnChallenge(party.Id, ceremony.Value)));
     }
 
@@ -264,7 +264,8 @@ internal sealed class AuthenticationService(
     /// <returns>
     /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
     /// signal answers <c>risk</c>, what the challenge then offers, less the factors
-    /// accepted on it already, or <c>auth.factor.rejected</c> where that is nothing; at
+    /// accepted on it already, or the first factors it opened with where a second step
+    /// was accepted before any, or <c>auth.factor.rejected</c> where that is nothing; at
     /// a step-up whose number's signal answers <c>risk</c>, the factors of the
     /// combinations left without the entry, less those accepted already, none where the
     /// session already meets the gate, or <c>auth.stepup.required</c> where no
@@ -278,7 +279,9 @@ internal sealed class AuthenticationService(
     /// answered as an ask that sent its code. A number whose signal answers
     /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
     /// what is left to present, which an anonymous caller is never told, and which
-    /// names no factor accepted on the challenge already (D-193). At a step-up,
+    /// names no factor accepted on the challenge already (D-193): the second steps it
+    /// still offers, or, where a second step was accepted before any first factor, the
+    /// first factors it opened with (D-194). At a step-up,
     /// whose challenge names no action, what is left is judged against the strictest of
     /// the policy's gates, field by field, and answered as a sign-in's ask is
     /// (AUTH-STEP-002, D-187, D-188). An ask after a first factor, or under a session,
@@ -371,25 +374,34 @@ internal sealed class AuthenticationService(
         Assurance reached = Assurance.Reached(Properties(open.Presented))
             ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
 
-        List<Factor> wanted = Wanted(
-            policy,
-            await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false),
-            reached,
-            trusts: false);
+        List<Factor> wanted;
 
-        _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted || open.Presented.Contains(entry));
+        if (FirstAccepted(open))
+        {
+            wanted = Wanted(
+                policy,
+                await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false),
+                reached,
+                trusts: false);
+
+            _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted || open.Presented.Contains(entry));
+        }
+        else
+        {
+            // 09 POST /auth/factor (D-194): after a second step accepted before any
+            // first factor, what is left is the first factors the challenge opened with.
+            wanted = (await FirstFactorsAsync(cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<List<Factor>>(error, ref failure));
+
+            if (failure is not null)
+            {
+                return Result.Failure<SignInProgress?>(failure);
+            }
+        }
 
         return wanted.Count is 0
             ? Result.Failure<SignInProgress?>(Error.From(ErrorCodes.FactorRejected))
-            : Result.Success<SignInProgress?>(new SignInProgress(
-                SignInStatus.FactorRequired,
-                reached.Level,
-                reached.PhishingResistant,
-                wanted,
-                TrustDeviceOffered: false,
-                Session: null,
-                Requirement: null,
-                PasswordChangeRequired: false));
+            : Result.Success<SignInProgress?>(Left(reached, wanted, changeRequired: false));
     }
 
     /// <inheritdoc/>
@@ -1737,6 +1749,27 @@ internal sealed class AuthenticationService(
         Assurance reached = Assurance.Reached(Properties(open.Presented))
             ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
 
+        // 09 POST /auth/factor (D-194): a second step accepted before any first factor
+        // reaches no level, and what is left to present is the first factors the
+        // challenge opened with, never the second step accepted nor another. A sign-in
+        // left with none is refused, never completed.
+        if (!FirstAccepted(open))
+        {
+            List<Factor> first = (await FirstFactorsAsync(cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<List<Factor>>(error, ref failure));
+
+            if (failure is not null || first.Count is 0)
+            {
+                return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
+            }
+
+            return Result.Success(new SignInOutcome(
+                Left(reached, first, changeRequired),
+                Session: null,
+                Remembered: null,
+                Trusted: null));
+        }
+
         bool trusts = trusted is not null
             && await devices.TrustsAsync(subject, trusted, cancellationToken).ConfigureAwait(false);
 
@@ -1768,15 +1801,7 @@ internal sealed class AuthenticationService(
         if (wanted.Count > 0)
         {
             return Result.Success(new SignInOutcome(
-                new SignInProgress(
-                    SignInStatus.FactorRequired,
-                    reached.Level,
-                    reached.PhishingResistant,
-                    wanted,
-                    TrustDeviceOffered: false,
-                    Session: null,
-                    Requirement: null,
-                    changeRequired),
+                Left(reached, wanted, changeRequired),
                 Session: null,
                 Remembered: null,
                 Trusted: null));
@@ -1856,6 +1881,35 @@ internal sealed class AuthenticationService(
         SubjectId subject,
         CancellationToken cancellationToken) =>
         await passwordStore.FindAsync(subject, cancellationToken).ConfigureAwait(false) is not null;
+
+    // 09 POST /auth/begin: the challenge's available is the deployment's enabled
+    // primary set, never the account's, so it reads the same for every identifier.
+    private static List<Factor> Available(Policy system) =>
+        [.. system.LoginFactors.Where(factor => FactorCatalogue.Of(factor).CanBePrimary).Order()];
+
+    // Whether a first factor has been accepted on the challenge, which is what a
+    // second step is second to.
+    private static bool FirstAccepted(Challenge open) =>
+        open.Presented.Any(factor => FactorCatalogue.Of(factor).CanBePrimary);
+
+    // A sign-in that has more to present: what the factors accepted reach so far and
+    // what is left (09 POST /auth/factor).
+    private static SignInProgress Left(Assurance reached, List<Factor> required, bool changeRequired) =>
+        new(
+            SignInStatus.FactorRequired,
+            reached.Level,
+            reached.PhishingResistant,
+            required,
+            TrustDeviceOffered: false,
+            Session: null,
+            Requirement: null,
+            changeRequired);
+
+    // 09 POST /auth/factor (D-194): the first factors of the challenge's available,
+    // read as the challenge's opening read them.
+    private async ValueTask<Result<List<Factor>>> FirstFactorsAsync(CancellationToken cancellationToken) =>
+        (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
+        .Match(system => Result.Success(Available(system)), Result.Failure<List<Factor>>);
 
     // The account's own second step raises what a sign-in has to reach above the
     // policy's floor: enrolling one is asking to be asked (AUTH-FACT-002b). A trusted
