@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- At a social provider's token endpoint only a 400 whose `error` is `invalid_grant`
+  refuses the code the browser carried: `auth.factor.rejected`, counted and recorded.
+  Every other answer but a success holding an identity token returns the browser with
+  `error=auth.provider.unavailable`, counts and records nothing and raises
+  `degradation` under `provider.unavailable:<provider>` with `part` `token`: a 5xx, a
+  429, a refusal of the deployment's own client (`invalid_client`,
+  `unauthorized_client` and any other refusal), an answer that cannot be read, and a
+  success holding no identity token. Each of these but an unreadable success was
+  answered `auth.factor.rejected` and counted against the person.
 - A social provider's return from an address that has earned a delay is answered
   `error=auth.throttled` with `retryAt` whatever it carries, the provider's own error
   or no code included, where such a return was answered `auth.factor.rejected` before

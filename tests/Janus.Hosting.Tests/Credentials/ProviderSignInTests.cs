@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -684,6 +685,101 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         Assert.Empty(_deployment.SessionAudit.Failed);
         Assert.Contains((LogLevel.Error, 21), _deployment.ProviderLog.Entries);
         AssertRaised("token", times: 4);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 AC6 and chapter 11 section 7.4: every answer of a token endpoint
+    /// but a success holding an identity token and a 400 whose error is
+    /// <c>invalid_grant</c> is the provider unavailable: a 5xx, a 429, a refusal of the
+    /// deployment's own client under any status, any other refusal, an answer that
+    /// cannot be read, and a success holding no identity token. The browser is returned
+    /// with the code of that, no failed authentication is recorded, nothing is
+    /// counted, so a fourth return in a row is answered as the first was, and each
+    /// raises the degradation naming the token endpoint.
+    /// </summary>
+    /// <param name="status">The status the token endpoint answers.</param>
+    /// <param name="body">The body it answers with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(500, "{\"error\":\"server_error\"}")]
+    [InlineData(503, "")]
+    [InlineData(502, "<html>bad gateway</html>")]
+    [InlineData(429, "{\"error\":\"slow_down\"}")]
+    [InlineData(401, "{\"error\":\"invalid_client\"}")]
+    [InlineData(400, "{\"error\":\"invalid_client\"}")]
+    [InlineData(400, "{\"error\":\"unauthorized_client\"}")]
+    [InlineData(400, "{\"error\":\"invalid_request\"}")]
+    [InlineData(400, "{\"error\":\"unsupported_grant_type\"}")]
+    [InlineData(400, "{\"error\":\"invalid_scope\"}")]
+    [InlineData(400, "{\"error\":7}")]
+    [InlineData(400, "{}")]
+    [InlineData(400, "<html>bad request</html>")]
+    [InlineData(401, "{\"error\":\"invalid_grant\"}")]
+    [InlineData(403, "{\"error\":\"access_denied\"}")]
+    [InlineData(404, "")]
+    [InlineData(200, "{\"access_token\":\"a-token\",\"token_type\":\"Bearer\"}")]
+    [InlineData(200, "{\"id_token\":7}")]
+    [InlineData(200, "{\"id_token\":\"\"}")]
+    [InlineData(200, "[]")]
+    [InlineData(200, "")]
+    public async Task IDN_LIFE_012_AC6_ATokenEndpointAnsweringAnythingButATokenOrInvalidGrantIsUnavailableAsync(
+        int status,
+        string body)
+    {
+        var browser = new Browser(_deployment);
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _deployment.SocialProviders.TokenAnswer = ((HttpStatusCode)status, body);
+            landed.Add((await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject))).Location);
+            _deployment.SocialProviders.TokenAnswer = null;
+        }
+
+        Assert.All(landed, where => Assert.Equal(Page + "?error=" + ErrorCodes.ProviderUnavailable, where));
+        Assert.Empty(_deployment.SessionAudit.Failed);
+        Assert.Contains((LogLevel.Error, 21), _deployment.ProviderLog.Entries);
+        AssertRaised("token", times: 4);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 AC6 and RFC 6749 section 5.2: a token endpoint answering a 400
+    /// whose error is <c>invalid_grant</c> refuses the code the browser carried. The
+    /// browser is returned with the code of a refused factor, the refusal is recorded
+    /// as a failed authentication and counted against the address, which a fourth
+    /// return finds under its delay, and no degradation is raised.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AC6_ATokenEndpointAnsweringInvalidGrantRefusesTheCodeCountedAndRecordedAsync()
+    {
+        var browser = new Browser(_deployment);
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _deployment.SocialProviders.TokenAnswer =
+                (HttpStatusCode.BadRequest, "{\"error\":\"invalid_grant\"}");
+            landed.Add((await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject))).Location);
+            _deployment.SocialProviders.TokenAnswer = null;
+        }
+
+        Assert.Equal(
+            [
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            ],
+            landed);
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Google), (null, Factor.Google), (null, Factor.Google)],
+            _deployment.SessionAudit.Failed);
+        Assert.Empty(_deployment.Raised.Waiting);
     }
 
     /// <summary>
