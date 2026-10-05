@@ -4428,7 +4428,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: every read that fails is a refresh that fails.
   2. Only the job's read raises `botdefence.ranges.refresh`; the read at a registration raises the absence alone.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **203. Tier 3. AUTH-STEP-002 step 2 and criterion 4c, `09` `POST /auth/step-up`: what a call answers, and what it writes, before the accepted factors reach the gate.**
 
@@ -4436,7 +4436,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** The factors are held "until together they reach the gate". For a step-up that names no action the gate is the strictest of the policy's gates (D-187). No chapter says whether the session is raised at each call or only once the gate is reached.
 - **What the code does.** Each call raises the session to what the factors accepted so far prove, as before, and answers 200 `factorRequired` with the factors still to present until the strictest gate is met, then `complete`. So a password alone at a step-up on an account that holds a second step now answers `factorRequired`; it answered `complete` before.
 - **Parked.** Writing the session only once the gate is reached.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **204. Tier 3. AUTH-STEP-002: a step-up whose accepted factors do not reach the gate and for which nothing more can be presented.**
 
@@ -4444,14 +4444,14 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** No chapter says what this answers.
 - **What the code does.** As before the change: 200 `complete` with what the session attained, and the challenge ends. An ask in the same state is answered 403 `auth.stepup.required` with its outcome.
 - **Parked.** Any other answer.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **205. Tier 3. AUTH-STEP-002 criterion 4: a bare password at a step-up under a session that attained more.**
 
 - **Item.** Met while building question 193. Read from the code only; no test confirms or refutes it.
 - **The lead.** `Session.Present` never lowers what the session attained and always sets the instant it attained it. `SessionService.PresentAsync` calls it with what the presented factors prove. If that is the whole of it, a password alone presented at a step-up under a session that attained `aal2` earlier renews the age of that proof, against "a bare password passes no gate".
 - **Parked.** Nothing built. The reading is to be confirmed by a test before anything is changed.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **206. Tier 2. AUTH-RECOV-007 criterion 8 against IDN-LIFE-009b: a `phoneCode` ask naming a suspended number where the policy does not permit `phoneCode`.**
 
@@ -4461,7 +4461,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. 422 `auth.credential.suspended` whatever the policy permits.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **207. Tier 2. `09` `POST /recovery/report-loss`: a report on a credential a provider's security event holds.**
 
@@ -4471,7 +4471,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The report opens on it (202).
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **208. Tier 2. AUTH-RECOV-007: a suspended social credential whose provider vouches.**
 
@@ -4481,14 +4481,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. The provider's vouching is a proof that verifies, so the answer is `auth.credential.suspended`, declared on the callback route.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **209. Tier 3. AUTH-FACT-002: a delivered code presented after the credential of its factor is gone.**
 
 - **Item.** Met while building question 190. Read from the code only; no test confirms or refutes it.
 - **The lead.** A delivered code is judged without looking at the account's credential of that factor, but for the suspended check of question 190. If that is the whole of it, a right `phoneCode` code sent before the account's `phoneCode` credential was removed or invalidated is still accepted within the code's lifetime.
 - **Parked.** Nothing built. The reading is to be confirmed by a test before anything is changed.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 **210. Tier 3. AUTH-RECOV-007 against AUTH-FACT-014 criterion 3: a suspended key whose signature counter did not advance.**
 
@@ -4496,7 +4496,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** "Judged first as an active one would be" does not say whether the counter is part of what verifies.
 - **What the code does.** A suspended key runs every check an active one does, the counter included: one whose counter did not advance is refused `auth.webauthn.countermismatch` and audited as an active key's is, and only one that passes every check is told it is suspended.
 - **Parked.** Refusing as suspended before the counter is judged.
-- **Answer:** pending.
+- **Answer:** D-191.
 
 ## 5. Gate result
 
