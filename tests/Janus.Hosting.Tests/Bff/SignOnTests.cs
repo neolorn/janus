@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -413,6 +414,211 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// BFF-ERR-002, BFF-CSRF-005a and chapter 09: a start for which no
+    /// pre-authentication session can be issued is a fault, answered as the pipeline
+    /// answers one: the browser is sent nowhere, no code is carried in a redirect and
+    /// no request is pushed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AStartNoPreAuthenticationSessionCanBeIssuedForIsAFaultAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        deployment.Work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
+
+        Answer faulted = await new Browser(deployment).SendAsync("GET", Start);
+
+        Faulted(faulted);
+        Assert.Empty(deployment.Contacts.All);
+        Assert.Empty(deployment.Provider.Asked);
+    }
+
+    /// <summary>
+    /// BFF-ERR-002 and chapter 09: a push the authentication application cannot be
+    /// reached for is a fault, and nothing is bound to the browser.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_APushThatCannotReachTheAuthenticationApplicationIsAFaultAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        deployment.Provider.Reachable = false;
+
+        Answer faulted = await new Browser(deployment).SendAsync("GET", Start);
+
+        Faulted(faulted);
+        Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
+    }
+
+    /// <summary>
+    /// BFF-ERR-002 and chapter 09: a push answered a 5xx, or with no answer in its
+    /// protocol's shape (neither the reference nor a refusal naming its
+    /// <c>error</c>), is a fault and never the code of a session that is not there.
+    /// </summary>
+    /// <param name="status">The status the push is answered.</param>
+    /// <param name="body">The body it is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, """{"error":"server_error"}""")]
+    [InlineData(HttpStatusCode.InternalServerError, "")]
+    [InlineData(HttpStatusCode.BadGateway, "<html></html>")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "{}")]
+    [InlineData(HttpStatusCode.Created, "{}")]
+    [InlineData(HttpStatusCode.Created, """{"expires_in":60}""")]
+    [InlineData(HttpStatusCode.Created, "")]
+    [InlineData(HttpStatusCode.Found, "")]
+    [InlineData(HttpStatusCode.BadRequest, "")]
+    [InlineData(HttpStatusCode.BadRequest, "<html></html>")]
+    [InlineData(HttpStatusCode.BadRequest, "{}")]
+    public async Task BFF_ERR_002_APushAnsweredA5xxOrOutsideItsProtocolsShapeIsAFaultAsync(
+        HttpStatusCode status,
+        string body)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        deployment.Provider.Answers["/oidc/par"] = (status, body);
+
+        Answer faulted = await new Browser(deployment).SendAsync("GET", Start);
+
+        Faulted(faulted);
+        Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 and chapter 09: a push the authentication application refuses in
+    /// its protocol's shape is a refusal: the browser is returned to where it was going
+    /// with the code of a session that is not there.
+    /// </summary>
+    /// <param name="status">The status the push is answered.</param>
+    /// <param name="body">The body it is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, """{"error":"invalid_request"}""")]
+    [InlineData(HttpStatusCode.Unauthorized, """{"error":"invalid_client"}""")]
+    public async Task BFF_SESS_006_APushRefusedInItsProtocolsShapeReturnsTheBrowserExpiredAsync(
+        HttpStatusCode status,
+        string body)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        deployment.Provider.Answers["/oidc/par"] = (status, body);
+
+        Answer refused = await new Browser(deployment).SendAsync("GET", Start);
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+    }
+
+    /// <summary>
+    /// BFF-ERR-002 and chapter 09: an exchange the authentication application cannot
+    /// be reached for is a fault, and no session is established.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AnExchangeThatCannotReachTheAuthenticationApplicationIsAFaultAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        deployment.Provider.Reachable = false;
+
+        Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Faulted(faulted);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-002 and chapter 09: an exchange answered a 5xx, or with no answer in
+    /// its protocol's shape (neither the identity token nor a refusal naming its
+    /// <c>error</c>), is a fault and never the code of a session that is not there.
+    /// </summary>
+    /// <param name="status">The status the exchange is answered.</param>
+    /// <param name="body">The body it is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, """{"error":"server_error"}""")]
+    [InlineData(HttpStatusCode.InternalServerError, "")]
+    [InlineData(HttpStatusCode.BadGateway, "<html></html>")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "{}")]
+    [InlineData(HttpStatusCode.OK, "{}")]
+    [InlineData(HttpStatusCode.OK, """{"access_token":"a"}""")]
+    [InlineData(HttpStatusCode.OK, "")]
+    [InlineData(HttpStatusCode.Found, "")]
+    [InlineData(HttpStatusCode.BadRequest, "")]
+    [InlineData(HttpStatusCode.BadRequest, "<html></html>")]
+    [InlineData(HttpStatusCode.BadRequest, "{}")]
+    public async Task BFF_ERR_002_AnExchangeAnsweredA5xxOrOutsideItsProtocolsShapeIsAFaultAsync(
+        HttpStatusCode status,
+        string body)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        deployment.Provider.Answers["/oidc/token"] = (status, body);
+
+        Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Faulted(faulted);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 and chapter 09: an exchange the authentication application refuses
+    /// in its protocol's shape is a refusal: the browser is returned to the stored
+    /// return address with the code of a session that is not there.
+    /// </summary>
+    /// <param name="status">The status the exchange is answered.</param>
+    /// <param name="body">The body it is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, """{"error":"invalid_grant"}""")]
+    [InlineData(HttpStatusCode.Unauthorized, """{"error":"invalid_client"}""")]
+    public async Task BFF_SESS_006_AnExchangeRefusedInItsProtocolsShapeReturnsTheBrowserExpiredAsync(
+        HttpStatusCode status,
+        string body)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        deployment.Provider.Answers["/oidc/token"] = (status, body);
+
+        Answer refused = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
     /// BFF-SESS-006: the browser is sent back onto this application, so a return
     /// address naming another site is not one it is sent to.
     /// </summary>
@@ -436,6 +642,14 @@ public sealed class SignOnTests
     }
 
     private static string Start => "/auth/signon?returnTo=" + Uri.EscapeDataString(Page);
+
+    // BFF-ERR-002: the pipeline's answer to a fault, which sends the browser nowhere.
+    private static void Faulted(Answer answered)
+    {
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), answered.Text("code"));
+        Assert.Null(answered.Location);
+    }
 
     private static string Where(Answer answered) =>
         answered.Location ?? throw new InvalidOperationException("The answer forwarded nowhere.");

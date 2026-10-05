@@ -131,7 +131,7 @@ internal sealed class ProviderSignIn(
 
         Error? failure = null;
 
-        ProviderBinding binding = (await BindingAsync(context, provider, intended, cancellationToken)
+        ProviderBinding binding = (await BindingAsync(provider, intended, cancellationToken)
                 .ConfigureAwait(false))
             .Match(bound => bound, error => Withheld<ProviderBinding>(error, ref failure));
 
@@ -406,7 +406,6 @@ internal sealed class ProviderSignIn(
     // pre-authentication session, and one to link to the session it links for, which
     // must already be allowed to link (IDN-LIFE-012, 10 section 5a).
     private async ValueTask<Result<ProviderBinding>> BindingAsync(
-        HttpContext context,
         Factor provider,
         ProviderIntent intended,
         CancellationToken cancellationToken)
@@ -431,12 +430,11 @@ internal sealed class ProviderSignIn(
             return Result.Failure<ProviderBinding>(Error.From(ErrorCodes.RegistrationSignedIn));
         }
 
-        if (browser.FirstContact is not PreAuthentication contact)
-        {
-            BrowserProfileLog.ProviderUnbound(log, context.TraceIdentifier);
-
-            return Result.Failure<ProviderBinding>(Error.From(ErrorCodes.SessionCsrfInvalid));
-        }
+        // BFF-ERR-002, chapter 09: a browser that reached here holds no session, so it
+        // was issued a pre-authentication session unless none could be issued, which
+        // is a fault and no refusal of the person's (BFF-CSRF-005a).
+        PreAuthentication contact = browser.FirstContact
+            ?? throw new InvalidOperationException("No pre-authentication session was issued for the round trip.");
 
         return intended is ProviderIntent.Register && contact.Registration is null
             ? Result.Failure<ProviderBinding>(Error.From(ErrorCodes.SessionExpired))

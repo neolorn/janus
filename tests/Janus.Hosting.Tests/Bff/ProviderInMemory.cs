@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -38,6 +39,13 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
     /// </summary>
     public bool Reachable { get; set; } = true;
 
+    /// <summary>
+    /// What the provider answers a request to a path with, where a test sets one, in
+    /// place of what the deployment would answer: the status and the body, as written.
+    /// </summary>
+    public IDictionary<string, (HttpStatusCode Status, string Body)> Answers { get; } =
+        new Dictionary<string, (HttpStatusCode Status, string Body)>(StringComparer.Ordinal);
+
     /// <inheritdoc/>
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -53,6 +61,14 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
         if (!Reachable)
         {
             throw new HttpRequestException("The provider is unreachable.");
+        }
+
+        if (Answers.TryGetValue(address.AbsolutePath, out (HttpStatusCode Status, string Body) set))
+        {
+            return new HttpResponseMessage(set.Status)
+            {
+                Content = new StringContent(set.Body, Encoding.UTF8, "application/json"),
+            };
         }
 
         var context = new DefaultHttpContext();

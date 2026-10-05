@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A fault on a navigation route stays a fault, answered 500 `system.fault` and never
+  carried as a code in `error`. A start of the sign-on, or of a provider round trip to
+  sign in or to register, for which no pre-authentication session can be issued is
+  such a fault and no longer `auth.session.csrfinvalid`; so is a push or an exchange
+  of the sign-on that the authentication application answers with a 5xx or with no
+  answer in its protocol's shape, which returned the browser with
+  `auth.session.expired` before. A refusal it answers in that shape, a 4xx naming its
+  `error`, still returns the browser with `auth.session.expired`.
 - `GET /auth/providers/{provider}` started to link declares, under its redirect, the
   codes of the link's gate it asks before the browser leaves: `auth.stepup.required`,
   `authz.restricted` and `authz.denied`, beside `auth.factor.notpermitted` for a

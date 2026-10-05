@@ -805,6 +805,30 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ERR-002, BFF-CSRF-005a and chapter 09: a start to sign in or to register
+    /// for which no pre-authentication session can be issued is a fault, answered as
+    /// the pipeline answers one: the browser is sent nowhere, no code is carried in a
+    /// redirect and no attempt is bound.
+    /// </summary>
+    /// <param name="intent">What the round trip was started for.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("signin")]
+    [InlineData("register")]
+    public async Task BFF_ERR_002_AStartNoPreAuthenticationSessionCanBeIssuedForIsAFaultAsync(string intent)
+    {
+        _deployment.Work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
+
+        Answer faulted = await new Browser(_deployment).SendAsync("GET", Start("google", intent));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, faulted.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), faulted.Text("code"));
+        Assert.Null(faulted.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+        Assert.Equal(0, _deployment.SocialProviders.Calls);
+    }
+
+    /// <summary>
     /// BFF-CSRF-005a AC1 and chapter 09: a start to sign in from a browser that
     /// carries no pre-authentication session is issued one, and the attempt is bound to
     /// it: the browser is sent to the provider, and the return it then makes is judged
