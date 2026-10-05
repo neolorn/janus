@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A repeated `POST /account/identifiers` whose pending verification was swept or
+  abandoned between the read of the account's identifiers and the lock of its row now
+  proceeds as a fresh add, judged against the maximum, staged and sent its code, where
+  it answered 202 and staged and sent nothing.
 - A repeated `PUT /account/identifiers/{id}/replace` naming the value already staged
   is a resend, where it was refused 409 `identity.change.pending`: it sends again the
   new address's code and, where the displaced address must confirm and has not, its

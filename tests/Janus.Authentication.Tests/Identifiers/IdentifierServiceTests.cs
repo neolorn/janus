@@ -3566,6 +3566,70 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-004 (D-189): a repeated add whose pending verification is gone under
+    /// its row's lock, taken by the sweep meanwhile, proceeds as a fresh add: it is
+    /// staged under an identifier of its own, its code is sent, the set hears of it and
+    /// the unit of work commits.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_ARepeatedAddWhosePendingVerificationIsGoneIsStagedAfreshAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId swept = Named(await HeldAsync(), Second).Id;
+        _work.Reset();
+        _pending.Locking = identifier =>
+            _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask().GetAwaiter().GetResult();
+
+        await AddedAsync(Second);
+
+        PendingVerification staged = Assert.Single(_pending.All);
+        Assert.NotEqual(swept, staged.Identifier);
+        Assert.Equal(Second, staged.Staged.Canonical);
+        Assert.False(staged.IsReplacement);
+        Assert.True(Outstanding(staged.Identifier).IsAnswerable());
+        Assert.Equal(2, Sent(MessageKind.VerificationLink));
+        Assert.Equal(2, Sent(MessageKind.IdentifierAdded));
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 (D-189): the fresh add a repeated add proceeds as is judged against
+    /// the maximum on the set as it then stands, so where the kind is full without the
+    /// verification that is gone it is refused <c>identity.identifier.maximum</c>,
+    /// nothing is staged or sent and the unit of work is rolled back.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_ARepeatedAddWhosePendingVerificationIsGoneIsJudgedAgainstTheMaximumAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId swept = Named(await HeldAsync(), Second).Id;
+        _work.Reset();
+        _pending.Locking = identifier =>
+        {
+            _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask().GetAwaiter().GetResult();
+            _ = _directory.Verified(_person, IdentifierKind.Email, Third);
+        };
+
+        ErrorCode refused = Refused(await Service.AddAsync(
+            Acting,
+            Stepped(),
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.IdentifierMaximum, refused);
+        Assert.DoesNotContain(_pending.All, pending => pending.Identifier != swept);
+        Assert.Equal(1, Sent(MessageKind.VerificationLink));
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC8 (D-189): a repeated replace naming the staged value is a resend
     /// on the same staged replace: it sends again the new address's code and, where the
     /// displaced address must confirm and has not, its confirmation, and is answered as

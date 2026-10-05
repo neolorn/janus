@@ -175,7 +175,7 @@ internal sealed class IdentifierService(
         await directory.LockValuesAsync([(kind, canonical)], cancellationToken).ConfigureAwait(false);
 
         (Error? refused, bool staged) = await StageAsync(
-                subject, session, held, kind, entered, canonical, source, cancellationToken)
+                subject, session, held, kind, entered, canonical, maximum, source, cancellationToken)
             .ConfigureAwait(false);
 
         if (refused is not null)
@@ -1750,6 +1750,7 @@ internal sealed class IdentifierService(
         IdentifierKind kind,
         string entered,
         string canonical,
+        int maximum,
         string source,
         CancellationToken cancellationToken)
     {
@@ -1757,23 +1758,39 @@ internal sealed class IdentifierService(
         // on, so asking again sends again rather than starting a second wait.
         if (Standing(held, canonical) is HeldIdentifier standing)
         {
-            PendingVerification? again = standing.IsVerified
-                ? null
-                : await pending.FindForUpdateAsync(standing.Id, cancellationToken).ConfigureAwait(false);
-
-            if (again is null)
+            if (standing.IsVerified)
             {
                 return (null, false);
             }
 
-            if (await AskAsync(again, source, cancellationToken).ConfigureAwait(false) is Error refused)
+            if (await pending.FindForUpdateAsync(standing.Id, cancellationToken).ConfigureAwait(false)
+                is PendingVerification again)
             {
-                return (refused, false);
+                if (await AskAsync(again, source, cancellationToken).ConfigureAwait(false) is Error refused)
+                {
+                    return (refused, false);
+                }
+
+                await pending.RecordAsync(again, cancellationToken).ConfigureAwait(false);
+
+                return (null, true);
             }
 
-            await pending.RecordAsync(again, cancellationToken).ConfigureAwait(false);
+            // REG-IDENT-004 (D-189): the pending verification is gone under its row's
+            // lock, swept or abandoned since the set was read, so the add proceeds as a
+            // fresh one. The caller holds the value's lock; the set is read again, and
+            // judged against the maximum without the verification that is gone.
+            held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-            return (null, true);
+            if (Standing(held, canonical) is not null)
+            {
+                return (null, false);
+            }
+
+            if (held.OfKind(kind).Count >= maximum)
+            {
+                return (Error.From(ErrorCodes.IdentifierMaximum), false);
+            }
         }
 
         var staged = PendingVerification.ToAdd(
