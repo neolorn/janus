@@ -222,21 +222,25 @@ internal sealed class ProviderSignIn(
             return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
         }
 
-        if (error is { Length: > 0 } || code is not { Length: > 0 } issued)
-        {
-            BrowserProfileLog.ProviderRefused(log, context.TraceIdentifier, provider);
-
-            return Back(context, attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
-        }
-
-        // AUTH-ABUSE-001: an address that has earned a delay is sent back before the
-        // code is traded, so this server makes no call to the provider on its behalf.
+        // AUTH-ABUSE-001 AC12: an address that has earned a delay is sent back first,
+        // whatever its return carries and before any code is traded, so this server
+        // makes no call to the provider on its behalf.
         if (await authentication
                 .ExchangeDelayedAsync(RequestOrigin.Source(context.Request), cancellationToken)
                 .ConfigureAwait(false)
             is Error delayed)
         {
             return Back(context, attempt.ReturnTo, delayed);
+        }
+
+        // AUTH-ABUSE-001 AC14, CONV-LOG-005: the provider's own error, a cancel
+        // included, and a return with no code present nothing, so the browser goes back
+        // with the code of a refused factor and nothing is counted or recorded.
+        if (error is { Length: > 0 } || code is not { Length: > 0 } issued)
+        {
+            BrowserProfileLog.ProviderRefused(log, context.TraceIdentifier, provider);
+
+            return Back(context, attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
         }
 
         Error? unavailable = null;

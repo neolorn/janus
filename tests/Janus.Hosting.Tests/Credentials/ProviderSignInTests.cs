@@ -379,6 +379,86 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC14 and CONV-LOG-005: a provider's return carrying the
+    /// provider's own error, a cancel included, or no code presents nothing. Whatever
+    /// the round trip was started for, the browser is returned with the code of a
+    /// refused factor, no provider is called, no failed authentication is recorded and
+    /// nothing is counted: a fourth such return in a row is answered as the first was.
+    /// </summary>
+    /// <param name="intent">What the round trip was started for.</param>
+    /// <param name="carried">What the provider returns the browser with, beside the state.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("signin", "error=access_denied")]
+    [InlineData("signin", "error=user_cancelled_authorize")]
+    [InlineData("signin", "")]
+    [InlineData("register", "error=access_denied")]
+    [InlineData("register", "")]
+    [InlineData("link", "error=access_denied")]
+    [InlineData("link", "")]
+    public async Task AUTH_ABUSE_001_AC14_AProvidersOwnErrorOrAMissingCodeCountsAndRecordsNothingAsync(
+        string intent,
+        string carried)
+    {
+        Browser browser = intent switch
+        {
+            "register" => await AgedAsync(),
+            "link" => await Flow.SignedInAsync(_deployment),
+            _ => new Browser(_deployment),
+        };
+        int called = 0;
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", intent)));
+
+            called = _deployment.SocialProviders.Calls;
+            landed.Add((await ReturnedWithAsync(browser, "google", authorization, carried)).Location);
+        }
+
+        Assert.All(landed, where => Assert.Equal(Page + "?error=" + ErrorCodes.FactorRejected, where));
+        Assert.Empty(_deployment.SessionAudit.Failed);
+        Assert.Empty(_deployment.SocialProviders.Exchanges);
+        Assert.Equal(called, _deployment.SocialProviders.Calls);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC12 and AC14: a provider's return from a source under a delay is
+    /// answered throttled first, with the instant the delay lifts, whether it carries a
+    /// code, the provider's own error or neither; it adds nothing to the count and
+    /// records nothing.
+    /// </summary>
+    /// <param name="carried">What the provider returns the browser with, beside the state.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("error=access_denied")]
+    [InlineData("")]
+    public async Task AUTH_ABUSE_001_AC12_AReturnUnderADelayIsThrottledBeforeItsErrorIsReadAsync(string carried)
+    {
+        var browser = new Browser(_deployment);
+        var forged = new ProviderPerson(GoogleSubject) { Forged = true };
+
+        for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default; attempt++)
+        {
+            string refused = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _ = await ReturnedAsync(browser, "google", refused, forged);
+        }
+
+        int recorded = _deployment.SessionAudit.Failed.Count;
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+        Answer landed = await ReturnedWithAsync(browser, "google", authorization, carried);
+
+        Assert.Equal(
+            Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            landed.Location);
+        Assert.Equal(recorded, _deployment.SessionAudit.Failed.Count);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC2: every throttled return names the instant its delay lifts: the
     /// delay the returning address earned, and the delay the account a linked identity
     /// signs into earned from elsewhere.
@@ -1160,6 +1240,29 @@ public sealed class ProviderSignInTests : IAsyncDisposable
             "POST",
             "/callbacks/providers/" + provider + "/return",
             "code=" + Uri.EscapeDataString(code) + "&state=" + Uri.EscapeDataString(Parameter(authorization, "state")!),
+            header: false,
+            origin: null,
+            token: false,
+            contentType: "application/x-www-form-urlencoded");
+
+        Assert.Equal(StatusCodes.Status303SeeOther, forwarded.Status);
+
+        return await browser.SendAsync("GET", Where(forwarded));
+    }
+
+    // The provider returns the browser with no code: with its own error, as it does
+    // where the person cancels, or with the state alone.
+    private static async Task<Answer> ReturnedWithAsync(
+        Browser browser,
+        string provider,
+        string authorization,
+        string carried)
+    {
+        Answer forwarded = await browser.SendAsync(
+            "POST",
+            "/callbacks/providers/" + provider + "/return",
+            (carried.Length > 0 ? carried + "&" : string.Empty)
+                + "state=" + Uri.EscapeDataString(Parameter(authorization, "state")!),
             header: false,
             origin: null,
             token: false,

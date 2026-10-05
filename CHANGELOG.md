@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A social provider's return from an address that has earned a delay is answered
+  `error=auth.throttled` with `retryAt` whatever it carries, the provider's own error
+  or no code included, where such a return was answered `auth.factor.rejected` before
+  the delay was asked. From an address under no delay, a return carrying the
+  provider's own error, a cancel included, or no code still returns
+  `auth.factor.rejected` for every intent, and counts and records nothing.
 - A step-up gate whose level is `delegated`, which is what enrolling asks of an account
   that reaches no more, asks no maximum age: the session counts however long ago it
   reached that level, where it was refused 403 `auth.stepup.required` once the maximum
