@@ -76,7 +76,9 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     {
         await ForgetEarlierRunsAsync();
 
-        // A pass of another test, at a later instant of its own, would fold this one's raise.
+        // The pass carries what it raises where alert-dispatch takes its turn after the
+        // ranges job's, and a pass of another test, at a later instant of its own, would
+        // fold it there.
         await using (NpgsqlConnection earlier = await host.OpenAsync())
         {
             await earlier.ExecuteAsync("DELETE FROM identity.alerts;");
@@ -98,8 +100,11 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             1,
             await connection.ExecuteScalarAsync<int>(
                 """
-                SELECT count(*)::int FROM identity.raised_alerts
-                WHERE condition = 'degradation' AND scope = 'botdefence.ranges.absent' AND raised_at = @at
+                SELECT
+                    (SELECT count(*) FROM identity.raised_alerts
+                     WHERE condition = 'degradation' AND scope = 'botdefence.ranges.absent' AND raised_at = @at)::int
+                    + (SELECT count(*) FROM identity.alerts
+                       WHERE key = 'degradation:botdefence.ranges.absent' AND at = @at)::int
                 """,
                 new { at }));
     }
