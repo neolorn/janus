@@ -4248,7 +4248,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. Both the match and the document use the ASCII form.
   3. It stays: a host writes `webauthn.origins` as a browser writes an origin.
 - **Parked.** That comparison, left as it is.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **189. Tier 2. CONV-DESIGN-007 criterion 7, fourth clause: `KeyRing`'s static members read in `KeyRingService`, and the shape of the contract.**
 
@@ -4259,7 +4259,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The rule is about constructors and factories; a constant or a static helper is not the seam: as built, and what the test asserts.
   2. No naming of the three classes anywhere in `Janus.Hosting`: the names and helpers move off `KeyRing`, to a home no chapter names.
 - **Parked.** Those static reads, left as they are.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **190. Tier 3. `09` `POST /auth/factor`, AUTH-ABUSE-001 and AUTH-RECOV-007: no presentation answers `auth.credential.suspended`.**
 
@@ -4267,7 +4267,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The rows list `auth.credential.suspended` as a failed attempt at both routes. No factor's judgement answers it: a suspended passkey or security key answers `auth.factor.rejected` after its signature verifies; a suspended generator is left out of those a code is judged against; a suspended `phoneCode` is sent nothing and a code presented answers `auth.code.expired`. AUTH-RECOV-007 says a suspended authenticator is rejected and not with which code, nor whether before or after what was presented verifies, nor whether an anonymous caller at `/auth/factor` is told (AUTH-ABUSE-003).
 - **What the code does.** The list holds the code and both routes declare it; nothing answers it there.
 - **Parked.** What a suspended authenticator answers at a sign-in and at a step-up.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **191. Tier 2. `09` `POST /auth/step-up`: `identity.identifier.domainnotallowed` at a step-up.**
 
@@ -4277,7 +4277,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The row lists it at the step-up too.
   2. A step-up never judges the domain lock.
 - **Parked.** That answer, left as it is.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **192. Tier 2. `09` `POST /recovery/report-loss`: 422 `auth.credential.suspended`.**
 
@@ -4287,14 +4287,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. The row and the declaration gain it.
   2. The case answers one of the row's codes.
 - **Parked.** That answer, left as it is.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **193. Tier 3. AUTH-STEP-002 criterion 4 and `09` `POST /auth/step-up`: factors presented over several calls.**
 
 - **Item.** Met while building question 174. Read from the code only; no test confirms or refutes it.
 - **The lead.** `AuthenticationService.RaiseAsync` removes the challenge after one factor, and `SessionService.PresentAsync` judges `Assurance.Proved` over the factors of that one call. If that is the whole of it, a password at one call and a generator's code at the next do not combine to reach the gate, against "called once per factor until the session reaches the gate".
 - **Parked.** Nothing built. The reading is to be confirmed by a test before anything is changed.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **194. Tier 2. AUTH-ABUSE-008, INT-GEN-006 criterion 2 and `10` section 5.23: what the `datacenter-ranges` job itself raises.**
 
@@ -4306,7 +4306,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. A failed refresh raises at the refresh, under a third scope section 5.23 would name, or under `botdefence.ranges.absent` where nothing is held.
   3. The job raises absence or staleness on each run while the signal is counted, so a deployment with no registrations hears of it.
 - **Parked.** Any raise made by the job itself.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **195. Tier 3. CONV-DESIGN-002 criterion 3 and `09` `POST /enrol/begin`: the in-process refusal for an operation that takes only an access context.**
 
@@ -4314,7 +4314,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** Every operation the enrolment session does not reach refuses "an access context of an enrolment session's authority", the operations that meet no gate included. `AccessContext` (public: `Acting`, `Effective`, `Principal`, `BreakGlassReason`) cannot carry that authority: in process it exists only as `CredentialAuthority.Of(EnrolmentSessionId)` on `ICredentials` and as the `EnrolmentSessionId` overloads the session reaches. For the roughly 130 operations that take only an `AccessContext` the refused input cannot be constructed, so the criterion cannot be tested as written, and making it constructible needs a public member no chapter names. Over HTTP the case cannot arise: stage 5 hands no handler an enrolment session off the listed routes.
 - **What the code does.** The six operations of `ICredentials` that take a `CredentialAuthority` and are not listed refuse first, before any load.
 - **Parked.** The refusal in every operation that takes only an `AccessContext`, and in the five that meet no gate (`IReadVolume.ReturnedAsync`, `IProviderProbes.RunAsync`, `IDerivationMaterialiser.RefreshAsync`, `IRecovery.CancelLossAsync`, `IRegistration.BeginAsync`).
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **196. Tier 2. AUTH-RECOV-006 criterion 5: what ends an enrolment session that showed codes, besides the report.**
 
@@ -4325,7 +4325,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. A later enrolment that shows no codes ends it, leaving the shown codes unreportable in that session.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **197. Tier 2. `09` `POST /account/recoverycodes/exported` and IDN-ACCT-007: the report in an enrolment session whose second step showed no codes.**
 
@@ -4336,7 +4336,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The report is refused there, under a code no chapter names.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **198. Tier 3. REG-IDENT-006 and IDN-LIFE-008: what an undo that displaces a value does to the account's sessions.**
 
@@ -4344,7 +4344,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** D-189 has an undo onto a standing identifier displace what it holds "as a replace does". IDN-LIFE-008 speaks of a removal and a replacement, not of an undo.
 - **What the code does.** No session is ended at an undo. A verified value so displaced gets a removal row and its undo link; an unverified one is displaced with no row.
 - **Parked.** Nothing built beyond that.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **199. Tier 3. REG-IDENT-007, questions 178 and 180 together: who staged a replace after a resend from another session.**
 
@@ -4352,7 +4352,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** Question 178 reaches "the pending verification of the replace it staged"; question 180 makes a repeated replace of the staged value a resend. Neither says whether a resend changes who staged it.
 - **What the code does.** A resend changes neither the browser nor the enrolment session recorded: an enrolment session that resends a replace a signed-in session staged is answered 202 and then cannot verify it (422 `auth.code.invalid`). A replace an enrolment session staged before the column existed carries none and is reached by no enrolment session until it is swept and staged again.
 - **Parked.** Any change of who staged a replace at a resend.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **200. Tier 3. REG-SESS-003 against question 178: a press of the link of the replace the enrolment session itself staged.**
 
@@ -4360,7 +4360,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** REG-SESS-003 lets a press verify from the browser that started it. D-189 speaks of a press "naming any other".
 - **What the code does.** As before: in an enrolment session the press shows the code, proves nothing and counts nothing.
 - **Parked.** A press that verifies from the enrolment session.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 **201. Tier 2. Questions 185 and 178: names and shapes the chapters do not give.**
 
@@ -4368,7 +4368,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The removal row's key is the column `removal_id` and the identifier it came from stays in `identifier_id`, with the index `ix_identifier_removals_identifier`; an existing row's key is drawn from its `removed_at`. The enrolment session that staged a replace is the nullable column `identifier_verifications.enrolment`. The press in an enrolment session is the public overload `IIdentifiers.LandAsync(EnrolmentSessionId, string, bool, string, CancellationToken)`.
 - **What the specification says.** The chapters state the behaviour and name none of these.
 - **Parked.** Nothing: built as above.
-- **Answer:** pending.
+- **Answer:** D-190.
 
 ## 5. Gate result
 
