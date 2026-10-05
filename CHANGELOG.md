@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The verification link of a replace an enrolment session staged opens on the
+  authentication application's landing origin, where that session is held, and a
+  press of it there (`POST /account/identifiers/{id}/verify` with `linkToken` and
+  `press`, `IIdentifiers.LandAsync` with the enrolment session) proves the new
+  address and applies the replace, where it showed the code and proved nothing.
+  Every other identifier link still opens on the account application's origin, so
+  a frontend serves the `identifier` kind of `/link` on both applications.
 - `POST /account/identifiers/{id}/undo` ends every session of the account, whether
   the undo restores a removed identifier or moves a replaced value back, where it
   ended none: an undo completes under no session. A browser that held a session is

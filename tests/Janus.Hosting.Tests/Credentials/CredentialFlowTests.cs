@@ -728,6 +728,41 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC10 and API-LAND-001 AC4 (D-190): the link of the replace an
+    /// enrolment session staged lands on the authentication application, where that
+    /// session is held, and a press of it under that session answers 204 and replaces
+    /// the address, the displaced one never asked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_APressOfTheLinkInTheEnrolmentSessionVerifiesTheReplaceAsync()
+    {
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _ = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        await LinkedAsync(subject, mailboxLost: true);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        IdentifierId held = await EmailAsync(subject);
+        _ = await browser.SendAsync("PUT", "/account/identifiers/" + held.Value + "/replace", ("value", Replaced));
+
+        Answer pressed = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + held.Value + "/verify",
+            ("linkToken", Flow.Token(_deployment, IdentifierKind.Email)),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
+        Assert.Contains(
+            _deployment.Mail.Taken,
+            sent => sent.Body.Contains(" https://identity.example.test/link#identifier.", StringComparison.Ordinal));
+        Assert.Contains(
+            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All,
+            identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC3 (D-189) and chapter 09: the enrolment session reaches the
     /// pending verification of the replace it staged and no other, so the code of an add
     /// the account staged from a session answers 422 <c>auth.code.invalid</c> there and

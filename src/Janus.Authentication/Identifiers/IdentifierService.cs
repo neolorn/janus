@@ -551,10 +551,12 @@ internal sealed class IdentifierService(
 
         StagedIdentity staged = waiting.Staged;
 
-        // REG-SESS-003: a press proves the browser only against the session that
-        // staged it, so a replace an enrolment session staged is proved by the code
-        // alone and never by a press from a browser holding no session.
-        bool sameBrowser = waiting.Browser is SessionId staging && session == staging;
+        // REG-SESS-003, REG-IDENT-007 (D-190): a press proves the browser only against
+        // the session that staged the change, which for a replace an enrolment session
+        // staged is that enrolment session and never a browser holding none.
+        bool sameBrowser = waiting.Browser is SessionId staging
+            ? session == staging
+            : waiting.Enrolment is EnrolmentSessionId opened && enrolment == opened;
 
         // The press proves it only from the browser that staged the change; anywhere
         // else the page shows the code and changes nothing, which is what defeats a
@@ -1919,7 +1921,11 @@ internal sealed class IdentifierService(
                     Values = new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["code"] = code,
-                        ["link"] = landing.Of(LinkKind.Identifier, link.Value),
+                        // API-LAND-001, REG-IDENT-007 (D-190): the link lands where the
+                        // session that staged the change is held.
+                        ["link"] = waiting.Enrolment is null
+                            ? landing.Of(LinkKind.Identifier, link.Value)
+                            : landing.OfEnrolmentReplace(link.Value),
                     },
                 },
                 cancellationToken)

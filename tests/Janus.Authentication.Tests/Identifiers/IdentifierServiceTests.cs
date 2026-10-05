@@ -3087,9 +3087,10 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-007 AC3 (D-189): the replace an enrolment session stages keeps which
-    /// session staged it, and a press of its link from that session shows the code and
-    /// proves nothing, as from any browser that holds no session (REG-SESS-003).
+    /// REG-IDENT-007 AC3 (D-189, D-190): the replace an enrolment session stages keeps
+    /// which session staged it and no browser, so a press of its link from a browser
+    /// holding a session of the account, or none, shows the code and proves nothing
+    /// (REG-SESS-003).
     /// </summary>
     [Fact]
     public async Task REG_IDENT_007_AC3_AReplaceKeepsTheEnrolmentSessionThatStagedItAsync()
@@ -3105,12 +3106,76 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
         string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
 
-        LinkLanding landed = (await Service.LandAsync(opened, link, press: true, Source, TestContext.Current.CancellationToken))
-            .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
+        LinkLanding[] landed =
+        [
+            Landed(await Service.LandAsync(Stepped(), link, press: true, Source, TestContext.Current.CancellationToken)),
+            Landed(await Service.LandAsync(session: null, link, press: true, Source, TestContext.Current.CancellationToken)),
+        ];
 
         Assert.Equal(opened, Waiting(email).Enrolment);
-        Assert.False(landed.Verified);
-        Assert.Equal(Code(email), landed.Code);
+        Assert.Null(Waiting(email).Browser);
+        Assert.All(landed, landing => Assert.Equal((false, false, Code(email)), (landing.Verified, landing.SameBrowser, landing.Code)));
+        Assert.False(Waiting(email).Staged.IsVerified);
+        Assert.Empty(_throttle.Failures);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC10, API-LAND-001 AC4 (D-190): the new address's link of a replace
+    /// an enrolment session staged lands on the authentication application, where that
+    /// session is held; the link of a replace a session staged, as of an add, still
+    /// lands on the account application.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_TheLinkOfAnEnrolmentSessionsReplaceLandsOnTheAuthenticationApplicationAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await ReplacingAsync(email, Stepped(), Second);
+        string fromSession = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Values["link"];
+        Accepted(await Service.AbandonAsync(Landing.Token(fromSession), TestContext.Current.CancellationToken));
+
+        Accepted(await Service.ReplaceAsync(
+            Enrolling(mailboxLost: true),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string fromEnrolment = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Values["link"];
+        Assert.StartsWith(Landing.Origins.Account + "/link#identifier.", fromSession, StringComparison.Ordinal);
+        Assert.StartsWith(Landing.Origins.Authentication + "/link#identifier.", fromEnrolment, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC10 (D-190): a press of that link in the browser holding the
+    /// enrolment session that staged the replace verifies it, as a press in the browser
+    /// that staged any replace does: merely opened it changes nothing and says it is
+    /// the same browser; pressed, the swap applies on the new address alone, the code
+    /// that would have proved it is ended, and every session of the account ends,
+    /// since the swap completes under none (IDN-LIFE-008).
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_APressInTheEnrolmentSessionThatStagedTheReplaceVerifiesItAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId elsewhere = Stepped();
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+        Accepted(await Service.ReplaceAsync(opened, email, Second, Source, TestContext.Current.CancellationToken));
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+
+        LinkLanding open = Landed(await Service.LandAsync(opened, link, press: false, Source, TestContext.Current.CancellationToken));
+        bool unproved = !Waiting(email).Staged.IsVerified;
+        LinkLanding pressed = Landed(await Service.LandAsync(opened, link, press: true, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(new LinkLanding(Verified: false, SameBrowser: true, Code: null), open);
+        Assert.True(unproved);
+        Assert.Equal(new LinkLanding(Verified: true, SameBrowser: true, Code: null), pressed);
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
+        Assert.DoesNotContain(_notifications.Mail, sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+        Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
         Assert.Empty(_throttle.Failures);
     }
 
@@ -4612,6 +4677,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private static HeldIdentifier Named(IEnumerable<HeldIdentifier> all, string canonical) =>
         all.Single(identifier =>
             string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+    private static LinkLanding Landed(Result<LinkLanding> outcome) =>
+        outcome.Match(landing => landing, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
     private static void Accepted<TValue>(Result<TValue> outcome) =>
         _ = outcome.Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
