@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Text;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -53,7 +54,8 @@ namespace Janus.Hosting.Credentials;
 /// carrying the code of any refusal and never its words (CONV-CONTENT-001). A signing
 /// credential has the client secret minted at each exchange, so none is stored and
 /// none lapses (OPS-SEC-002). A provider whose discovery document, published keys or
-/// token endpoint cannot be reached or read is no refusal of what the person
+/// token endpoint cannot be reached or read, every answer of the token endpoint but an
+/// identity token and its refusal of the code included, is no refusal of what the person
 /// presented: the browser comes back with the code of that, nothing is counted or
 /// recorded as a failed authentication, and the degradation is raised under the
 /// provider's scope (IDN-LIFE-012 AC6, CONV-LOG-005, OPS-OBS-002).
@@ -80,6 +82,10 @@ internal sealed class ProviderSignIn(
     // Chapter 10 section 5.23: the scope a provider that could not be reached or read is
     // raised under, before the provider's name.
     private const string UnavailableScope = "provider.unavailable:";
+
+    // RFC 6749 section 5.2: the error a token endpoint refuses the grant itself with,
+    // the code invalid, expired, revoked or issued to another client.
+    private const string CodeRefused = "invalid_grant";
 
     // What a round trip is started for, as the start names it.
     private static readonly FrozenDictionary<string, ProviderIntent> Intents =
@@ -125,7 +131,7 @@ internal sealed class ProviderSignIn(
 
         Error? failure = null;
 
-        ProviderBinding binding = (await BindingAsync(context, provider, intended, cancellationToken)
+        ProviderBinding binding = (await BindingAsync(provider, intended, cancellationToken)
                 .ConfigureAwait(false))
             .Match(bound => bound, error => Withheld<ProviderBinding>(error, ref failure));
 
@@ -222,21 +228,25 @@ internal sealed class ProviderSignIn(
             return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
         }
 
-        if (error is { Length: > 0 } || code is not { Length: > 0 } issued)
-        {
-            BrowserProfileLog.ProviderRefused(log, context.TraceIdentifier, provider);
-
-            return Back(context, attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
-        }
-
-        // AUTH-ABUSE-001: an address that has earned a delay is sent back before the
-        // code is traded, so this server makes no call to the provider on its behalf.
+        // AUTH-ABUSE-001 AC12: an address that has earned a delay is sent back first,
+        // whatever its return carries and before any code is traded, so this server
+        // makes no call to the provider on its behalf.
         if (await authentication
                 .ExchangeDelayedAsync(RequestOrigin.Source(context.Request), cancellationToken)
                 .ConfigureAwait(false)
             is Error delayed)
         {
             return Back(context, attempt.ReturnTo, delayed);
+        }
+
+        // AUTH-ABUSE-001 AC14, CONV-LOG-005: the provider's own error, a cancel
+        // included, and a return with no code present nothing, so the browser goes back
+        // with the code of a refused factor and nothing is counted or recorded.
+        if (error is { Length: > 0 } || code is not { Length: > 0 } issued)
+        {
+            BrowserProfileLog.ProviderRefused(log, context.TraceIdentifier, provider);
+
+            return Back(context, attempt.ReturnTo, Error.From(ErrorCodes.FactorRejected));
         }
 
         Error? unavailable = null;
@@ -396,7 +406,6 @@ internal sealed class ProviderSignIn(
     // pre-authentication session, and one to link to the session it links for, which
     // must already be allowed to link (IDN-LIFE-012, 10 section 5a).
     private async ValueTask<Result<ProviderBinding>> BindingAsync(
-        HttpContext context,
         Factor provider,
         ProviderIntent intended,
         CancellationToken cancellationToken)
@@ -421,12 +430,11 @@ internal sealed class ProviderSignIn(
             return Result.Failure<ProviderBinding>(Error.From(ErrorCodes.RegistrationSignedIn));
         }
 
-        if (browser.FirstContact is not PreAuthentication contact)
-        {
-            BrowserProfileLog.ProviderUnbound(log, context.TraceIdentifier);
-
-            return Result.Failure<ProviderBinding>(Error.From(ErrorCodes.SessionCsrfInvalid));
-        }
+        // BFF-ERR-002, chapter 09: a browser that reached here holds no session, so it
+        // was issued a pre-authentication session unless none could be issued, which
+        // is a fault and no refusal of the person's (BFF-CSRF-005a).
+        PreAuthentication contact = browser.FirstContact
+            ?? throw new InvalidOperationException("No pre-authentication session was issued for the round trip.");
 
         return intended is ProviderIntent.Register && contact.Registration is null
             ? Result.Failure<ProviderBinding>(Error.From(ErrorCodes.SessionExpired))
@@ -522,8 +530,11 @@ internal sealed class ProviderSignIn(
                 : null);
     }
 
-    // The code traded for an identity token: the token, nothing where the provider
-    // would not trade it, or that the token endpoint could not be reached or read.
+    // IDN-LIFE-012 AC6: the code traded for an identity token: the token; nothing where
+    // the provider refused the code itself, which is a 400 whose error is
+    // invalid_grant and no other answer (RFC 6749 section 5.2); or that the token
+    // endpoint could not be reached or read, which is every other answer, a refusal of
+    // the deployment's own client and a success holding no identity token among them.
     private async Task<Result<string?>> ExchangedAsync(
         SocialProvider declared,
         ProviderMetadata configured,
@@ -561,20 +572,17 @@ internal sealed class ProviderSignIn(
                 .PostAsync(configured.Token!, form, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (!answered.IsSuccessStatusCode)
+            using var body = JsonDocument.Parse(
+                await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+            if (answered.StatusCode is HttpStatusCode.BadRequest && Member(body, "error") is CodeRefused)
             {
                 return Result.Success<string?>(null);
             }
 
-            using var body = JsonDocument.Parse(
-                await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-
-            return Result.Success(
-                body.RootElement.ValueKind is JsonValueKind.Object
-                && body.RootElement.TryGetProperty("id_token", out JsonElement token)
-                && token.ValueKind is JsonValueKind.String
-                    ? token.GetString()
-                    : null);
+            return answered.IsSuccessStatusCode && Member(body, "id_token") is { Length: > 0 } token
+                ? Result.Success<string?>(token)
+                : Result.Failure<string?>(ProviderKeys.Unavailable(ProviderPart.Token));
         }
         catch (Exception unanswered) when (Unreached(unanswered, cancellationToken))
         {
@@ -582,9 +590,18 @@ internal sealed class ProviderSignIn(
         }
     }
 
+    // A member of the object a token endpoint answered with, where it holds it as text.
+    private static string? Member(JsonDocument answered, string name) =>
+        answered.RootElement.ValueKind is JsonValueKind.Object
+        && answered.RootElement.TryGetProperty(name, out JsonElement member)
+        && member.ValueKind is JsonValueKind.String
+            ? member.GetString()
+            : null;
+
     // IDN-LIFE-012 AC6: the token endpoint was not reached where no response came
     // back, the connection failing or the wait for it running out with the caller
-    // still there, and was not read where what it answered a trade with is no JSON.
+    // still there, and was not read where what it answered a trade with is no JSON,
+    // whatever its status.
     private static bool Unreached(Exception failure, CancellationToken cancellationToken) =>
         failure is HttpRequestException or JsonException
         || (failure is OperationCanceledException && !cancellationToken.IsCancellationRequested);

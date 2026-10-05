@@ -25,7 +25,9 @@ namespace Janus.Hosting.Credentials;
 /// form posts across sites: it reads nothing of the browser and sends it on, by a
 /// read, to the continuation. The start and the continuation declare the codes
 /// chapter 09 gives each to carry in the query member <c>error</c> of its redirect
-/// (CONV-DESIGN-006).
+/// (CONV-DESIGN-006). A link's gate is asked at both ends: at the start, before the
+/// browser leaves, and again on the return before it links, so the start declares the
+/// gate's codes beside its own.
 /// </remarks>
 internal static class ProviderSignInEndpoints
 {
@@ -68,7 +70,10 @@ internal static class ProviderSignInEndpoints
                     ErrorCodes.FactorNotPermitted,
                     ErrorCodes.ProviderUnavailable,
                     ErrorCodes.SessionExpired,
-                    ErrorCodes.RegistrationSignedIn))
+                    ErrorCodes.RegistrationSignedIn,
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.Denied))
                 .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapGet(
@@ -114,7 +119,8 @@ internal static class ProviderSignInEndpoints
                 .Declares(EndpointDeclaration.Answering(
                     ErrorCodes.StepUpRequired,
                     ErrorCodes.Restricted,
-                    ErrorCodes.Denied))
+                    ErrorCodes.Denied,
+                    ErrorCodes.FactorNotPermitted))
                 .Produces(StatusCodes.Status204NoContent);
 
             _ = SessionRequired.On(endpoints.MapDelete(
@@ -167,8 +173,8 @@ internal static class ProviderSignInEndpoints
     }
 
     // IDN-LIFE-012, chapter 10 section 5a: whether the session may link now, which
-    // the start of the round trip asks again, so a browser learns it must step up
-    // before it leaves for the provider rather than after it returns.
+    // the round trip asks again at its start and on its return, so a browser learns it
+    // must step up before it leaves for the provider rather than after it returns.
     private static async Task<IResult> LinkableAsync(
         ICredentials credentials,
         RequestSession browser,

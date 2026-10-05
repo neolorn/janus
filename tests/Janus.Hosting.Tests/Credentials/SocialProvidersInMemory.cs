@@ -146,6 +146,12 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
     public IDictionary<ProviderPart, ProviderOutage> Outages { get; } = new Dictionary<ProviderPart, ProviderOutage>();
 
     /// <summary>
+    /// What the token endpoint of every provider answers each exchange with, where it
+    /// is set, in place of trading the code: the status and the body, as written.
+    /// </summary>
+    public (HttpStatusCode Status, string Body)? TokenAnswer { get; set; }
+
+    /// <summary>
     /// What each exchange the deployment made presented, in order.
     /// </summary>
     public IReadOnlyList<IReadOnlyDictionary<string, string>> Exchanges => _exchanges;
@@ -289,6 +295,14 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         if (Reachable && request.Method == HttpMethod.Post
             && (request.RequestUri == GoogleToken || request.RequestUri == AppleToken))
         {
+            if (TokenAnswer is (HttpStatusCode status, string body))
+            {
+                return new HttpResponseMessage(status)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                };
+            }
+
             return await ExchangedAsync(request, cancellationToken);
         }
 

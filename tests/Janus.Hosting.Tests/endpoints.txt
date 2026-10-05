@@ -279,6 +279,7 @@ POST /account/link/apple
   204
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  422 auth.factor.notpermitted
 DELETE /account/link/google
   204
   401 auth.session.expired
@@ -289,6 +290,7 @@ POST /account/link/google
   204
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  422 auth.factor.notpermitted
 GET /account/mail/apppasswords
   200
     application/json
@@ -1266,7 +1268,7 @@ POST /auth/logout
   403 auth.session.csrfinvalid
 GET /auth/providers/apple
   303
-    error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired identity.registration.signedin
+    error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired auth.stepup.required authz.denied authz.restricted identity.registration.signedin
   403 auth.session.csrfinvalid
 GET /auth/providers/apple/return
   303
@@ -1274,7 +1276,7 @@ GET /auth/providers/apple/return
   403 auth.session.csrfinvalid
 GET /auth/providers/google
   303
-    error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired identity.registration.signedin
+    error api.request.malformed auth.factor.notpermitted auth.provider.unavailable auth.session.expired auth.stepup.required authz.denied authz.restricted identity.registration.signedin
   403 auth.session.csrfinvalid
 GET /auth/providers/google/return
   303

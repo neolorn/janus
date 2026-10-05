@@ -20,6 +20,39 @@ against the public contract of LIB-API-001.
   the answer of a call that presents a factor at a step-up, where every factor of the
   combinations left was named, the accepted ones among them. A sign-in left with
   nothing but a factor already accepted is refused 422 `auth.factor.rejected`.
+- `GET /auth/signon/return` returns the browser with `auth.session.expired` whenever
+  the per-application session is not derived, whatever code the derivation was refused
+  with inside. A derivation refused for a reason other than the record having ended
+  answered that reason's own code and status before.
+- A fault on a navigation route stays a fault, answered 500 `system.fault` and never
+  carried as a code in `error`. A start of the sign-on, or of a provider round trip to
+  sign in or to register, for which no pre-authentication session can be issued is
+  such a fault and no longer `auth.session.csrfinvalid`; so is a push or an exchange
+  of the sign-on that the authentication application answers with a 5xx or with no
+  answer in its protocol's shape, which returned the browser with
+  `auth.session.expired` before. A refusal it answers in that shape, a 4xx naming its
+  `error`, still returns the browser with `auth.session.expired`.
+- `GET /auth/providers/{provider}` started to link declares, under its redirect, the
+  codes of the link's gate it asks before the browser leaves: `auth.stepup.required`,
+  `authz.restricted` and `authz.denied`, beside `auth.factor.notpermitted` for a
+  provider the policy in force does not permit. The return asks the same gate again
+  before it links. `POST /account/link/{provider}` declares the 422
+  `auth.factor.notpermitted` it answers for such a provider.
+- At a social provider's token endpoint only a 400 whose `error` is `invalid_grant`
+  refuses the code the browser carried: `auth.factor.rejected`, counted and recorded.
+  Every other answer but a success holding an identity token returns the browser with
+  `error=auth.provider.unavailable`, counts and records nothing and raises
+  `degradation` under `provider.unavailable:<provider>` with `part` `token`: a 5xx, a
+  429, a refusal of the deployment's own client (`invalid_client`,
+  `unauthorized_client` and any other refusal), an answer that cannot be read, and a
+  success holding no identity token. Each of these but an unreadable success was
+  answered `auth.factor.rejected` and counted against the person.
+- A social provider's return from an address that has earned a delay is answered
+  `error=auth.throttled` with `retryAt` whatever it carries, the provider's own error
+  or no code included, where such a return was answered `auth.factor.rejected` before
+  the delay was asked. From an address under no delay, a return carrying the
+  provider's own error, a cancel included, or no code still returns
+  `auth.factor.rejected` for every intent, and counts and records nothing.
 - A step-up gate whose level is `delegated`, which is what enrolling asks of an account
   that reaches no more, asks no maximum age: the session counts however long ago it
   reached that level, where it was refused 403 `auth.stepup.required` once the maximum

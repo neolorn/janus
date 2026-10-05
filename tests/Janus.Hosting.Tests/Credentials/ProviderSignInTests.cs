@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -379,6 +380,86 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC14 and CONV-LOG-005: a provider's return carrying the
+    /// provider's own error, a cancel included, or no code presents nothing. Whatever
+    /// the round trip was started for, the browser is returned with the code of a
+    /// refused factor, no provider is called, no failed authentication is recorded and
+    /// nothing is counted: a fourth such return in a row is answered as the first was.
+    /// </summary>
+    /// <param name="intent">What the round trip was started for.</param>
+    /// <param name="carried">What the provider returns the browser with, beside the state.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("signin", "error=access_denied")]
+    [InlineData("signin", "error=user_cancelled_authorize")]
+    [InlineData("signin", "")]
+    [InlineData("register", "error=access_denied")]
+    [InlineData("register", "")]
+    [InlineData("link", "error=access_denied")]
+    [InlineData("link", "")]
+    public async Task AUTH_ABUSE_001_AC14_AProvidersOwnErrorOrAMissingCodeCountsAndRecordsNothingAsync(
+        string intent,
+        string carried)
+    {
+        Browser browser = intent switch
+        {
+            "register" => await AgedAsync(),
+            "link" => await Flow.SignedInAsync(_deployment),
+            _ => new Browser(_deployment),
+        };
+        int called = 0;
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", intent)));
+
+            called = _deployment.SocialProviders.Calls;
+            landed.Add((await ReturnedWithAsync(browser, "google", authorization, carried)).Location);
+        }
+
+        Assert.All(landed, where => Assert.Equal(Page + "?error=" + ErrorCodes.FactorRejected, where));
+        Assert.Empty(_deployment.SessionAudit.Failed);
+        Assert.Empty(_deployment.SocialProviders.Exchanges);
+        Assert.Equal(called, _deployment.SocialProviders.Calls);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC12 and AC14: a provider's return from a source under a delay is
+    /// answered throttled first, with the instant the delay lifts, whether it carries a
+    /// code, the provider's own error or neither; it adds nothing to the count and
+    /// records nothing.
+    /// </summary>
+    /// <param name="carried">What the provider returns the browser with, beside the state.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("error=access_denied")]
+    [InlineData("")]
+    public async Task AUTH_ABUSE_001_AC12_AReturnUnderADelayIsThrottledBeforeItsErrorIsReadAsync(string carried)
+    {
+        var browser = new Browser(_deployment);
+        var forged = new ProviderPerson(GoogleSubject) { Forged = true };
+
+        for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default; attempt++)
+        {
+            string refused = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _ = await ReturnedAsync(browser, "google", refused, forged);
+        }
+
+        int recorded = _deployment.SessionAudit.Failed.Count;
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+        Answer landed = await ReturnedWithAsync(browser, "google", authorization, carried);
+
+        Assert.Equal(
+            Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            landed.Location);
+        Assert.Equal(recorded, _deployment.SessionAudit.Failed.Count);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC2: every throttled return names the instant its delay lifts: the
     /// delay the returning address earned, and the delay the account a linked identity
     /// signs into earned from elsewhere.
@@ -607,6 +688,101 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012 AC6 and chapter 11 section 7.4: every answer of a token endpoint
+    /// but a success holding an identity token and a 400 whose error is
+    /// <c>invalid_grant</c> is the provider unavailable: a 5xx, a 429, a refusal of the
+    /// deployment's own client under any status, any other refusal, an answer that
+    /// cannot be read, and a success holding no identity token. The browser is returned
+    /// with the code of that, no failed authentication is recorded, nothing is
+    /// counted, so a fourth return in a row is answered as the first was, and each
+    /// raises the degradation naming the token endpoint.
+    /// </summary>
+    /// <param name="status">The status the token endpoint answers.</param>
+    /// <param name="body">The body it answers with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(500, "{\"error\":\"server_error\"}")]
+    [InlineData(503, "")]
+    [InlineData(502, "<html>bad gateway</html>")]
+    [InlineData(429, "{\"error\":\"slow_down\"}")]
+    [InlineData(401, "{\"error\":\"invalid_client\"}")]
+    [InlineData(400, "{\"error\":\"invalid_client\"}")]
+    [InlineData(400, "{\"error\":\"unauthorized_client\"}")]
+    [InlineData(400, "{\"error\":\"invalid_request\"}")]
+    [InlineData(400, "{\"error\":\"unsupported_grant_type\"}")]
+    [InlineData(400, "{\"error\":\"invalid_scope\"}")]
+    [InlineData(400, "{\"error\":7}")]
+    [InlineData(400, "{}")]
+    [InlineData(400, "<html>bad request</html>")]
+    [InlineData(401, "{\"error\":\"invalid_grant\"}")]
+    [InlineData(403, "{\"error\":\"access_denied\"}")]
+    [InlineData(404, "")]
+    [InlineData(200, "{\"access_token\":\"a-token\",\"token_type\":\"Bearer\"}")]
+    [InlineData(200, "{\"id_token\":7}")]
+    [InlineData(200, "{\"id_token\":\"\"}")]
+    [InlineData(200, "[]")]
+    [InlineData(200, "")]
+    public async Task IDN_LIFE_012_AC6_ATokenEndpointAnsweringAnythingButATokenOrInvalidGrantIsUnavailableAsync(
+        int status,
+        string body)
+    {
+        var browser = new Browser(_deployment);
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _deployment.SocialProviders.TokenAnswer = ((HttpStatusCode)status, body);
+            landed.Add((await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject))).Location);
+            _deployment.SocialProviders.TokenAnswer = null;
+        }
+
+        Assert.All(landed, where => Assert.Equal(Page + "?error=" + ErrorCodes.ProviderUnavailable, where));
+        Assert.Empty(_deployment.SessionAudit.Failed);
+        Assert.Contains((LogLevel.Error, 21), _deployment.ProviderLog.Entries);
+        AssertRaised("token", times: 4);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 AC6 and RFC 6749 section 5.2: a token endpoint answering a 400
+    /// whose error is <c>invalid_grant</c> refuses the code the browser carried. The
+    /// browser is returned with the code of a refused factor, the refusal is recorded
+    /// as a failed authentication and counted against the address, which a fourth
+    /// return finds under its delay, and no degradation is raised.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AC6_ATokenEndpointAnsweringInvalidGrantRefusesTheCodeCountedAndRecordedAsync()
+    {
+        var browser = new Browser(_deployment);
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _deployment.SocialProviders.TokenAnswer =
+                (HttpStatusCode.BadRequest, "{\"error\":\"invalid_grant\"}");
+            landed.Add((await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject))).Location);
+            _deployment.SocialProviders.TokenAnswer = null;
+        }
+
+        Assert.Equal(
+            [
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            ],
+            landed);
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Google), (null, Factor.Google), (null, Factor.Google)],
+            _deployment.SessionAudit.Failed);
+        Assert.Empty(_deployment.Raised.Waiting);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012 and API-CONV-003: the start of a round trip at a provider the
     /// deployment does not declare returns the browser with the code of a factor that
     /// is not permitted. Nothing is presented, so nothing is counted or recorded, no
@@ -626,6 +802,30 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         Assert.Empty(deployment.SessionAudit.Failed);
         Assert.Empty(deployment.Raised.Waiting);
         Assert.DoesNotContain((LogLevel.Error, 21), deployment.ProviderLog.Entries);
+    }
+
+    /// <summary>
+    /// BFF-ERR-002, BFF-CSRF-005a and chapter 09: a start to sign in or to register
+    /// for which no pre-authentication session can be issued is a fault, answered as
+    /// the pipeline answers one: the browser is sent nowhere, no code is carried in a
+    /// redirect and no attempt is bound.
+    /// </summary>
+    /// <param name="intent">What the round trip was started for.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("signin")]
+    [InlineData("register")]
+    public async Task BFF_ERR_002_AStartNoPreAuthenticationSessionCanBeIssuedForIsAFaultAsync(string intent)
+    {
+        _deployment.Work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
+
+        Answer faulted = await new Browser(_deployment).SendAsync("GET", Start("google", intent));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, faulted.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), faulted.Text("code"));
+        Assert.Null(faulted.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+        Assert.Equal(0, _deployment.SocialProviders.Calls);
     }
 
     /// <summary>
@@ -1071,6 +1271,128 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's gate is asked again on the return, before
+    /// it links. A session that met the step-up when the browser left and no longer
+    /// meets it when the provider returns it is returned with the code of that, and
+    /// nothing is linked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAsksForTheStepUpAgainAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/begin",
+            ("label", "This phone"));
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", new OtpNet.Totp(OtpNet.Base32Encoding.ToBytes(begun.Text("secret"))).ComputeTotp(
+                _deployment.Clock.GetUtcNow().UtcDateTime)));
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.StepUpRequired, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's gate is asked again on the return, before
+    /// it links. A provider the policy in force permitted when the browser left and no
+    /// longer permits when it returns is not linked: the browser is returned with the
+    /// code of a factor that is not permitted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAsksThePolicyInForceAgainAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        _deployment.Configuration.Set(Settings.PolicyDefault, WithoutGoogle());
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.FactorNotPermitted, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a link's gate is asked again on the return, before
+    /// it links. An account restricted since the browser left is not linked: the
+    /// browser is returned with the code of that.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AReturnToLinkAsksTheRestrictionAgainAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
+        _deployment.Restriction.Restrict(_deployment.Directory.Created[^1].Subject);
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.Restricted, landed.Location);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a start to link asks the link's gate before the
+    /// browser leaves. A provider the policy in force does not permit is not started:
+    /// the browser is returned with the code of a factor that is not permitted,
+    /// nothing is bound and no provider is called, and the route that answers whether
+    /// the account may link answers the same code in its body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AStartToLinkAProviderThePolicyDoesNotPermitIsNotStartedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Configuration.Set(Settings.PolicyDefault, WithoutGoogle());
+
+        int called = _deployment.SocialProviders.Calls;
+        Answer asked = await browser.SendAsync("POST", "/account/link/google");
+        Answer started = await browser.SendAsync("GET", Start("google", "link"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, asked.Status);
+        Assert.Equal(ErrorCodes.FactorNotPermitted.ToString(), asked.Text("code"));
+        Assert.Equal(StatusCodes.Status303SeeOther, started.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.FactorNotPermitted, started.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+        Assert.Equal(called, _deployment.SocialProviders.Calls);
+        Assert.Empty(_deployment.SessionAudit.Failed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 and chapter 09: a start to link from a restricted account is not
+    /// started: the browser is returned with the code of that and nothing is bound.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012_AStartToLinkFromARestrictedAccountIsNotStartedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Restriction.Restrict(_deployment.Directory.Created[^1].Subject);
+
+        Answer started = await browser.SendAsync("GET", Start("google", "link"));
+
+        Assert.Equal(StatusCodes.Status303SeeOther, started.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.Restricted, started.Location);
+        Assert.Equal(0, _deployment.ProviderAttempts.Count);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012: unlinking a provider the account holds no identity at is answered
     /// as the absence it is.
     /// </summary>
@@ -1134,6 +1456,14 @@ public sealed class ProviderSignInTests : IAsyncDisposable
             });
     }
 
+    // The system's policy with Google taken out of the factors it permits.
+    private static Policy WithoutGoogle() =>
+        Policies.SystemDefault with
+        {
+            LoginFactors = new HashSet<Factor>(
+                Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Google)),
+        };
+
     private static string Start(string provider, string intent) =>
         "/auth/providers/" + provider + "?intent=" + intent + "&returnTo=" + Uri.EscapeDataString(Page);
 
@@ -1160,6 +1490,29 @@ public sealed class ProviderSignInTests : IAsyncDisposable
             "POST",
             "/callbacks/providers/" + provider + "/return",
             "code=" + Uri.EscapeDataString(code) + "&state=" + Uri.EscapeDataString(Parameter(authorization, "state")!),
+            header: false,
+            origin: null,
+            token: false,
+            contentType: "application/x-www-form-urlencoded");
+
+        Assert.Equal(StatusCodes.Status303SeeOther, forwarded.Status);
+
+        return await browser.SendAsync("GET", Where(forwarded));
+    }
+
+    // The provider returns the browser with no code: with its own error, as it does
+    // where the person cancels, or with the state alone.
+    private static async Task<Answer> ReturnedWithAsync(
+        Browser browser,
+        string provider,
+        string authorization,
+        string carried)
+    {
+        Answer forwarded = await browser.SendAsync(
+            "POST",
+            "/callbacks/providers/" + provider + "/return",
+            (carried.Length > 0 ? carried + "&" : string.Empty)
+                + "state=" + Uri.EscapeDataString(Parameter(authorization, "state")!),
             header: false,
             origin: null,
             token: false,

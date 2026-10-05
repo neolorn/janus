@@ -48,8 +48,11 @@ namespace Janus.Hosting.Bff;
 /// read once and dropped: after it, this application holds a session record and nothing
 /// else. The sign-on is a navigation (BFF-ERR-001): a failure other than its state
 /// returns the browser, to where it was going at the start and to the stored return
-/// address at the return, with the code of a session that is not there, and a return
-/// whose state is absent, unbound or mismatched is refused and sent nowhere.
+/// address at the return, with the code of a session that is not there, whatever code
+/// refused it inside, and a return whose state is absent, unbound or mismatched is
+/// refused and sent nowhere. A fault stays a fault (BFF-ERR-002): no pre-authentication
+/// session to bind the start to, or a push or an exchange that did not reach the
+/// provider, was answered a 5xx or read no answer in its protocol's shape.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -198,6 +201,38 @@ internal sealed class SignOn(
     private static string Address(string provider, string route) =>
         provider.TrimEnd('/') + route;
 
+    // BFF-ERR-002, chapter 09: what the authentication application answered a push or
+    // an exchange with. The member asked for is the answer, and a refusal in its
+    // protocol's shape, a 4xx naming its error (RFC 6749 section 5.2), is none. A 5xx,
+    // or anything that is neither, is a fault, as a body that does not read is.
+    private static async ValueTask<string?> AnsweredAsync(
+        HttpResponseMessage answered,
+        string member,
+        CancellationToken cancellationToken)
+    {
+        using var body = JsonDocument.Parse(
+            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+        if (answered.IsSuccessStatusCode && Text(body, member) is { Length: > 0 } value)
+        {
+            return value;
+        }
+
+        return (int)answered.StatusCode is >= StatusCodes.Status400BadRequest and < StatusCodes.Status500InternalServerError
+            && Text(body, "error") is { Length: > 0 }
+                ? null
+                : throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The authentication application answered {(int)answered.StatusCode} outside its protocol's shape."));
+    }
+
+    private static string? Text(JsonDocument body, string member) =>
+        body.RootElement.ValueKind is JsonValueKind.Object
+        && body.RootElement.TryGetProperty(member, out JsonElement held)
+        && held.ValueKind is JsonValueKind.String
+            ? held.GetString()
+            : null;
+
     private static IReadOnlyList<PublishedSigningKey> Withheld(
         Error error,
         ref Error? failure)
@@ -221,12 +256,11 @@ internal sealed class SignOn(
             return Expired(returnTo);
         }
 
-        if (browser.FirstContact is not PreAuthentication contact)
-        {
-            BrowserProfileLog.SignOnUnbound(log, context.TraceIdentifier);
-
-            return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
-        }
+        // BFF-ERR-002, chapter 09: a browser that reached here holds no session, so it
+        // was issued a pre-authentication session unless none could be issued, which
+        // is a fault and no refusal of the person's (BFF-CSRF-005a).
+        PreAuthentication contact = browser.FirstContact
+            ?? throw new InvalidOperationException("No pre-authentication session was issued for the sign-on.");
 
         var state = OpaqueToken.Draw(randomness);
         string verifier = OpaqueToken.Draw(randomness).Value;
@@ -294,17 +328,7 @@ internal sealed class SignOn(
             .PostAsync(new Uri(Address(addresses.Provider, "/oidc/par")), form, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!answered.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        using var body = JsonDocument.Parse(
-            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-
-        return body.RootElement.TryGetProperty("request_uri", out JsonElement reference)
-            ? reference.GetString()
-            : null;
+        return await AnsweredAsync(answered, "request_uri", cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IResult> RedeemAsync(
@@ -345,13 +369,12 @@ internal sealed class SignOn(
             .DeriveAsync(named, SessionType.PerApp, RequestOrigin.Of(context.Request), cancellationToken)
             .ConfigureAwait(false);
 
-        // A record that has ended since the code was issued is a session that is not
-        // there; anything else that kept the session from being derived is a fault.
-        if (derived.Match(_ => (Error?)null, failure => failure) is Error unestablished)
+        // BFF-SESS-006, chapter 09: a session that was not derived is one that is not
+        // there, whatever code the derivation was refused with inside, which is
+        // never carried to the browser.
+        if (derived.Match(_ => false, _ => true))
         {
-            return unestablished.Code == ErrorCodes.SessionExpired
-                ? Expired(attempt.ReturnTo)
-                : Answers.Refused(unestablished);
+            return Expired(attempt.ReturnTo);
         }
 
         // BFF-SESS-004, BFF-CSRF-005a AC3: the pair the browser carries is written
@@ -394,17 +417,7 @@ internal sealed class SignOn(
             .PostAsync(new Uri(Address(addresses.Provider, "/oidc/token")), form, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!answered.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        using var body = JsonDocument.Parse(
-            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-
-        return body.RootElement.TryGetProperty("id_token", out JsonElement token)
-            ? token.GetString()
-            : null;
+        return await AnsweredAsync(answered, "id_token", cancellationToken).ConfigureAwait(false);
     }
 
     // OPS-SEC-002: the secret is read from the registry at each request and held
