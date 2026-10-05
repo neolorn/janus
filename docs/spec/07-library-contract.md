@@ -367,12 +367,15 @@ the application, by `MapIdentityWellKnown`, and SHALL NOT carry the prefix.
 ---
 
 **LIB-HOST-004** — Where authorization is consumed without authentication, the host
-SHALL supply an assurance provider if step-up is required, reporting for the caller the
-attained assurance level, whether it was phishing-resistant, the instant it was attained
-and the account's reachable assurance. The gate is judged from that report (AUTH-STEP-002).
-Absent one, step-up checks SHALL fail closed.
+SHALL supply an assurance provider if step-up is required, reporting for the caller, as
+the session record does (AUTH-SESS-001), the instant each assurance level was last
+reached (`Aal1At`, `Aal2At`, `Aal3At`, none where never), the instant phishing
+resistance was last reached (`PhishingResistantAt`, none where never) and the account's
+reachable assurance (`Reachable`), a presentation renewing only what it reaches. The
+gate is judged from that report as AUTH-STEP-002 step 1 judges a session (D-191). Absent
+one, step-up checks SHALL fail closed.
 
-*Source: D-041, AUTH-STEP-003, D-166, D-183*
+*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191*
 
 **Acceptance criteria**
 1. Authorization alone compiles and runs.
@@ -381,9 +384,10 @@ Absent one, step-up checks SHALL fail closed.
 3. With an assurance provider whose report meets a bound gate, the action is admitted;
    with one whose report does not, it is refused with `auth.stepup.required` carrying the
    gate.
-4. A report whose instant is after now, whose level is not one of `10` section 5.4, or
-   that the provider fails to give, meets no gate; a host-named gate is judged at the
-   strictest of the policy's gates, field by field; where the acting person's own
+4. A report any of whose instants is after now, or that the provider fails to give,
+   meets no gate; a report meets an `aal2` gate only where its `Aal2At` or `Aal3At` lies
+   within the gate's maximum age, whatever its `Aal1At`; a host-named gate is judged at
+   the strictest of the policy's gates, field by field; where the acting person's own
    session of the library carries the request, the provider is not asked.
 
 ---

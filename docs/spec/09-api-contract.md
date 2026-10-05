@@ -564,13 +564,14 @@ challenge whose email the account no longer holds is `auth.factor.rejected`),
 `auth.code.invalid` and `auth.code.expired` (a sign-in code, below),
 `auth.code.replayed` (a TOTP code already used, AUTH-FACT-005),
 `auth.credential.suspended` (a suspended authenticator whose proof verified, or a
-`phoneCode` ask after a first factor naming a suspended number, AUTH-RECOV-007), and
-`auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
-`auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` (an assertion
-refused, AUTH-FACT-011, AUTH-FACT-014); each that refuses a presented factor is a failed
-attempt, save `identity.identifier.domainnotallowed`, which counts no failure
-(AUTH-FACT-004), and a `phoneCode` ask refused where no factor is left, or naming a
-suspended number, counts nothing (AUTH-FACT-002, AUTH-ABUSE-001, D-189, D-190).
+`phoneCode` ask after a first factor naming a suspended number where the policy permits
+`phoneCode`, AUTH-RECOV-007), and `auth.webauthn.algorithmnotallowed`,
+`auth.webauthn.countermismatch`, `auth.webauthn.rpidchanged` and
+`auth.webauthn.userverificationrequired` (an assertion refused, AUTH-FACT-011,
+AUTH-FACT-014); each that refuses a presented factor is a failed attempt, save
+`identity.identifier.domainnotallowed`, which counts no failure (AUTH-FACT-004), and a
+`phoneCode` ask refused where no factor is left, or naming a suspended number, counts
+nothing (AUTH-FACT-002, AUTH-ABUSE-001, D-189, D-190).
 Never 401: that code is session death only (API-CONV-003, D-125).
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
@@ -597,7 +598,8 @@ the challenge as it then stands: **200** `factorRequired` with `required` not na
 `phoneCode`, or **422** `auth.factor.rejected` where no factor is left (AUTH-FACT-002b).
 An ask before a first factor is **202** and sends nothing, whatever the account holds;
 after one, an ask naming a suspended number sends nothing and is **422**
-`auth.credential.suspended`, counting nothing (AUTH-RECOV-007, D-190).
+`auth.credential.suspended`, counting nothing, where the policy in force permits
+`phoneCode`, and **202** otherwise (AUTH-RECOV-007, IDN-LIFE-009b, D-190, D-191).
 
 **Passkey assertions.** The assertion carries the user handle the authenticator
 returned. A handle naming an account other than the credential's owner, or none the
@@ -622,7 +624,7 @@ carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
 requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
-AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190*
+AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -676,27 +678,35 @@ account's, another account's included, one answer for both
 ### `POST /auth/step-up`
 
 Raises an existing session's assurance. Same request and response shape as
-`/auth/factor`; called once per factor until the session reaches the gate. A factor the
-policy in force for the account does not permit is refused `auth.factor.notpermitted`
-before it is verified, and counted (AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask
-whose number answers `risk` is answered as `/auth/factor` answers it: **200**
-`factorRequired` with the combinations the challenge still offers, judged against the
-strictest of the policy's gates field by field, since the step-up names no action;
-**403** `auth.stepup.required` with the outcome AUTH-STEP-002 gives where none is left
-(`report-loss`, `enrol`, or `pending` with `pendingUntil`, D-189); and **200** with
-`required` empty where the factors already presented meet that gate (AUTH-FACT-002,
-AUTH-FACT-002b, D-187, D-188). The shape's refusals of a presented factor are this
-route's too: **422** with each code `/auth/factor` lists as a failed attempt
-(AUTH-ABUSE-001, D-188, D-189), and **422** `identity.identifier.domainnotallowed` where
-a right email code sent to an address the domain lock now refuses is presented: judged
-after the code, it counts no failure (REG-DOM-001, AUTH-FACT-004, D-190). A `phoneCode`
-ask naming a suspended number sends nothing and is **422** `auth.credential.suspended`,
-counting nothing (AUTH-RECOV-007, D-190).
+`/auth/factor`; called once per factor until the session reaches the gate. Each call
+that presents a factor writes into the session record what the factors accepted on the
+challenge reach together, and its **200** reports that in `assuranceLevel` and
+`phishingResistant`: `factorRequired`, with the factors still offered, until the
+strictest of the policy's gates is reached, and `complete` once it is or once no
+combination still offered can be completed with the factors accepted, which ends the
+challenge; the request the step-up was for is judged again by its own gate when it is
+repeated (AUTH-STEP-002, D-191). A factor the policy in force for the account does not
+permit is refused `auth.factor.notpermitted` before it is verified, and counted
+(AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask whose number answers `risk` is
+answered as `/auth/factor` answers it: **200** `factorRequired` with the combinations
+the challenge still offers, judged against the strictest of the policy's gates field by
+field, since the step-up names no action; **403** `auth.stepup.required` with the
+outcome AUTH-STEP-002 gives where none is left (`report-loss`, `enrol`, or `pending`
+with `pendingUntil`, D-189); and **200** with `required` empty where the factors already
+presented meet that gate (AUTH-FACT-002, AUTH-FACT-002b, D-187, D-188). The shape's
+refusals of a presented factor are this route's too: **422** with each code
+`/auth/factor` lists as a failed attempt (AUTH-ABUSE-001, D-188, D-189), and **422**
+`identity.identifier.domainnotallowed` where a right email code sent to an address the
+domain lock now refuses is presented: judged after the code, it counts no failure
+(REG-DOM-001, AUTH-FACT-004, D-190). A `phoneCode` ask naming a suspended number sends
+nothing and is **422** `auth.credential.suspended`, counting nothing, where the policy
+in force permits `phoneCode`, and **202** otherwise (AUTH-RECOV-007, D-190, D-191).
 
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
-*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190*
+*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
+D-191*
 
 Rotates the session identifier on success.
 
@@ -754,11 +764,13 @@ application.
   "subject": "...",
   "assuranceLevel": "aal2",
   "phishingResistant": true,
-  "lastStrongAuthAt": "...",
+  "lastStrongAuthAt": "...",   // when aal2 or above was last reached; null if never
   "expiresAt": "...",
   "landing": "..."        // the origin of the client captured at registration; absent otherwise
 }
 ```
+
+*Source: AUTH-SESS-001, REG-SESS-008, D-166, D-191*
 
 **No organization is returned.** Authorization resolves the organization from the
 resource, never from the session (IDN-MEM-003, AUTHZ-SCOPE-001) — returning one here
@@ -921,12 +933,13 @@ notification.
 
 **202** — accepted; the authenticator is `suspended`; body carries `invalidatesAt`
 **404**: `auth.credential.notfound` for an authenticator invalidated, or not the
-account's (D-190)
+account's (D-190), and for a social credential a provider's security event holds
+(IDN-LIFE-012a, D-191)
 **409** — `auth.lossreport.notpermitted` (administrative-organization member);
 `auth.lossreport.pending` (already reported, or already suspended by a removal that
 would lower reachable assurance, AUTH-RECOV-007, D-190)
 
-*Source: AUTH-RECOV-007, AUTH-RECOV-008, D-141, D-186, D-190*
+*Source: AUTH-RECOV-007, AUTH-RECOV-008, D-141, D-186, D-190, D-191*
 
 Invalidation is automatic after `recovery.invalidation.window` and is **held** if no
 notification was taken at its immediate attempt (AUTH-RECOV-007, AUTH-ABUSE-004).
@@ -1327,13 +1340,17 @@ The continuation finishes the round trip on the browser profile. A refusal of th
 person's attempt returns the browser to where it started with the code in the query
 member `error`, placed before any fragment; a throttled refusal carries `retryAt` beside
 it (`error=auth.throttled&retryAt=<instant>`, ISO 8601 in UTC), and a provider's return
-asks the source's delay before the code is traded (AUTH-ABUSE-001).
+asks the source's delay before the code is traded (AUTH-ABUSE-001). A sign-in by a
+linked credential that is suspended, on a window or held after its provider's security
+event, is refused `auth.credential.suspended` once the provider vouches, the browser
+returned with it in `error`, a failed attempt counted (AUTH-RECOV-007, D-191).
 
 **303**: to the provider, to the continuation, or back to `returnTo`
 **403**: `auth.session.csrfinvalid`, where no attempt is bound to the browser, it names
 another provider, or its `state` does not match; the browser is sent nowhere
 
-*Source: IDN-LIFE-012, REG-IDENT-008, BFF-MACH-001, BFF-CSRF-005a, BFF-ABUSE-001, D-166*
+*Source: IDN-LIFE-012, REG-IDENT-008, BFF-MACH-001, BFF-CSRF-005a, BFF-ABUSE-001, D-166,
+D-191*
 
 ---
 

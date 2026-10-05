@@ -143,10 +143,15 @@ status, not an error, though it arrives as a 403 because the operation did not p
 (`09` `/auth/step-up`). A `phoneCode` ask at the step-up that is answered 200
 `factorRequired` re-presents the combinations offered, and one answered 200 with
 `required` empty retries the original request (D-188). A factor presented at the step-up
-and answered 200 `factorRequired` is followed by the next factor of the chosen
-combination, one at each call (AUTH-STEP-002, D-190).
+and answered 200 is followed by the next factor of the chosen combination, one at each
+call, until what the 200 reports (`assuranceLevel`, `phishingResistant`) meets the gate
+the 403 named, and the original request is then retried, whether the answer was
+`factorRequired` or `complete`; a 200 `complete` whose report does not meet that gate
+ends the prompt, and the original request is retried and answered by its own gate
+(AUTH-STEP-002, D-190, D-191).
 
-*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190*
+*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190,
+D-191*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after

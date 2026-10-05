@@ -93,7 +93,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.factor.required` **(new)** | Further factors needed to reach required assurance; 422 | AUTH-FACT-001, D-166 |
 | `auth.lossreport.notpermitted` | Self-service loss report and removal unavailable to this account; 409 | AUTH-RECOV-008, D-141, D-166 |
 | `auth.lossreport.pending` **(new)** | This authenticator is already suspended, by a loss report or by a removal that would lower the account's reachable assurance; `details.invalidatesAt`; 409 | AUTH-RECOV-007, D-141, D-166, D-190 |
-| `auth.credential.suspended` **(new)** | A suspended authenticator (reported lost, or suspended by a removal that would lower the account's reachable assurance) was presented and what it presented verified, or a `phoneCode` ask after a first factor or under a session named a suspended number (one before a first factor is answered 202); a presentation counts as a failed attempt, an ask counts nothing (AUTH-ABUSE-001); 422 | AUTH-RECOV-007, D-141, D-166, D-190 |
+| `auth.credential.suspended` **(new)** | A suspended authenticator (reported lost, suspended by a removal that would lower the account's reachable assurance, or a social credential a provider's security event holds) was presented and what it presented verified (a social credential's provider vouched, answered in the provider return's `error`), or a `phoneCode` ask after a first factor or under a session named a suspended number where the policy permits `phoneCode` (one before a first factor, or where the policy does not permit it, is answered 202); a presentation counts as a failed attempt, an ask counts nothing (AUTH-ABUSE-001); 422 | AUTH-RECOV-007, D-141, D-166, D-190, D-191 |
 | `auth.credential.notfound` | The account holds no active credential by that identifier of the kind the operation acts on, including an app password the mail server does not hold for the person; a credential of another account answers the same; 404 | AUTH-FACT-001, INT-MAIL-010, D-162, D-166 |
 | `auth.credential.labelinvalid` | A credential or app-password label that is empty, over 64 characters, or already held by another credential of the same kind on the account in any capitalisation (OPS-DB-001); 422 | AUTH-FACT-001, REG-MAIL-002, D-162, D-166 |
 | `auth.credential.notupgradable` | The credential named at `POST /account/credentials/{id}/upgrade` is the account's and is not a second-factor security key; 409 | AUTH-FACT-002b, D-162, D-166 |
@@ -122,7 +122,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.credential.lastsecondfactor` | Removing this credential would lower the account's reachable assurance; it is suspended now and invalidated after the window (AUTH-RECOV-007). A 202 status, not a refusal: `details.invalidatesAt` carries the instant of invalidation. In process the removal answers it as the failure outcome of its `Result` (CONV-DESIGN-005) | D-092, D-135, D-141, D-166 |
 | `auth.breakglass.consumed` **(new)** | The code of the issue last used, presented again, the second of two concurrent uses included; 409 | D-065, OPS-BOOT-002, D-166 |
 | `auth.webauthn.algorithmnotallowed` | Signature algorithm outside the allow-list; 422 | AUTH-FACT-014, D-166 |
-| `auth.webauthn.countermismatch` **(new)** | Signature counter moved backwards — possible cloned credential; 422 | AUTH-FACT-014, D-166 |
+| `auth.webauthn.countermismatch` **(new)** | Signature counter did not advance, where it or the stored value is non-zero — possible cloned credential; 422 | AUTH-FACT-014, D-166, D-191 |
 | `auth.webauthn.rpidchanged` **(new)** | Credential enrolled under a different relying party identifier; 422 | AUTH-FACT-011, D-166 |
 | `auth.webauthn.userverificationrequired` | User verification did not occur; 422 | AUTH-FACT-014, D-166 |
 | `auth.challenge.required` | A bot-defence signal fired at `POST /register` and the host declared a challenge verifier; no session is created until the request is repeated with a passing `challengeToken` (AUTH-ABUSE-008); 403 | AUTH-ABUSE-008, D-153, D-166, D-188 |
@@ -891,11 +891,11 @@ completes on what is enrolled (REG-SESS-006).
 
 The closed set a capability's `requires` may carry (API-CAP-001, AUTHZ-GATE-005):
 `stepup` · `reauthenticate` (a downgraded session, AUTH-SESS-009: the gate would be met
-but for proof attained before the session's last downgrade; otherwise `stepup`) ·
+but for proof last reached before the session's last downgrade; otherwise `stepup`) ·
 `restricted` (AUTHZ-GATE-006) · `consent` (PRIV-SENS-002, PRIV-CONS-007) ·
 `accountstate`.
 
-*Source: AUTHZ-GATE-005, D-153, D-183*
+*Source: AUTHZ-GATE-005, D-153, D-183, D-191*
 
 ### 5.21 Consent and objection mechanism
 
@@ -947,8 +947,8 @@ thing. The scopes the chapters name:
 | `degradation` | `password.blocklist.fallback` | Screening fell back to the offline list; `details.configured` and `details.used` (`offline`) | OPS-OBS-002, AUTH-PASS-004 |
 | `degradation` | `clock.reference.absent` · `clock.reference.unread` | No clock reference is declared, or the declared one could not answer | OPS-OBS-002, INF-HOST-001 |
 | `degradation` | `certificate.renewal.absent` · `certificate.renewal.unread` | No certificate renewal outcome is declared, or the declared one could not answer | OPS-OBS-002, INF-TLS-003 |
-| `degradation` | `botdefence.ranges.absent` · `botdefence.ranges.stale` · `botdefence.ranges.refresh` | At the refresh, a refresh whose file could not be opened or read, or was refused whole (`.refresh`); and while `datacenterRange` is among `abuse.botdefence.signals`, at each run of the `datacenter-ranges` job and where a registration is judged, no range source declared or no range file read (`.absent`), or the file held older than `abuse.botdefence.ranges.maxage` by its own date (`.stale`) | AUTH-ABUSE-008, D-189, D-190 |
-| `degradation` | `location.database.absent` · `location.database.stale` · `location.database.refresh` | At the refresh, a refresh whose file could not be opened or read, or was refused whole (`.refresh`); and where an address is resolved, no location file declared or none read (`.absent`), or the file held older than `location.database.maxage` by its own date (`.stale`) | INT-GEN-006, OPS-OBS-002, D-190 |
+| `degradation` | `botdefence.ranges.absent` · `botdefence.ranges.stale` · `botdefence.ranges.refresh` | At a read of the file that fails, the job's or the first a process makes where a registration is judged, the file not opened or read, or refused whole (`.refresh`); and while `datacenterRange` is among `abuse.botdefence.signals`, at each run of the `datacenter-ranges` job and where a registration is judged, no range source declared or no range file read (`.absent`), or the file held older than `abuse.botdefence.ranges.maxage` by its own date (`.stale`) | AUTH-ABUSE-008, D-189, D-190, D-191 |
+| `degradation` | `location.database.absent` · `location.database.stale` · `location.database.refresh` | At a read of the file that fails, the job's or the first a process makes where an address is resolved, the file not opened or read, or refused whole (`.refresh`); and where an address is resolved, no location file declared or none read (`.absent`), or the file held older than `location.database.maxage` by its own date (`.stale`) | INT-GEN-006, OPS-OBS-002, D-190, D-191 |
 | `expiry-approaching` | `envelope-rotation` | The annual envelope operation falls due within `maintenance.expiry.warninglead` of a year after the log's latest `envelope-rotation` entry | OPS-MAINT-001 |
 | `expiry-approaching` | `kek-cryptoperiod` | The key-encryption key's cryptoperiod ends within `maintenance.expiry.warninglead`; `details.version`, `details.rotatedAt`, `details.dueAt` | DR-009a |
 

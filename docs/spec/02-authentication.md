@@ -406,15 +406,17 @@ work with the refusal, which counts no failure and records no failed authenticat
 since the factor succeeded, and the lock is judged after the code, never before it, so
 that a wrong code learns nothing of the lock (D-188). A right code sent to an address
 given up since is refused `auth.factor.rejected`, a refused factor counted and recorded
-with its spend in the same unit of work. For every factor, the lock on the address the
-sign-in was opened with is judged after the factor's verification and counts no failure,
-and what the verification wrote (a code's spend, a credential's counter) is kept with
-that refusal (CONV-DESIGN-003, D-189); at a step-up, the lock on the address an email
-code was sent to is judged after the code (REG-DOM-001, D-190). The `emailCode` code
-SHALL be sent as the message kind `sign-in-code` and the `phoneCode` code as
-`secondstep-code`, never as a verification code.
+with its spend in the same unit of work, and so is a right `phoneCode` code whose
+credential has been removed or invalidated since it was sent; one whose credential is
+suspended is answered as AUTH-RECOV-007 states (D-191). For every factor, the lock on
+the address the sign-in was opened with is judged after the factor's verification and
+counts no failure, and what the verification wrote (a code's spend, a credential's
+counter) is kept with that refusal (CONV-DESIGN-003, D-189); at a step-up, the lock on
+the address an email code was sent to is judged after the code (REG-DOM-001, D-190). The
+`emailCode` code SHALL be sent as the message kind `sign-in-code` and the `phoneCode`
+code as `secondstep-code`, never as a verification code.
 
-*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189, D-190*
+*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189, D-190, D-191*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -438,6 +440,8 @@ restrictions bound how many they can ask for.
    `link.magic.lifetime`; each dies after `code.signin.attempts` wrong tries, whatever
    `code.verification.lifetime` and `code.verification.attempts` hold. The `emailCode`
    code is sent as `sign-in-code`.
+7. A right `phoneCode` code presented after the credential it was sent for was removed
+   or invalidated is refused `auth.factor.rejected`, counted and recorded, and spent.
 
 ---
 
@@ -653,10 +657,10 @@ These drive the adaptive second-credential prompt (AUTH-RECOV-001).
 ---
 
 **AUTH-FACT-014** — WebAuthn SHALL require user verification, SHALL NOT require
-attestation, SHALL restrict signature algorithms to a configured allow-list, and
-SHALL verify the signature counter where the authenticator provides one.
+attestation, SHALL restrict signature algorithms to a configured allow-list, and SHALL
+verify the signature counter where the counter presented or the one stored is non-zero.
 
-*Source: D-034, D-120, D-186*
+*Source: D-034, D-120, D-186, D-191*
 
 **The allow-list is configuration** (`webauthn.algorithms`, `10` §4.3): default
 **EdDSA (−8), ES256 (−7), RS256 (−257)**, offered in that preference order — the
@@ -665,16 +669,17 @@ registration example accepts. ES256 cannot be removed, so the list can never be
 emptied or reduced below what all authenticators support.
 
 Requiring attestation excludes legitimate authenticators for no benefit at this risk
-level. A counter moving backwards indicates a cloned credential; synced passkeys do
-not supply one, so the check applies only where present.
+level. A counter that does not advance, where it or the stored value is non-zero,
+indicates a cloned credential (WebAuthn Level 3, section 7.2); synced passkeys present
+zero, so the check applies only where either value is non-zero (D-191).
 
 **Acceptance criteria**
 1. An authentication without user verification is rejected.
 2. A credential from an unattested authenticator enrols successfully.
-3. A counter lower than the stored value is rejected; the refusal records
-   `auth.credential.countermismatch`, records the failed authentication (CONV-LOG-005)
-   and counts the failure (AUTH-ABUSE-001), the three committed together and nothing
-   else (CONV-DESIGN-003).
+3. A counter not above the stored value, where either is non-zero, is rejected; the
+   refusal records `auth.credential.countermismatch`, records the failed authentication
+   (CONV-LOG-005) and counts the failure (AUTH-ABUSE-001), the three committed together
+   and nothing else (CONV-DESIGN-003).
 4. A credential using an algorithm outside the allow-list is rejected at enrolment.
 5. The default allow-list is exactly −8, −7, −257; a configuration omitting −7 is
    refused at startup.
@@ -1033,13 +1038,17 @@ the rehash.
 **AUTH-SESS-001** — A server-side session record SHALL be the spine from which every
 credential derives. Revoking it SHALL invalidate everything derived from it.
 
-The record holds: subject, created, last seen, **assurance level attained**,
-**phishing-resistance attained**, timestamp of each, the instant it was last downgraded
-(AUTH-SESS-009), origin address, device, idle expiry, absolute expiry.
+The record holds: subject, created, last seen, the **instant each assurance level was
+last reached** and the **instant phishing resistance was last reached**, the instant it
+was last downgraded (AUTH-SESS-009), origin address, device, idle expiry, absolute
+expiry. A presentation writes the instant of each level it reaches, its own and every
+lower one, and of phishing resistance where it reaches it, and changes no instant of
+what it does not reach: a bare password under a session that reached `aal2` earlier
+renews `aal1` alone. The level the session holds is the highest it has reached (D-191).
 
 Redis for speed, PostgreSQL as the durable copy.
 
-*Source: D-007, D-020.2, D-147, D-183*
+*Source: D-007, D-020.2, D-147, D-183, D-191*
 
 **Acceptance criteria**
 1. Revoking the session invalidates the app session, the auth session, and any
@@ -1047,6 +1056,9 @@ Redis for speed, PostgreSQL as the durable copy.
    A token a relying party validates offline stays valid until it expires; that
    latency is bounded by `oidc.accesstoken.lifetime` (AUTH-OIDC-004, D-147).
 2. The record survives a Redis flush by reload from PostgreSQL.
+3. A bare password presented under a session that reached `aal2` earlier leaves the
+   instant of `aal2` unchanged, and an `aal2` gate whose maximum age has passed since
+   then is not met.
 
 ---
 
@@ -1475,13 +1487,14 @@ offered enrolment; the expiry of the grace SHALL end no live session, and the ho
 applies at the account's next sign-in.
 
 **Values (D-183).** A downgrade SHALL be recorded on the session record as the instant
-it was made, written in the transaction that makes it; the attained level and phishing
-resistance stay as they were reached. A gate SHALL count what the session proved only
-where it was attained after that instant (AUTH-STEP-002 step 1), so a downgraded session
-passes no gate until a combination the policy in force permits is presented, and that
-presentation lifts the downgrade.
+it was made, written in the transaction that makes it; the instants of the levels and of
+phishing resistance stay as they were reached. A gate SHALL count what the session
+proved only where it was reached after that instant (AUTH-STEP-002 step 1,
+AUTH-SESS-001, D-191), so a downgraded session passes no gate until a combination the
+policy in force permits is presented, and what that presentation reaches counts from
+then.
 
-*Source: D-026.5, D-146, D-166, D-183*
+*Source: D-026.5, D-146, D-166, D-183, D-191*
 
 Terminating outright logs everyone out mid-work for a non-emergency, training users
 to expect random logouts.
@@ -1497,7 +1510,8 @@ to expect random logouts.
    no step-up gate until a factor the organization's policy permits is presented.
 6. A session that proved the gate one minute before a membership attaches is asked a
    presentation at its next gated action; a permitted factor presented then passes the
-   gate, and the session's attained values from before the downgrade are unchanged.
+   gate; the downgrade itself changed none of the instants at which the session had
+   reached a level or phishing resistance (AUTH-SESS-001).
 
 ---
 
@@ -1527,29 +1541,37 @@ split across two apps or folded into another.
 (AUTH-SESS-001) and the account's reachable assurance (AUTH-STEP-006) only; it SHALL
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
-*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190*
+*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191*
 
 **Evaluation order:**
-1. **Check what the session already proved.** If the attained level and
-   phishing-resistance meet the gate and were earned within the maximum age and after
-   the session's last downgrade (AUTH-SESS-009), **require nothing**.
+1. **Check what the session already proved.** If a level at or above the gate's, and
+   phishing resistance where the gate requires it, were each last reached within the
+   maximum age and after the session's last downgrade (AUTH-SESS-001, AUTH-SESS-009),
+   **require nothing**.
 2. **Otherwise offer every combination of the account's usable factors** (state
    `active`, AUTH-RECOV-007, of a factor the policy in force permits in `loginFactors`,
    and not a restricted entry withheld because its number's signal answers `risk`,
    AUTH-FACT-002b AC6) whose contribution (AUTH-SESS-005a) lifts the session to the
    gate, and let the subject **choose among them**, presenting the combination chosen,
    one factor at each call, the factors accepted held on the step-up's challenge until
-   together they reach the gate (D-190). A password alone reaches AAL1; a passkey alone
-   reaches AAL2 phishing-resistant; password + non-discoverable WebAuthn credential (a
-   security key as second factor) reaches AAL2 phishing-resistant, because WebAuthn is
-   phishing-resistant whether or not the credential is discoverable (AUTH-FACT-002,
-   D-148); password + TOTP and password + recovery code reach AAL2 without phishing
-   resistance; password + SMS code (`phoneCode`) reaches AAL2 and never
-   phishing-resistance, so it satisfies a gate whose level is `aal2` and never one that
-   requires phishing resistance. A second factor alone contributes nothing; a social
-   credential, an email factor or a sign-in link contributes nothing (AUTH-STEP-005,
-   AUTH-FACT-003). Presenting a combination writes exactly what it reached into the
-   session record.
+   together they reach the gate (D-190). Each call that presents a factor writes into
+   the session record what the factors accepted so far reach together (AUTH-SESS-001)
+   and answers with that, `factorRequired` with the factors still offered until the gate
+   is reached, and `complete` once it is or once no combination still offered can be
+   completed with the factors accepted, which ends the challenge; a `phoneCode` ask is
+   answered as AUTH-FACT-002 states; a step-up names no action, so its gate is the
+   strictest of the policy's gates, field by field (D-187), and the request it was for
+   is judged again by its own gate when it is repeated (D-191). A password alone reaches
+   AAL1; a passkey alone reaches AAL2 phishing-resistant; password + non-discoverable
+   WebAuthn credential (a security key as second factor) reaches AAL2
+   phishing-resistant, because WebAuthn is phishing-resistant whether or not the
+   credential is discoverable (AUTH-FACT-002, D-148); password + TOTP and password +
+   recovery code reach AAL2 without phishing resistance; password + SMS code
+   (`phoneCode`) reaches AAL2 and never phishing-resistance, so it satisfies a gate
+   whose level is `aal2` and never one that requires phishing resistance. A second
+   factor alone contributes nothing; a social credential, an email factor or a sign-in
+   link contributes nothing (AUTH-STEP-005, AUTH-FACT-003). Presenting a combination
+   writes exactly what it reached into the session record.
 3. **If no usable combination can reach the gate**, the answer is one of three,
    never a bare refusal:
    - the account's reachable assurance (AUTH-STEP-006) is **below** the gate (the
@@ -1570,14 +1592,14 @@ A gate bound to a host's action (AUTHZ-GATE-005) is judged against the library's
 the request carries, where that session is the acting person's own; a host-named gate
 that no policy states values for costs the strictest of the policy's gates, field by
 field. Where no session of the library carries the request, the host's assurance
-provider (LIB-HOST-004) reports the attained level, whether it was phishing-resistant,
-when it was attained and the account's reachable assurance, and the gate, its values
-resolved as for a session, is judged from those. The gate SHALL be met only where the
-provider answers, its report reads (a level of `10` section 5.4, an instant not after
-now), the level reaches the gate's level (the reachable assurance read from the report,
-floor `aal1`), phishing resistance is reported where the gate requires it, and the
-instant lies within the maximum age before now; anything else, a provider failure
-included, is refused with `auth.stepup.required` carrying `required`, `outcome`
+provider (LIB-HOST-004) reports the instant each level was last reached, the instant
+phishing resistance was last reached and the account's reachable assurance, and the
+gate, its values resolved as for a session, is judged from those as step 1 judges a
+session (D-191). The gate SHALL be met only where the provider answers, its report reads
+(no instant after now), a level at or above the gate's (the reachable assurance read
+from the report, floor `aal1`) was last reached within the maximum age before now, and
+phishing resistance was too where the gate requires it; anything else, a provider
+failure included, is refused with `auth.stepup.required` carrying `required`, `outcome`
 `present`, empty `options` and a null `pendingUntil`: the proof is the host's to obtain
 through its own sign-in, so the answer offers no factor of the library's (LIB-HOST-004).
 Where no assurance provider is registered, no report is asked and the action is refused
@@ -1605,8 +1627,9 @@ this design's own extension, recorded as a choice (D-125).
    maximum age, and nothing else; no rule text names a factor.
 2. Evaluating a gate reads the session record and the account's reachable
    assurance; it never enumerates enrolled factors.
-3. A subject whose session meets the gate within the maximum age, and after its last
-   downgrade (AUTH-SESS-009), is not challenged.
+3. A subject whose session last reached the gate's level, and phishing resistance where
+   the gate asks for it, within the maximum age and after its last downgrade
+   (AUTH-SESS-009), is not challenged.
 4. On an account whose reachable assurance is AAL2, a bare password passes no gate;
    password + TOTP, password + recovery code, password + security key, or a passkey
    does, and the subject chooses among those they can present.
@@ -1617,6 +1640,9 @@ this design's own extension, recorded as a choice (D-125).
    password + recovery code are not offered at such a gate.
 4c. A password at one call of a step-up and a TOTP code at the next pass a gate declared
    `aal2`, as password + TOTP does (AUTH-SESS-005a).
+4d. At a step-up whose strictest gate asks `aal2`, on an account holding a second step,
+   a password alone is answered 200 `factorRequired` reporting `aal1`, and renews the
+   instant of `aal1` alone.
 5. A customer holding only a password passes every customer gate with the password.
 6. Every combination that reaches the gate is offered; none that does not is.
 7. A subject with no usable combination is told to enrol or to report a loss; a
@@ -2043,18 +2069,23 @@ notification is the message kind `credential-suspended`, carrying the cancel lin
 (D-166).
 
 **Values (D-190).** A suspended authenticator, whether a loss report or a removal that
-would lower the account's reachable assurance suspended it, that is presented anyway is
-judged first as an active one would be: only where what it presented verifies (an
-assertion's signature, a code its generator gives) is it refused 422
-`auth.credential.suspended`, a failed attempt (AUTH-ABUSE-001), and one whose proof does
-not verify is refused as any wrong presentation is, so a caller who does not hold it
-learns nothing of its state. A `phoneCode` ask that names a suspended number, made after
-a first factor or under a session, sends nothing and is answered 422
+would lower the account's reachable assurance suspended it, or a provider's security
+event holds it (IDN-LIFE-012a, D-191), that is presented anyway is judged first as an
+active one would be: only where what it presented verifies (an assertion's signature
+with every check of AUTH-FACT-014, its counter included; a code its generator gives; a
+social provider's vouching on its return, D-191) is it refused 422
+`auth.credential.suspended`, on a provider's return as
+`error=auth.credential.suspended`, a failed attempt (AUTH-ABUSE-001), and one whose
+proof does not verify is refused as any wrong presentation is, so a caller who does not
+hold it learns nothing of its state. A `phoneCode` ask that names a suspended number,
+made after a first factor or under a session, sends nothing and is answered 422
 `auth.credential.suspended`, counting nothing, since an ask presents no factor; one made
 before a first factor is answered 202 and sends nothing, whatever the account holds
-(AUTH-FACT-002).
+(AUTH-FACT-002); and where the policy in force does not permit `phoneCode`, the policy
+is judged first: the ask sends nothing and is answered 202, whatever the number's state
+(IDN-LIFE-009b, D-191).
 
-*Source: D-009, D-022, D-141, D-166, D-186, D-190*
+*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -2090,8 +2121,13 @@ have nothing left to stand in for.
 7. A customer whose only passkey is lost and who has recovered a password can report
    the passkey with that password, and after the window enrol a new one with it.
 8. A `phoneCode` ask after a first factor, or under a session, naming a suspended number
-   sends nothing, is answered `auth.credential.suspended` and counts nothing; before a
-   first factor it is answered 202.
+   sends nothing, is answered `auth.credential.suspended` and counts nothing where the
+   policy permits `phoneCode`; before a first factor, or where the policy does not
+   permit it, it is answered 202.
+9. A social credential that is suspended, on a window or held after its provider's
+   security event, returns the browser with `error=auth.credential.suspended` once its
+   provider vouches; a suspended key whose signature counter did not advance is refused
+   `auth.webauthn.countermismatch`.
 
 ---
 
@@ -2635,15 +2671,16 @@ refused whole for no date, an unreadable line, or ranges of mixed family, revers
 overlapping. The `datacenter-ranges` job refreshes it every
 `abuse.botdefence.ranges.refresh`; a file older than `abuse.botdefence.ranges.maxage`,
 judged from its own date, or none at all, is stale, and then `datacenterRange` does not
-fire and `degradation` is raised (OPS-OBS-002), so the signal is never silent. A refresh
-that fails raises `degradation` at the refresh, as the location file's does, and keeps
-the copy held until it is stale; and while `datacenterRange` is among
-`abuse.botdefence.signals`, each run of the job raises the file's absence or staleness,
-so a deployment that receives no registration hears of it (`10` section 5.23, D-190). A
-host that supplies no ranges takes `datacenterRange` out of `abuse.botdefence.signals`.
-The library ships no ranges (D-189).
+fire and `degradation` is raised (OPS-OBS-002), so the signal is never silent. A read of
+the file that fails, the job's or the first a process makes where a registration is
+judged, is a refresh that fails: it raises `degradation` at that read, as the location
+file's does, and keeps the copy held until it is stale (D-191); and while
+`datacenterRange` is among `abuse.botdefence.signals`, each run of the job raises the
+file's absence or staleness, so a deployment that receives no registration hears of it
+(`10` section 5.23, D-190). A host that supplies no ranges takes `datacenterRange` out
+of `abuse.botdefence.signals`. The library ships no ranges (D-189).
 
-*Source: D-013, D-186, D-188, D-189, D-190*
+*Source: D-013, D-186, D-188, D-189, D-190, D-191*
 
 Phone verification already imposes attacker cost; showing every customer a puzzle is
 friction without proportionate benefit.
@@ -2666,8 +2703,9 @@ friction without proportionate benefit.
    verifier is declared; with a verifier declared the record is committed before the
    verifier is asked, no transaction is open while it is asked, and the record stands
    where the verifier fails, does not answer or requires a challenge.
-6. A refresh that fails raises `degradation` under `botdefence.ranges.refresh` and keeps
-   the copy held; while `datacenterRange` is among the signals, each run of
+6. A read of the file that fails, the job's or the first a process makes where a
+   registration is judged, raises `degradation` under `botdefence.ranges.refresh` and
+   keeps the copy held; while `datacenterRange` is among the signals, each run of
    `datacenter-ranges` with no fresh file raises its absence or staleness, though no
    registration arrives.
 

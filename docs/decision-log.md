@@ -955,6 +955,8 @@ every few months, on exactly the operations where being wrong is expensive.
 
 ## D-020 — Consistency corrections from the review pass
 
+> **Amended.** 20.2: the session record keeps the instant each assurance level was last reached and the instant phishing resistance was last reached, and a presentation renews only what it reaches (D-191).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Amends:** D-007, D-008, D-010, D-012
 
 Three inconsistencies found by auditing the log against itself. All are corrections
@@ -1612,6 +1614,8 @@ before sign-in remains valid afterwards — session fixation.
 ---
 
 ## D-034 — Second-factor mechanics
+
+> **Amended.** WebAuthn: where the counter presented or the one stored is non-zero, a counter not above the stored one is a possible clone, an equal one included (D-191).
 
 **Date:** 2026-08-25 · **Status:** accepted · **Resolves:** R-10 · **Extends:** D-012
 
@@ -8777,6 +8781,8 @@ word `identity` is used: schema `identity`, roles `identity_app`, `identity_migr
 
 > **Amended.** The mail server verifies `aud` itself (`requireAudience`); the provider callback row of `09` section 10 is restored (D-166).
 
+> **Amended.** A credential held after a provider's security event, presented meanwhile, is answered `auth.credential.suspended` once its provider vouches (D-191).
+
 **Date:** 2026-09-23 · **Status:** accepted · **Amends:** D-005 (provider scope), D-007, D-147 · **Extends:** D-162 (the OIDC rebuild)
 
 **TL;DR.** A standards checklist was put against the design. Two thirds of it describes
@@ -9001,6 +9007,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 > **Amended.** X3: a decision on a value no one row holds is made under a lock on the value; 115 (2): a record's holder is an unkeyed SHA-256, a pending verification's UUID taken in the byte order of RFC 9562; 209 (2): the UTS #46 processing is nontransitional with every check on; 265: the drift check's grants are audited as `authz.grant.materialised` and `authz.grant.retracted`; 306: the sweep waits on the old address's confirmation, which has a lifetime of its own, and an add stages no identifier row, so its sweep removes the pending verification alone; section E item 4: `AddJanus` also registers the host's declaration and a type whose factory reads a type its own project cannot reference (`SendingValidation`, `DeclaredProcessing`) (D-187).
 
 > **Amended.** 382 (3): `Accepts` is added only where a route reads a typed body, not on the photo or the provider callbacks (D-188).
+
+> **Amended.** 328: the host's assurance report gives the instant each level and phishing resistance was last reached (`Aal1At`, `Aal2At`, `Aal3At`, `PhishingResistantAt`) beside `Reachable`, in place of `Level`, `PhishingResistant` and `AttainedAt`, and the gate is judged from it as a session is (D-191).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -14425,6 +14433,8 @@ criterion 10), REG-IDENT-007 (body, criterion 7, new criterion 8).
 
 ## D-190 — Corrections-4 questions 188 to 201: the answers after D-189 was built
 
+> **Amended.** Question 190: a suspended social credential, on a window or held after its provider's security event, is answered `auth.credential.suspended` once its provider vouches, on the provider's return; 193: each step-up call writes what the factors accepted so far reach and reports it, and the frontend retries the original request once that meets its gate; 194: a failed first read is a refresh that fails (D-191).
+
 **Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-189 (question 168, `Janus.Hosting` names no seam's implementation anywhere; question 169, a failed refresh is raised at the refresh and the file's absence or staleness at each run of the job; question 176, the in-process refusal reaches only an operation that can be given an enrolment session's authority; question 177, the report refused before the second step showed codes; question 178, a press of the session's own replace verifies; question 180, a resend only from the session that staged the replace; question 185, an undo ends every session), D-141 (what a suspended authenticator answers, and `auth.lossreport.pending` for one a removal suspended)
 
 **TL;DR.** Building D-189 raised 14 questions. Eight change what was built (188, 190, 192,
@@ -14609,6 +14619,147 @@ section 5.43 (link kinds); `13` R-M06; `15` the stolen-session identifier remova
 `18` FE-API-004 (the step-up prompt), FE-VER-001 (body, the `identifier` and `undo` rows);
 `20` REG-SESS-003 (values), REG-DOM-001 (body, new criterion 14), REG-IDENT-006 (body, new
 criterion 11), REG-IDENT-007 (body, criterion 8, new criteria 9 and 10).
+
+---
+
+## D-191 — Corrections-4 questions 202 to 210: the answers after D-190 was built
+
+**Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-190 (question 190, a held social credential and the provider's return; question 193, what each step-up call writes and answers; question 194, a failed first read is a refresh that fails), D-164 (what a held social credential answers when presented), D-166 (question 328, the host's assurance report gives the instant of each level), D-034 (WebAuthn, an equal counter is a possible clone), D-020 (20.2, the session record keeps the instant each level was last reached)
+
+**TL;DR.** Building D-190 raised nine questions. One is a real defect, to be proved by a
+test and then fixed: a bare password at a step-up may renew the age of an earlier `aal2`
+proof, which would let a stolen session pass a strong gate with the password alone (205).
+The session record now keeps the instant each level was last reached, so a presentation
+renews only what it reaches. A second possible defect gets the same treatment: a
+`phoneCode` code sent before its credential was removed may still be accepted (209). A
+suspended social credential is answered `auth.credential.suspended` once its provider
+vouches, as other suspended authenticators are (208). Each step-up call reports what the
+factors accepted so far reach, and the frontend retries the original request as soon as
+that meets the gate it was refused for (203, 204). The rest confirm what was built.
+
+**The questions.** Questions 202 to 210 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names its question; the chapters
+carry the full rule.
+
+**The session record (question 205).**
+
+- **205. A bare password renewing an earlier proof.** The session record keeps the instant
+  each assurance level was last reached and the instant phishing resistance was last
+  reached (AUTH-SESS-001, which already said "timestamp of each"). A presentation writes
+  the instant of each level it reaches, its own and every lower one, and of phishing
+  resistance where it reaches it, and changes no instant of what it does not reach; a gate
+  is met where a level at or above its own, and phishing resistance where it asks for it,
+  were each last reached within its maximum age and after the last downgrade
+  (AUTH-STEP-002 step 1). So a bare password under a session that reached `aal2` earlier
+  renews `aal1` alone, and an `aal2` gate whose maximum age has passed is not met
+  (AUTH-SESS-001 criterion 3). Write that test first; where it fails, bring the session
+  record and its write to the rule, with the migration it needs: a session already
+  recorded keeps its instant as the instant of each level up to the one it holds, and of
+  phishing resistance where it reached it. *Rejected:* one instant for the level (a fresh
+  password and an old second factor cannot both be told); never refreshing below the level
+  held (a fresh password could then pass no `aal1` gate under a session whose `aal2` proof
+  is old).
+- **205, the host's report.** A host that consumes authorization without authentication
+  has a gate judged from its assurance provider's report (LIB-HOST-004), which held the
+  same single instant. The report now gives what the session record keeps: `Aal1At`,
+  `Aal2At`, `Aal3At` and `PhishingResistantAt`, each none where never reached, beside
+  `Reachable`, in place of `Level`, `PhishingResistant` and `AttainedAt` (D-166 question
+  328), and the gate is judged from it as AUTH-STEP-002 step 1 judges a session.
+  `GET /auth/session` keeps its shape: `assuranceLevel` is the highest level the session
+  has reached, and `lastStrongAuthAt` the instant `aal2` or above was last reached.
+  *Rejected:* one level and one instant in the report (a host's fresh password would renew
+  an old second factor there, the defect of question 205).
+
+**Step-up (questions 203, 204 and 206).**
+
+- **203. What a call writes and answers.** As built, with what the 200 reports made exact:
+  each call writes into the session record what the factors accepted on the challenge
+  reach together (under the rule of question 205), and its 200 reports that in
+  `assuranceLevel` and `phishingResistant`; it is `factorRequired`, with the factors still
+  offered, until the strictest of the policy's gates is reached (a step-up names no
+  action, D-187), and `complete` once it is. Only a call that presents a factor writes; a
+  `phoneCode` ask is answered as AUTH-FACT-002 states. The request the step-up was for is
+  judged again by its own gate when it is repeated, so the frontend retries it as soon as
+  what the 200 reports meets the gate the 403 named, whichever status the 200 carries, and
+  a 200 `complete` whose report does not meet that gate ends the prompt, the request then
+  retried and answered by its own gate (`18` FE-API-004, `17` BFF-STEP-001 criterion 2).
+  *Rejected:* writing the session only once the gate is reached (a factor the person
+  presented would prove nothing until the last, and a weaker gate would wait for the
+  strictest).
+- **204. Nothing more to present.** As built: where the factors accepted do not reach the
+  strictest gate and no combination still offered can be completed with them, the call
+  answers 200 `complete` with what they reach, and the challenge ends; the repeated
+  request is answered by its own gate, with the outcome AUTH-STEP-002 gives where it is
+  not met.
+- **206. A suspended number the policy does not permit.** As built: the policy is judged
+  first, so the ask sends nothing and is answered 202, whatever the number's state
+  (IDN-LIFE-009b); the suspended answer is given only where the policy permits
+  `phoneCode`. Every text that states the ask now says so (AUTH-RECOV-007 criterion 8,
+  `09` `/auth/factor` and `/auth/step-up`, `10` `auth.credential.suspended`).
+
+**Suspended credentials (questions 207, 208 and 210).**
+
+- **207. A report on a held social credential.** As built: 404 `auth.credential.notfound`,
+  since the route reports an active authenticator and a credential a provider's security
+  event holds is not active; the hold ends when the person signs in by another factor
+  (IDN-LIFE-012a).
+- **208. A suspended social credential whose provider vouches.** The provider's vouching
+  on its return is the proof that verifies, so a social credential that is suspended, on a
+  window (a loss report or a removal) or held after its provider's security event, is
+  refused `auth.credential.suspended` once the provider vouches, the browser returned with
+  `error=auth.credential.suspended`, a failed attempt counted (AUTH-RECOV-007, `09` the
+  provider round trip). The held credential is included: the person told why can sign in
+  by another factor, which is what restores it. *Rejected:* `auth.factor.rejected` (it
+  tells the owner nothing they can act on).
+- **210. A suspended key whose counter did not advance.** As built: "judged first as an
+  active one would be" includes every check of AUTH-FACT-014, the signature counter among
+  them; a key whose counter did not advance is refused `auth.webauthn.countermismatch` and
+  audited as an active key's is, and only one that passes every check is told it is
+  suspended. A possible clone matters more than the suspension. The counter check itself
+  is stated as WebAuthn Level 3 section 7.2 has it: where the counter presented or the one
+  stored is non-zero, a counter not above the stored one is a possible clone, so an equal
+  counter is refused too, not only a lower one (AUTH-FACT-014 criterion 3, `10`
+  `auth.webauthn.countermismatch`, D-034).
+
+**Codes whose credential is gone (question 209).**
+
+- **209. A right `phoneCode` code after its credential is removed or invalidated.** A
+  delivered code is judged against the credential it was sent for: where that credential
+  has been removed or invalidated since it was sent, a right code is refused
+  `auth.factor.rejected`, a refused factor counted and recorded, as a right code sent to
+  an address given up since is; where it is suspended, it is answered as AUTH-RECOV-007
+  states (AUTH-FACT-004 criterion 7). Write that test first; where it fails, bring the
+  code's judgement to it.
+
+**The range file (question 202).**
+
+- **202. A failed first read.** As built: every read of the file that fails, the job's or
+  the first a process makes where a registration is judged, is a refresh that fails and
+  raises `botdefence.ranges.refresh` at that read; the location file does the same where
+  an address is resolved (AUTH-ABUSE-008, INT-GEN-006 criterion 2, `10` section 5.23).
+
+**What the run reported besides.** The extra check built for question 199 stands: a press
+that read the replace's row before a restaging and locked it after is judged again under
+the lock, and one whose link no longer matches is answered 422 `auth.code.expired`,
+counted, and proves nothing (REG-IDENT-007, new criterion 11). An enrolment session that
+has ended stays 401 `auth.session.expired` wherever it is presented, the export route
+included (D-188). The gate ran twice because the first run was red on a test's
+arrangement, corrected in test code alone; the second run stands.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `01` IDN-LIFE-012a (body); `02` AUTH-FACT-004 (body, new criterion 7),
+AUTH-FACT-014 (body, criterion 3), AUTH-SESS-001 (body, new criterion 3), AUTH-SESS-009
+(values, criterion 6), AUTH-STEP-002 (step 1, step 2, the host's report, criterion 3, new
+criterion 4d), AUTH-RECOV-007 (values, criterion 8, new criterion 9), AUTH-ABUSE-008
+(values, criterion 6); `03` AUTHZ-GATE-005 (values); `05` INT-GEN-006 (values, criterion
+2); `07` LIB-HOST-004 (body, criterion 4); `09` `/auth/factor` (second-step codes, the 422
+list), `POST /auth/step-up`, `GET /auth/session` (`lastStrongAuthAt`),
+`POST /recovery/report-loss`, `GET /auth/providers/{provider}` (the round trip); `10`
+`auth.credential.suspended`, `auth.webauthn.countermismatch`, section 5.20
+(`reauthenticate`), section 5.23 (the range file's and the location file's scopes); `17`
+BFF-STEP-001 (criterion 2); `18` FE-API-004 (the step-up prompt); `20` REG-IDENT-007
+(body, new criterion 11).
 
 ---
 
@@ -14812,6 +14963,7 @@ criterion 11), REG-IDENT-007 (body, criterion 8, new criteria 9 and 10).
 | Corrections-4 questions 127 to 160: the answers after D-186 and D-187 were built | D-188 |
 | Corrections-4 questions 161 to 187: the answers after D-188 was built | D-189 |
 | Corrections-4 questions 188 to 201: the answers after D-189 was built | D-190 |
+| Corrections-4 questions 202 to 210: the answers after D-190 was built | D-191 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -159,19 +159,20 @@ or missing file SHALL degrade to no location, never to an external lookup.
 `location.database.refresh`; a file older than `location.database.maxage`, or no file at
 all, is stale: no location is shown and the `degradation` condition is raised, under
 `location.database.stale`, or `location.database.absent` where no file is declared or
-read; a refresh that fails raises it at the refresh, under `location.database.refresh`
-(`10` section 5.23, D-190). The file comes from the host through `ILocationSource`
-(optional) in the format that interface documents: UTF-8 text, a first line
-`# YYYY-MM-DD` giving the date the data was produced, then one tab-separated range per
-line (first address, last address, ISO 3166-1 alpha-2 country or empty, city or empty,
-and the city's latitude and longitude exactly where a city is given). A file with no
-date, an unreadable line, or ranges of mixed family, reversed or overlapping, is refused
-whole. Its age is judged from its own date. A process reads it at its first resolution
-and on each refresh; a failed refresh keeps the copy held until it is stale. The address
-resolved is the whole address the session records, never a counting key derived from it
-(AUTH-SESS-013, AUTH-ABUSE-001).
+read; a read of the file that fails, the job's or the first a process makes where an
+address is resolved, is a refresh that fails and raises it at that read, under
+`location.database.refresh` (`10` section 5.23, D-190, D-191). The file comes from the
+host through `ILocationSource` (optional) in the format that interface documents: UTF-8
+text, a first line `# YYYY-MM-DD` giving the date the data was produced, then one
+tab-separated range per line (first address, last address, ISO 3166-1 alpha-2 country or
+empty, city or empty, and the city's latitude and longitude exactly where a city is
+given). A file with no date, an unreadable line, or ranges of mixed family, reversed or
+overlapping, is refused whole. Its age is judged from its own date. A process reads it
+at its first resolution and on each refresh; a failed refresh keeps the copy held until
+it is stale. The address resolved is the whole address the session records, never a
+counting key derived from it (AUTH-SESS-013, AUTH-ABUSE-001).
 
-*Source: D-146, D-162, D-166, D-190; AUTH-SESS-013*
+*Source: D-146, D-162, D-166, D-190, D-191; AUTH-SESS-013*
 
 A network lookup would hand every sign-in address to whoever runs the lookup service.
 The database is a data file, refreshed like any other, and its age is a degradation to
@@ -180,7 +181,9 @@ surface (OPS-OBS-002), not a reason to look elsewhere.
 **Acceptance criteria**
 1. No outbound request is made to resolve a location; a test asserts the resolver
    performs no network call.
-2. Refresh runs without human action and a failed refresh surfaces as a degradation.
+2. Refresh runs without human action, and a read of the file that fails, the job's or
+   the first a process makes, surfaces as a degradation under
+   `location.database.refresh`.
 3. With no file available, sessions are listed without a location and nothing else
    changes.
 

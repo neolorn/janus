@@ -695,7 +695,7 @@ identifier.
 **BFF-STEP-001** — Where a request requires step-up, the BFF SHALL reject it with the
 step-up code rather than performing it.
 
-*Source: AUTH-STEP-001, D-166*
+*Source: AUTH-STEP-001, D-166, D-191*
 
 The frontend initiates the step-up flow and retries. The BFF does not redirect
 mid-request.
@@ -715,8 +715,8 @@ pass through to the frontend unchanged; the BFF adds nothing and removes nothing
 1. The rejection names what is required — level, phishing-resistance and maximum
    age — never a factor; the `options` list of presentable combinations is passed
    through as the identity API supplied it.
-2. Retrying after successful step-up succeeds without re-submitting business data
-   the user would have to re-enter.
+2. Retrying once a step-up 200 reports what meets the gate (`18` FE-API-004) succeeds
+   without re-submitting business data the user would have to re-enter.
 3. An expired-session rejection carries `details.reauthenticate`; retrying after
    reauthentication succeeds with the original data.
 

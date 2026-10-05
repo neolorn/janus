@@ -960,15 +960,16 @@ under, it has not expired and its `nonce` is the round trip's.
 send about a linked identity: Google's Cross-Account Protection (RISC, Security Event
 Tokens) and Sign in with Apple's server-to-server notifications. On an event that says
 the provider account was compromised, disabled, or its sessions revoked, every session
-of the linked account SHALL end and the linked credential SHALL be `suspended` until
-the person signs in by another factor; on consent revoked or account deleted at the
-provider, the credential SHALL be unlinked (IDN-LIFE-012 AC3 still refuses to remove
-the last credential, in which case the account is `suspended` with a security notice
-to the security-notice set); on an email disable, the provider-verified identifier
-SHALL drop to unverified. Every event is verified against the provider's
-published keys, is idempotent by its `jti`, and is audited.
+of the linked account SHALL end and the linked credential SHALL be `suspended` until the
+person signs in by another factor, and presented meanwhile it is answered
+`auth.credential.suspended` once its provider vouches (AUTH-RECOV-007, D-191); on
+consent revoked or account deleted at the provider, the credential SHALL be unlinked
+(IDN-LIFE-012 AC3 still refuses to remove the last credential, in which case the account
+is `suspended` with a security notice to the security-notice set); on an email disable,
+the provider-verified identifier SHALL drop to unverified. Every event is verified
+against the provider's published keys, is idempotent by its `jti`, and is audited.
 
-*Source: D-164, D-166, D-183, D-187*
+*Source: D-164, D-166, D-183, D-187, D-191*
 
 A person's Google account is taken over and Google tells every relying party within
 seconds. A system that ignores that is choosing to keep the attacker signed in.

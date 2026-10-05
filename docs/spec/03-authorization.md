@@ -825,13 +825,13 @@ explanation.
 **Values (D-153).** `requires` carries members of the closed set in `10` section 5.20:
 `stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`.
 
-**Values (D-160).** The `stepup` residual comes from the **gate bound to the action**, not
-from the permission string: the model builder binds a host-declared action to a step-up
-gate name (`10` section 5a or a host-declared gate), and the library-owned actions carry
-their bindings in section 5a. `requires` lists `reauthenticate` for an action whose
-bound gate the session would satisfy but for proof attained before its last downgrade
-(AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise does not currently
-satisfy (`10` section 5.20).
+**Values (D-160).** The `stepup` residual comes from the **gate bound to the action**,
+not from the permission string: the model builder binds a host-declared action to a
+step-up gate name (`10` section 5a or a host-declared gate), and the library-owned
+actions carry their bindings in section 5a. `requires` lists `reauthenticate` for an
+action whose bound gate the session would satisfy but for proof last reached before its
+last downgrade (AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise does
+not currently satisfy (`10` section 5.20).
 
 **Values (D-162, D-166).** The `consent` residual comes from the **purpose bound to the
 action**, as `stepup` comes from its gate: the model builder binds a host-declared action
@@ -852,7 +852,7 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls

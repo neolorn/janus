@@ -333,13 +333,15 @@ confirm and has not), each a send of its purpose counted by the restrictions
 (AUTH-ABUSE-004), holding the staged replace's row while it writes, as REG-IDENT-004's
 resend does (D-188, D-189); from any other session it stages the replace afresh for the
 asking session, the records staged before it answering nothing from then on, each new
-one a send counted by the restrictions (D-190); a replace naming another value is
-refused `identity.change.pending`. In an enrolment session, the new address's link of
+one a send counted by the restrictions (D-190), and a press judges its link again once
+the replace's row is locked, one that no longer matches answered 422 `auth.code.expired`
+and counted against the source (AUTH-ABUSE-001, D-191); a replace naming another value
+is refused `identity.change.pending`. In an enrolment session, the new address's link of
 the replace that session staged lands on the authentication application, where that
 session is held, and a press of it there verifies, as a press in the browser that staged
 any replace does (REG-SESS-003, D-190).
 
-*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, amends D-035 and
+*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, D-191, amends D-035 and
 restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
@@ -376,6 +378,9 @@ undo a hostile change. If that address is lost or compromised, administrative re
 10. In an enrolment session that staged a replace, the new address's link lands on the
     authentication application, and a press of it in the browser holding that session
     verifies it.
+11. A press that read the replace's row before it was restaged and locked it after is
+    judged again under the lock: its link no longer matches, and it is answered 422
+    `auth.code.expired`, counted, and proves nothing.
 
 ---
 
