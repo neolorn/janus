@@ -687,8 +687,11 @@ public static class ErrorCodes
         ErrorCode.Parse("auth.credential.notupgradable");
 
     /// <summary>
-    /// The credential is reported lost and stands suspended. Cancel the report from
-    /// the link a notification carried, or from any session of the account.
+    /// The credential stands suspended: reported lost, suspended by a removal that would
+    /// lower the account's reachable assurance, or a social credential held after its
+    /// provider's security event. Cancel the report from the link a notification
+    /// carried, or from any session of the account; a held social credential stands
+    /// again once the person signs in by another factor.
     /// </summary>
     /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 1.2.</remarks>
     public static ErrorCode CredentialSuspended { get; } = ErrorCode.Parse("auth.credential.suspended");

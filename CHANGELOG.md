@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A sign-in over a social provider's round trip by a linked credential that is
+  suspended, on a window (a loss report or a removal) or held after the provider's
+  security event, returns the browser with `error=auth.credential.suspended` once the
+  provider vouches, a failed attempt counted and recorded, where it returned
+  `error=auth.factor.rejected`. On an account that is not active it is refused
+  `auth.factor.rejected` as an active credential is.
 - A right `phoneCode` code presented at `POST /auth/factor` or `POST /auth/step-up`
   after the credential it was sent for was removed or invalidated is spent and refused
   422 `auth.factor.rejected`, a failed attempt counted and recorded, where it was

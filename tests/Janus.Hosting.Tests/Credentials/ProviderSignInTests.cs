@@ -206,6 +206,48 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007 AC9 and IDN-LIFE-012a: a linked credential that is suspended, on a
+    /// window or held after its provider's security event, signs nobody in once the
+    /// provider vouches: the browser is returned with
+    /// <c>error=auth.credential.suspended</c>, and the refusal is recorded against the
+    /// account as a failed attempt.
+    /// </summary>
+    /// <param name="held">Whether a provider's event holds it, or a window suspends it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_RECOV_007_AC9_ASuspendedSocialCredentialReturnsTheBrowserSuspendedOnceItsProviderVouchesAsync(
+        bool held)
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        Authenticator linked = _deployment.Authenticators.All.Single(credential => credential.Factor is Factor.Google);
+
+        if (held)
+        {
+            linked.Hold();
+        }
+        else
+        {
+            linked.Suspend(_deployment.Clock.GetUtcNow() + TimeSpan.FromDays(7));
+        }
+
+        var browser = new Browser(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(StatusCodes.Status302Found, landed.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.CredentialSuspended, landed.Location);
+        Assert.Equal(StatusCodes.Status401Unauthorized, (await browser.SendAsync("GET", "/auth/session")).Status);
+        Assert.Equal((subject, Factor.Google), _deployment.SessionAudit.Failed[^1]);
+        Assert.Equal(AuthenticatorState.Suspended, linked.State);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012 and REG-IDENT-008: an identity token is believed only where it holds
     /// up: the nonce this browser was sent with, the deployment's own client, a lifetime
     /// that has not ended and the provider's own key.

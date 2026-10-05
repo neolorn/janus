@@ -456,12 +456,15 @@ internal sealed class AuthenticationService(
     /// <returns>The completed sign-in, or the refusal.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-FACT-002a, REG-IDENT-008, AUTH-ABUSE-001 and CONV-LOG-005. The
-    /// provider established who this is, so no second step is asked for and the session
-    /// records <c>delegated</c>. An identity linked to no account, a credential that does
-    /// not stand, and an account that is not active are one refusal, as they are for
-    /// every other factor (AUTH-ABUSE-003), recorded and counted as a refused factor is,
-    /// behind the same delay.
+    /// Implements AUTH-FACT-002a, REG-IDENT-008, AUTH-ABUSE-001, CONV-LOG-005 and
+    /// AUTH-RECOV-007 AC9. The provider established who this is, so no second step is
+    /// asked for and the session records <c>delegated</c>. An identity linked to no
+    /// account, a credential invalidated, and an account that is not active are one
+    /// refusal, as they are for every other factor (AUTH-ABUSE-003), recorded and
+    /// counted as a refused factor is, behind the same delay. A credential that is
+    /// suspended, on a window or held after its provider's security event, is refused
+    /// <c>auth.credential.suspended</c> on an account that would otherwise sign in,
+    /// since the provider's vouching is the proof that verifies (IDN-LIFE-012a, D-191).
     /// </remarks>
     public async ValueTask<Result<SignInOutcome>> DelegatedAsync(
         Factor provider,
@@ -483,14 +486,29 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(held);
         }
 
+        // AUTH-RECOV-007: a suspended credential is judged first as an active one would
+        // be, so the state of its account refuses it as it refuses an active one.
+        bool suspended = linked is not null && (linked.IsAwaitingInvalidation || linked.IsHeldByProvider);
+
         // IDN-ACCT-007: a restricted account signs in and reads, as an active one does.
-        if (linked is not { IsUsable: true }
+        if (linked is null
+            || !(linked.IsUsable || suspended)
             || await accounts.StateAsync(linked.Subject, cancellationToken).ConfigureAwait(false)
                 is not (AccountState.Active or AccountState.Restricted))
         {
             return Result.Failure<SignInOutcome>(
                 await CountedAsync(attempt, provider, linked?.Subject, null, cancellationToken).ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.FactorRejected));
+        }
+
+        // AUTH-RECOV-007 AC9, IDN-LIFE-012a: the provider's vouching is the proof that
+        // verifies, so the credential's state is what refuses it now, and its owner is
+        // told so: a failed attempt, recorded and counted.
+        if (suspended)
+        {
+            return Result.Failure<SignInOutcome>(
+                await CountedAsync(attempt, provider, linked.Subject, null, cancellationToken).ConfigureAwait(false)
+                ?? Error.From(ErrorCodes.CredentialSuspended));
         }
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);

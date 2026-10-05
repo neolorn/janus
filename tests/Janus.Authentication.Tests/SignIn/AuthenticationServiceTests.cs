@@ -2199,6 +2199,67 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007 AC9: a social credential that is suspended, on a window or held
+    /// after its provider's security event, is refused
+    /// <c>auth.credential.suspended</c> once its provider vouches, a failed attempt
+    /// recorded against its account and counted, and nobody is signed in.
+    /// </summary>
+    /// <param name="held">Whether a provider's event holds it, or a window suspends it.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_RECOV_007_AC9_ASuspendedSocialCredentialIsRefusedSuspendedOnceItsProviderVouchesAsync(
+        bool held)
+    {
+        SubjectId subject = await AccountAsync();
+        Authenticator linked = await LinkedAsync(subject, held);
+        _work.Reset();
+
+        Result<SignInOutcome> refused = await Service.DelegatedAsync(
+            Factor.Google,
+            "linked-at-the-provider",
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Google)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal(AuthenticatorState.Suspended, linked.State);
+        Assert.Empty(_live.All);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007: a suspended social credential is judged first as an active one
+    /// would be, so on an account that is not active it is refused as an active one is,
+    /// <c>auth.factor.rejected</c>, and nothing is told of its state.
+    /// </summary>
+    /// <param name="held">Whether a provider's event holds it, or a window suspends it.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_RECOV_007_ASuspendedSocialCredentialOfAnAccountNotActiveIsRefusedAsAnActiveOneIsAsync(
+        bool held)
+    {
+        SubjectId subject = await AccountAsync();
+        _ = await LinkedAsync(subject, held);
+        _accounts.Stands(subject, AccountState.Suspended);
+
+        Result<SignInOutcome> refused = await Service.DelegatedAsync(
+            Factor.Google,
+            "linked-at-the-provider",
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, refused.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Google)], _audit.Failed);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// CONV-LOG-005 AC1: a provider's round trip whose identity does not hold up is a
     /// refused factor naming no account, recorded and counted against its source, and
     /// while the delay it earned stands nothing more is recorded (AUTH-ABUSE-001).
@@ -3534,6 +3595,32 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         {
             held.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
         }
+    }
+
+    // AUTH-RECOV-007, IDN-LIFE-012a: an identity at a social provider linked to the
+    // account and suspended since, by a window (a loss report or a removal) or held by
+    // the provider's security event.
+    private async ValueTask<Authenticator> LinkedAsync(SubjectId subject, bool held)
+    {
+        var linked = Authenticator.Linked(
+            AuthenticatorId.New(_clock),
+            subject,
+            Factor.Google,
+            Label(Factor.Google),
+            _clock.GetUtcNow());
+
+        await _authenticators.LinkAsync(linked, "linked-at-the-provider", TestContext.Current.CancellationToken);
+
+        if (held)
+        {
+            linked.Hold();
+        }
+        else
+        {
+            linked.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        }
+
+        return linked;
     }
 
     // The account's credentials of one factor as a removal that completes at once
