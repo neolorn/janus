@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- At the sign-on, an error the authentication application answers is no longer always
+  a refusal. Every error it answers the push with, every error of the exchange other
+  than a 400 whose `error` is `invalid_grant`, and an authorization response whose
+  `error` is `server_error` or `temporarily_unavailable` are faults, answered 500
+  `system.fault`, where each returned the browser with `auth.session.expired` before.
+  A 400 `invalid_grant`, any other `error` of an authorization response but
+  `login_required`, and a derivation the library refuses still return the browser
+  with `auth.session.expired`, and a new entry of the browser profile's log (event
+  26, Information) records the code returned and, beside it, the `error` or the
+  library's own code the refusal carried inside.
 - The 403 `auth.stepup.required` of a step-up gate that asks no maximum age, one whose
   level is `delegated`, carries `required.maxAge` null, where it carried the age the
   policy gives the action, a limit that gate does not apply. A gate at any other
@@ -30,8 +40,7 @@ against the public contract of LIB-API-001.
   such a fault and no longer `auth.session.csrfinvalid`; so is a push or an exchange
   of the sign-on that the authentication application answers with a 5xx or with no
   answer in its protocol's shape, which returned the browser with
-  `auth.session.expired` before. A refusal it answers in that shape, a 4xx naming its
-  `error`, still returns the browser with `auth.session.expired`.
+  `auth.session.expired` before.
 - `GET /auth/providers/{provider}` started to link declares, under its redirect, the
   codes of the link's gate it asks before the browser leaves: `auth.stepup.required`,
   `authz.restricted` and `authz.denied`, beside `auth.factor.notpermitted` for a

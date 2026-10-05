@@ -335,4 +335,20 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Warning,
         Message = "A round trip was started at {Provider}, which the deployment does not declare ({CorrelationId}).")]
     public static partial void ProviderUndeclared(ILogger log, string correlationId, Factor provider);
+
+    /// <summary>
+    /// A sign-on refused and returned to where the browser was going, by the code it
+    /// was returned with and, beside it, what the refusal carried inside: the error
+    /// the provider, which is the library's own, refused with, or the library's own
+    /// code (BFF-SESS-006, BFF-ERR-001 AC5).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="returned">The code the browser was returned with.</param>
+    /// <param name="code">What the refusal carried inside.</param>
+    [LoggerMessage(
+        EventId = 26,
+        Level = LogLevel.Information,
+        Message = "A sign-on was returned with {Returned}, refused inside with {Code} ({CorrelationId}).")]
+    public static partial void SignOnReturned(ILogger log, string correlationId, ErrorCode returned, string code);
 }
