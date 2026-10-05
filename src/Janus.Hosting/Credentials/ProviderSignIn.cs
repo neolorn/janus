@@ -706,9 +706,12 @@ internal sealed class ProviderSignIn(
         string destination,
         CancellationToken cancellationToken)
     {
+        // Chapter 09: a link's attempt is bound to its session, so a return that found
+        // one arrived on that session. A return whose session has ended found none and
+        // was refused before it reached here, so there is no ended session to answer.
         if (browser.Context is not AccessContext holder || browser.Live is not Session live)
         {
-            return Back(context, destination, Error.From(ErrorCodes.SessionExpired));
+            throw new InvalidOperationException("A link's attempt was found on a request that carries no session.");
         }
 
         Result linked = await credentials
