@@ -331,6 +331,13 @@ against the public contract of LIB-API-001.
   origin whose host is written in Unicode, and the reverse, where before the two were
   compared as written and the start refused. The relying party identifier in force,
   configured or derived, is the ASCII form.
+- Each origin of `webauthn.origins` and `webauthn.relatedorigins` is held in its
+  serialization, the form a browser writes: its scheme, its host in that ASCII form,
+  and its port only where it is not the scheme's default. A WebAuthn ceremony's origin
+  is matched against the origins so held, so a deployment that writes an origin with
+  its host in Unicode, with the default port or with a trailing slash admits the
+  ceremonies a browser runs there, where before it started and refused each of them.
+  `GET /.well-known/webauthn` lists the related origins in the same form.
 - The rules of the Public Suffix List the conversion sets aside are fixed when a
   release's list is committed, and a test of the release pins them by name: a list
   that sets one aside more, or one fewer, fails it until the pin is reviewed with the

@@ -3,6 +3,8 @@ using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Tests.Passwords;
@@ -172,6 +174,56 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Empty(_authenticators.All);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-010 AC6: a deployment whose origin is configured with its host in
+    /// Unicode admits a ceremony whose client data carries that origin with its host in
+    /// ASCII form, which is how a browser writes it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_010_AC6_AnOriginConfiguredInUnicodeAdmitsACeremonyInAsciiFormAsync()
+    {
+        _configuration.Set(
+            Settings.WebAuthnOrigins,
+            (IReadOnlyList<string>)["https://app.bücher.de"]);
+        _configuration.Set(Settings.WebAuthnRelyingPartyId, "bücher.de");
+
+        WebAuthnMaterial read = Value(await Service.ReadAsync(
+            Factor.Passkey,
+            Attestation("a-challenge", "https://app.xn--bcher-kva.de", "xn--bcher-kva.de"),
+            "a-challenge",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("xn--bcher-kva.de", read.RelyingPartyId);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-010: a ceremony's origin is matched ordinally against the origins as
+    /// held, so one that carries another port, or the host as no browser writes it, is
+    /// admitted by none.
+    /// </summary>
+    /// <param name="origin">The origin the client data carries.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("https://app.xn--bcher-kva.de:8443")]
+    [InlineData("https://app.bücher.de")]
+    [InlineData("http://app.xn--bcher-kva.de")]
+    public async Task AUTH_FACT_010_ACeremonyFromAnOriginNotHeldIsRefusedAsync(string origin)
+    {
+        _configuration.Set(
+            Settings.WebAuthnOrigins,
+            (IReadOnlyList<string>)["https://app.bücher.de"]);
+        _configuration.Set(Settings.WebAuthnRelyingPartyId, "bücher.de");
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.ReadAsync(
+                Factor.Passkey,
+                Attestation("a-challenge", origin, "xn--bcher-kva.de"),
+                "a-challenge",
+                TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -773,6 +825,33 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             BackupEligible: false,
             BackupState: false,
             Counter: 0);
+
+    // What a browser sends back from a creation ceremony run at an origin: the client
+    // data carrying that origin, and authenticator data bound to the relying party.
+    private static AuthenticatorAttestation Attestation(string challenge, string origin, string relyingParty)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        byte[] clientData = JsonSerializer.SerializeToUtf8Bytes(
+            new Dictionary<string, string>(capacity: 3, StringComparer.Ordinal)
+            {
+                ["type"] = "webauthn.create",
+                ["challenge"] = challenge,
+                ["origin"] = origin,
+            });
+
+        byte[] authenticatorData = new byte[37];
+
+        SHA256.HashData(Encoding.UTF8.GetBytes(relyingParty)).CopyTo(authenticatorData, 0);
+        authenticatorData[32] = 0x05;
+
+        return new AuthenticatorAttestation(
+            Base64Url.EncodeToString(new byte[] { 1, 2, 3 }),
+            Base64Url.EncodeToString(clientData),
+            Base64Url.EncodeToString(authenticatorData),
+            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
+            Algorithm: -7);
+    }
 
     // REG-PM-001: the handle is the subject identifier; the two shown values are the
     // account's own primary email and display name.
