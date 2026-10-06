@@ -834,20 +834,31 @@ fault, or that no row names (`10` section 6), which is a fault (D-195). The depl
 own state is a fault too: the application's client in no registry, its secret that
 cannot be read, an identity token from the authentication application that does not hold
 up (its signature under that application's published keys, its issuer, its audience or
-its expiry), and that application's published keys that cannot be read; a return
-carrying neither `code` nor `error` is a refusal, its inside code
-`api.request.malformed`, and so is an identity token whose session has ended since, its
-inside code `auth.session.expired` (D-195). The `error`, or the library's own code, that
-a refusal carried inside is logged once, at Information, beside the one returned
-(BFF-LOG-001, D-194, D-195); a fault that the push, the exchange or the authorization
-response answered adds, beside the fault's own entry, one entry at Error carrying the
-status the push or the exchange read and the `error` any of them read, and nothing else
-they carried (D-195).
+its expiry) or carries no session identifier in `sid` (D-196), and that application's
+published keys that cannot be read; a return carrying neither `code` nor `error` is a
+refusal, its inside code `api.request.malformed`, and so is an identity token whose
+`sid` names a session that has ended since or is not found, its inside code
+`auth.session.expired` (D-195, D-196). An authorization response's `error` reaches the
+return through the browser, so the return judges it as text (CONV-DESIGN-006): one that
+is not one or more characters of %x20 to %x21, %x23 to %x5B and %x5D to %x7E (RFC 6749
+Appendix A.7), or is longer than 64 characters, does not read, and the return is a
+refusal, its inside code `api.request.malformed`, the value in no entry the library
+writes (D-196). The `error`, or the library's own code, that a refusal carried inside is
+logged once, at Information, beside the one returned (BFF-LOG-001, D-194, D-195); a
+fault that the push, the exchange or the authorization response answered adds, beside
+the fault's own entry, one entry at Error carrying the status the push or the exchange
+read and the `error` any of them read, and nothing else they carried (D-195). A fault of
+the sign-on is logged at Error and at no other level, and its log names what failed: a
+secret or keys that cannot be read make a fault carrying the code and details their read
+answered, an identity token that does not hold up a fault carrying the validation's own
+fault as its inner fault, and a client in no registry and a token carrying no session
+identifier in `sid` each add one entry at Error naming it (BFF-LOG-001, BFF-ERR-002,
+D-196).
 
 **403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`; the
 browser is sent nowhere
 
-*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195*
+*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195, D-196*
 
 ---
 

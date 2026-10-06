@@ -1131,7 +1131,7 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192*
+*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196*
 
 **The flow.** A BFF holding no session pushes an authorization request with
 `prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
@@ -1146,7 +1146,10 @@ session inherits the record's assurance properties (AUTH-SESS-002), with the ins
 record last reached each level and phishing resistance and the record's last downgrade,
 never the instant of derivation, since deriving presents nothing (AUTH-SESS-001,
 AUTH-SESS-009, D-192), and, where the record belongs to a break-glass session, takes its
-reason from the record it is bound to (OPS-BOOT-002, D-171).
+reason from the record it is bound to (OPS-BOOT-002, D-171). The provider writes in
+`sid` of every ID token it issues to a browser application the identifier of the session
+record its code was issued from, so a token that holds up and carries no session
+identifier in `sid` is a fault at the sign-on, never a refusal (BFF-SESS-006, D-196).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (API-REDIR-001), single-use short-lived
@@ -1178,6 +1181,8 @@ Every one is a standard requirement restated, not a mechanism designed here.
    09:00 passes no `aal2` gate whose maximum age is 30 minutes, and one established
    after the record was downgraded passes no gate on proof reached before that
    downgrade; establishing it changes no instant of the record.
+9. Every ID token the provider issues to a browser application carries in `sid` the
+   identifier of the session record its code was issued from.
 
 ---
 

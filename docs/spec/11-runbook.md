@@ -386,16 +386,25 @@ fault: the authentication application unreachable or failing (a 5xx, a push or e
 answer not in its protocol's shape, `server_error` or `temporarily_unavailable` on the
 authorization response), the push or the exchange refused for the deployment's own
 client or request, the client in no registry, its secret or the application's published
-keys that cannot be read, an identity token that does not hold up, a derivation code
-that is a fault's, or no pre-authentication session issued. Read the fault's logged
-detail by its correlation identifier: its type and frames, the code it carries where it
-carries one (BFF-ERR-002), and, where the push, the exchange or the authorization
-response answered, the status and `error` read (D-195), and check that the client the
-host declares (`SignOnClient`) is registered with its exact `redirect_uri`
-(LIB-HOST-001). A sign-on that keeps returning `auth.session.expired` logs, at
-Information, the code that refused it inside, an inside `api.request.malformed` being a
-return carrying neither `code` nor `error`, or a value that does not read; read that the
-same way (BFF-SESS-006, BFF-LOG-001, D-194, D-195).
+keys that cannot be read, an identity token that does not hold up or carries no session
+identifier in `sid` (D-196), a derivation code that is a fault's, or no
+pre-authentication session issued. Read the fault's logged detail by its correlation
+identifier: its type and frames; the code and details it carries where it carries one
+(BFF-ERR-002), which for a secret or keys that cannot be read are those their read
+answered; for an identity token that does not hold up, the type of its inner fault,
+which names the check that failed; and, where the push, the exchange or the
+authorization response answered, the status and `error` read (D-195, D-196). A client in
+no registry and a token carrying no session identifier in `sid` are each named by an
+entry at Error beside the fault (D-196). Check that the client the host declares
+(`SignOnClient`) is registered with its exact `redirect_uri` (LIB-HOST-001). An
+authorization response's `error` comes through the browser, so a `server_error` or
+`temporarily_unavailable` while the authentication application is otherwise healthy may
+be a person's own edit of their return, which faults that person's sign-on alone
+(D-196). A sign-on that keeps returning `auth.session.expired` logs, at Information, the
+code that refused it inside, an inside `api.request.malformed` being a return carrying
+neither `code` nor `error`, or a value that does not read, an authorization response's
+`error` outside its protocol's characters or over 64 characters among them; read that
+the same way (BFF-SESS-006, BFF-LOG-001, D-194, D-195, D-196).
 
 
 

@@ -145,7 +145,7 @@ AUTH-OIDC-006), acting as a **confidential client** of the library's provider, a
 retain no token afterwards.
 
 *Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
-D-195*
+D-195, D-196*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -177,13 +177,21 @@ every error of the exchange but a 400 `invalid_grant`, and an authorization resp
 `server_error` or `temporarily_unavailable` are faults too (D-194), and so are the
 application's client in no registry, its secret that cannot be read, an identity token
 from the authentication application that does not hold up (its signature under that
-application's published keys, its issuer, its audience or its expiry), that
-application's published keys that cannot be read, and a derivation code whose row names
-a fault or that no row names; a return carrying neither `code` nor `error`, and a token
-whose session has ended, are refusals (D-195); a refusal is logged once, and a fault the
-push, the exchange or the authorization response answered logs, at Error, the status and
-`error` read (D-195); a start from a browser with no pre-authentication session issues
-one (BFF-CSRF-005a, D-192).
+application's published keys, its issuer, its audience or its expiry) or carries no
+session identifier in `sid` (D-196), that application's published keys that cannot be
+read, and a derivation code whose row names a fault or that no row names; a return
+carrying neither `code` nor `error`, and a token whose `sid` names a session that has
+ended or is not found, are refusals (D-195, D-196), and so is a return whose `error`
+does not read as RFC 6749 Appendix A.7 defines one or is longer than 64 characters, its
+inside code `api.request.malformed` and the value in no entry the library writes
+(D-196); a refusal is logged once, and a fault the push, the exchange or the
+authorization response answered logs, at Error, the status and `error` read (D-195); a
+fault of the sign-on is logged at Error and at no other level, the fault of a secret or
+keys that cannot be read carrying the code and details the read answered, that of a
+token that does not hold up the validation's own fault as its inner fault, and a client
+in no registry and a token carrying no session identifier in `sid` each adding one entry
+at Error naming it (BFF-LOG-001, D-196); a start from a browser with no
+pre-authentication session issues one (BFF-CSRF-005a, D-192).
 
 **Values (D-166).** The client is the one the host declares for this application
 (`SignOnClient`, LIB-HOST-001). Its secret is the one the library generated for that
@@ -646,7 +654,7 @@ structured data and a correlation identifier. Rendered prose SHALL NOT cross it,
 the BFF SHALL NOT return HTML intended for a person to read — including framework
 default error pages.
 
-*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194, D-195*
+*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194, D-195, D-196*
 
 A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
 trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
@@ -659,7 +667,12 @@ navigation route is no refusal: it is answered as BFF-ERR-002 answers every faul
 returned in `error` (D-193). The log records the route, the provider where there is one,
 and the trace, never the provider's authorization `code`, the `state` or anything a
 social provider wrote; the sign-on logs the `error`, or the library's own code, that its
-refusal carried inside, its provider being the library's own (BFF-SESS-006, D-194).
+refusal carried inside, its provider being the library's own (BFF-SESS-006, D-194). An
+authorization response's `error` reaches the sign-on through the browser, so it is
+logged only where it reads as RFC 6749 Appendix A.7 defines one and is at most 64
+characters; otherwise it does not read: the return is a refusal, the browser returned
+with `auth.session.expired`, `api.request.malformed` logged as the code it carried
+inside, and the value in no entry the library writes (D-196).
 
 **Acceptance criteria**
 1. No response body contains a user-facing sentence.
@@ -675,13 +688,21 @@ refusal carried inside, its provider being the library's own (BFF-SESS-006, D-19
    read, and nothing else it carried, and so are the application's client in no
    registry, its secret that cannot be read, an identity token from the authentication
    application that does not hold up (its signature under that application's published
-   keys, its issuer, its audience or its expiry), that application's published keys that
-   cannot be read, and a derivation code whose row names a fault or that no row names; a
-   400 `invalid_grant`, an authorization response's other `error` but `login_required`,
-   a return carrying neither `code` nor `error`, a token whose session has ended, and
-   any other derivation the library refuses return `error` `auth.session.expired`, the
-   code carried inside (`api.request.malformed` for a return carrying neither,
-   `auth.session.expired` for an ended session) logged once at Information beside it.
+   keys, its issuer, its audience or its expiry) or carries no session identifier in
+   `sid`, that application's published keys that cannot be read, and a derivation code
+   whose row names a fault or that no row names; a 400 `invalid_grant`, an authorization
+   response's other `error` but `login_required`, a return carrying neither `code` nor
+   `error`, a token whose `sid` names a session that has ended or is not found, and any
+   other derivation the library refuses return `error` `auth.session.expired`, the code
+   carried inside (`api.request.malformed` for a return carrying neither, and for an
+   `error` that does not read as RFC 6749 Appendix A.7 defines one or is longer than 64
+   characters, whose value no entry the library writes carries; `auth.session.expired`
+   for a session ended or not found) logged once at Information beside it. A fault of
+   the sign-on is logged at Error and at no other level, and its log names what failed:
+   a secret or keys that cannot be read make a fault carrying the code and details the
+   read answered, an identity token that does not hold up a fault carrying the
+   validation's own fault as its inner fault, and a client in no registry and a token
+   carrying no session identifier in `sid` each add one entry at Error naming it.
 
 ---
 

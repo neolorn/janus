@@ -1384,6 +1384,13 @@ so there the specification does constrain them.
 values interpolated. Every log call SHALL go through a `LoggerMessage` source-generated
 method (D-149), which fixes the event name and the field names at compile time.
 
+A log method whose last call is removed is removed with it, and neither its event
+identifier nor its event name is ever given to another method of its class, so that a
+query or an alert kept on either never comes to match another event of that class
+(D-196).
+
+*Source: D-149, D-196*
+
 **Acceptance criteria**
 1. No log call uses string interpolation for values.
 2. Logs are queryable by field.

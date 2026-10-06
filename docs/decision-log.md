@@ -15098,6 +15098,8 @@ BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7
 
 > **Amended.** Question 229: `required` after a second step accepted first is a presenting call's alone, an ask being before a first factor until one is accepted; 233 and 234: the client in no registry, its unreadable secret, a token that does not hold up, unreadable keys and a derivation code that is a fault's are faults, a return with neither `code` nor `error` and a token whose session ended are refusals, a refusal is logged once and a fault logs the status and `error` it read (D-195).
 
+> **Amended.** Question 234: an authorization response's `error` is logged only where it reads as RFC 6749 Appendix A.7 defines one and is at most 64 characters; any other value makes the return a refusal logged as `api.request.malformed` (D-196).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-193 (question 221, a link's return after the session ended; questions 225 and 226, which answers at the sign-on's push and exchange are refusals), D-192 (question 212, a redirect's `error` carries only codes its route declares, and a link's return whose session has ended is answered 403)
 
 **TL;DR.** Building D-193 raised seven questions, each answered narrowly; one corrects a
@@ -15196,6 +15198,8 @@ BFF-SESS-006 (body), BFF-ERR-001 (body, criterion 5).
 
 ## D-195 — Corrections-4 questions 236 to 242: the answers after D-194 was built
 
+> **Amended.** Question 239: an identity token that carries no session identifier in `sid` is a fault too, and one whose `sid` names a session not found is a refusal, as one ended; 241: a fault of the sign-on is logged at Error and at no other level, and its log names what failed, the faults of a secret or keys that cannot be read, or of a token that does not hold up, carrying what the read or the validation failed with, and a client in no registry and a token carrying no session identifier in `sid` each adding an entry at Error; 242: an entry left with no writer is removed, entry 10 now, and neither its event identifier nor its event name is ever given to another entry of its class (D-196).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-194 (question 229, `required` after a second step accepted first applies to a presenting call alone; questions 233 and 234, the sign-on's remaining failures and what a refusal and a fault log)
 
 **TL;DR.** Building D-194 raised seven questions, each answered narrowly. At a sign-in, an
@@ -15267,6 +15271,126 @@ carry the full rule.
 (`required`, second-step codes), `GET /auth/signon` · `GET /auth/signon/return`; `10`
 `auth.session.expired`; `11` section 7.5; `17` BFF-SESS-006 (body), BFF-ERR-001 (criterion
 5).
+
+---
+
+## D-196 — Corrections-4 questions 243 to 247: the answers after D-195 was built
+
+**Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-195 (question 239, an identity token carrying no session identifier in `sid`; question 241, the level a fault of the sign-on is logged at and what names the failure; question 242, the log entries left with no writer), D-194 (question 234, an authorization response's `error` in the log)
+
+**TL;DR.** Building D-195 raised five questions, each answered narrowly. The one that
+matters most is 247: the sign-on logged an authorization response's `error` exactly as the
+browser brought it, so anyone signing on could write any text, line breaks included, of
+any length into the log. Now the value is logged only where it reads as OAuth defines an
+`error` (printable ASCII characters without `"` or `\`) and is at most 64 characters, a
+bound of Janus's own; any other value makes the return a refusal logged as
+`api.request.malformed`, and no entry the library writes carries the value. An identity
+token from the library's own provider that carries no session identifier in `sid` is a
+fault (244). A fault of the sign-on is logged at Error and at no other level (245), and
+its log names what failed: the faults of a secret or keys that cannot be read, or of a
+token that does not hold up, carry what their read or check failed with, and the two that
+carry nothing, a client in no registry and a token carrying no session identifier in
+`sid`, each get an Error entry naming them (246). A log entry nothing writes is removed,
+and neither its number nor its name is ever reused (243).
+
+**The questions.** Questions 243 to 247 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names its question; the chapters
+carry the full rule.
+
+**The sign-on (questions 244 to 247).**
+
+- **247. An authorization response's `error` in the log.** The authorization response
+  comes back through the browser, so its `error` is whatever the browser sends, not what
+  the authentication application wrote: a person signing on holds their own `state` and
+  can edit the rest. Logged as it came, it lets anyone write any characters, line breaks
+  among them, and any length the server's request line allows into an Information entry,
+  which is log forging and log flooding (OWASP Logging Cheat Sheet: "Perform sanitization
+  on all event data to prevent log injection attacks e.g. carriage return (CR), line feed
+  (LF) and delimiter characters"; an attacker "floods log files in order to exhaust disk
+  space"). The return therefore judges the value as text, as a navigation route judges
+  every value (CONV-DESIGN-006): it reads only as RFC 6749 Appendix A.7 defines `error`
+  (`error = 1*NQSCHAR`, NQSCHAR being %x20-21 / %x23-5B / %x5D-7E, printable ASCII without
+  `"` and `\`, so no line break or control character), and only up to 64 characters, twice
+  the longest name in the IANA OAuth Extensions Error Registry
+  (`insufficient_user_authentication`, 32 characters, read on 2026-10-06). A value that
+  does not read makes the return a refusal: the browser is returned with
+  `auth.session.expired`, the inside code logged is `api.request.malformed`, and no entry
+  the library writes carries the value. A value that reads is taken as the provider wrote
+  it: a person who edits their own return to `server_error` or `temporarily_unavailable`
+  faults their own sign-on alone, under a fixed value, which `11` section 7.5 now tells
+  the operator; D-194's split stands, since taking those two values as refusals would hide
+  a real failure of the authorization endpoint behind "sign in again". The `error` the
+  push and the exchange read on the back channel from the library's own provider is
+  unchanged. What the framework's own request log, which a host may enable, writes of a
+  navigation's query is outside this answer and is recorded for the Milestone 1 exit
+  review. *Rejected:* the two failure values taken as refusals (the silent loop D-194
+  removed, for a real outage); a closed list of the codes the provider writes (no chapter
+  lists them, and a code missing from the list would hide the reason the runbook reads);
+  the value logged as it came (forging and flooding by anyone who signs on); the value
+  escaped and logged (a value outside the protocol's syntax is not one the provider wrote,
+  so there is nothing true to log).
+- **244. An identity token that holds up and carries no session identifier in `sid`.** A
+  fault. The library's own provider writes the session record's identifier into `sid` of
+  every identity token it issues for a sign-on (as built, it always does; AUTH-SESS-012
+  now says so), so a token right in signature, issuer, audience and expiry that carries no
+  `sid`, or a `sid` that is no identifier, is the deployment's own state gone wrong, not
+  the person's attempt. Returning the browser expired would send every person round "sign
+  in again" with nothing raised, the loop D-194 removed. A `sid` that is an identifier
+  stays a refusal wherever the session it names has ended (D-195), found ended or not
+  found at all, since an ended record may since have been removed and the two cannot be
+  told apart. The chapters now say so (`09`, BFF-SESS-006, BFF-ERR-001 criterion 5, `10`).
+  The provider's writing of `sid` becomes a rule of its own (AUTH-SESS-012 and its new
+  criterion 9), so the fault rests on a requirement and not only on the code. *Rejected:*
+  a refusal with an inside code of its own, and as built (the same loop either way).
+- **245. The entries written beside the new faults.** A fault of the sign-on is logged at
+  Error and at no other level, as BFF-LOG-001 criterion 2 logs a fault, so entries 11 and
+  14, at Warning and worded as the provider not taking the request or the code, are no
+  longer written for a fault: their words would send an operator to the provider for what
+  is the deployment's own secret, keys or token. Entry 12 stays: it is at Error and names
+  a client the registry does not hold, a fault that carries no code, which is what `11`
+  section 7.5 has the operator check. The rule is the sign-on's; BFF-LOG-001 criterion 2
+  is unchanged. Entries 11 and 14 are then left with no writer and are removed (243).
+  *Rejected:* writing none of the three entries, 12 included (a client in no registry
+  would be logged by type and frames alone, which do not say what failed); as built (a
+  fault logged at Warning, under words that misdirect).
+- **246. What a fault of the deployment's own state carries.** What its read or check
+  failed with, so that its entry names what broke, as BFF-ERR-002 criterion 2 and `11`
+  section 7.5 already read. A secret or keys that cannot be read make a fault carrying the
+  code and details their read answered (a configuration read that failed, or a unit of
+  work that could not begin or commit); an identity token that does not hold up makes a
+  fault carrying the validation's own fault as its inner fault, whose type names the check
+  that failed (signature, issuer, audience or lifetime), kept by type and frames and never
+  by message (BFF-ERR-002 criterion 2). A client in no registry carries no code, since the
+  registry answers that it holds none rather than failing, and entry 12 names it (245); a
+  token carrying no session identifier in `sid` carries none either, so it too adds one
+  entry at Error naming it, under a new identifier, never 10, 11 or 14 (243). The chapters
+  now require both entries (BFF-ERR-001 criterion 5). CONV-ERR-001 criterion 1 is
+  untouched: as built, these reads answer no code of the `auth.`, `authz.` or
+  `privacy.consent.` families. *Rejected:* as built (an operator would read a type and
+  frames and could not tell an unreadable setting from a failed rotation).
+
+**Log entries (question 243).**
+
+- **243. An entry nothing writes.** It is removed, and neither its event identifier nor
+  its event name is ever given to another entry of its class (CONV-LOG-001): a query or an
+  alert an operator keeps on either must never come to match another event. Entry 10 goes
+  now (D-195 question 242 left it no writer), and entries 11 and 14 go once 244 and 245
+  leave them none; their numbers stay unused. *Rejected:* keeping the declaration (an
+  entry declared but never written reads as one that can appear).
+
+**What the run reported besides.** The gate's first run at `30f94326` failed one
+integration test before its body ran, on the machine's socket error; the second run on the
+same commit passed, and it stands. The `CHANGELOG.md` conflict at the merge was resolved
+by taking out four stale lines; it stands. At a sign-in, no test now holds an ask leaving
+out a factor already accepted (question 219): as the run found, the only arrangement that
+reached it is now a 202, so no sign-in test is owed, and the step-up tests hold the rule.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `02` AUTH-SESS-012 (the flow, new criterion 9); `08` CONV-LOG-001
+(body, new Source line); `09` `GET /auth/signon` · `GET /auth/signon/return`; `10`
+`auth.session.expired`, `api.request.malformed`; `11` section 7.5; `17` BFF-SESS-006
+(body), BFF-ERR-001 (body, criterion 5).
 
 ---
 
@@ -15475,6 +15599,7 @@ carry the full rule.
 | Corrections-4 questions 218 to 228: the answers after D-192 was built | D-193 |
 | Corrections-4 questions 229 to 235: the answers after D-193 was built | D-194 |
 | Corrections-4 questions 236 to 242: the answers after D-194 was built | D-195 |
+| Corrections-4 questions 243 to 247: the answers after D-195 was built | D-196 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
