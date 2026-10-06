@@ -14,6 +14,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Oidc;
+using Janus.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -58,11 +59,18 @@ namespace Janus.Hosting.Bff;
 /// refused; an authorization response naming the provider's own failure; this
 /// application's client in no registry; its secret that cannot be read; the provider's
 /// published keys that cannot be read; an identity token that does not hold up under
-/// them; and a derivation failing with a code whose row names a fault or that no row
-/// names (10 section 6). A return carrying neither a code nor an error, and a token
-/// whose session has ended since, are refusals. A fault the push, the exchange or the
-/// authorization response answered records, beside its own entry, the status and the
-/// error read and nothing else of the answer.
+/// them, or that holds up and carries no session identifier; and a derivation failing
+/// with a code whose row names a fault or that no row names (10 section 6). A return
+/// carrying neither a code nor an error, and a token naming a session that has ended
+/// since or is not found, are refusals, and so is a return whose error does not read
+/// as the protocol defines one or is longer than this library takes, which arrived
+/// through the browser and is recorded in no entry. A fault the push, the exchange or
+/// the authorization response answered records, beside its own entry, the status and
+/// the error read and nothing else of the answer. A fault is recorded at Error and at
+/// no other level, and names what failed: that of a secret or keys that cannot be read
+/// carries the code and the details the read answered, that of a token that does not
+/// hold up the validation's own fault beneath it, and a client in no registry and a
+/// token carrying no session identifier, whose faults carry no code, an entry each.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -109,6 +117,10 @@ internal sealed class SignOn(
     private const string ProviderFailed = "server_error";
 
     private const string ProviderUnavailable = "temporarily_unavailable";
+
+    // BFF-ERR-001: the most characters an authorization response's error reads at. The
+    // bound is this library's own and no part of RFC 6749.
+    private const int ErrorLimit = 64;
 
     /// <summary>
     /// Starts the flow for a browser that holds no session here.
@@ -178,6 +190,15 @@ internal sealed class SignOn(
             return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
         }
 
+        // BFF-ERR-001 AC5, chapter 09: an authorization response's error reaches here
+        // through the browser, so it is judged as text before anything is made of it.
+        // One that does not read is a refusal, what it carried inside is the code of a
+        // request that cannot be read, and the value itself is recorded nowhere.
+        if (error is not null && !Reads(error))
+        {
+            return Refused(context, attempt.ReturnTo, ErrorCodes.RequestMalformed.ToString());
+        }
+
         // AUTH-SESS-012 AC3: `login_required` answers the silent attempt and nothing
         // else, so the second attempt asks the provider to sign the person in and the
         // provider forwards them rather than refusing again.
@@ -196,9 +217,9 @@ internal sealed class SignOn(
             throw new InvalidOperationException("The authentication application failed the authorization request.");
         }
 
-        if (error is { Length: > 0 } refused)
+        if (error is not null)
         {
-            return Refused(context, attempt.ReturnTo, refused);
+            return Refused(context, attempt.ReturnTo, error);
         }
 
         // BFF-ERR-001 AC5, chapter 09: a return carrying neither a code nor an error is
@@ -235,14 +256,19 @@ internal sealed class SignOn(
     private static string Address(string provider, string route) =>
         provider.TrimEnd('/') + route;
 
-    // BFF-ERR-001 AC5, chapter 09: the application's client in no registry, and its
-    // secret that cannot be read, are the deployment's own state and so faults, never
-    // a refusal that would send every person round to sign in again.
+    // RFC 6749 Appendix A.7: an error is one or more characters of %x20-21, %x23-5B
+    // and %x5D-7E, which is printable ASCII without the quotation mark and the
+    // backslash, so no line break and no control character.
+    private static bool Reads(string error) =>
+        error.Length is >= 1 and <= ErrorLimit
+        && error.All(static character => character is >= ' ' and <= '~' and not ('"' or '\\'));
+
+    // BFF-ERR-001 AC5, chapter 09: the application's client in no registry is the
+    // deployment's own state and so a fault, never a refusal that would send every
+    // person round to sign in again. The registry answers that it holds none rather
+    // than failing, so the fault carries no code and an entry of its own names it.
     private static InvalidOperationException Unregistered() =>
         new("This application's client is in no registry.");
-
-    private static InvalidOperationException SecretUnread() =>
-        new("This application's client secret could not be read.");
 
     private static string? Text(JsonDocument body, string member) =>
         body.RootElement.ValueKind is JsonValueKind.Object
@@ -304,12 +330,7 @@ internal sealed class SignOn(
         bool silent,
         CancellationToken cancellationToken)
     {
-        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
-        {
-            BrowserProfileLog.SignOnPushRejected(log, context.TraceIdentifier);
-
-            throw SecretUnread();
-        }
+        string secret = await SecretAsync(registered, cancellationToken).ConfigureAwait(false);
 
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -365,12 +386,7 @@ internal sealed class SignOn(
             throw Unregistered();
         }
 
-        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
-        {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
-            throw SecretUnread();
-        }
+        string secret = await SecretAsync(registered, cancellationToken).ConfigureAwait(false);
 
         string? identity = await ExchangedAsync(context, registered, secret, attempt, code, cancellationToken)
             .ConfigureAwait(false);
@@ -380,14 +396,7 @@ internal sealed class SignOn(
             return Refused(context, attempt.ReturnTo, CodeRefused);
         }
 
-        SessionId? spine = await RecordAsync(context, identity, cancellationToken).ConfigureAwait(false);
-
-        if (spine is not SessionId named)
-        {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
-            return Expired(attempt.ReturnTo);
-        }
+        SessionId named = await RecordAsync(context, identity, cancellationToken).ConfigureAwait(false);
 
         Result<IssuedSession> derived = await sessions
             .DeriveAsync(named, SessionType.PerApp, RequestOrigin.Of(context.Request), cancellationToken)
@@ -506,11 +515,14 @@ internal sealed class SignOn(
 
     // OPS-SEC-002: the secret is read from the registry at each request and held
     // nowhere, so one rotated since the last request is the one presented.
-    private async ValueTask<string?> SecretAsync(OidcClient registered, CancellationToken cancellationToken)
+    // BFF-ERR-001 AC5, BFF-ERR-002 AC2: a secret that cannot be read is the
+    // deployment's own state and so a fault, which carries the code and the details
+    // the read answered so that its log entry names what broke.
+    private async ValueTask<string> SecretAsync(OidcClient registered, CancellationToken cancellationToken)
     {
         Result<byte[]> read = await secrets.CurrentAsync(registered.ClientId, cancellationToken).ConfigureAwait(false);
 
-        return read.Match<string?>(
+        return read.Match(
             current =>
             {
                 try
@@ -522,27 +534,28 @@ internal sealed class SignOn(
                     CryptographicOperations.ZeroMemory(current);
                 }
             },
-            _ => null);
+            unread => throw new CodedFault(unread));
     }
 
     // AUTH-KEY-001 AC2: the identity token is judged against the set the deployment
     // publishes, for this client and no other, before a claim of it is believed.
     // BFF-ERR-001 AC5, chapter 09: published keys that cannot be read, and a token
     // that does not hold up under them, in its signature, its issuer, its audience or
-    // its expiry, are the deployment's own state and so faults.
-    private async ValueTask<SessionId?> RecordAsync(
+    // its expiry, are the deployment's own state and so faults: the first carries the
+    // code and the details the read answered, and the second the validation's own
+    // fault beneath it, whose type names the check that failed and which is kept by
+    // type and frames and never by message (BFF-ERR-002 AC2). So is a token that
+    // holds up and carries no session identifier, the provider writing the record's in
+    // every one it issues here (AUTH-SESS-012 AC9); that fault carries no code, so an
+    // entry of its own names it.
+    private async ValueTask<SessionId> RecordAsync(
         HttpContext context,
         string identity,
         CancellationToken cancellationToken)
     {
-        if ((await oidc.KeysAsync(cancellationToken).ConfigureAwait(false))
-                .Match<IReadOnlyList<PublishedSigningKey>?>(keys => keys, _ => null)
-            is not IReadOnlyList<PublishedSigningKey> published)
-        {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
-            throw new InvalidOperationException("The authentication application's published keys could not be read.");
-        }
+        IReadOnlyList<PublishedSigningKey> published =
+            (await oidc.KeysAsync(cancellationToken).ConfigureAwait(false))
+            .Match(keys => keys, unread => throw new CodedFault(unread));
 
         string provider = addresses.Provider.TrimEnd('/');
         var parameters = new TokenValidationParameters
@@ -561,17 +574,22 @@ internal sealed class SignOn(
 
         if (!read.IsValid)
         {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
-            throw new InvalidOperationException("The identity token the authentication application issued did not hold up.");
+            throw new InvalidOperationException(
+                "The identity token the authentication application issued did not hold up.",
+                read.Exception);
         }
 
-        return read.Claims.TryGetValue(OidcClaimNames.Session, out object? named)
+        if (read.Claims.TryGetValue(OidcClaimNames.Session, out object? named)
             && Guid.TryParse(
                 Convert.ToString(named, CultureInfo.InvariantCulture),
                 CultureInfo.InvariantCulture,
-                out Guid record)
-                ? new SessionId(record)
-                : null;
+                out Guid record))
+        {
+            return new SessionId(record);
+        }
+
+        BrowserProfileLog.SignOnSessionUnnamed(log, context.TraceIdentifier);
+
+        throw new InvalidOperationException("The identity token the authentication application issued carried no session identifier.");
     }
 }

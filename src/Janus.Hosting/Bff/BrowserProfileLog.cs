@@ -12,7 +12,10 @@ namespace Janus.Hosting.Bff;
 /// <remarks>
 /// Implements BFF-CSRF-001, BFF-CSRF-004, BFF-ERR-002, BFF-LOG-001, CONV-LOG-001,
 /// CONV-LOG-002 and CONV-LOG-005. Which layer refused is recorded and never answered,
-/// and no entry carries a cookie, a token or an address.
+/// and no entry carries a cookie, a token or an address. An entry nothing writes is
+/// declared no longer, and neither its identifier nor its name is given to another:
+/// events 10 (<c>SignOnRefused</c>), 11 (<c>SignOnExchangeRejected</c>) and 14
+/// (<c>SignOnPushRejected</c>) are such.
 /// </remarks>
 internal static partial class BrowserProfileLog
 {
@@ -128,46 +131,9 @@ internal static partial class BrowserProfileLog
     public static partial void SignOnStateRejected(ILogger log, string correlationId);
 
     /// <summary>
-    /// A return the provider refused, by the code it refused with.
-    /// </summary>
-    /// <param name="log">The logger.</param>
-    /// <param name="correlationId">What resolves the request.</param>
-    /// <param name="code">What the provider refused with.</param>
-    [LoggerMessage(
-        EventId = 10,
-        Level = LogLevel.Warning,
-        Message = "A sign-on was refused by the provider with {Code} ({CorrelationId}).")]
-    public static partial void SignOnRefused(ILogger log, string correlationId, string code);
-
-    /// <summary>
-    /// An exchange that could not be made or judged, the client's secret or the
-    /// provider's published keys not being read, or whose identity token did not hold
-    /// up or named no session (BFF-SESS-006 AC3). An exchange the provider refused is
-    /// recorded once, where the browser is returned (BFF-LOG-001 AC2).
-    /// </summary>
-    /// <param name="log">The logger.</param>
-    /// <param name="correlationId">What resolves the request.</param>
-    [LoggerMessage(
-        EventId = 11,
-        Level = LogLevel.Warning,
-        Message = "A sign-on code was not exchanged for an identity token that held up ({CorrelationId}).")]
-    public static partial void SignOnExchangeRejected(ILogger log, string correlationId);
-
-    /// <summary>
-    /// An authorization request the provider would not take when it was pushed
-    /// (AUTH-OIDC-006 AC2).
-    /// </summary>
-    /// <param name="log">The logger.</param>
-    /// <param name="correlationId">What resolves the request.</param>
-    [LoggerMessage(
-        EventId = 14,
-        Level = LogLevel.Warning,
-        Message = "A sign-on request was not taken by the provider when it was pushed ({CorrelationId}).")]
-    public static partial void SignOnPushRejected(ILogger log, string correlationId);
-
-    /// <summary>
     /// A sign-on by an application the provider's registry does not hold, which is a
-    /// registration the deployment has not made.
+    /// registration the deployment has not made. It is a fault that carries no code,
+    /// so this entry names it (BFF-ERR-001 AC5).
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="correlationId">What resolves the request.</param>
@@ -370,4 +336,18 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Error,
         Message = "A sign-on faulted on an answer of status {Status} naming the error {Error} ({CorrelationId}).")]
     public static partial void SignOnFaulted(ILogger log, string correlationId, int? status, string? error);
+
+    /// <summary>
+    /// A sign-on whose identity token held up and carried no session identifier in
+    /// <c>sid</c>, where the provider, which is the library's own, writes the record's
+    /// in every one it issues to a browser application. It is a fault that carries no
+    /// code, so this entry names it (BFF-SESS-006, BFF-ERR-001 AC5).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 28,
+        Level = LogLevel.Error,
+        Message = "A sign-on's identity token held up and carried no session identifier in sid ({CorrelationId}).")]
+    public static partial void SignOnSessionUnnamed(ILogger log, string correlationId);
 }

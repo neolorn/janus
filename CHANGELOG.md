@@ -10,6 +10,46 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A fault of the sign-on over the deployment's own state names what failed in the
+  fault's log entry, read by its correlation identifier. A client secret or the
+  authentication application's published keys that cannot be read make a fault
+  carrying the code and the details their read answered (a configuration read that
+  failed, or a unit of work that could not begin or commit), where the entry kept a
+  type and frames alone before. An identity token that does not hold up makes a
+  fault carrying the validation's own fault as its inner fault, whose type names
+  the check that failed (signature, issuer, audience or lifetime), kept by type and
+  frames and never by message.
+- A fault of the sign-on is logged at Error and at no other level. A client secret
+  that cannot be read, at the push and at the exchange, the authentication
+  application's published keys that cannot be read, and an identity token that does
+  not hold up no longer write event 14 or event 11 of the browser profile's log, at
+  Warning, beside the fault's own entry: their words named the provider not taking
+  the request or the code, for what is the deployment's own state. Event 12 (Error)
+  is still written for a client in no registry.
+- At the sign-on, an identity token from the authentication application that holds
+  up in its signature, its issuer, its audience and its expiry and carries no
+  session identifier in `sid` (the claim absent, or holding no identifier) is a
+  fault, answered 500 `system.fault`, where it returned the browser with
+  `auth.session.expired` before. The fault carries no code, so a new entry of the
+  browser profile's log (event 28, `SignOnSessionUnnamed`, Error) names it. A `sid`
+  that is an identifier naming a session that has ended or is not found still
+  returns the browser with `auth.session.expired`.
+- At the sign-on's return, the `error` of an authorization response is judged as text
+  before it is acted on or logged, since it reaches the return through the browser.
+  It reads only as RFC 6749 Appendix A.7 defines `error` (one or more characters of
+  %x20 to %x21, %x23 to %x5B and %x5D to %x7E) and only up to 64 characters, a bound
+  of the library's own. A value that does not read, an empty one among them, makes
+  the return a refusal whatever else it carries: the browser is returned with
+  `auth.session.expired`, event 26 records `api.request.malformed` as the code it
+  carried inside, and no entry the library writes carries the value. Before, event
+  26 carried such a value exactly as the browser brought it, line breaks and any
+  length included, and a return carrying an empty `error` beside a `code` went on to
+  the exchange. A value that reads is handled as before.
+- Events 10 (`SignOnRefused`), 11 (`SignOnExchangeRejected`) and 14
+  (`SignOnPushRejected`) of the browser profile's log, which nothing writes any
+  longer, are no longer declared. Their identifiers and their names are given to no
+  other event of that log, so a query or an alert kept on any of them matches
+  nothing from now on.
 - `POST /auth/factor` at a sign-in where a second step is accepted before any first
   factor answers 200 `factorRequired` with `required` naming the first factors of the
   `available` that `POST /auth/begin` answered, where it named every usable second
@@ -23,9 +63,7 @@ against the public contract of LIB-API-001.
 - A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
   Information, by the code the browser is returned with and the one the refusal
   carried inside. A refused authorization response no longer writes event 10 as
-  well, nor a 400 `invalid_grant` at the exchange event 11, each at Warning. Event 10
-  is written by nothing now; event 11 stays for an exchange that could not be made
-  or whose identity token could not be relied on.
+  well, nor a 400 `invalid_grant` at the exchange event 11, each at Warning.
 - A fault of the sign-on that the authentication application answered adds, beside
   the fault's own entry, a new entry of the browser profile's log (event 27, Error)
   carrying the status the push or the exchange was answered with and the `error` the

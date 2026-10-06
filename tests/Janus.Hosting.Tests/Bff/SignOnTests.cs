@@ -14,6 +14,7 @@ using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -39,6 +40,11 @@ public sealed class SignOnTests
     private const string Page = "/account/profile";
 
     private const string Described = "a-description-never-logged";
+
+    private const string Forged = "forged";
+
+    // What every category the library logs under begins with.
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
 
     /// <summary>
     /// BFF-SESS-006 AC1: a browser that holds no session here, whose person holds a
@@ -351,9 +357,7 @@ public sealed class SignOnTests
             "/auth/signon?returnTo=" + Uri.EscapeDataString(Page + "#keys"));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.Contains((LogLevel.Error, 12), deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Equal([Unregistered], deployment.SignOnLog.Entries);
         Assert.Empty(deployment.Provider.Asked);
         Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
     }
@@ -381,9 +385,7 @@ public sealed class SignOnTests
         Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.Contains((LogLevel.Error, 12), deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Equal([Unregistered], deployment.SignOnLog.Entries);
         Assert.DoesNotContain(
             deployment.Provider.Asked,
             asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
@@ -408,8 +410,11 @@ public sealed class SignOnTests
         Answer faulted = await new Browser(deployment).SendAsync("GET", Start);
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.StartupDeclarationMissing,
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
         Assert.Empty(deployment.Provider.Asked);
         Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
     }
@@ -437,8 +442,11 @@ public sealed class SignOnTests
         Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.StartupDeclarationMissing,
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             deployment.Provider.Asked,
             asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
@@ -505,9 +513,58 @@ public sealed class SignOnTests
 
         Answer faulted = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
 
+        // BFF-ERR-002 AC2: the validation's own fault is kept beneath the sign-on's, by
+        // its type, which names the check that failed, and never by its message.
+        Type check = fails switch
+        {
+            "signature" => typeof(SecurityTokenInvalidSignatureException),
+            "issuer" => typeof(SecurityTokenInvalidIssuerException),
+            "audience" => typeof(SecurityTokenInvalidAudienceException),
+            _ => typeof(SecurityTokenInvalidLifetimeException),
+        };
+        string kept = Kept(deployment, faulted);
+
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, kept, StringComparison.Ordinal);
+        Assert.Contains("inner " + check.FullName, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain("IDX", kept, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not hold up", kept, StringComparison.Ordinal);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5, BFF-SESS-006 and chapter 09: an identity token that holds up in
+    /// its signature, its issuer, its audience and its expiry and carries no session
+    /// identifier in <c>sid</c>, the claim absent or holding no identifier, is a fault:
+    /// the browser is sent nowhere, no session is established, no refusal is recorded,
+    /// and one entry at Error names it, the fault carrying no code.
+    /// </summary>
+    /// <param name="sid">What the token carries in the claim, or nothing where it carries none.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("a-session-that-is-no-identifier")]
+    public async Task BFF_ERR_001_AC5_AnIdentityTokenCarryingNoSessionIdentifierIsAFaultAsync(string? sid)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        _ = await HolderAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        deployment.Provider.Answers["/oidc/token"] =
+            (HttpStatusCode.OK, await IssuedAsync(deployment, fails: null, sid));
+
+        Answer faulted = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
+
+        Faulted(faulted);
+        Assert.Equal([Unnamed], deployment.SignOnLog.Entries);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
@@ -543,8 +600,90 @@ public sealed class SignOnTests
 
         Assert.Equal(Settings.TokenSigningRotation.Key, deployment.Configuration.Unread);
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.StartupDeclarationMissing,
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5 and BFF-ERR-002 AC2: a client secret that cannot be read, here
+    /// one whose replacement is due and whose unit of work cannot begin, makes a fault
+    /// carrying the code and the details its read answered, which the fault's log entry
+    /// keeps under the correlation identifier, and no other entry of the sign-on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_ASecretThatCannotBeReadFaultsWithTheCodeAndDetailsItsReadAnsweredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        deployment.Clock.Advance(Settings.TokenSigningRotation.Default);
+
+        // The browser is issued its pre-authentication session first, so the opening
+        // refused next is the one the secret's replacement makes.
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", "/auth/session");
+
+        deployment.Work.RefusesBegin = Unbegun;
+
+        Answer faulted = await arriving.SendAsync("GET", Start);
+
+        Assert.Null(deployment.Work.RefusesBegin);
+        Faulted(faulted);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.SystemFault + " unit=\"begin\"",
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
+        Assert.Empty(deployment.Provider.Asked);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5 and BFF-ERR-002 AC2: the authentication application's published
+    /// keys that cannot be read, here a set whose change is due and whose unit of work
+    /// cannot begin, make a fault carrying the code and the details their read
+    /// answered, which the fault's log entry keeps under the correlation identifier,
+    /// and no other entry of the sign-on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_PublishedKeysThatCannotBeReadFaultWithTheCodeAndDetailsTheirReadAnsweredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        // The set's change falls due once the exchange has been answered, and the
+        // opening it makes, the first after that answer, is refused.
+        deployment.Provider.Answered = address =>
+        {
+            if (address.AbsolutePath is "/oidc/token")
+            {
+                deployment.Clock.Advance(Settings.TokenSigningRotation.Default);
+                deployment.Work.RefusesBegin = Unbegun;
+            }
+        };
+
+        Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Null(deployment.Work.RefusesBegin);
+        Faulted(faulted);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.SystemFault + " unit=\"begin\"",
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
@@ -661,6 +800,44 @@ public sealed class SignOnTests
         Assert.Empty(refused.Body);
         Logged(deployment, ErrorCodes.SessionExpired.ToString());
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp && held.EndedAt is null);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5, BFF-LOG-001 AC2 and chapter 09: an identity token whose
+    /// <c>sid</c> is an identifier naming a session that is not found is a refusal, as
+    /// one naming a session that has ended is: the browser is returned to the stored
+    /// return address with the code of a session that is not there, and that same code
+    /// is recorded once at Information as what the refusal carried inside.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC5_ATokenWhoseSessionIsNotFoundReturnsTheBrowserExpiredAndIsLoggedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        _ = await HolderAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        deployment.Provider.Answers["/oidc/token"] = (
+            HttpStatusCode.OK,
+            await ExchangedAsync(
+                deployment,
+                fails: null,
+                new SessionId(Guid.CreateVersion7(deployment.Clock.GetUtcNow()))));
+
+        Answer refused = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, ErrorCodes.SessionExpired.ToString());
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
     /// <summary>
@@ -1048,6 +1225,104 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// BFF-ERR-001 AC5, BFF-SESS-006 and chapter 09: an authorization response's
+    /// <c>error</c> reaches the return through the browser, so one that does not read
+    /// as RFC 6749 Appendix A.7 defines an error, or is longer than 64 characters, is a
+    /// refusal whatever else the return carries: the browser is returned to the stored
+    /// return address with the code of a session that is not there, the code of a
+    /// request that cannot be read is recorded once at Information as what it carried
+    /// inside, no code is traded, and no entry the library writes carries the value.
+    /// </summary>
+    /// <param name="unread">The one respect the value does not read in.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("line break")]
+    [InlineData("control character")]
+    [InlineData("quotation mark")]
+    [InlineData("backslash")]
+    [InlineData("delete")]
+    [InlineData("outside ASCII")]
+    [InlineData("empty")]
+    [InlineData("65 characters")]
+    public async Task BFF_ERR_001_AC5_AnAuthorizationResponsesErrorThatDoesNotReadReturnsTheBrowserExpiredAndIsInNoEntryAsync(
+        string unread)
+    {
+        string error = unread switch
+        {
+            "line break" => Forged + "\r\nentry",
+            "control character" => Forged + "\u0001entry",
+            "quotation mark" => Forged + "\"entry",
+            "backslash" => Forged + "\\entry",
+            "delete" => Forged + "\u007Fentry",
+            "outside ASCII" => Forged + "éentry",
+            "empty" => string.Empty,
+            _ => Forged + new string('e', 65 - Forged.Length),
+        };
+
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        Answer refused = await arriving.SendAsync(
+            "GET",
+            Returned(deployment, "error=" + Uri.EscapeDataString(error) + "&code=a-code"));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, ErrorCodes.RequestMalformed.ToString());
+        Assert.DoesNotContain(
+            deployment.SignOnLog.Carried.SelectMany(entry => entry.Values),
+            value => value is not null && value.Contains(Forged, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            deployment.Logs.Lines,
+            line => line.StartsWith(Library, StringComparison.Ordinal)
+                && line.Contains(Forged, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            deployment.Provider.Asked,
+            asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5 and chapter 09: an authorization response's <c>error</c> of
+    /// exactly 64 characters, each one RFC 6749 Appendix A.7 allows and the outermost of
+    /// its ranges among them, reads: it is taken as the provider wrote it, a refusal
+    /// recorded at Information with that value as what it carried inside.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC5_AnAuthorizationResponsesErrorOf64CharactersThatReadsIsLoggedAsync()
+    {
+        const string outermost = " !#[]~";
+        string error = outermost + new string('e', 64 - outermost.Length);
+
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        Answer refused = await arriving.SendAsync(
+            "GET",
+            Returned(deployment, "error=" + Uri.EscapeDataString(error)));
+
+        Assert.Equal(64, error.Length);
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, error);
+    }
+
+    /// <summary>
     /// BFF-ERR-001 AC5, BFF-LOG-001 AC2 and chapter 09: a return whose session the
     /// library refuses to derive with a code of its own returns the browser to the
     /// stored return address with the code of a session that is not there, never with
@@ -1277,6 +1552,14 @@ public sealed class SignOnTests
     // exchange or the authorization response answered.
     private static (LogLevel Level, int EventId) Beside => (LogLevel.Error, 27);
 
+    // BFF-ERR-001 AC5: the entry that names a client in no registry, whose fault
+    // carries no code.
+    private static (LogLevel Level, int EventId) Unregistered => (LogLevel.Error, 12);
+
+    // BFF-ERR-001 AC5: the entry that names an identity token carrying no session
+    // identifier, whose fault carries no code.
+    private static (LogLevel Level, int EventId) Unnamed => (LogLevel.Error, 28);
+
     // BFF-LOG-001 AC2: one entry at Information names the code the browser was
     // returned with and, beside it, what the refusal carried inside.
     private static void Logged(Deployment deployment, string inside)
@@ -1315,6 +1598,23 @@ public sealed class SignOnTests
         Assert.DoesNotContain(
             deployment.Logs.Lines,
             line => line.Contains(Described, StringComparison.Ordinal));
+    }
+
+    // A unit of work that could not begin, as a store answers one: a code and the
+    // details that name what broke.
+    private static Error Unbegun =>
+        Error.From(ErrorCodes.SystemFault, "unit", JsonSerializer.SerializeToElement("begin"));
+
+    // BFF-ERR-002 AC2: the one entry a fault is kept in the log as, found by the
+    // correlation identifier its answer carries.
+    private static string Kept(Deployment deployment, Answer faulted)
+    {
+        string correlation = faulted.Text("correlationId");
+
+        return Assert.Single(
+            deployment.Logs.Lines,
+            line => line.Contains(correlation, StringComparison.Ordinal)
+                && line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal));
     }
 
     // BFF-ERR-002: the pipeline's answer to a fault, which sends the browser nowhere.
@@ -1366,7 +1666,12 @@ public sealed class SignOnTests
     private static async Task<string> ExchangedAsync(
         Deployment deployment,
         string? fails,
-        SessionId? record = null)
+        SessionId? record = null) =>
+        await IssuedAsync(deployment, fails, (record ?? Spine(deployment)).Value.ToString());
+
+    // The same answer with the token carrying in `sid` what a test names, or no such
+    // claim where it names nothing.
+    private static async Task<string> IssuedAsync(Deployment deployment, string? fails, string? sid)
     {
         CancellationToken cancellation = TestContext.Current.CancellationToken;
 
@@ -1387,18 +1692,24 @@ public sealed class SignOnTests
         }
 
         DateTimeOffset now = deployment.Clock.GetUtcNow();
+        var claims = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["sub"] = Guid.CreateVersion7(now).ToString(),
+            ["iat"] = now.AddMinutes(-10).ToUnixTimeSeconds(),
+            ["exp"] = now.AddMinutes(fails is "expiry" ? -1 : 5).ToUnixTimeSeconds(),
+        };
+
+        if (sid is not null)
+        {
+            claims["sid"] = sid;
+        }
+
         string identity = new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(
             new SecurityTokenDescriptor
             {
                 Issuer = fails is "issuer" ? "https://another.example.test" : "https://identity.example.test",
                 Audience = fails is "audience" ? "another-application" : Client,
-                Claims = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    ["sub"] = Guid.CreateVersion7(now).ToString(),
-                    ["sid"] = (record ?? Spine(deployment)).Value.ToString(),
-                    ["iat"] = now.AddMinutes(-10).ToUnixTimeSeconds(),
-                    ["exp"] = now.AddMinutes(fails is "expiry" ? -1 : 5).ToUnixTimeSeconds(),
-                },
+                Claims = claims,
                 SigningCredentials = new SigningCredentials(
                     new ECDsaSecurityKey(signer)
                     {
