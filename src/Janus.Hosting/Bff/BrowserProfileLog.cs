@@ -140,8 +140,10 @@ internal static partial class BrowserProfileLog
     public static partial void SignOnRefused(ILogger log, string correlationId, string code);
 
     /// <summary>
-    /// An exchange the provider would not carry out, or whose identity token did not
-    /// hold up (BFF-SESS-006 AC3).
+    /// An exchange that could not be made or judged, the client's secret or the
+    /// provider's published keys not being read, or whose identity token did not hold
+    /// up or named no session (BFF-SESS-006 AC3). An exchange the provider refused is
+    /// recorded once, where the browser is returned (BFF-LOG-001 AC2).
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="correlationId">What resolves the request.</param>
@@ -351,4 +353,21 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Information,
         Message = "A sign-on was returned with {Returned}, refused inside with {Code} ({CorrelationId}).")]
     public static partial void SignOnReturned(ILogger log, string correlationId, ErrorCode returned, string code);
+
+    /// <summary>
+    /// A sign-on fault that the provider, which is the library's own, answered,
+    /// beside the fault's own entry: the status a push or an exchange was answered
+    /// with, and the error the push, the exchange or the authorization response named,
+    /// where it named one, and nothing else of the answer, never its description
+    /// (BFF-SESS-006, BFF-ERR-001 AC5).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="status">The status read, or nothing for an authorization response.</param>
+    /// <param name="error">The error read, or nothing where the answer named none.</param>
+    [LoggerMessage(
+        EventId = 27,
+        Level = LogLevel.Error,
+        Message = "A sign-on faulted on an answer of status {Status} naming the error {Error} ({CorrelationId}).")]
+    public static partial void SignOnFaulted(ILogger log, string correlationId, int? status, string? error);
 }

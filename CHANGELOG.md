@@ -20,6 +20,34 @@ against the public contract of LIB-API-001.
   ask after a second step accepted first sent the code, or was answered 200 or 422
   `auth.factor.rejected` where the number's signal withheld it, or 422
   `auth.credential.suspended` for a suspended number.
+- A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
+  Information, by the code the browser is returned with and the one the refusal
+  carried inside. A refused authorization response no longer writes event 10 as
+  well, nor a 400 `invalid_grant` at the exchange event 11, each at Warning. Event 10
+  is written by nothing now; event 11 stays for an exchange that could not be made
+  or whose identity token could not be relied on.
+- A fault of the sign-on that the authentication application answered adds, beside
+  the fault's own entry, a new entry of the browser profile's log (event 27, Error)
+  carrying the status the push or the exchange was answered with and the `error` the
+  push, the exchange or the authorization response named, where it named one, and
+  nothing else of the answer, never its description. An operator reading the fault
+  by its correlation identifier can so tell `invalid_client` from `server_error`. A
+  fault nothing answered (the authentication application not reached, the client in
+  no registry, a secret or keys that cannot be read, an identity token that does not
+  hold up) adds no such entry.
+- At the sign-on, the deployment's own state is a fault, answered 500 `system.fault`,
+  where each of these returned the browser with `auth.session.expired` before: the
+  application's client in no registry, at `GET /auth/signon` and at its return; its
+  client secret that cannot be read, at the push and at the exchange; an identity
+  token from the authentication application that does not hold up in its signature
+  under that application's published keys, its issuer, its audience or its expiry;
+  those published keys that cannot be read; and a derivation that fails with a code
+  whose row names a fault or that no row names (`system.fault`,
+  `authz.policy.unregistered` and `authz.derivation.sourcesmissing` among them). A
+  return carrying neither `code` nor `error` still returns the browser with
+  `auth.session.expired` and is now recorded in event 26 with `api.request.malformed`
+  as the code it carried inside; an identity token whose session has ended since is
+  recorded there with `auth.session.expired`.
 - At the sign-on, an error the authentication application answers is no longer always
   a refusal. Every error it answers the push with, every error of the exchange other
   than a 400 whose `error` is `invalid_grant`, and an authorization response whose
