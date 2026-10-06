@@ -1819,6 +1819,19 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no change to `endpoints.txt`, no truth-table row. `CHANGELOG.md` conflicted at the merge; both sides are kept.
 - Questions 239 to 242.
 
+### `part/factors` (D-195), merged as `5b8ff33f`: question 236
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 236: at a sign-in, a `phoneCode` ask while no first factor has been accepted on the challenge, a second step accepted or not, reads nothing of the account, asks no signal, sends nothing and is answered 202; the ask's branch of question 229 is removed | `4ea8d0fc` | AUTH-FACT-002 | `AuthenticationServiceTests.AUTH_FACT_002_AC8_AnAskAfterASecondStepAndBeforeAnyFirstFactorAsksNoSignalAndSendsNothingAsync`, `SignInFlowTests.AUTH_FACT_002_AC8_ATextCodeAskedAfterASecondStepAndBeforeAnyFirstFactorIsAnswered202AndSendsNothingAsync`, `SignInFlowTests.PostFactor_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync` |
+
+- The tests of criterion 8 were written first. Of the service test's four cases three failed: with the number active and the signal clear the signal was asked and the code would have gone out; with the signal answering `risk` the ask was answered 200; with the number suspended it was refused `auth.credential.suspended`. The case of no number held passed. Both cases of the route test failed.
+- Removed, as D-195 orders: `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskAfterASecondStepAcceptedFirstNamesTheFirstFactorsAsync` and `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskWithOnlyASecondStepAcceptedFirstIsNotRefusedAsync`. The route test's ask now asserts 202 and nothing sent; its presenting call is unchanged.
+- The presenting call's `required` after a second step accepted first, a step-up's ask and an ask after a first factor are unchanged, their tests passing unchanged.
+- With those two tests gone, no test at a sign-in holds an ask leaving out a factor already accepted (question 219): they were the only arrangement that reached it, a second step accepted with no first factor, which is now a 202. The line is unchanged and the step-up tests of the same rule hold it there.
+- The changelog's unreleased line of `eb5fbe31` is corrected to what is now true.
+- No migration, no public surface line, no change to `endpoints.txt`, no truth-table row.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4916,7 +4929,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the specification says.** `09` and AUTH-FACT-002: "An ask before a first factor sends nothing and is answered 202, whatever the account holds". `09`, as D-194 reads, gives `required` for "where a second step was accepted before any first factor".
 - **The contradiction.** Such an ask is before a first factor, so 202 and nothing told, and is also the case the rule of `required` was built for at an ask, 200 and a code sent where the signal is clear.
 - **Parked.** The condition under which an ask is before a first factor. If such an ask is 202, the ask's branch of question 229 and its two tests fall with it.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 **237. Tier 2. `09` `POST /auth/factor`: the challenge's `available` read at the later call.**
 
@@ -4926,7 +4939,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The challenge holds the `available` it was begun with, which needs a column and a migration.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 **238. Tier 2. AUTH-FACT-002b criterion 6 against `09` `POST /auth/factor`: restricted first factors in `required`.**
 
@@ -4936,7 +4949,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The restricted entries are withheld from that list too where the signal answered `risk`.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 **239. Tier 2. BFF-ERR-001 criterion 5: the sign-on's failures the criterion names neither a refusal nor a fault.**
 
@@ -4948,7 +4961,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. (1), (2), (4) and (5) are faults; (3) is a refusal.
   3. Each is a refusal and writes entry 26, for which no chapter gives a code.
 - **Parked.** Readings 2 and 3.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 **240. Tier 2. BFF-ERR-001 criterion 5: a derivation that fails with a code that is a fault's.**
 
@@ -4959,7 +4972,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. A code whose status is 500 is a fault.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 **241. Tier 2. `11` section 7.5, BFF-LOG-001: what a fault of the sign-on logs.**
 
@@ -4970,7 +4983,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. The `error` behind a fault is logged too.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 **242. Tier 2. BFF-LOG-001: the entries a refusal already wrote, beside entry 26.**
 
@@ -4980,7 +4993,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. Entry 26 takes the place of entry 10.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-195.
 
 ## 5. Gate result
 
