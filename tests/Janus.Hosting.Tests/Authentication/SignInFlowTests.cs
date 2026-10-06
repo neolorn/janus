@@ -394,12 +394,12 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// `09` `POST /auth/factor`, AUTH-FACT-002 AC7: where a generated code is accepted
+    /// `09` `POST /auth/factor`, AUTH-FACT-002 AC8: where a generated code is accepted
     /// before any first factor, the call that presented it is answered 200
     /// <c>factorRequired</c> with <c>required</c> naming the first factors of the
-    /// <c>available</c> the challenge opened with, and so is a text code asked for after
-    /// it where the number's signal answers <c>risk</c>, which sends nothing; a first
-    /// factor then completes the sign-in.
+    /// <c>available</c> the challenge opened with; a text code asked for after it is
+    /// still an ask before a first factor, answered 202 and sent nothing, whatever the
+    /// number's signal would answer; a first factor then completes the sign-in.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -460,9 +460,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
         Assert.Equal("factorRequired", second.Text("status"));
         Assert.Equal("delegated", second.Text("assuranceLevel"));
         Assert.Equal(available, Named(second, "required"));
-        Assert.Equal(StatusCodes.Status200OK, asked.Status);
-        Assert.Equal("factorRequired", asked.Text("status"));
-        Assert.Equal(available, Named(asked, "required"));
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
         Assert.Equal(sent, reporting.Sms.Taken.Count);
         Assert.Equal(StatusCodes.Status200OK, first.Status);
         Assert.Equal("complete", first.Text("status"));
@@ -481,6 +479,104 @@ public sealed class SignInFlowTests : IAsyncDisposable
                     : throw new InvalidOperationException("The label does not read."),
                 AuthenticatorState.Active,
                 reporting.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC8, `09` `POST /auth/factor`: a text code asked for at a sign-in
+    /// on whose challenge a generated code was accepted and no first factor is answered
+    /// 202, asks no signal and sends nothing, whether the number it would go to is
+    /// active or suspended.
+    /// </summary>
+    /// <param name="suspended">Whether the account's number is suspended.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_FACT_002_AC8_ATextCodeAskedAfterASecondStepAndBeforeAnyFirstFactorIsAnswered202AndSendsNothingAsync(
+        bool suspended)
+    {
+        int signalled = 0;
+
+        await using var clear = new Deployment(
+            signals: new PhoneSignalProvider((_, _) =>
+            {
+                signalled++;
+
+                return ValueTask.FromResult(PhoneSignal.Clear);
+            }));
+
+        Flow.Prepare(clear);
+
+        clear.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        clear.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        clear.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        _ = await Flow.SignedInAsync(clear);
+
+        clear.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = clear.Directory.Created[^1].Subject;
+        Authenticator phone = Held(Factor.PhoneCode, "Phone");
+
+        clear.Authenticators.Hold(phone);
+        clear.Authenticators.Hold(Held(Factor.Totp, "Generator"));
+
+        if (suspended)
+        {
+            phone.Suspend(clear.Clock.GetUtcNow() + TimeSpan.FromDays(7));
+        }
+
+        var browser = new Browser(clear);
+        string challenge = await BegunAsync(browser);
+
+        Answer second = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "totp"),
+            ("value", new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+                .ComputeTotp(clear.Clock.GetUtcNow().UtcDateTime)));
+
+        int sent = clear.Sms.Taken.Count;
+        int before = signalled;
+
+        Answer asked = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        Assert.Equal(StatusCodes.Status200OK, second.Status);
+        Assert.Equal("factorRequired", second.Text("status"));
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal(before, signalled);
+        Assert.Equal(sent, clear.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(clear.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                clear.Clock.GetUtcNow(),
                 null,
                 null,
                 confirmed: true,
