@@ -53,7 +53,6 @@ internal sealed class EventConsumers(IServiceProvider services)
         IdentifierPrimaryChanged each => Registered(each),
         IdentifierRemoved each => Registered(each),
         MembershipChanged each => Registered(each),
-        NotificationRequested each => Registered(each),
         ObjectionChanged each => Registered(each),
         OrganizationErased each => Registered(each),
         RestrictionChanged each => Registered(each),

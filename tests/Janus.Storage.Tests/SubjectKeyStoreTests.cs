@@ -49,7 +49,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext reading = database.Context();
         SubjectKey read = await ReadAsync(reading, subject);
 
-        Assert.Equal(subject, read.Subject);
+        Assert.Equal(SubjectKeyId.Of(subject), read.Id);
         Assert.Equal(keys.CurrentVersion, read.KeyVersion);
         Assert.False(read.IsErased);
         Assert.Equal(Secret, Decrypted(read, keys, location, stored));
@@ -65,6 +65,41 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
 
         Assert.Null(await Store(context)
             .FindBySubjectAsync(Subjects.New(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-SEC-001 AC2 (D-183): the versions the start holds the secret source to are
+    /// those the keys that are not erased stand under; an erased key's version is not
+    /// among them.
+    /// </summary>
+    [Fact]
+    public async Task OPS_SEC_001_AC2_TheVersionsReadAreThoseOfTheKeysThatAreNotErasedAsync()
+    {
+        SubjectId live = Subjects.New();
+        SubjectId gone = Subjects.New();
+
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+
+        await WriteAsync(live, dataKey, OneVersion(7001));
+        await WriteAsync(gone, dataKey, OneVersion(7002));
+
+        await using (StoreContext erasing = database.Context())
+        {
+            SubjectKey key = await ReadAsync(erasing, gone);
+            key.Erase();
+
+            await Store(erasing).RecordWrappingAsync(key, TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlySet<int> versions = await Store(reading)
+            .WrappingVersionsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains(7001, versions);
+        Assert.DoesNotContain(7002, versions);
     }
 
     /// <summary>
@@ -212,7 +247,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext context = database.Context();
 
         var key = SubjectKey.Wrapped(
-            Subjects.New(),
+            SubjectKeyId.Of(Subjects.New()),
             1,
             new byte[PersonalDataFormat.WrappedKeyLength]);
 
@@ -236,7 +271,11 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private static byte[] Unwrapped(SubjectKey key, KeyEncryptionKeys keys) =>
-        PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey.Span, keys);
+        PersonalFieldCipher.Unwrap(
+            key.FormatMarker,
+            key.KeyVersion,
+            key.WrappedKey,
+            new KeyRingInMemory(keys, Deployment.FingerprintKeys));
 
     private static byte[] Decrypted(
         SubjectKey key,
@@ -266,7 +305,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
 
         await Store(context).AddAsync(
             SubjectKey.Wrapped(
-                subject,
+                SubjectKeyId.Of(subject),
                 keys.CurrentVersion,
                 PersonalFieldCipher.Wrap(dataKey, keys.Current.Span)),
             TestContext.Current.CancellationToken);
@@ -278,5 +317,5 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     // they mean to test, so the versions and the randomness it would draw with are
     // whatever a store needs to be constructed.
     private static SubjectKeyStore Store(StoreContext context) =>
-        new(context, OneVersion(1), Randomness);
+        new(context, new KeyRingInMemory(OneVersion(1), Deployment.FingerprintKeys), Randomness);
 }

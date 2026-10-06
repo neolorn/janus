@@ -110,7 +110,7 @@ internal sealed class WebAuthnService(
             && !await SecondStep.AvailableAsync(passwords, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorNotPermitted));
+            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorPasswordRequired));
         }
 
         RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
@@ -125,9 +125,19 @@ internal sealed class WebAuthnService(
 
         Authenticator enrolled = Enrolled(subject, kind, label, registration, party);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<AuthenticatorId>(notBegun);
+        }
+
         await authenticators.AddAsync(enrolled, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<AuthenticatorId>(notCommitted);
+        }
 
         return Result.Success(enrolled.Id);
     }
@@ -183,12 +193,21 @@ internal sealed class WebAuthnService(
 
         Authenticator enrolled = Enrolled(subject, discoverable, label, registration, party);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<AuthenticatorId>(notBegun);
+        }
 
         upgrading.Invalidate();
         await authenticators.AddAsync(enrolled, cancellationToken).ConfigureAwait(false);
         await authenticators.RecordAsync(upgrading, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<AuthenticatorId>(notCommitted);
+        }
 
         return Result.Success(enrolled.Id);
     }
@@ -239,17 +258,53 @@ internal sealed class WebAuthnService(
     }
 
     /// <summary>
+    /// Reads what a creation ceremony answered into the key material it produced,
+    /// checking the ceremony as an enrolment does and writing nothing: a registration
+    /// session stages the material until its account exists (REG-SESS-006).
+    /// </summary>
+    /// <param name="kind">Which kind is being created.</param>
+    /// <param name="answered">What the browser sent back.</param>
+    /// <param name="challenge">The value the ceremony was opened with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The key material, or the refusal.</returns>
+    public async ValueTask<Result<WebAuthnMaterial>> ReadAsync(
+        Factor kind,
+        AuthenticatorAttestation answered,
+        string challenge,
+        CancellationToken cancellationToken)
+    {
+        RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        Error? refusal = null;
+
+        WebAuthnRegistration registration = WebAuthnCeremonies
+            .Created(answered, challenge, party.Origins, party.Id)
+            .Match(read => read, error => Withheld<WebAuthnRegistration>(error, ref refusal));
+
+        refusal ??= Admits(party, kind, registration);
+
+        return refusal is not null
+            ? Result.Failure<WebAuthnMaterial>(refusal)
+            : Result.Success(Material(registration, party));
+    }
+
+    /// <summary>
     /// Judges what a sign-in ceremony answered against the credential it names,
     /// reading and checking the ceremony first.
     /// </summary>
     /// <param name="answered">What the browser sent back.</param>
     /// <param name="challenge">The value the sign-in was opened with.</param>
+    /// <param name="account">
+    /// The account the ceremony was opened for, or nothing where it named none.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The credential that answered, or the refusal.</returns>
     /// <exception cref="ArgumentNullException">The answer is absent.</exception>
     public async ValueTask<Result<Authenticator>> AssertAsync(
         AuthenticatorAssertion answered,
         string challenge,
+        SubjectId? account,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(answered);
@@ -281,31 +336,48 @@ internal sealed class WebAuthnService(
 
         return refusal is not null
             ? Result.Failure<Authenticator>(refusal)
-            : await PresentAsync(assertion, cancellationToken).ConfigureAwait(false);
+            : await JudgedAsync(assertion, identified: account is not null, account, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>
     /// Judges an assertion against the credential it names.
     /// </summary>
     /// <param name="assertion">What the ceremony produced.</param>
+    /// <param name="identified">Whether the ceremony was opened for an account it named.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The credential that answered, or the failure where it is unusable, was enrolled
-    /// under another relying party, verified nobody, or reported a counter that moved
-    /// backwards.
+    /// under another relying party, verified nobody, or reported a counter that did not
+    /// advance. A suspended credential that passes every one of those checks is
+    /// refused <c>auth.credential.suspended</c>, nothing written of it (AUTH-RECOV-007).
     /// </returns>
     /// <exception cref="ArgumentNullException">The assertion is absent.</exception>
-    public async ValueTask<Result<Authenticator>> PresentAsync(
+    public ValueTask<Result<Authenticator>> PresentAsync(
         WebAuthnAssertion assertion,
+        bool identified,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(assertion);
 
+        return JudgedAsync(assertion, identified, account: null, cancellationToken);
+    }
+
+    // The account is the one the ceremony was opened for, where its caller knows it: a
+    // suspended credential's state is told to no other (AUTH-RECOV-007).
+    private async ValueTask<Result<Authenticator>> JudgedAsync(
+        WebAuthnAssertion assertion,
+        bool identified,
+        SubjectId? account,
+        CancellationToken cancellationToken)
+    {
         Authenticator? held = await authenticators
             .ByCredentialAsync(assertion.CredentialId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held is null || !held.IsUsable || held.WebAuthn is null)
+        // AUTH-RECOV-007: a suspended credential is judged as an active one is, every
+        // check below included, and is told to be suspended only once all of them pass.
+        if (held?.WebAuthn is null || !(held.IsUsable || held.IsAwaitingInvalidation))
         {
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }
@@ -314,7 +386,16 @@ internal sealed class WebAuthnService(
         // was created for, so it is what says whose credential answered. A handle
         // naming another account, or none the library ever issued, is refused exactly
         // as a wrong credential is: whose it is is not disclosed.
-        if (assertion.UserHandle is { Length: > 0 } returned && Named(returned) != held.Subject)
+        if (assertion.UserHandle is { Length: > 0 } returned && Named(returned) != held.Subject.Value)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        // REG-PM-001 AC4, WebAuthn Level 3 section 7.2: where the ceremony named no
+        // account, the handle is the only thing that names one, so an assertion
+        // returning none is refused. A second-step key answering a ceremony opened for
+        // a named account returns none and is judged as before.
+        if (!identified && assertion.UserHandle is not { Length: > 0 })
         {
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }
@@ -335,29 +416,80 @@ internal sealed class WebAuthnService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        // A counter that did not advance is a credential that exists twice. An
-        // authenticator that keeps no counter reports nought every time, which is the
-        // absence the chapter excludes and not a counter standing still.
-        if (Kept(assertion.Counter) && Kept(held.WebAuthn.Counter) && assertion.Counter <= held.WebAuthn.Counter)
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<Authenticator>(notBegun);
+        }
+
+        // D-166 X3: the counter is judged on the row under its lock, so two assertions
+        // made at once are judged one after the other and the stored counter never
+        // moves backwards.
+        Authenticator? locked = await authenticators.FindForUpdateAsync(held.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (locked?.WebAuthn is null || !(locked.IsUsable || locked.IsAwaitingInvalidation))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        // AUTH-FACT-014 AC3: a counter that did not advance is refused and the refusal
+        // audited, the record being all this level writes; the sign-in whose unit of
+        // work it joins commits it with the failed authentication's record and count.
+        bool moved = Moved(assertion, locked.WebAuthn);
+
+        if (moved)
         {
             await audit.RecordedAsync(CounterMoved, held.Subject, held.Id, now, cancellationToken)
                 .ConfigureAwait(false);
-
-            return Result.Failure<Authenticator>(Error.From(ErrorCodes.WebAuthnCounterMismatch));
         }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        if (Kept(assertion.Counter))
+        else if (!locked.IsUsable)
         {
-            held.Counted(assertion.Counter);
+            // AUTH-RECOV-007: the assertion verified and its counter advanced, so the
+            // credential's state is what refuses it, and nothing is written of it. Its
+            // state is told only to the account the ceremony was opened for: answering
+            // another's, it is refused as any wrong credential is.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<Authenticator>(Error.From(
+                account is SubjectId named && locked.Subject != named
+                    ? ErrorCodes.FactorRejected
+                    : ErrorCodes.CredentialSuspended));
+        }
+        else
+        {
+            if (Kept(assertion.Counter))
+            {
+                locked.Counted(assertion.Counter);
+            }
+
+            locked.Used(now);
+            await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
         }
 
-        held.Used(now);
-        await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<Authenticator>(notCommitted);
+        }
 
-        return Result.Success(held);
+        return moved
+            ? Result.Failure<Authenticator>(Error.From(ErrorCodes.WebAuthnCounterMismatch))
+            : Result.Success(locked);
+    }
+
+    // AUTH-FACT-014 AC3, WebAuthn Level 3 section 7.2: where the counter presented or
+    // the one stored is above nought, a counter not above the stored one is a credential
+    // that may exist twice: an equal one, a lower one, and nought against a stored one.
+    // An authenticator that keeps no counter reports nought every time and has none
+    // stored, which is the case the check passes over.
+    private static bool Moved(WebAuthnAssertion assertion, WebAuthnMaterial held)
+    {
+        uint stored = held.Counter ?? 0;
+
+        return (Kept(assertion.Counter) || Kept(stored)) && assertion.Counter <= stored;
     }
 
     /// <summary>
@@ -384,9 +516,11 @@ internal sealed class WebAuthnService(
 
     private static bool Kept(uint? counter) => counter is > 0;
 
-    private static SubjectId? Named(string handle) =>
+    // The identifier a handle carries, read as bytes and never made a subject: the max
+    // UUID, which no subject is issued, is refused here as any other stranger is (D-174).
+    private static Guid? Named(string handle) =>
         Read(handle) is { Length: 16 } bytes
-            ? new SubjectId(new Guid(bytes, bigEndian: true))
+            ? new Guid(bytes, bigEndian: true)
             : null;
 
     private static byte[]? Read(string value) =>
@@ -440,13 +574,16 @@ internal sealed class WebAuthnService(
             subject,
             kind,
             label,
-            new WebAuthnMaterial(
-                registration.CredentialId,
-                registration.PublicKey,
-                registration.Algorithm,
-                party.Id,
-                registration.Counter is 0 ? null : registration.Counter,
-                registration.BackupEligible,
-                registration.BackupState),
+            Material(registration, party),
             time.GetUtcNow());
+
+    private static WebAuthnMaterial Material(WebAuthnRegistration registration, RelyingParty party) =>
+        new(
+            registration.CredentialId,
+            registration.PublicKey,
+            registration.Algorithm,
+            party.Id,
+            registration.Counter is 0 ? null : registration.Counter,
+            registration.BackupEligible,
+            registration.BackupState);
 }

@@ -16,7 +16,7 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     /// <summary>
     /// What each authentication presented, in the order it was recorded.
     /// </summary>
-    public List<(SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented)> Records { get; } = [];
+    public List<(SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented, string? BreakGlassReason)> Records { get; } = [];
 
     /// <summary>
     /// Each factor refused at authentication, with the account it was presented
@@ -25,19 +25,26 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     public List<(SubjectId? Subject, Factor Presented)> Failed { get; } = [];
 
     /// <summary>
+    /// Each refused code of the new-device check, with the account whose sign-in it
+    /// would have completed where there was one, in the order it was recorded.
+    /// </summary>
+    public List<SubjectId?> DeviceVerificationsFailed { get; } = [];
+
+    /// <summary>
     /// Each factor refused at a step-up, in the order it was recorded.
     /// </summary>
-    public List<(SessionId Session, SubjectId Subject, Factor Presented)> StepUpsFailed { get; } = [];
+    public List<(SessionId Session, SubjectId Subject, Factor Presented, string? BreakGlassReason)> StepUpsFailed { get; } = [];
 
     /// <inheritdoc/>
     public ValueTask PresentedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         IReadOnlyCollection<Factor> presented,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Records.Add((session, subject, presented));
+        Records.Add((session, subject, presented, breakGlassReason));
 
         return ValueTask.CompletedTask;
     }
@@ -55,14 +62,26 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     }
 
     /// <inheritdoc/>
+    public ValueTask DeviceVerificationFailedAsync(
+        SubjectId? subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        DeviceVerificationsFailed.Add(subject);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask StepUpFailedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         Factor presented,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        StepUpsFailed.Add((session, subject, presented));
+        StepUpsFailed.Add((session, subject, presented, breakGlassReason));
 
         return ValueTask.CompletedTask;
     }

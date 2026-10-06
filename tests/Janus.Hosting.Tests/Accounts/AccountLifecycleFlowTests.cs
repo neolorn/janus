@@ -1,5 +1,7 @@
+
 using System;
 using System.Threading.Tasks;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -36,7 +38,7 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
                     message,
                     kind,
                     "en",
-                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "{token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "{link}"));
             }
         }
     }
@@ -157,6 +159,27 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
 
     // The browser the notice's link is opened in, which is never the one that made
     // the request: the operation ended every session the account had.
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the deactivation, and the account stands as it
+    /// stood with no notice sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesADeactivationAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        int sent = _deployment.Mail.Taken.Count;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/deactivate"));
+
+        Assert.Equal(AccountState.Active, await StateAsync());
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/account")).Status);
+    }
+
     private async Task<Browser> ElsewhereAsync()
     {
         var elsewhere = new Browser(_deployment);
@@ -167,7 +190,7 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
     }
 
     // The token the notice carried, read off the body the template put it in.
-    private string Link() => _deployment.Mail.Taken[^1].Body;
+    private string Link() => Landing.Token(_deployment.Mail.Taken[^1].Body);
 
     private SubjectId Subject() => _deployment.Directory.Created[^1].Subject;
 

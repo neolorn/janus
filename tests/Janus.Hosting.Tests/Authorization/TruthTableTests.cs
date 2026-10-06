@@ -3,14 +3,23 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
+using Janus.Authorization.Gate;
+using Janus.Authorization.Tests.Gate;
 using Janus.Core;
+using Janus.Core.Configuration;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
+using Janus.Privacy.SubjectKeys;
+using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -40,7 +49,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         [ErrorCodes.Denied] = Decided.Denied,
         [ErrorCodes.Restricted] = Decided.Restricted,
         [ErrorCodes.ConsentRequired] = Decided.ConsentRequired,
+        [ErrorCodes.ConsentSuperseded] = Decided.ConsentSuperseded,
+        [ErrorCodes.ConsentWrittenRequired] = Decided.ConsentWrittenRequired,
+        [ErrorCodes.StepUpRequired] = Decided.StepUpRequired,
+        [ErrorCodes.StepUpUnavailable] = Decided.StepUpUnavailable,
     };
+
+    // The gate a report is judged against: the account is a member of the case's
+    // organization, whose policy states one gate at two factors, phishing-resistant,
+    // five minutes old at most, so the gate the host names costs that
+    // (AUTHZ-GATE-005, AUTH-STEP-002).
+    private static readonly Gate Strict = new(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
 
     // The table itself, stated once. Changing a policy is changing a row here, and both
     // the case-by-case run and the agreement check read it (AUTHZ-TEST-001).
@@ -69,6 +88,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant on the container the record was moved into", Decided.Allowed),
         ("a grant on the container the record was moved out of", Decided.Denied),
         ("a record of a type the model does not declare", Decided.Raised),
+        ("a permission the model does not declare", Decided.Raised),
     ];
 
     // The decisions an operation's own gate step makes over what no list shows, each
@@ -82,10 +102,110 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to a group no row names, by a caller managing groups", Decided.Denied),
         ("a change to a group no row names, by a restricted caller", Decided.Restricted),
         ("a grant on a record no registration names, by a caller managing grants", Decided.Denied),
+        ("a lookup of a record no registration names, by a caller reading grants", Decided.Denied),
         ("a change to the account's own settings", Decided.Allowed),
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
+        ("a page's record under a bound action, on a session that proved its gate", Decided.Allowed),
+        ("a page's record under a bound action, on a session whose proof has aged", Decided.StepUpRequired),
+        (
+            "a page's record under a bound action, on a session downgraded since it proved its gate",
+            Decided.ReauthenticationRequired),
+        ("a grant in the administrative organization, to a member of it", Decided.Allowed),
+        ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
+        ("a check by background work, which holds no grant", Decided.Denied),
+        ("a check refused inside work the caller rolls back", Decided.Denied),
+        ("a modifying check asked again inside the caller's unit of work", Decided.Allowed),
+        (
+            "a modifying check asked again inside the caller's unit of work, by a caller restricted since the gate step",
+            Decided.Restricted),
+        (
+            "a settings change asked again inside its unit of work, by a caller restricted since the gate step",
+            Decided.Restricted),
+        ("a group created, by a caller managing groups", Decided.Allowed),
+        ("a group created, by a caller restricted since the gate step", Decided.Restricted),
+        ("a member a group already holds added again, by a caller managing groups", Decided.Allowed),
+        ("a member a group does not hold taken out, by a caller managing groups", Decided.Allowed),
+        ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
+        ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
+        ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
+    ];
+
+    // An action bound to a step-up gate, judged from what a host's assurance provider
+    // reports of the caller where no session of the library carries the request: every
+    // outcome of the report against the gate (AUTHZ-TEST-001 AC1, LIB-HOST-004,
+    // AUTH-STEP-002, AUTH-STEP-003). The gate is one the host names, costing the
+    // strictest of the gates of the policy the caller is under. The caller's grant admits
+    // the record in every case, so what decides is the gate, and a list asked under the
+    // action is refused with the code the check answers (AUTHZ-TEST-001 AC2,
+    // AUTHZ-GATE-005).
+    private static readonly (string Scenario, Decided Decided)[] StepUps =
+    [
+        ("a report that meets the gate", Decided.Allowed),
+        ("a report below the level the gate asks", Decided.StepUpRequired),
+        ("a report that last reached the gate's level before its maximum age, and a lower one within it", Decided.StepUpRequired),
+        ("a report that last reached a level above the gate's within its maximum age", Decided.Allowed),
+        ("a report that was not phishing-resistant, at a gate asking it", Decided.StepUpRequired),
+        ("a report that last reached phishing resistance before the gate's maximum age", Decided.StepUpRequired),
+        ("a report older than the gate's maximum age", Decided.StepUpRequired),
+        ("a report made at an instant after now", Decided.StepUpRequired),
+        ("a report that meets the gate, one of whose other instants is after now", Decided.StepUpRequired),
+        ("a provider that fails to report", Decided.StepUpRequired),
+        ("no provider", Decided.StepUpUnavailable),
+    ];
+
+    // An action bound to a step-up gate, judged from the library's own session where it
+    // carries the request and is the acting person's own: what the session last reached,
+    // and when, against the gate (AUTHZ-TEST-001 AC1, AUTH-STEP-002 step 1,
+    // AUTH-SESS-001, AUTH-SESS-009). The record, the grant and the gate are the step-up
+    // table's, so what decides is the session alone, and a list asked under the action
+    // is refused with the code the check answers (AUTHZ-TEST-001 AC2, AUTHZ-GATE-005).
+    // These rows are the library's own and no scenario of chapter 10 section 5.30, since
+    // the conformance suite judges a step-up from a host's report alone.
+    private static readonly (string Scenario, Decided Decided)[] Sessions =
+    [
+        ("a session that meets the gate", Decided.Allowed),
+        ("a session below the level the gate asks", Decided.StepUpRequired),
+        ("a session that was not phishing-resistant, at a gate asking it", Decided.StepUpRequired),
+        ("a session whose proof is older than the gate's maximum age", Decided.StepUpRequired),
+        (
+            "a session that reached a lower level since, beside the gate's level past its maximum age",
+            Decided.StepUpRequired),
+        ("a session whose proof was reached only before its last downgrade", Decided.StepUpRequired),
+        (
+            "a session that reached delegated alone, the level whose own gate asks no maximum age",
+            Decided.StepUpRequired),
+        ("a session derived from a record that meets the gate", Decided.Allowed),
+        (
+            "a session derived within the gate's maximum age from a record whose proof is older than it",
+            Decided.StepUpRequired),
+        (
+            "a session derived after its record's last downgrade, the record's proof reached only before it",
+            Decided.StepUpRequired),
+    ];
+
+    // An action bound to a consent-based purpose, on a sensitive type, which asks the
+    // written consent of the record's data subject against the document the purpose
+    // names. The caller holds the grant in every case, so what decides is the consent,
+    // and the lists admit the record where the check does and nowhere else. A subject
+    // holds a record a grant, so the cases include a live record beside an ended one and
+    // a subject whose every record is ended, where the latest says which refusal it is
+    // (AUTHZ-TEST-001 AC1, AUTHZ-GATE-002 AC4, PRIV-SENS-002 AC1, PRIV-CONS-007 AC5).
+    private static readonly (string Scenario, Decided Decided)[] Consents =
+    [
+        ("a written consent against the document the purpose names", Decided.Allowed),
+        ("no consent", Decided.ConsentRequired),
+        ("a consent that was withdrawn", Decided.ConsentRequired),
+        ("a consent that was superseded", Decided.ConsentSuperseded),
+        ("a consent given again after one was withdrawn", Decided.Allowed),
+        ("a live consent standing beside one that was superseded", Decided.Allowed),
+        ("every consent to the purpose withdrawn or superseded", Decided.ConsentRequired),
+        ("a written consent against another document", Decided.ConsentSuperseded),
+        ("an ordinary consent where the purpose asks a written one", Decided.ConsentWrittenRequired),
+        ("a consent to another purpose", Decided.ConsentRequired),
+        ("a consent of the caller, who is not the record's data subject", Decided.ConsentRequired),
+        ("a record that names no data subject", Decided.ConsentRequired),
     ];
 
     /// <summary>
@@ -94,9 +214,24 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     public static TheoryData<string, Decided> Cases => Read(Table);
 
     /// <summary>
+    /// The step-up table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> StepUpCases => Read(StepUps);
+
+    /// <summary>
+    /// The sessions' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> SessionCases => Read(Sessions);
+
+    /// <summary>
     /// The operations' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> OperationCases => Read(Operations);
+
+    /// <summary>
+    /// The consents' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> ConsentCases => Read(Consents);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -132,6 +267,87 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         string scenario,
         Decided decided) =>
         Assert.Equal(decided, await OperationAsync(scenario));
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-005, LIB-HOST-004 AC3, AC4, AUTH-STEP-003 AC1:
+    /// every case of the step-up table decides the way the table says through the single
+    /// check, and both renderings of the filter answer the same: the record listed where
+    /// the report meets the gate, and the filter refused with the code the check answers
+    /// where it does not.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(StepUpCases))]
+    public async Task AUTHZ_TEST_001_AC2_EveryStepUpCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteBoundAsync();
+
+        await using ServiceProvider? reporting = Reporting(scenario);
+
+        Assert.Equal(decided, await ChecksAsync(written, reporting));
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written, reporting));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written, reporting));
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-005, AUTH-STEP-002 AC3, AUTH-SESS-001 AC3,
+    /// AUTH-SESS-009, AUTH-SESS-012 AC8: every case of the sessions' table decides the
+    /// way the table says through the single check, and both renderings of the filter
+    /// answer the same: the record listed where the session meets the gate, and the
+    /// filter refused with the code the check answers where it does not.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(SessionCases))]
+    public async Task AUTHZ_TEST_001_AC2_EverySessionCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteBoundAsync();
+        IReadOnlyList<Session> proving = Proving(written.Account, scenario);
+        Session carried = proving[^1];
+
+        foreach (Session kept in proving)
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            await KeptAsync(scope.ServiceProvider, kept);
+        }
+
+        Assert.Equal(decided, await ChecksAsync(written, carried: carried));
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written, carried: carried));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written, carried: carried));
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AUTHZ-GATE-002 AC4, PRIV-SENS-002 AC5: every case of the
+    /// consents' table decides the way the table says through the single check, and both
+    /// renderings of the filter list the record where the check admits it and nowhere
+    /// else.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(ConsentCases))]
+    public async Task AUTHZ_GATE_002_AC4_EveryConsentCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteConsentedAsync(scenario);
+
+        Decided listed = decided is Decided.Allowed ? Decided.Allowed : Decided.Denied;
+
+        Assert.Equal(decided, await ChecksAsync(written));
+        Assert.Equal(listed, await ExpressionAdmitsAsync(written));
+        Assert.Equal(listed, await FragmentAdmitsAsync(written));
+    }
 
     /// <summary>
     /// AUTHZ-PRIN-001 AC1: the single check and the list filter are asked the whole
@@ -338,19 +554,39 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     private static async Task<Expression<Func<HostDocument, bool>>> ExpressionAsync(
         Case written,
+        HostContext reading) =>
+        Rendered(await FilteredAsync(written, reading, deployment: null, carried: null));
+
+    // The expression the gate renders for the case, or the refusal it answers before
+    // rendering one (AUTHZ-GATE-005).
+    private static async Task<Result<Expression<Func<HostDocument, bool>>>> FilteredAsync(
+        Case written,
         HostContext reading,
-        IServiceProvider? deployment = null)
+        IServiceProvider? deployment,
+        Session? carried)
     {
         await using AsyncServiceScope scope = (deployment ?? written.Host.Services).CreateAsyncScope();
 
-        return Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+        Arrived(scope.ServiceProvider, carried);
+
+        return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
                 AccessContext.Of(written.Account),
-                HostPermissions.Read,
+                written.Asked,
                 written.Record.Type,
                 written.Deployment.Organization,
                 Sources(reading),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken);
+    }
+
+    // The session a request arrived on, as the resolution stage leaves it for every
+    // stage after it (BFF-ORDER-001 stage 5); a case that names none arrives on none.
+    private static void Arrived(IServiceProvider request, Session? carried)
+    {
+        if (carried is not null)
+        {
+            request.GetRequiredService<RequestSession>().Resolved(carried);
+        }
     }
 
     private static TheoryData<string, Decided> Read((string Scenario, Decided Decided)[] table)
@@ -372,9 +608,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             ? decided
             : throw new InvalidOperationException(error.Code.ToString());
 
-    // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is raised by the
-    // gate before anything is read, which is what the case decides; the test's own
-    // failures are never read as one.
+    // CONV-ERR-001, AUTHZ-PRIN-003: a type or a permission the model does not declare is
+    // raised by the gate before anything is read, which is what the case decides; the
+    // test's own failures are never read as one.
     private static async Task<Decided> RaisedOrAsync(Func<Task<Decided>> asked)
     {
         try
@@ -390,7 +626,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // What the host supplies from its own context, the same object every path on a type
     // with a derivation takes (D-161).
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
@@ -401,16 +637,21 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
-    private async Task<Decided> ChecksAsync(Case written, IServiceProvider? deployment = null) =>
+    private async Task<Decided> ChecksAsync(
+        Case written,
+        IServiceProvider? deployment = null,
+        Session? carried = null) =>
         await RaisedOrAsync(async () =>
         {
             await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
             await using HostContext reading = host.Context();
 
+            Arrived(scope.ServiceProvider, carried);
+
             Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .RequireAsync(
                     AccessContext.Of(written.Account),
-                    HostPermissions.Read,
+                    written.Asked,
                     written.Record,
                     Sources(reading),
                     TestContext.Current.CancellationToken);
@@ -418,37 +659,56 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             return outcome.Match(() => Decided.Allowed, Refused);
         });
 
-    private async Task<Decided> ExpressionAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
+    private async Task<Decided> ExpressionAdmitsAsync(
+        Case written,
+        IServiceProvider? deployment = null,
+        Session? carried = null) =>
         await RaisedOrAsync(async () =>
         {
             await using HostContext reading = host.Context();
 
-            return await reading.Documents
-                .Where(await ExpressionAsync(written, reading, deployment))
-                .AnyAsync(
-                    document => document.Id == written.Record.Id.ToString(),
-                    TestContext.Current.CancellationToken)
-                ? Decided.Allowed
-                : Decided.Denied;
+            return await (await FilteredAsync(written, reading, deployment, carried)).Match(
+                async expression => await reading.Documents
+                    .Where(expression)
+                    .AnyAsync(
+                        document => document.Id == written.Record.Id.ToString(),
+                        TestContext.Current.CancellationToken)
+                    ? Decided.Allowed
+                    : Decided.Denied,
+                refused => Task.FromResult(Refused(refused)));
         });
 
-    private async Task<Decided> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
+    private async Task<Decided> FragmentAdmitsAsync(
+        Case written,
+        IServiceProvider? deployment = null,
+        Session? carried = null) =>
         await RaisedOrAsync(async () =>
         {
-            SqlFilter fragment;
+            Result<SqlFilter> rendered;
 
             await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
             {
-                fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                Arrived(scope.ServiceProvider, carried);
+
+                rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                     .FragmentAsync(
                         AccessContext.Of(written.Account),
-                        HostPermissions.Read,
+                        written.Asked,
                         written.Record.Type,
                         written.Deployment.Organization,
                         "identity_authz_row",
                         "id",
-                        TestContext.Current.CancellationToken));
+                        TestContext.Current.CancellationToken);
             }
+
+            // AUTHZ-GATE-005: a fragment the gate refuses before rendering decides the
+            // case by the code it answers.
+            if (rendered.Match<Error?>(_ => null, refused => refused) is Error refusal)
+            {
+                return Refused(refusal);
+            }
+
+            SqlFilter fragment = Rendered(rendered);
 
             var arguments = new DynamicParameters();
 
@@ -511,7 +771,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await ReviewAsync(deployment, scenario, account, inner, outer);
         await MovedAsync(scenario, record, elsewhere);
 
-        return new Case(host, deployment, account, record, sibling, inner, outer);
+        // CONV-ERR-001, AUTHZ-PRIN-003: a permission no rule governs is asked of a record
+        // the whole organization's grant would otherwise admit.
+        Permission asked = scenario == "a permission the model does not declare"
+            ? Permission.Parse("document:share")
+            : HostPermissions.Read;
+
+        return new Case(host, deployment, account, record, sibling, inner, outer, asked);
     }
 
     // AUTHZ-INHERIT-002: the record is moved by the library, whose rewrite of the
@@ -533,9 +799,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.True(moved.Match(() => true, _ => false));
     }
 
-    // Each operation case in a deployment of its own, its caller holding the management
-    // of grants and of groups across the organization, so that what refuses a row no
-    // row names is the row's absence and never the caller's want of a permission.
+    // Each operation case in a deployment of its own, its caller holding the reading and
+    // management of grants and the management of groups across the organization, so
+    // that what refuses a row no row names is the row's absence and never the caller's
+    // want of a permission.
     private async Task<Decided> OperationAsync(string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -545,7 +812,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             [HostPermissions.Read, HostPermissions.Recommend],
             cancellationToken);
         RoleName managing = await deployment.RoleAsync(
-            [Permissions.GrantManage, Permissions.GroupManage],
+            [Permissions.GrantManage, Permissions.GrantRead, Permissions.GroupManage],
             cancellationToken);
         SubjectId caller = await deployment.AccountAsync(cancellationToken);
 
@@ -595,10 +862,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             cancellationToken))
                     .Match(_ => Decided.Allowed, Refused);
 
+            case "a lookup of a record no registration names, by a caller reading grants":
+                return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .WhoCanAccessAsync(context, Reference(Document), cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused);
+
             case "a change to the account's own settings":
             case "a change to the account's own settings, by a restricted caller":
                 return await scope.ServiceProvider.GetRequiredService<ISettingsRestriction>()
-                    .RefusedAsync(caller, cancellationToken) is Error refused
+                    .RefusedAsync(AccessContext.Of(caller), cancellationToken) is Error refused
                     ? Refused(refused)
                     : Decided.Allowed;
 
@@ -610,9 +882,465 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     consented: scenario == "a page's record whose subject gave the consent its purpose asks");
 
+            case "a page's record under a bound action, on a session that proved its gate":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: false);
+
+            case "a page's record under a bound action, on a session whose proof has aged":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromDays(1), downgraded: false);
+
+            case "a page's record under a bound action, on a session downgraded since it proved its gate":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: true);
+
+            case "a grant in the administrative organization, to a member of it":
+            case "a grant in the administrative organization, to an account holding no membership of it":
+                return await AdministeredAsync(
+                    deployment,
+                    managing,
+                    caller,
+                    member: scenario == "a grant in the administrative organization, to a member of it");
+
+            case "a check by background work, which holds no grant":
+                return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .RequireAsync(
+                            AccessContext.Of(SystemPrincipal.ForOrganization(
+                                "import",
+                                "the nightly import",
+                                deployment.Organization)),
+                            Permissions.GrantRead,
+                            deployment.Organization,
+                            cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
+
+            case "a check refused inside work the caller rolls back":
+                return await RolledBackAsync(caller, deployment.Organization);
+
+            case "a modifying check asked again inside the caller's unit of work":
+                return await AskedAgainAsync(deployment, caller, restricted: false, settings: false);
+
+            case "a modifying check asked again inside the caller's unit of work, by a caller restricted since the gate step":
+                return await AskedAgainAsync(deployment, caller, restricted: true, settings: false);
+
+            case "a settings change asked again inside its unit of work, by a caller restricted since the gate step":
+                return await AskedAgainAsync(deployment, caller, restricted: true, settings: true);
+
+            case "a group created, by a caller managing groups":
+            case "a group created, by a caller restricted since the gate step":
+                return await GroupCreatedAsync(
+                    deployment,
+                    caller,
+                    restricted: scenario.EndsWith("since the gate step", StringComparison.Ordinal));
+
+            case "a member a group already holds added again, by a caller managing groups":
+                return await MemberChangedAsync(deployment, caller, held: true);
+
+            case "a member a group does not hold taken out, by a caller managing groups":
+                return await MemberChangedAsync(deployment, caller, held: false);
+
+            case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
+                return await ViewedAsync(deployment, caller);
+
+            case "a fact in the host's data no grant was materialised for, after the drift check":
+            case "a materialised grant the host's data no longer supports, after the drift check":
+                return await DriftCheckedAsync(
+                    deployment,
+                    supported: scenario.StartsWith("a fact", StringComparison.Ordinal));
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // AUTHZ-DERIVE-007, LIB-HOST-001: the view of who can access a record a fact in the
+    // host's data reaches, read through the relationship source the host declared. The
+    // case is allowed where the view answers and names the fact's holder as derived.
+    private async Task<Decided> ViewedAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        SubjectId reviewing = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await deployment.ReviewAsync(workspace, reviewing, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .WhoCanAccessAsync(AccessContext.Of(caller), record, cancellationToken))
+            .Match(
+                access => access.Grants.Any(grant =>
+                    grant.Kind is GrantKind.Derived && grant.SubjectId == reviewing.Value)
+                    ? Decided.Allowed
+                    : throw new InvalidOperationException("The view left the derived grant out."),
+                Refused);
+    }
+
+    // AUTHZ-DERIVE-005 AC4: a record under a workspace someone reviews, in the deployment
+    // with the derivation materialised, after the drift check has run over the declared
+    // source; where the case says the rows no longer support the grant, the fact is
+    // taken away after a first check wrote it and the check runs again.
+    private async Task<Decided> DriftCheckedAsync(Deployment deployment, bool supported)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        SubjectId reviewing = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await deployment.ReviewAsync(workspace, reviewing, cancellationToken);
+
+        await using ServiceProvider materialised = Materialised();
+
+        await DriftCheckedAsync(materialised);
+
+        if (!supported)
+        {
+            await deployment.UnreviewAsync(workspace, reviewing, cancellationToken);
+            await DriftCheckedAsync(materialised);
+        }
+
+        await using AsyncServiceScope scope = materialised.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(reviewing), HostPermissions.Read, record, cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+    }
+
+    // The drift check as the worker runs it: the job, under its own principal.
+    private static async Task DriftCheckedAsync(IServiceProvider deployment)
+    {
+        BackgroundJob check = BackgroundJobs.All.Single(job => job.Name == DerivationDriftCheck.Job);
+
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        (await check.RunAsync(
+                scope.ServiceProvider,
+                AccessContext.Of(check.Principal),
+                TestContext.Current.CancellationToken))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    // AUTHZ-GATE-006 AC3: a modifying action that passed the gate step, asked again inside
+    // the unit of work it writes in, where the account's row is held. A restriction
+    // committed between the two refuses the second, and the case is decided by it.
+    private async Task<Decided> AskedAgainAsync(
+        Deployment deployment,
+        SubjectId caller,
+        bool restricted,
+        bool settings)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope working = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = working.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var context = AccessContext.Of(caller);
+
+        async Task<Decided> AskAsync() =>
+            settings
+                ? await working.ServiceProvider.GetRequiredService<ISettingsRestriction>()
+                    .RefusedAsync(context, cancellationToken) is Error refused
+                    ? Refused(refused)
+                    : Decided.Allowed
+                : (await working.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .RequireAsync(context, Permissions.GrantManage, deployment.Organization, cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
+
+        Assert.Equal(Decided.Allowed, await AskAsync());
+
+        if (restricted)
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
+        }
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Decided decided = await AskAsync();
+
+        await work.RollbackAsync();
+
+        return decided;
+    }
+
+    // AUTHZ-GATE-006 AC3, CONV-DESIGN-002: a change through the library's own operation,
+    // which asks the gate at its gate step and again inside its unit of work. Where the
+    // case restricts the caller between the two, the operation refuses, leaves no
+    // transaction open and writes no group.
+    private async Task<Decided> GroupCreatedAsync(Deployment deployment, SubjectId caller, bool restricted)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using ServiceProvider interleaved = Interleaved(
+            async cancelled =>
+            {
+                if (restricted)
+                {
+                    await deployment.RestrictAsync(caller, cancelled);
+                }
+            });
+        await using AsyncServiceScope scope = interleaved.CreateAsyncScope();
+
+        Decided decided = (await scope.ServiceProvider.GetRequiredService<IGroups>()
+                .CreateAsync(
+                    AccessContext.Of(caller),
+                    deployment.Organization,
+                    "Reviewers",
+                    "A group for the reviewers.",
+                    cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int written = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM identity.groups WHERE organization = @organization;",
+            new { organization = deployment.Organization.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.False(Assert.IsType<UnitOfWorkInterleaved>(
+            scope.ServiceProvider.GetRequiredService<IUnitOfWork>()).Open);
+        Assert.Equal(decided is Decided.Allowed ? 1 : 0, written);
+
+        return decided;
+    }
+
+    // A session of the caller that proved two factors a minute ago, which meets the gate
+    // a change of members asks.
+    private static async Task<SessionId> SteppedUpAsync(IServiceProvider services, SubjectId caller)
+    {
+        Session session = Begun(
+            caller,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Deployment.Noon - TimeSpan.FromMinutes(1));
+
+        await KeptAsync(services, session);
+
+        return session.Id;
+    }
+
+    private static Session Begun(SubjectId caller, Assurance reached, DateTimeOffset at) =>
+        Session.Begin(
+            SessionId.New(TimeProvider.System),
+            caller,
+            reached,
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            at,
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+    // The session as the store keeps it, which is where the gate reads it from.
+    private static async Task KeptAsync(IServiceProvider services, Session session)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(session.Subject, cancellationToken) is null)
+        {
+            await keys.CreateAsync(session.Subject, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+    }
+
+    // What the session of each case of the sessions' table last reached, and when,
+    // against the strict gate: two factors, phishing-resistant, five minutes old at
+    // most. Each case leaves unmet the one thing its row names and nothing else, but
+    // the case of delegated alone, which reaches nothing the gate asks: a gate whose
+    // level is delegated asks no maximum age (AUTH-STEP-007), no gate bound to an
+    // action states that level (AUTH-STEP-002a), and so what such a session reached
+    // passes none of them however lately. The request arrives on the last session a
+    // case answers; a derived session comes after the record it stands on
+    // (AUTH-SESS-012).
+    private static IReadOnlyList<Session> Proving(SubjectId caller, string scenario)
+    {
+        DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
+        DateTimeOffset aged = Deployment.Noon - TimeSpan.FromMinutes(6);
+        var met = new Assurance(AssuranceLevel.Aal2, PhishingResistant: true);
+        var lower = new Assurance(AssuranceLevel.Aal1, PhishingResistant: true);
+
+        switch (scenario)
+        {
+            case "a session that meets the gate":
+                return [Begun(caller, met, recent)];
+
+            case "a session below the level the gate asks":
+                return [Begun(caller, lower, recent)];
+
+            case "a session that was not phishing-resistant, at a gate asking it":
+                return [Begun(caller, met with { PhishingResistant = false }, recent)];
+
+            case "a session whose proof is older than the gate's maximum age":
+                return [Begun(caller, met, aged)];
+
+            case "a session that reached a lower level since, beside the gate's level past its maximum age":
+                Session renewed = Begun(caller, met, aged);
+
+                renewed.Present(lower, recent);
+
+                return [renewed];
+
+            case "a session whose proof was reached only before its last downgrade":
+                Session downgraded = Begun(caller, met, recent);
+
+                downgraded.Downgrade(Deployment.Noon - TimeSpan.FromSeconds(30));
+
+                return [downgraded];
+
+            case "a session that reached delegated alone, the level whose own gate asks no maximum age":
+                return [Begun(caller, new Assurance(AssuranceLevel.Delegated, PhishingResistant: false), recent)];
+
+            case "a session derived from a record that meets the gate":
+                Session standing = Begun(caller, met, recent);
+
+                return [standing, Derived(standing, Deployment.Noon - TimeSpan.FromSeconds(30))];
+
+            case "a session derived within the gate's maximum age from a record whose proof is older than it":
+                Session old = Begun(caller, met, aged);
+
+                return [old, Derived(old, recent)];
+
+            case "a session derived after its record's last downgrade, the record's proof reached only before it":
+                Session lowered = Begun(caller, met, Deployment.Noon - TimeSpan.FromMinutes(3));
+
+                lowered.Downgrade(Deployment.Noon - TimeSpan.FromMinutes(2));
+
+                return [lowered, Derived(lowered, recent)];
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "The table has no such case.");
+        }
+    }
+
+    // The session another application establishes from a record (AUTH-SESS-012).
+    private static Session Derived(Session record, DateTimeOffset at) =>
+        record.Derive(
+            SessionId.New(TimeProvider.System),
+            SessionType.PerApp,
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            at,
+            TimeSpan.FromDays(7));
+
+    // AUTHZ-GROUP-001, CONV-DESIGN-003 AC10: a change of members that changes nothing is
+    // decided as any other, the gate asked at its step and again inside the unit of work
+    // and the step-up met, and is answered as done; it writes no row and leaves no
+    // transaction open.
+    private async Task<Decided> MemberChangedAsync(Deployment deployment, SubjectId caller, bool held)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        var member = GrantSubject.Of(account);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGroups groups = services.GetRequiredService<IGroups>();
+
+        GroupId group = (await groups.CreateAsync(
+                context,
+                deployment.Organization,
+                "Reviewers",
+                "A group for the reviewers.",
+                cancellationToken))
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        if (held)
+        {
+            (await groups.AddMemberAsync(context, session, group, member, "Joined the reviewers.", cancellationToken))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+
+        Decided decided = (held
+                ? await groups.AddMemberAsync(context, session, group, member, "Joined the reviewers.", cancellationToken)
+                : await groups.RemoveMemberAsync(context, session, group, member, "Left the reviewers.", cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int members = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM identity.group_members WHERE group_id = @group;",
+            new { group = group.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal(held ? 1 : 0, members);
+
+        return decided;
+    }
+
+    // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
+    // back, decided as any other and resolving afterwards by the identifier it carried.
+    private async Task<Decided> RolledBackAsync(SubjectId caller, OrganizationId organization)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Result outcome;
+
+        await using (AsyncServiceScope working = host.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = working.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            _ = await work.BeginAsync(cancellationToken);
+            outcome = await working.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(caller), HostPermissions.Publish, organization, cancellationToken);
+            await work.RollbackAsync();
+        }
+
+        if (outcome.Match<Error?>(() => null, error => error) is not Error refusal)
+        {
+            return Decided.Allowed;
+        }
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        AccessExplanation resolved = (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ResolveOwnAsync(
+                    AccessContext.Of(caller),
+                    new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+                    cancellationToken))
+            .Match(explained => explained, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return resolved.Outcome is AccessOutcome.Denied ? Refused(refusal) : Decided.Allowed;
+    }
+
+    // IDN-LIFE-009a, D-166: the caller's grant in the administrative organization,
+    // asked of that organization as an administrative operation asks it.
+    private async Task<Decided> AdministeredAsync(
+        Deployment deployment,
+        RoleName managing,
+        SubjectId caller,
+        bool member)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+
+        if (member)
+        {
+            await deployment.MemberAsync(caller, administrative, cancellationToken);
+        }
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(caller), Permissions.GrantRead, administrative, cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
     }
 
     // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: one page holding a record of a subject who
@@ -667,6 +1395,165 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return checkedAlone;
     }
 
+    // AUTHZ-GATE-005, AUTH-SESS-009: a page under an action bound to a step-up gate,
+    // asked on the caller's own session. The page names what the action still requires
+    // and the single check refuses it for step-up, or both admit it; a session
+    // downgraded since its proof is asked to authenticate again, and one whose proof has
+    // aged to step up.
+    private async Task<Decided> BoundPagedAsync(
+        Deployment deployment,
+        SubjectId caller,
+        TimeSpan ago,
+        bool downgraded)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        RoleName publishing = await deployment.RoleAsync(
+            [HostPermissions.Read, HostPermissions.Publish],
+            cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), publishing, workspace, false, null, null, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IServiceProvider services = scope.ServiceProvider;
+
+        Session session = Begun(
+            caller,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Deployment.Noon - ago);
+
+        if (downgraded)
+        {
+            session.Downgrade(Deployment.Noon - (ago / 2));
+        }
+
+        await KeptAsync(services, session);
+
+        Arrived(services, session);
+
+        IAccessGate gate = services.GetRequiredService<IAccessGate>();
+
+        Capability paged = Rendered(await gate.CapabilitiesAsync(
+                AccessContext.Of(caller),
+                Document,
+                [record.Id],
+                [HostPermissions.Publish],
+                Sources(reading),
+                cancellationToken))
+            .Single();
+
+        Decided checkedAlone = (await gate.RequireAsync(
+                AccessContext.Of(caller),
+                HostPermissions.Publish,
+                record,
+                Sources(reading),
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        Assert.Contains(HostPermissions.Publish, paged.Can);
+
+        Decided asked = paged.Requires.TryGetValue(
+            HostPermissions.Publish,
+            out IReadOnlySet<CapabilityResidual>? outstanding)
+            ? outstanding.SetEquals([CapabilityResidual.Reauthenticate])
+                ? Decided.ReauthenticationRequired
+                : outstanding.SetEquals([CapabilityResidual.StepUp])
+                    ? Decided.StepUpRequired
+                    : throw new InvalidOperationException("The page asks what the table has no row for.")
+            : Decided.Allowed;
+
+        Assert.Equal(
+            asked is Decided.Allowed ? Decided.Allowed : Decided.StepUpRequired,
+            checkedAlone);
+
+        return asked;
+    }
+
+    // A record the account's grant confers the consent-bound action on, whose data
+    // subject holds what the case names.
+    private async Task<Case> WriteConsentedAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        SubjectId subject = await deployment.AccountAsync(cancellationToken);
+        ResourceReference outer = Reference(Workspace);
+        ResourceReference inner = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        ResourceReference sibling = Reference(Document);
+
+        await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(inner, outer, cancellationToken);
+        await deployment.RegisterAsync(sibling, inner, cancellationToken);
+        await deployment.RegisterAsync(
+            record,
+            inner,
+            cancellationToken,
+            scenario == "a record that names no data subject" ? null : subject);
+        await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+
+        switch (scenario)
+        {
+            case "a written consent against the document the purpose names":
+                await ConsentedAsync(subject);
+                break;
+            case "a consent that was withdrawn":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: true);
+                break;
+            case "a consent that was superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                break;
+            case "a consent given again after one was withdrawn":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: true);
+                await ConsentedAsync(subject);
+                break;
+            case "a live consent standing beside one that was superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                await ConsentedAsync(subject, after: TimeSpan.FromHours(2));
+                break;
+            case "every consent to the purpose withdrawn or superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                await ConsentedAsync(subject, after: TimeSpan.FromHours(2));
+                await EndedAsync(subject, withdrawn: true, after: TimeSpan.FromHours(3));
+                break;
+            case "a written consent against another document":
+                await ConsentedAsync(subject, document: "newsletter-terms");
+                break;
+            case "an ordinary consent where the purpose asks a written one":
+                await ConsentedAsync(subject, kind: ConsentKind.Ordinary);
+                break;
+            case "a consent to another purpose":
+                await ConsentedAsync(subject, purpose: "newsletters");
+                break;
+            case "a consent of the caller, who is not the record's data subject":
+            case "a record that names no data subject":
+                await ConsentedAsync(account);
+                break;
+            case "no consent":
+                break;
+            default:
+                throw new InvalidOperationException("The consents' table holds a case nothing writes.");
+        }
+
+        return new Case(host, deployment, account, record, sibling, inner, outer, HostPermissions.Recommend);
+    }
+
     // What the page decides on one record: the consent it still requires, the action
     // it admits, or neither.
     private static Decided Paged(Capability capability) =>
@@ -676,8 +1563,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             : capability.Can.Contains(HostPermissions.Recommend) ? Decided.Allowed : Decided.Denied;
 
     // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
-    // sensitive type, recorded for its data subject.
-    private async Task ConsentedAsync(SubjectId subject)
+    // sensitive type, recorded for its data subject. A case that gives a second consent
+    // gives it later than the first, so which of the two is the latest is not left to
+    // their identifiers.
+    private async Task ConsentedAsync(
+        SubjectId subject,
+        string purpose = "recommendations",
+        string document = "privacy-notice",
+        ConsentKind kind = ConsentKind.Written,
+        TimeSpan after = default)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -686,17 +1580,40 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await work.BeginAsync(cancellationToken);
-        await scope.ServiceProvider.GetRequiredService<IConsentStore>().RecordAsync(
+        _ = await scope.ServiceProvider.GetRequiredService<IConsentStore>().AddAsync(
             subject,
             new ConsentRecord(
-                "recommendations",
+                purpose,
+                document,
                 "1",
                 ConsentMechanism.Dashboard,
-                ConsentKind.Written,
-                Deployment.Noon,
+                kind,
+                Deployment.Noon + after,
                 WithdrawnAt: null,
                 SupersededAt: null),
             cancellationToken);
+        await work.CommitAsync(cancellationToken);
+    }
+
+    // PRIV-CONS-004, PRIV-CONS-007: the subject's live consent to the purpose, stamped
+    // withdrawn or superseded, an hour after the first consent where the case names no
+    // other instant.
+    private async Task EndedAsync(SubjectId subject, bool withdrawn, TimeSpan? after = null)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        IConsentStore store = scope.ServiceProvider.GetRequiredService<IConsentStore>();
+        DateTimeOffset at = Deployment.Noon + (after ?? TimeSpan.FromHours(1));
+
+        await work.BeginAsync(cancellationToken);
+
+        Assert.True(withdrawn
+            ? await store.WithdrawConsentAsync(subject, "recommendations", at, cancellationToken)
+            : await store.SupersedeAsync(subject, "recommendations", at, cancellationToken));
+
         await work.CommitAsync(cancellationToken);
     }
 
@@ -815,9 +1732,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     holder, role, inner, false, null, null, cancellationToken);
                 break;
 
-            // The whole organization is granted, so a type the gate answered rather than
-            // raised would be allowed.
+            // The whole organization is granted, so a type or a permission the gate
+            // answered rather than raised would be allowed.
             case "a record of a type the model does not declare":
+            case "a permission the model does not declare":
                 await deployment.GrantAsync(
                     holder, role, null, false, null, null, cancellationToken);
                 break;
@@ -860,6 +1778,114 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await deployment.ReviewAsync(workspace, account, cancellationToken);
     }
 
+    // What a provider reports in each case of the step-up table, and nothing where the
+    // case has it fail.
+    private static AttainedAssurance? Reported(string scenario)
+    {
+        DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
+        DateTimeOffset aged = Deployment.Noon - TimeSpan.FromMinutes(6);
+        DateTimeOffset ahead = Deployment.Noon + TimeSpan.FromMinutes(1);
+
+        var met = new AttainedAssurance(
+            Aal1At: recent,
+            Aal2At: recent,
+            Aal3At: null,
+            PhishingResistantAt: recent,
+            AssuranceLevel.Aal2);
+
+        return scenario switch
+        {
+            "a report that meets the gate" => met,
+            "a report below the level the gate asks" => met with { Aal2At = null },
+            "a report that last reached the gate's level before its maximum age, and a lower one within it" => met with { Aal2At = aged },
+            "a report that last reached a level above the gate's within its maximum age" => met with { Aal2At = aged, Aal3At = recent },
+            "a report that was not phishing-resistant, at a gate asking it" => met with { PhishingResistantAt = null },
+            "a report that last reached phishing resistance before the gate's maximum age" => met with { PhishingResistantAt = aged },
+            "a report older than the gate's maximum age" => met with { Aal1At = aged, Aal2At = aged, PhishingResistantAt = aged },
+            "a report made at an instant after now" => met with { Aal1At = ahead, Aal2At = ahead, PhishingResistantAt = ahead },
+            "a report that meets the gate, one of whose other instants is after now" => met with { Aal3At = ahead },
+            "a provider that fails to report" => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "The table has no such case."),
+        };
+    }
+
+    // The same deployment with a host's assurance provider registered, which is what a
+    // deployment consuming authorization without the library's sign-in supplies
+    // (LIB-HOST-004); the last case registers none, as the fixture does.
+    private ServiceProvider? Reporting(string scenario)
+    {
+        if (scenario == "no provider")
+        {
+            return null;
+        }
+
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddSingleton<IAssuranceProvider>(new AssuranceProviderInMemory(Reported(scenario)));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+
+        return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // A record the account's grant confers the bound action on, in an organization the
+    // account is a member of and whose policy states the strict gate.
+    private async Task<Case> WriteBoundAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Publish],
+            cancellationToken);
+
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        ResourceReference outer = Reference(Workspace);
+        ResourceReference inner = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        ResourceReference sibling = Reference(Document);
+
+        await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(inner, outer, cancellationToken);
+        await deployment.RegisterAsync(sibling, inner, cancellationToken);
+        await deployment.RegisterAsync(record, inner, cancellationToken);
+        await deployment.MemberAsync(account, deployment.Organization, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO identity.settings (key, value) VALUES (@key, @value);",
+            new
+            {
+                key = Settings.OrganizationPolicy.For(deployment.Organization.ToString()).ToString(),
+                value = Settings.OrganizationPolicy.Write(PolicyOverride.None with
+                {
+                    Gates = new Dictionary<StepUpAction, Gate> { [StepUpAction.IdentifierAdd] = Strict },
+                }),
+            },
+            cancellationToken: cancellationToken));
+
+        return new Case(host, deployment, account, record, sibling, inner, outer, HostPermissions.Publish);
+    }
+
+    // The same deployment with something committed on another connection in the moment
+    // before an operation's unit of work begins, which is after its gate step
+    // (AUTHZ-GATE-006 AC3).
+    private ServiceProvider Interleaved(Func<CancellationToken, Task> meanwhile)
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+        services.AddScoped<IUnitOfWork>(provider =>
+            new UnitOfWorkInterleaved(new UnitOfWork(provider.GetRequiredService<StoreContext>()), meanwhile));
+
+        return HostFixture.Started(services.BuildServiceProvider());
+    }
+
     // The same deployment with the one derivation precomputed into grant rows, which
     // is what AUTHZ-TEST-001 AC3 asks the table of a second time.
     private ServiceProvider Materialised()
@@ -867,16 +1893,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         var services = new ServiceCollection();
 
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
-        services.AddJanus(
-            host.ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new byte[16],
-            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-            HostFixture.Declaration(materialised: true),
-            ApplicationKind.Public);
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        HostFixture.Sourced(services, host.ConnectionString);
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(materialised: true), ApplicationKind.Public);
 
-        return services.BuildServiceProvider();
+        return HostFixture.Started(services.BuildServiceProvider());
     }
 
     // AUTHZ-DERIVE-005: the host refreshes the derivation from the operation that
@@ -993,5 +2014,6 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ResourceReference Record,
         ResourceReference Sibling,
         ResourceReference Inner,
-        ResourceReference Outer);
+        ResourceReference Outer,
+        Permission Asked);
 }

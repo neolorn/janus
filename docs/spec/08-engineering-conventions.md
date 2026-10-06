@@ -11,9 +11,9 @@ platform constraints.
 defaults. Anything not addressed here follows standard .NET practice.
 
 **Nothing in this document is a suggestion.** Every design and code choice below is
-fixed so that the implementer decides none of them. Where a choice is
-not covered here or by another chapter, the implementer stops and reports rather than
-choosing (D-149).
+fixed so that the implementer decides none of them. Where a choice is not covered here
+or by another chapter, the implementer parks the item and reports it rather than
+choosing (D-149, D-182).
 
 **Root namespace:** `Janus`. Settled — the library is internal to the company's own
 projects and is not published publicly, so no registry check applies.
@@ -27,24 +27,31 @@ area**, published as a single package.
 
 | Project | Contains | Depends on |
 |---|---|---|
-| `Janus.Core` | Contracts, abstractions, the public surface | nothing |
-| `Janus.Identity` | Accounts, organizations, memberships | Core |
-| `Janus.Authentication` | Factors, sessions, flows | Core |
+| `Janus.Core` | Contracts, abstractions, the public surface; internally, the key ring's implementation (CONV-CODE-007) and the implementation of the contract of the mail server in use (CONV-DESIGN-007) | nothing |
+| `Janus.Identity` | The account, identifier, organization and membership aggregates, their rules and their persistence ports | Core |
+| `Janus.Authentication` | Factors, sessions, flows; the services of the account, identifier, registration, organization and invitation operations, which gate through this area's step-up guard; the sending restrictions and the governed send path (evaluation, outbox row, counting), whose contract `Janus.Core` declares so that every area sends through it | Core |
 | `Janus.Authorization` | Grants, model builder, gate | Core |
 | `Janus.Privacy` | Purposes and bases, consent and objection, legal documents, rights queue, erasure and export (chapter `04`) | Core |
 | `Janus.Storage` | EF Core, Dapper, migrations; implements the persistence ports the areas declare; the OIDC provider's stores | Core, Identity, Authentication, Authorization, Privacy (D-149) |
-| `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default mail and SMS transports and the mail-server adapter (chapter `05`, LIB-EXT-001 defaults) | all |
-| `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001); the one further project with public types, shipped as its own package | Core, Hosting |
+| `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default notification handler (template resolution over the transports) and the shipped message catalogue, the outbox and event publishers, the alert router, the default mail and SMS transports and the JMAP mail-server adapter (chapter `05`, LIB-EXT-001 defaults), and the provider probes of the conformance suite, made by the sign-on's client half (BFF-SESS-006, LIB-TEST-001) | all |
+| `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001), which asks for its provider probes through a contract in `Janus.Core` and holds no client secret; the one further project with public types, shipped as its own package | Core, Hosting |
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
-| `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154): a console project outside the package, with the Unicode Character Database files of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
-| `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication — it creates the first organization, administrator, enrolment link and the credential-less `emergency` account; **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003, run under the maintenance credential (D-147) |
+| `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154), the IDNA mapping of UTS #46 that gives a domain its ASCII form among them (REG-DOM-001): a console project outside the package, with the Unicode Character Database files and the UTS #46 IDNA mapping table and conformance test file (`IdnaTestV2.txt`, REG-DOM-001) of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
+| `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication, Privacy — it creates the first organization, administrator, enrolment link, the credential-less `emergency` account and the restore-test canary (DR-007); **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
 
-Dependencies point **inward toward Core**. Nothing points outward. Storage is the one
-project that depends on the four area projects: it implements their persistence ports
-(CONV-DESIGN-003), and no area depends on Storage. The OIDC provider (`02` section 8) is
-the `Oidc` feature of `Janus.Authentication` with its stores in `Janus.Storage`.
+Dependencies point **inward toward Core**. Nothing points outward. The column names the
+projects each project depends on; the packages a project references are
+CONV-DESIGN-008's, and a framework reference to `Microsoft.AspNetCore.App`, through
+which a project takes the container's abstractions (CONV-DESIGN-007), is neither.
+Storage is the one project that depends on the four area projects: it implements their
+persistence ports (CONV-DESIGN-003), and no area depends on Storage. The OIDC provider
+(`02` section 8) is the `Oidc` feature of `Janus.Authentication`, which holds the
+credential source of AUTH-KEY-001, with its stores in `Janus.Storage`.
+`Janus.Authentication` references `OpenIddict.Server` for the credential objects that
+source holds (CONV-CODE-007).
 
-*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149*
+*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176, D-181,
+D-183, D-187, D-189*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -52,7 +59,8 @@ could only be met by adding an architecture-test tool to simulate what the compi
 does for free.
 
 **Acceptance criteria**
-1. Each area compiles without reference to another area's internals.
+1. Each area compiles without reference to another area's internals, save as LIB-PKG-001
+   and CONV-LAYOUT-002 allow `Janus.Storage`, `Janus.Hosting` and `Janus.Cli`.
 2. `Janus.Core` compiles with no database dependency.
 3. A dependency pointing outward fails the build.
 
@@ -68,19 +76,47 @@ model-builder extension (AUTHZ-GATE-002, D-159) and the `AddJanus` registration
 entry point (CONV-DESIGN-007); request and response DTOs are `internal sealed record`,
 their wire shape being the contract, not their type.
 
-*Source: LIB-API-001, LIB-API-002*
+Where one area needs a rule another area owns, the contract SHALL be a public interface
+in `Janus.Core` that the owning area implements: `IAccessGate` (`Janus.Authorization`),
+`IStepUpGate` (`Janus.Authentication`), which `Janus.Privacy` asks before an export
+(`10` section 5a, `privacy:export`), and the governed send, `IGovernedSend`, which
+`Janus.Authentication` implements and its own services and `Janus.Privacy` call
+(AUTH-ABUSE-004): its one method, `UndertakeAsync`, takes an `OutboundMessage` and
+answers `Result<SendReference>`, the admission or the refusal and never the delivery,
+and its admitted message is the `SendRequest` that `INotificationHandler` carries
+(LIB-EXT-001). The key ring's contract (CONV-CODE-007), which every area borrows a key
+through and no area owns, is a public interface in `Janus.Core` whose implementation is
+internal to `Janus.Core`, and so is the contract of the mail server in use
+(CONV-DESIGN-007), which several areas ask and no area owns. No area reaches another
+area's internals, save as the grants below allow `Janus.Storage`, `Janus.Hosting` and
+`Janus.Cli`: `Janus.Hosting` registers the areas' types and maps its endpoints,
+handlers, jobs and middleware onto their internal operation services and asks the
+internal interfaces CONV-DESIGN-007 names (LIB-API-005, D-189).
+
+*Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171, D-176, D-183, D-189, D-190*
 
 Makes the public surface reviewable by reading one project.
 
 **Acceptance criteria**
 1. A public type outside `Janus.Core`, `Janus.Hosting`'s mounting types and
    `Janus.Conformance` fails the build (CONV-SETUP-003). The only `InternalsVisibleTo`
-   grants permitted are: every non-Core project to its own test project; each area
-   project to `Janus.Storage` (persistence ports), to `Janus.Storage.Tests` (a port
-   implementation is tested against the aggregate it translates, D-156), to
-   `Janus.Hosting` and to `Janus.Cli` (service registration); `Janus.Core` and
-   `Janus.Storage` to `Janus.Hosting` and to `Janus.Cli` (registration). Any other
-   grant fails the build (D-135, D-149).
+   grants permitted are: every source project except `Janus.Conformance` to its own test
+   project (`Janus.Core`'s for the key ring's clearing, D-171); each area project to
+   `Janus.Storage` (persistence ports), to `Janus.Storage.Tests` (a port implementation
+   is tested against the aggregate it translates, D-156), to `Janus.Hosting` (service
+   registration, the operation services it maps onto and the internal interfaces
+   CONV-DESIGN-007 names) and to `Janus.Cli` (service registration) and to
+   `Janus.Hosting.Tests` (the ports `Janus.Hosting` implements are tested against the
+   same aggregates); `Janus.Core` to `Janus.Hosting` (registration, and the internal
+   interface CONV-DESIGN-007 names with what is declared beside it) and to `Janus.Cli`
+   (registration and the filling of the key ring); `Janus.Storage` to `Janus.Hosting`
+   and to `Janus.Cli` (registration); `Janus.Storage` to `Janus.Hosting.Tests` (the
+   protocol server's stores, stood up over fakes of their records);
+   `Janus.Authentication.Tests`, `Janus.Authorization.Tests` and `Janus.Privacy.Tests`
+   to `Janus.Hosting.Tests` (their fakes, used at the browser boundary).
+   `Janus.Conformance` grants nothing: its test project holds the consumer sample of
+   LIB-API-002 AC2. Any other grant, by a source or a test project, fails the build
+   (D-135, D-149, D-156).
 2. The public surface is enumerable from `Janus.Core` plus the mounting types in
    `Janus.Hosting`.
 
@@ -103,12 +139,18 @@ following from that file and SHALL NOT override them: `Nullable` enable, `Implic
 disable, `TreatWarningsAsErrors` true, `AnalysisLevel` latest-all,
 `EnforceCodeStyleInBuild` true, `Deterministic` true, `GenerateDocumentationFile` true.
 
-*Source: D-149*
+The SDK SHALL be fixed in a committed `global.json` at a release of that .NET version's
+SDK, with `rollForward` `latestPatch`: a later patch of the same feature band is taken
+and nothing beyond it, and the feature band moves only by a decision-log entry.
+
+*Source: D-149, D-184*
 
 **Acceptance criteria**
 1. No project file sets a target framework or any of the listed properties, except
    `Janus.Analyzers`, which sets `netstandard2.0` (CONV-LAYOUT-001).
 2. A warning of any analyser fails the build.
+3. `global.json` names an SDK of the .NET release the solution targets, with
+   `rollForward` `latestPatch`.
 
 ---
 
@@ -116,7 +158,12 @@ disable, `TreatWarningsAsErrors` true, `AnalysisLevel` latest-all,
 `Directory.Packages.props` (Central Package Management) with a committed lockfile per
 project (`RestorePackagesWithLockFile`); restore SHALL run in locked mode in the pipeline.
 
-*Source: CONV-DEP-001, D-149*
+The repository's one .NET tool is `dotnet-ef`, which writes the migrations and builds
+the migration bundle (CONV-DESIGN-003); it is pinned in the committed tool manifest
+(`.config/dotnet-tools.json`) at the version of `Microsoft.EntityFrameworkCore`
+(CONV-DESIGN-008).
+
+*Source: CONV-DEP-001, D-149, D-184*
 
 **Acceptance criteria**
 1. No project file carries a package version.
@@ -167,14 +214,19 @@ and no others; any further deviation is a specification defect, not a local supp
 
 CA1848 stays at error: logging uses the `LoggerMessage` source generator (CONV-LOG-001).
 
-*Source: CONV-NAME-001, D-149*
+The files EF Core's migration tool writes, each migration's designer file and the model
+snapshot, SHALL be marked as generated code (`generated_code = true`) in the
+`.editorconfig`. A pragma the tool writes there is the tool's, not a suppression.
+
+*Source: CONV-NAME-001, D-149, D-166*
 
 **Acceptance criteria**
 1. A file that `dotnet format` would change fails the gate.
 2. The `.editorconfig` is the only place a style rule is configured.
 3. No rule other than the five above is set below error in any configuration file, and
    no `#pragma warning disable` or `SuppressMessage` exists without a justification on the
-   same line and a phase-report entry.
+   same line and a phase-report entry, outside the files the `.editorconfig` marks as
+   generated code.
 
 ---
 
@@ -211,15 +263,55 @@ operation group**, implementing the corresponding contract from `Janus.Core`
 method per operation. Cross-cutting behaviour (the authorization gate, audit, the
 step-up check, the transaction) SHALL be invoked **explicitly** in the method body in a
 fixed order: **gate** (`RequireAsync` for the operation and access context; for a read,
-the port method also takes the access context and applies the rendered filter inside
-the query, AUTHZ-GATE-001), **validate** (semantic rules; shape validation already
-happened at the boundary, CONV-CODE-006), **load**, **decide** (domain methods), **persist**
-(writes and the outbox row in the one transaction, IDN-LIFE-003a), **audit** (the audit
-row in the same transaction), **commit**, **publish** (after commit, the in-process events
-of LIB-API-001, raised from the committed outbox row). No mediator,
-pipeline, behaviour, interceptor or aspect library SHALL be used.
+the port method also takes the access context and applies the rendered filter inside the
+query, AUTHZ-GATE-001), **validate** (semantic rules; shape validation already happened
+at the boundary, CONV-CODE-006; and a host callback that may call across the network,
+after any kept write that must stand whatever it answers is committed alone,
+CONV-DESIGN-003), **begin** (the unit of work; for a modifying action of an account, the
+gate asked again inside it with the acting account's row held, taken before any other
+row lock, AUTHZ-GATE-006), **load**, **decide** (domain methods), **persist** (the
+writes, and in the same transaction every outbox row the operation owes: its event rows,
+each written by `IEvents.PublishAsync`, whose failure fails the operation; the
+deliveries of IDN-LIFE-003a; and the messages it sends, AUTH-ABUSE-004), **audit** (the
+audit row in the same transaction), **commit**, **deliver** (after the outermost commit
+and never before it: the event publisher offers each committed event row to every
+`IEventConsumer<TEvent>` the host registered, and each message, save one whose ask is
+answered before any transport is called (AUTH-ABUSE-003, D-189), has one immediate
+attempt, registered on the unit of work to run after that commit and discarded on
+rollback, the outbox publisher carrying what that attempt does not, a row that a fault
+of the library's own left behind included, CONV-DESIGN-003). No mediator, pipeline,
+behaviour, interceptor or aspect library SHALL be used.
 
-*Source: LIB-API-005, AUTHZ-IMP-001, D-149*
+**Events and sends.** An event row SHALL be written in the transaction that makes its
+fact true; nothing is published after a commit, and publication is not replaceable (the
+events live in the library's own `events` table, and a host consumes one by registering
+`IEventConsumer<TEvent>`). A send SHALL be judged against the restrictions and the
+gateway floor inside the caller's transaction, with the counters it is judged on held
+and the floor read from the latest balance a poll recorded (AUTH-ABUSE-004), and a
+refusal SHALL return before the send's count and outbox row are written; it fails the
+operation only where a chapter or the operation's `09` row answers it. No transport
+SHALL be called while a transaction is open. A refusal the gate records (AUTHZ-GATE-004)
+SHALL be written outside any open transaction and committed at once, with the
+`denial-spike` alert it raises (AUTHZ-CONCEAL-004), since a refusal is a fact whatever
+the caller's outcome; every other audit row stays in its operation's transaction.
+
+**Own records.** An operation on the caller's own records (the account, its credentials,
+devices, sessions, consents, objections, privacy requests, invitations and app
+passwords), which no permission of `10` section 2.1 governs, SHALL perform as its gate
+step the check that the access context names an account and, where the operation is one
+of the step-up actions OPS-BOOT-002 lists and the context is the break-glass session or
+a session another application opened from it (BFF-SESS-006), its refusal with 403
+`authz.denied`, before any load. A record such an operation names by identifier SHALL be
+loaded after that check, and a record of another account SHALL be answered as an
+identifier that names no record. An operation that can be given an enrolment session's
+authority (one that takes a credential authority, `CredentialAuthority`, or an overload
+that takes an enrolment session) and that `POST /enrol/begin` does not list SHALL refuse
+that authority with `authz.denied`, first in its gate step and before any load (D-189);
+an operation that takes only an access context cannot be given it, and over HTTP no
+route hands it one (`17` BFF-ORDER-001 stage 5, D-190).
+
+*Source: LIB-API-005, AUTHZ-IMP-001, D-149, D-162, D-166, D-172, D-179, D-183, D-186,
+D-189, D-190*
 
 Explicit calls read top to bottom and are what a reviewer and a test can see. A
 pipeline hides the order in registration code, and the two mainstream mediator and
@@ -228,11 +320,42 @@ rule (CONV-DEP-003) would refuse in any case.
 
 **Acceptance criteria**
 1. Every `Janus.Core` service contract has exactly one implementation in the source
-   projects (fakes in test projects do not count; LIB-EXT-001 extension points are not
-   service contracts) and every implementation is `internal sealed`.
+   projects (fakes in test projects do not count; an interface the host implements for
+   the library to call is not a service contract: the extension points of LIB-EXT-001,
+   the declarations of LIB-HOST-001, its environment seams among them (clock reference,
+   certificate renewal, DNS resolver, location file, datacenter range file, mail server,
+   restore-test instance, erasure ledger), the assurance provider of LIB-HOST-004, and
+   the receivers of the events of LIB-API-001 and IDN-LIFE-003a; the contract test names
+   each with the item requiring it) and every implementation is `internal sealed`.
 2. No package whose purpose is request dispatch, pipeline behaviours or object mapping
    is referenced.
-3. Each operation method performs the gate call before any load or write.
+3. Each operation method performs its gate step before any load or write: where it can
+   be given an enrolment session's authority and `POST /enrol/begin` does not list it,
+   the refusal of that authority with `authz.denied`; then the gate call, or for an
+   operation on the caller's own records the check that the context names an account
+   and, for a step-up action OPS-BOOT-002 lists, the refusal of the context of the
+   break-glass session or a session another application opened from it (BFF-SESS-006)
+   with `authz.denied`. Resolving the organization the gate is asked in (the
+   administrative organization, the organization the path names, or the organization one
+   row belongs to, read alone and used for nothing else before the gate) is part of the
+   gate step; where it resolves nothing, the operation is refused as API-CONV-003
+   answers a path naming no record, with 404 `identity.organization.notfound` where the
+   path names no organization. Five operations meet no gate: read-volume counting
+   (OPS-ALERT-005); the provider probes of the conformance suite (LIB-TEST-001), which
+   read no record of a person; derivation refresh (AUTHZ-DERIVE-005), which the host
+   calls from its own gated operation and the daily drift check calls under its system
+   principal `derivation-driftcheck`; loss-report cancellation, whose authority is the
+   token its notice carried or the report's holder (AUTH-RECOV-007); and registration
+   begin, which precedes any account (REG-SESS-002). The read of the provider's
+   published key set (`IOidc.KeysAsync`, AUTH-KEY-001) is no operation (LIB-API-005) and
+   meets none: it answers public keys alone and takes no access context.
+4. An operation on the caller's own records given a context that names no account reads
+   nothing; one naming another account's record answers exactly as one naming no record.
+5. An operation that rolls back leaves no event row and no outbox row of its own, and no
+   transport or event consumer is called for it; the refusal a gate records outside it,
+   and the `denial-spike` alert with its `AlertRaised` row that record raises, stand
+   (AUTHZ-CONCEAL-004). One that commits has its events and messages delivered after the
+   commit.
 
 ---
 
@@ -248,20 +371,135 @@ encrypted columns as `byte[]`, beside its configuration. The port implementation
 translates between the aggregate and its records in both directions, and that
 translation is the one place per-subject encryption happens: it calls the field cipher
 with the subject identifier read from the record's declared subject column
-(PRIV-RIGHT-005a) and the table and column names as associated data. No value
+(PRIV-RIGHT-005a) and the table and column names as associated data. A value that
+belongs to no subject and that the field cipher encrypts is encrypted there too, under
+the deployment's data key or a data key of its row's own that the deployment's data key
+wraps, with its own row's identifier in the place of the subject identifier, never the
+reserved identifier the subject-key table holds that key under (PRIV-RIGHT-005a); a key
+or secret wrapped with RFC 5649 takes no associated data (D-173). No value
 converter, interceptor or shadow state encrypts anything; a domain entity never holds
 ciphertext, a record never holds plaintext of an encrypted column.
 The **unit of work is the operation**: a service method runs inside one transaction
-opened by an `IUnitOfWork` port and committed once, at the end, after every write.
+opened by an `IUnitOfWork` port and committed once, at the end, after every write, save
+a kept write committed alone before a host callback (below). A refusal that needs no
+write SHALL be returned before the unit of work begins. `BeginAsync` answers
+`Result<bool>`, true where the level it opened is the outermost (D-188, D-189). Once
+`BeginAsync` has succeeded, the operation SHALL end its unit of work before it returns:
+with `CommitAsync` where it succeeds having written, or where it refuses having made one
+or more of the kept writes below and nothing else; and with `RollbackAsync` on every
+other return, whether or not it wrote, a refusal decided under a row lock and, at the
+outermost level, a success that wrote nothing included, so that a commit always keeps a
+write. A level an operation joined (a nested `BeginAsync`) that succeeds ends with
+`CommitAsync` whatever it wrote. The **kept writes** are the counts and records a
+chapter requires to stand whatever the outcome, and no others: a wrong try's count on a
+code's record, the code's invalidation at its attempt cap, the spend of an
+authentication code presented right whatever refusal follows, and what a factor's
+verification wrote where a domain lock then refuses the sign-in or the step-up
+(AUTH-FACT-004, D-189, D-190); a failure AUTH-ABUSE-001 counts, every code or press
+refused at either verify route as wrong, past its lifetime or its attempt cap, naming
+nothing held or opening nothing among them, and the `auth-failures-sustained` raise such
+failures bring past `alerting.authfailures.threshold` for their account (OPS-ALERT-001,
+OPS-ALERT-002); a trusted device's failure and its trust revoked at the failure limit
+(AUTH-FACT-015); the record of a refused step-up factor (`auth.stepup.failed`) and of a
+failed authentication (AUTH-STEP-002, CONV-LOG-005); the audit record of a signature
+counter that did not advance (AUTH-FACT-014); the record of a bot-defence signal
+(AUTH-ABUSE-008) and of a phone signal's consideration (AUTH-FACT-002b); a break-glass
+attempt's global count and the `auth-failures-sustained` raise (OPS-BOOT-004); a
+callback's admission count, a rejected callback's count and record, and the
+`callback-verification-failed` raise past `alerting.callback.threshold` (INT-GEN-003,
+BFF-MACH-003, INT-SMS-005); the record of a rejected provider event (IDN-LIFE-012a); a
+consumed refresh token's session family revoked at its reuse, with the revocation's
+audit record (AUTH-OIDC-003); and a registration session's end at an under-age answer
+with its locked date (REG-PROF-002), and where a staged identifier was taken or reserved
+since (REG-SESS-005). A refusal SHALL commit every kept write it made, together, and
+nothing else, and an operation SHALL decide every refusal that keeps a write before it
+makes any write that is not kept. An operation whose refusal keeps a write begins the
+outermost unit of work and is never called inside another's, and a call it makes to
+write a kept write (a throttle's count, an audit record) joins its unit of work. A host
+callback that may call across the network (the challenge verifier, AUTH-ABUSE-008; the
+phone signal, AUTH-FACT-002b) is never called inside an open transaction: a kept write
+that must stand whatever it answers is committed first, alone, in a unit of work of its
+own (the bot-defence signal's record), and one that records its answer is written in the
+unit of work that follows the call (the phone signal's consideration). A refusal the
+gate records is written outside the operation (CONV-DESIGN-002). A rollback discards the
+transaction, every change the scope's context tracks and every after-commit
+registration, and leaves the unit of work as though no operation had begun it. An
+operation that joined a unit of work another opened (a nested `BeginAsync`) and rolls
+back ends its level and marks the whole unit of work: nothing of it commits, the
+outermost level's `RollbackAsync` rolls it back, and its `CommitAsync` rolls it back and
+throws a fault. A call an operation must be able to survive being refused begins no unit
+of work of its own; it decides in its caller's. A `CommitAsync` that fails leaves the
+unit of work rolled back. Work registered on the unit of work to run after the commit
+(`IUnitOfWork.AfterCommit`, a fault where no unit of work is in progress; a send's
+immediate attempt, AUTH-ABUSE-004) runs once the outermost level has committed, and a
+fault of the library's own inside it (a setting that does not read, the database failing
+at the claim or at the outcome) is caught and logged by that work itself, never by the
+unit of work, and left to the publisher, which carries the row at a later pass, once it
+is due and unclaimed or its claim has timed out: the commit stands and the operation
+answers what it committed (CONV-ERR-003). A later operation in the same scope SHALL open
+and commit its own. `RollbackAsync` takes no cancellation token and answers no result:
+it has no expected failure, and a database error in it is a fault (CONV-ERR-001).
+`BeginAsync` and `CommitAsync` return a result and name no failure code; a caller that
+returns a result passes their failure up, and a caller that returns none (background
+work, a hosted service) throws it as a fault naming the code its `Error` carries, as a
+configuration read throws naming its key (OPS-CFG-008). No signature gains a result only
+to carry theirs (D-171). A port that runs hand-written SQL inside a unit of work SHALL
+first save the changes the scope's context tracks, in that transaction, so that the SQL
+sees them (OPS-DATA-002): a conditional insert naming an account added in the same unit
+of work finds it. A read, decide and write on a row whose value decides a security or
+state outcome SHALL take a row lock (`SELECT ... FOR UPDATE`) inside the transaction, or
+SHALL write through one update conditional on the value read, or a constraint SHALL make
+the race impossible. A decision on a value that no one row holds (whether an
+identifier's value is held or reserved, REG-SESS-005; whether a username is taken or
+held, REG-IDENT-009) SHALL be made under a lock on that value, which every operation
+that writes the value as held or reserved takes before it judges or writes, so that no
+other transaction takes or reserves the value between the judgement and the write. The
+lock is a transaction-scoped advisory lock (OPS-DATA-003) for each fingerprint key
+version the process holds, keyed by the first eight bytes, read as a signed big-endian
+integer, of SHA-256 over the lock's name in UTF-8 (`identifier` or `username`), one zero
+byte and the value's fingerprint under that version, taken after the operation's own row
+locks and before any send's counters (AUTH-ABUSE-004), the keys of every value lock the
+operation takes in one ascending order. A lookup that judges such a value reads every
+fingerprint key version in one statement (PRIV-RIGHT-005c). The unique constraints on
+such a value remain a guard, and one met by an operation that took the lock is a fault
+(CONV-ERR-001). A row that background work carries out of the database (a message, an
+outbox or event row, a mailbox push, a raised alert) SHALL be claimed before its carrier
+is called, by one conditional update committed on its own that marks it claimed until
+`outbox.claim.timeout` from then and succeeds only where the row is due (its next
+attempt's instant, where it carries one, has come) and is unclaimed or its claim has
+timed out. A row that tracks several deliveries (an outbox row's subscribers, an event
+row's consumers; a send row tracks one, a text message owed in several languages being
+one row for each and a mail one composed row, AUTH-ABUSE-004) is claimed whole, and an
+attempt of it is one pass over its outstanding deliveries: before each delivery the pass
+renews its claim, by one update conditional on the claim still being its own that moves
+its end to `outbox.claim.timeout` from then, and stops where the renewal changes
+nothing; each delivery's outcome (a subscriber's confirmation, a consumer's take) is
+written as it happens, by one update conditional on that claim. The attempt's outcome
+for the row (its attempts, its schedule, its status, the alert at exhaustion) SHALL be
+written by one update conditional on that claim, which changes nothing where the claim
+has been taken over, and an attempt still running when its claim times out is abandoned
+as a failed attempt. A pass reads its due rows without a lock, and passes in one process
+or several may run at once; the claim alone decides who carries a row. A send's
+immediate attempt (AUTH-ABUSE-004) claims its row the same way, save that it claims
+whatever the row's due instant, since it is the row's first attempt; a new send row that
+has an immediate attempt is due `outbox.retry.initial` after its admission, with no
+jitter, so the pass takes it only once that attempt has had its chance (D-188), and one
+that has none (a message whose ask is answered before any transport is called,
+AUTH-ABUSE-003) is due at its admission (D-189).
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
 it serves, never at a call site. Migrations are EF Core migrations in `Janus.Storage`,
 applied in the pipeline as an **EF Core migration bundle** built from the same commit
 (OPS-MIG-001); the destructive-operation report (OPS-DEP-002) is the idempotent SQL
-script of the pending migrations scanned for `DROP`, `ALTER ... TYPE` and `ADD
-CONSTRAINT`; the serialized model of AUTHZ-MODEL-005 is JSON written by
-`System.Text.Json` source generation to `artifacts/model.json`.
+script of the migrations pending on the target database, read from its migration history
+table (a pull request reports the migrations its range adds), scanned for `DROP`,
+`ALTER ... TYPE`, `ADD CONSTRAINT`, `TRUNCATE`, `DELETE FROM`, and, on a table the same
+migrations did not create or have filled, `SET NOT NULL`, a unique index and a column
+added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's. The
+serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
+generation to `artifacts/model.json`.
 
-*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149*
+*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166,
+D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -269,28 +507,82 @@ CONSTRAINT`; the serialized model of AUTHZ-MODEL-005 is JSON written by
 3. A service method with two writes and a failure between them leaves neither.
 4. No domain entity type appears in the `DbContext` model; every encrypted column is
    written and read through the field cipher inside a port implementation (D-155).
+5. An operation refused after its unit of work began, having written and having left
+   changes tracked, leaves no transaction open and nothing of its changes saved, then or
+   by a later commit, save the kept writes such a refusal makes; the next operation in
+   the same scope begins, commits, and saves only its own changes.
+6. Two concurrent operations that read and decide on one such row leave the outcome of
+   one run after the other.
+7. Where `BeginAsync` or `CommitAsync` returns a failure (a fake in the test project), a
+   service method that returns a result returns that failure, and a hosted service or
+   background job throws a fault naming the failure's code.
+8. An operation that joined another's unit of work and rolls back leaves nothing of the
+   whole unit of work committed: the outer operation's `RollbackAsync` ends it, and its
+   `CommitAsync` commits nothing and throws a fault.
+9. Two passes of one delivery job in two processes over the same due rows, and a send's
+   immediate attempt meeting the retry pass, carry each row once, count each attempt
+   once and record each outcome once; a row whose claim has timed out is carried by the
+   next pass, a row released and rescheduled is not claimed before its next attempt is
+   due, a new send row that has an immediate attempt is claimed by that attempt before
+   `outbox.retry.initial` has passed and by no pass until it has, one that has none is
+   claimed by the next pass, and a row that tracks several deliveries is carried by one
+   pass at a time, which renews its claim before each delivery and records each delivery
+   once.
+10. Each refusal that makes a kept write commits every kept write it made and nothing
+    else; any other refusal, and an outermost operation's success that wrote nothing,
+    leaves its unit of work rolled back, and a joined level that succeeds ends with
+    `CommitAsync`.
+11. An account added through the context and a consent inserted by hand-written SQL that
+    names it, in one unit of work, commit together.
+12. A fault of the library's own in a send's immediate attempt after the commit (a fake
+    failing at the claim) leaves the operation's answer and its committed writes as they
+    were, and the row is carried by the next pass that finds it due and unclaimed or,
+    where the fault came after the claim, once that claim has timed out.
 
 ---
 
-**CONV-DESIGN-004** — Domain types SHALL be **plain, encapsulated classes**: `internal
-sealed`, state changed only through methods named for the business action
+**CONV-DESIGN-004** — Domain types SHALL be **plain, encapsulated classes**:
+`internal sealed`, state changed only through methods named for the business action
 (`Verify()`, `MakePrimary()`, `Suspend(by, reason)`), invariants checked inside those
 methods, no public setters, no domain framework or base class. Identifiers SHALL be
 strongly typed `readonly record struct` wrappers (`SubjectId`, `OrganizationId`,
 `SessionId`) over a UUID value: **version 4** for `SubjectId`, because it is the OIDC
-`sub` and IDN-ACCT-002 requires it opaque and a version 7 value would carry the account's
-creation instant; **version 7** from `Guid.CreateVersion7()` for every other identifier,
-for index locality. Values with rules
-(canonical email, E.164 phone, permission string) SHALL be value types that cannot be
-constructed in an invalid state.
+`sub` and IDN-ACCT-002 requires it opaque and a version 7 value would carry the
+account's creation instant; `SubjectId` also refuses the max UUID of RFC 9562, under
+which the deployment's data key is held, at construction (PRIV-RIGHT-005a, D-174);
+**version 7** from `Guid.CreateVersion7()` for every other identifier, for index
+locality; a migration that gives existing rows an identifier MAY draw those version 7
+values in its SQL, each from its row's own instant. Values with rules (canonical email,
+E.164 phone, permission string) SHALL be value types that cannot be constructed in an
+invalid state: among them a restriction's name (`RestrictionName`) and a governing
+document's name (`DocumentName`), both under the rule of INT-SMS-003, public in
+`Janus.Core` and taken by the operation contracts that name one (`IRestrictionSet`,
+`ILegalDocuments`); a declaration names a document as text, judged at startup
+(INT-SMS-003). An identifier another system draws keeps that system's form and is a
+value type over it, never over a UUID: an app password's (`AppPasswordId`) is the mail
+server's JMAP `Id`, 1 to 255 octets of the URL and filename safe base64 alphabet, the
+pad `=` excluded (RFC 8620 section 1.2). Every public member that takes or returns such
+a name or identifier takes the type, the mail server's app-password operations included;
+an internal record MAY hold the value as text once the boundary has read it (D-188).
 
-*Source: IDN-ACCT-002, IDN-ACCT-004, D-149*
+*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166, D-174, D-183, D-187, D-188, D-193*
 
 **Acceptance criteria**
 1. No entity exposes a public or internal property setter.
 2. No method takes a bare `Guid` or `string` where a typed identifier or value exists.
+   The criterion reads every project, the public types of `Janus.Core` and the endpoint
+   handlers of `Janus.Hosting` included; a navigation route's handler, which takes its
+   route and query values as text (CONV-DESIGN-006, D-193), is outside it for those
+   values. Inside the declaration of a typed identifier or value, a parameter of the
+   type it wraps (the `Guid` of an identifier, the `string` of a value) is outside this
+   criterion: it is the value the type is made from; every other member of the type is
+   held to it. A member implementing an interface declared in an assembly of a package
+   CONV-DESIGN-008 lists, or names as one a listed package brings, takes the parameters
+   that interface declares and is outside this criterion; no other member of the
+   implementing type is.
 3. Constructing an invalid canonical value is a compile-time or immediate runtime
-   failure, never a stored row.
+   failure, never a stored row. A value type's default instance, which the language
+   cannot forbid, gives no text: it fails where it is first read, before any write.
 
 ---
 
@@ -303,11 +595,13 @@ failure (CONV-ERR-001 AC2), and a discarded `Result` is an analyser error (JAN00
 third-party result or discriminated-union library SHALL be used. A service method never
 returns `null` for "not found"; it returns a failure result with the named code.
 
-*Source: CONV-ERR-001, API-CONV-002, LIB-API-003, D-149*
+*Source: CONV-ERR-001, API-CONV-002, LIB-API-003, D-149, D-162, D-166, D-183*
 
 **Acceptance criteria**
-1. Every public contract method returns `Result`, `Result<T>`, or `Task` or
-   `ValueTask` thereof.
+1. Every method of every public interface in `Janus.Core` (`ISecretSource`,
+   `IUnitOfWork` and `IEvents` among them) returns `Result`, `Result<T>`, or `Task` or
+   `ValueTask` thereof, except `IUnitOfWork.RollbackAsync`, which has no expected
+   failure and answers none (CONV-DESIGN-003); a fault still throws (CONV-ERR-001).
 2. No `null`-returning lookup exists on a contract.
 
 ---
@@ -316,71 +610,250 @@ returns `null` for "not found"; it returns a failure result with the named code.
 `Janus.Hosting`, grouped per area with `MapGroup`, returning typed results
 (`TypedResults`). Session resolution, CSRF validation and step-up gating are the
 **middleware stages** of BFF-ORDER-001, never endpoint filters; an endpoint filter is
-used only for a library-local concern (DTO shape validation, CONV-CODE-006). Request
-and response types are `internal sealed record` DTOs in `Janus.Hosting`; mapping between a DTO and a contract type is a hand-written static
-method beside the DTO. Serialization uses `System.Text.Json` source generation. No
-controllers, no reflection-based mapping.
+used only for a library-local concern (DTO shape validation, CONV-CODE-006). Request and
+response types are `internal sealed record` DTOs in `Janus.Hosting`; mapping between a
+DTO and a contract type is a hand-written static method beside the DTO. Serialization
+uses `System.Text.Json` source generation. No controllers, no reflection-based mapping.
+A route or query value for which a typed identifier or value exists (CONV-DESIGN-004)
+binds to that type at the edge through `IParsable<T>`; no handler takes it as a bare
+`Guid` or `string`, save a navigation route's (BFF-ERR-001), which takes each value as
+text and judges it itself, returning the browser with `api.request.malformed` in `error`
+where one does not read (the sign-on with `auth.session.expired`, BFF-SESS-006), since
+the framework's refusal has no way back to the browser (D-193). Each endpoint declares,
+as endpoint metadata added through one route-builder extension of `Janus.Hosting`, the
+error codes `09` gives it: its row's, and those the text of its section or subsection
+gives the routes that text governs, before or after a table (among them
+`authz.restricted` and `authz.denied` in section 6; `authz.restricted`, `authz.denied`
+and `identity.organization.notfound` in section 8; `identity.registration.incomplete`
+for the step endpoints of section 2), and 422 `integration.sms.balancefloor` where the
+`09` preamble gives it; what its mounting answers, where its row does not give it, is
+derived, as the chapter's preamble says, and declared by no endpoint. A navigation route
+(BFF-ERR-001) declares the same way the codes `09` gives it to carry in the query member
+`error` of its redirect, which the contract file lists under that redirect, since no
+status of `10` is sent with them (D-192). An endpoint declares codes only: the status of
+each is the one `10` gives it, which `ApiStatus` maps, and a code `ApiStatus` maps by
+its details is listed under each status it can take. The endpoint contract file
+(LIB-API-001) is generated from that metadata, from the typed results' and body
+metadata, and from the endpoint's mounting (`09`, preamble). Each endpoint declares
+those route and query values too, by name and type, in the same metadata (a navigation
+route declares none as typed, D-193); the declaration is generic over the type, so no
+reflection reads the handler (CONV-CODE-004). Where the framework could not bind a
+request, the error translation stage refuses it **400** `api.request.malformed`,
+`details.member` naming the first declared value, in the order declared, whose type's
+`TryParse` refuses the request's text; no navigation route meets that refusal, since
+none binds a typed value (D-193).
 
-*Source: LIB-API-005, API-CONV-001 to 005, D-149*
+*Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187, D-192,
+D-193, D-194*
 
 **Acceptance criteria**
 1. No type derives from `ControllerBase`.
-2. Every endpoint is a one-line mapping to a contract method plus DTO conversion.
+2. Every endpoint is a one-line mapping to a contract method plus DTO conversion, except
+   the endpoints LIB-API-005 names as no mapping of an operation, each of which maps to
+   the internal service that carries its work.
+3. Every library endpoint declares the codes its `09` row and the text of its section or
+   subsection give it, with `integration.sms.balancefloor` where the `09` preamble gives
+   it, and the contract file lists each under the status `10` gives it; a navigation
+   route's codes carried in `error` are listed under its redirect.
+4. A response of a library endpoint in the integration tests that carries a code the
+   endpoint neither declares nor answers by its mounting or the pipeline fails the test
+   that made it. A body its protocol shapes, with no `code` (the provider's `/oidc/*`
+   endpoints, the RFC 8935 answers of the Google security-event route), is outside this
+   criterion, and so is a path outside the library's mount, which is the host's. A
+   redirect of a navigation route whose `error` carries a code the route does not
+   declare it carries fails the test that made it, since what a mounting answers is a
+   body and never rides in `error` (D-194); the machine callback's redirect, whose
+   `error` is the provider's own, is outside this sentence.
+5. A route or query value that does not parse as its type answers 400
+   `api.request.malformed` naming it; on a navigation route, which takes its values as
+   text, the handler returns the browser with that code in `error` (the sign-on with
+   `auth.session.expired`); and each handler's typed route and query parameters equal
+   those its endpoint declares.
 
 ---
 
-**CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only.
-Each project exposes exactly one `internal static` registration method
-(`AddIdentityArea(this IServiceCollection)`), called from the single public
-`AddJanus` entry point in `Janus.Hosting`. Lifetimes: services and ports scoped;
-stateless helpers singleton; nothing transient without a recorded reason. Options
-SHALL be bound through `IOptions<T>` with `ValidateOnStart`; the runtime-changeable
-keys of `10` section 4 are read through the configuration store abstraction, never
-through `IOptions`. Time comes from `TimeProvider`; randomness from
-`RandomNumberGenerator`; both injected, never static. The key-encryption key, the
-fingerprint key and the maintenance credential are fetched once, at startup or at the
-start of the command, through the host-supplied secret source of LIB-EXT-001; the
-library ships no secrets-manager client.
+**CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only. Each
+project of the package other than `Janus.Hosting` that defines a type the container
+registers exposes exactly one `internal static` registration method named for its
+project (`AddAuthorizationArea(this IServiceCollection)`), holding the registrations of
+the types that project defines and no other; a project that defines none exposes none.
+`AddJanus`, the single public entry point and `Janus.Hosting`'s registration method,
+calls every other one and itself registers `Janus.Hosting`'s own types, the host's
+declaration it is given, and of another project's types only one kind, which no other
+project can register: a type built by a factory that reads a type of a project the
+type's own cannot reference (`SendingValidation`, whose placeholders come from
+`Janus.Privacy`; `DeclaredProcessing`, read from the authorization model). A type of
+`Janus.Hosting` that bridges two areas (the settings restriction over the gate, the mail
+server's token over the OIDC provider) is `Janus.Hosting`'s own. A **seam**, a type that
+stands behind a contract so that its implementation can be replaced or held to a
+boundary, is reached from `Janus.Hosting` only through a contract, never through its
+implementation: the access gate (`AccessGate`, LIB-SEAM-001), the key ring (`KeyRing`,
+CONV-CODE-007) and the mail server in use (`MailServerInUse`, below). Where
+`Janus.Hosting` needs a member of a seam that no public contract declares, the owning
+project declares an `internal interface` for exactly those members, implements it and
+registers it by its method: the settings-change gate of `Janus.Authorization`, and
+`Janus.Core`'s filling of the ring and recording of the mail server in use at the start,
+which the service that fills the key ring takes. `Janus.Hosting` names no seam's
+implementation anywhere, in a constructor, a factory or a body, a constant or a static
+member included: what it reads of the key ring's implementation (the names of the
+secrets the ring holds, the refusal of a secret not available) is declared on the
+internal contract that `Janus.Core` declares for filling the ring, or in a static class
+of `Janus.Core` beside it (D-190). The access gate, the key ring and the mail server in
+use are the only seams of this rule. `IResources` and `ICallbackReferences`, which
+LIB-API-005 also calls seams because they join the host's transaction, are contracts the
+host calls, and `Janus.Hosting` reaches what implements them as it reaches an operation
+service. A port and its implementation that live in one project need no adapter in
+another: `AccessGate` implements `Janus.Authorization`'s unscoped refusal itself
+(D-188). The services that `Janus.Hosting`'s endpoints, handlers, jobs and middleware
+map onto (LIB-API-005's operation services, and the internal services of endpoints that
+map no operation, the OIDC provider's among them) are no seams and are reached directly;
+the mail server's token is minted through the internal interface `Janus.Authentication`
+declares for it (D-188, D-189). The shipped defaults that stand in for an absent host
+declaration (`RestrictionKeySuppliers.None`, `PreferenceDeclarations.None`,
+`ReservedUsernames.Default`, `DictionaryWords.Default`) are registered by `Janus.Core`'s
+method, each only where none is registered. A `Janus.Cli` command's composition calls
+the methods of the projects it uses and itself registers the types only a command uses
+(the deployment bootstrap, the client registry and the protected configuration of
+`Janus.Authentication`; the erasure replay and the two key rotations of `Janus.Privacy`;
+the rotations' stores of `Janus.Storage`). A composition a job builds inside the
+application over another credential (the audit retention's, the restore test's)
+registers the key ring the start filled, as it stands, and calls the methods of the
+projects it uses other than `Janus.Core`'s. A registration method MAY call registration
+code kept in other files of its project, each file naming one concern only. A project
+takes the container's abstractions from the ASP.NET Core shared framework, through a
+framework reference to `Microsoft.AspNetCore.App`, never as a package (CONV-DESIGN-008).
+Lifetimes: services and ports scoped; stateless helpers singleton; the key ring of
+CONV-CODE-007, the credential source of AUTH-KEY-001, which writes each change in a
+scope and a unit of work of its own, and the mail server in use (below) singleton;
+nothing transient without a recorded reason. A host declaration that can be absent and
+that the host registers as a service (an optional one of LIB-HOST-001, or one it
+requires only where a feature or a shipped default does not stand in for it, a transport
+among them) SHALL reach the type that uses it through a factory registration that asks
+the container for it (`GetService<T>()`), never through a constructor parameter whose
+default stands for its absence. Options SHALL be bound through `IOptions<T>` with
+`ValidateOnStart`, except the OIDC provider's, which the start builds once the
+credential source is filled (below); the runtime-changeable keys of `10` section 4 are
+read through the configuration store abstraction, never through `IOptions`. A stored
+value that does not read under its key is a fault: the read throws, and no read falls
+back to a default or a constant (OPS-CFG-008, CONV-ERR-001). Time comes from
+`TimeProvider`; randomness from `RandomNumberGenerator`; both injected, never static.
+Every secret the library needs (the members LIB-HOST-001 lists for the secret source) is
+read once, through the host-supplied `ISecretSource` of LIB-EXT-001, asynchronously,
+when the application starts and before the server serves a request, into the key ring of
+CONV-CODE-007; no secret is an argument of `AddJanus`. A `Janus.Cli` command reads the
+same values once, at its start, into the same key ring, from one JSON key document on
+standard input that the operator pipes from the secrets manager's own client
+(OPS-SEC-001). The library ships no secrets-manager client.
 
-*Source: OPS-CFG-001, OPS-CFG-008, D-149*
+**The mail server in use.** Every registration is made before a stored value can be
+read, so none depends on `integration.mailserver.endpoint`. `AddJanus` registers the
+shipped mail-server adapter as its own internal type, never as `IMailServer`, and
+`IMailServer` resolves only a host's own registration. The mail server in use is chosen
+once, by the service that fills the key ring and in the same start: the host's
+`IMailServer` where it registered one, the adapter's secret then not read; otherwise the
+adapter where the key is set, its secret read into the ring; otherwise none. The choice
+is held in a singleton whose contract is a public interface in `Janus.Core` (the push,
+reconciliation, the app-password operations, the invitation's mailbox rule and the
+records of processing ask it from several areas, CONV-LAYOUT-002) and whose
+implementation is internal to `Janus.Core`, registered with the ring by `Janus.Core`'s
+registration method, which `AddJanus` and the `Janus.Cli` composition call, and filled
+only at the application's start: no `Janus.Cli` command asks it, since a push a command
+owes is written to the outbox, which the application's worker delivers (INT-MAIL-007).
+No consumer resolves or receives `IMailServer` itself. A read before the start filled it
+is a fault, as it is for the ring. The start fills the ring in steps, since the settings
+table can be read only after the key-encryption key and the fingerprint key are
+(OPS-CFG-008): every secret but the adapter's first; then, the settings table now
+readable, the choice; then the adapter's secret where the adapter is chosen. A key is
+lent from the ring once the step that reads it is done, and a read of a key before that
+is the fault of CONV-CODE-007. A change of the key by `configure` (OPS-CFG-004) takes
+effect at the next start.
+
+**The provider's start.** At the application's start, once the ring is filled, the start
+reads the signing keys into the credential source of AUTH-KEY-001, making one current
+where the database holds none, and then builds the OIDC provider's options, which take
+no `ValidateOnStart` (CONV-CODE-007).
+
+*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181, D-183,
+D-187, D-188, D-189, D-190*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
-2. No `DateTime.UtcNow`, `DateTimeOffset.Now` or `new Random` appears outside tests.
+2. No `DateTime.UtcNow`, `DateTimeOffset.Now`, `new Random` or static draw from
+   `RandomNumberGenerator` appears outside tests.
 3. Startup fails when a required option is missing (LIB-HOST-001).
+4. No configuration read answers a default or a constant where the stored value does not
+   read under its key.
+5. The mail server in use is decided once, at the start: with
+   `integration.mailserver.endpoint` set and no host registration it is the shipped
+   adapter and the ring holds its secret; with a host registration it is the host's and
+   that secret is not read; with the key empty there is none and nothing is pushed; a
+   change of the key after the start changes nothing until the next start; a read before
+   the start filled it is a fault.
+6. No constructor of a type the library registers in the container has a parameter whose
+   default value stands for an absent declaration, and the type that uses such a
+   declaration is registered by a factory that asks the container for it.
+7. Each project of the package that defines a type the container registers exposes
+   exactly one registration method (`Janus.Hosting`'s is `AddJanus`), and no other
+   project exposes one; `AddJanus` calls every other one; every type of such a project
+   that `AddJanus` registers is registered by that project's own method, save the host's
+   declaration and a type built by a factory that reads a type of a project the type's
+   own cannot reference, which `AddJanus` registers; and no type of `Janus.Hosting`
+   names the implementation of a seam (`AccessGate`, `KeyRing`, `MailServerInUse`)
+   anywhere; one that needs a seam's member asks for a public or internal contract that
+   declares it.
+8. No project of the package but `Janus.Hosting` uses a type of a `Microsoft.AspNetCore`
+   namespace; the framework reference gives the others the container's abstractions
+   alone.
 
 ---
 
 **CONV-DESIGN-008** — The following dependencies are the **only** third-party
 packages permitted, and a package outside this table needs a decision-log entry before
-it is referenced. The base class library is preferred wherever it suffices.
+it is referenced. The base class library is preferred wherever it suffices. Each package
+is referenced only for the purpose its row names, and only by the projects its row names
+where it names any; within those bounds, the project whose items need a package
+references it.
 
 | Purpose | Package | Why this one |
 |---|---|---|
-| Relational access | `Microsoft.EntityFrameworkCore`, `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for the migration bundle), `Dapper` | OPS-DATA-001 |
+| Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage only, at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for the migration bundle), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage` resolves it at EF Core's version, not at the lower floor the provider declares |
 | Cache | `StackExchange.Redis` | INF-CACHE-001; the reference client |
 | Password hashing | `Konscious.Security.Cryptography.Argon2` | Argon2id is absent from the base class library; managed implementation, MIT licence (package listing inspected 2026-09-18) |
-| WebAuthn | `Fido2` (Fido2NetLib) | The maintained .NET attestation and assertion library; MIT; 4.0.1 targets net8.0 and runs on net10.0 (package listing inspected 2026-09-18) |
+| WebAuthn | `Fido2` (Fido2NetLib) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
 | TOTP | `Otp.NET` | RFC 6238 defaults; small |
 | OIDC provider | `OpenIddict.AspNetCore`, `OpenIddict.Server`, `OpenIddict.Validation`; stores are hand-written in `Janus.Storage` over the single `DbContext` (no `OpenIddict.EntityFrameworkCore`) | The maintained free OpenID Connect server for ASP.NET Core; a hand-written provider is a security risk this library does not take; hand-written stores keep one `DbContext` (CONV-DESIGN-003) |
-| OIDC client (Google, Apple) | `Microsoft.AspNetCore.Authentication.OpenIdConnect` | Microsoft's own handler, shipped as a NuGet package |
+| OIDC client (Google, Apple) | None: the round trip is the library's own (IDN-LIFE-012); the identity token is validated with `Microsoft.IdentityModel.JsonWebTokens`, which `OpenIddict.Server` and `OpenIddict.Validation` bring, and the provider's discovery and key-set documents are read through the document and configuration retrievers of `Microsoft.IdentityModel.Protocols`, which `OpenIddict.Validation` brings | The handler and OpenIddict's client each bind the round trip with a `SameSite=None` cookie, which BFF-SESS-002 and BFF-CSRF-005 AC3 forbid and which Apple's form-post return needs |
 | Public surface tracking | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | CONV-SETUP-003 |
-| Analyser authoring (`Janus.Analyzers` only) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The five rules the gates rely on (CONV-CODE-008) |
+| Analyser authoring (`Janus.Analyzers` only) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The six rules the gates rely on (CONV-CODE-008); the analysers ship as a package of their own that a build loads (`07` LIB-PKG-001), and a compiler older than the one they were built against refuses them, so these two move only by a decision-log entry (CONV-DEP-004) |
 | Versioning | `MinVer` | Version from the git tag, nothing to maintain (CONV-VCS-005) |
 | Tests | `xunit.v3`, `Microsoft.Testing.Platform` (as xunit.v3's runner), `Testcontainers.PostgreSql`, `Testcontainers.Redis` | CONV-TEST-002 |
+
+`Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational`,
+`Microsoft.EntityFrameworkCore.Design` and the `dotnet-ef` tool (CONV-SETUP-002) SHALL
+carry one version and move together; `Npgsql.EntityFrameworkCore.PostgreSQL` takes its
+own latest stable release of the same major version, whose floor may trail theirs.
 
 **Banned**, whatever the reason offered: mediator and pipeline libraries, object
 mappers, third-party result or functional libraries, mocking frameworks (hand-written
 fakes only, CONV-TEST-007), scheduler libraries (background work is `BackgroundService`
 over library tables, IDN-LIFE-003a), identity frameworks (ASP.NET Core Identity), and
-any package that duplicates a base class library capability.
+any package that duplicates a base class library capability. A framework reference to a
+shared framework of .NET is not a package: a project takes the container's abstractions
+through the reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and their package
+is never referenced.
 
-*Source: CONV-DEP-003, D-149*
+*Source: CONV-DEP-003, D-149, D-166, D-183, D-184*
 
 **Acceptance criteria**
 1. The set of direct package references, read from `Directory.Packages.props`, equals
-   the identifiers in this table.
+   the identifiers in this table, less the packages the table names only as ones another
+   package brings (`Microsoft.IdentityModel.JsonWebTokens`,
+   `Microsoft.IdentityModel.Protocols`), which are not referenced directly.
 2. A pull request adding a package not in the table fails a check.
+3. `Directory.Packages.props` gives `Microsoft.EntityFrameworkCore`,
+   `Microsoft.EntityFrameworkCore.Relational` and `Microsoft.EntityFrameworkCore.Design`
+   one version, the tool manifest gives `dotnet-ef` that version, and no project's build
+   reports an assembly version conflict (MSB3277).
 
 ---
 
@@ -390,7 +863,7 @@ any package that duplicates a base class library capability.
 and members, camelCase for locals and parameters, `I` prefix on interfaces, `Async`
 suffix on asynchronous methods.
 
-*Source: base convention*
+*Source: base convention, D-166*
 
 The `I` prefix is retained deliberately. It is near-universal in .NET; departing
 costs readability for anyone joining later, including future maintainers.
@@ -399,15 +872,20 @@ costs readability for anyone joining later, including future maintainers.
 project and package identifiers, and the single `AddJanus` entry point, because .NET
 convention ties those to the package and a package rename moves them together. It
 appears nowhere else: no type, member, table, schema, role, collation, cookie, header,
-DNS label, constant or test carries it. A name says what a thing is; the library's
+DNS label, constant or test carries it, except the constant the build generates to hold
+the library package's identifier for the range API's user agent (CONV-CODE-004,
+INT-PWD-001, D-168), which no committed file spells. A name says what a thing is; the library's
 own identity is carried by the namespace. Where a prefix is needed to keep the
 library's artefacts apart from a host's (schema, roles, cookies, headers, the DNS
 record), the prefix is the neutral word `identity`.
 
 **Acceptance criteria**
 1. Analyzer rules enforce the standard set.
-2. A source scan finds the product name only in namespaces, project and package
-   identifiers and `AddJanus` (D-163).
+2. A source scan of `src`, `tests`, `tools`, `.github`, `.config` and the files at the
+   repository root other than Markdown files and `NOTICE` (vendored Unicode data
+   excepted) finds the product name only as the first segment of a dotted name whose
+   second segment names one of the solution's projects or is `slnx`, in `AddJanus`, and
+   in the lower-case package identifiers of `packages.lock.json` (D-163).
 
 ---
 
@@ -428,10 +906,11 @@ is being encoded into permission names, which produces role explosion.
 **CONV-NAME-003** — Error codes SHALL be hierarchical, lowercase, dot-separated, and
 **stable**: `auth.session.expired`, `authz.grant.notfound`.
 
-*Source: LIB-API-001, LIB-API-003*
+*Source: LIB-API-001, LIB-API-003, D-166*
 
 A code is an identifier, not a message. Rewording the human-facing message is free;
-changing the code is breaking.
+changing the code is breaking. Audit actions (`10` section 5) are catalogued and stable
+on the same terms: an action is an identifier, and changing one is breaking.
 
 **Acceptance criteria**
 1. Every code is documented with meaning and remediation.
@@ -454,11 +933,16 @@ private methods. One type per file, named for the file (CONV-LAYOUT-003).
 ---
 
 **CONV-CODE-002** — Every asynchronous method SHALL take a `CancellationToken` as its
-last parameter and pass it through; SHALL be named with the `Async` suffix; SHALL
-return `Task` or `ValueTask`, never `void`; and SHALL NOT block on a task (`.Result`,
+last parameter and pass it through, except `IUnitOfWork.RollbackAsync` and its
+implementation, which take none (CONV-DESIGN-003), and a member implementing an
+interface of the shared framework or of a package CONV-DESIGN-008 lists whose signature
+declares none (a middleware's `InvokeAsync`, a provider event handler's `HandleAsync`),
+which passes on the token its arguments carry where they carry one
+(`HttpContext.RequestAborted`); SHALL be named with the `Async` suffix; SHALL return
+`Task` or `ValueTask`, never `void`; and SHALL NOT block on a task (`.Result`,
 `.Wait()`, `GetAwaiter().GetResult()`). Library code SHALL use `ConfigureAwait(false)`.
 
-*Source: D-149*
+*Source: D-149, D-183*
 
 **Acceptance criteria**
 1. The analysers for blocking calls and missing cancellation tokens are errors.
@@ -482,11 +966,28 @@ Collections SHALL never be exposed as mutable types.
 where a type, a generic or a source generator serves. `dynamic` SHALL NOT be used.
 Partial classes SHALL exist only where a source generator requires them.
 
-*Source: D-149*
+*Source: D-149, D-168*
+
+**The library's identity in code** is a pair of constants the build generates, not
+values read by reflection. A target declared in `Directory.Build.props` runs after MinVer
+has derived the version (CONV-VCS-005) and writes, into the intermediate output of the
+project that needs them, `internal` constants holding the identifier of the library's
+package and its package version without build metadata. The generated file carries the
+`<auto-generated/>` header, so the analysers treat it as generated code, declares the
+project's root namespace, and is never committed. Nothing reads the version or the name
+from an assembly attribute, and no committed source spells the package identifier as a
+string (D-168).
 
 **Acceptance criteria**
 1. No `static` field is writable after construction.
-2. No use of `System.Reflection` outside the model builder and tests.
+2. No use of `System.Reflection` outside the model builder and tests, except
+   `Assembly.GetManifestResourceStream` on the library's own assembly to read the
+   resources embedded in the package (AUTH-PASS-004, AUTH-FACT-010).
+3. The library's version constant equals the package version of the build, with no build
+   metadata; the file that holds it is generated in the intermediate output and is not
+   tracked in the repository; and no project, `.props` or `.targets` file sets `Version`,
+   `VersionPrefix`, `VersionSuffix`, `PackageVersion`, `AssemblyVersion`, `FileVersion` or
+   `InformationalVersion`.
 
 ---
 
@@ -511,11 +1012,23 @@ implementation in the area project (the validate step of CONV-DESIGN-002), with 
 methods, not attributes, returning the named `10` code. Inside a feature, a value that
 reached a domain type is trusted because the value type made it valid (CONV-DESIGN-004).
 
-*Source: API-CONV-002, D-149*
+A free-text member is held to the bound API-CONV-002 states, and refused as that item
+states. A well-formed value refused on its meaning is answered with the `10` code that
+names the refusal, or with `api.request.invalid` (422, `details.member`) where none does;
+`api.request.malformed` is kept for what cannot be read. Which status each answer carries
+is API-CONV-003's.
+
+*Source: API-CONV-002, D-149, D-166*
 
 **Acceptance criteria**
 1. No validation attribute appears on a domain type.
-2. Every endpoint rejects a malformed body with a `10` code before calling a service.
+2. Every endpoint rejects a malformed body with a `10` code before calling a service: a
+   missing member whose absence `10` names a refusal for (`authz.grant.reasonrequired`,
+   `auth.recovery.reasonrequired`, `config.change.reasonrequired`) with that code, and any
+   other missing or unreadable member with `api.request.malformed` naming it. A member no
+   chapter requires stays optional.
+3. A free-text member outside the bound of API-CONV-002 is refused at every endpoint
+   that takes one, and by the service for an in-process caller.
 
 ---
 
@@ -525,11 +1038,77 @@ reached a domain type is trusted because the value type made it valid (CONV-DESI
 they cross a port, and be cleared after use; nothing SHALL derive its own primitive
 where the base class library or a permitted package provides one (CONV-DESIGN-008).
 
-*Source: AUTH-PASS-007, AUTH-KEY-002, D-149*
+*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166, D-171, D-176, D-181, D-183, D-186,
+D-187*
+
+**The key ring.** The secrets read once at startup (CONV-DESIGN-007) are needed for the
+life of the process, so they are the first exception to "inside a method" and to
+"cleared after use". They are held in one key ring, a singleton whose contract is a
+public interface in `Janus.Core` (every area borrows a key through it and no area owns
+it, CONV-LAYOUT-002) and whose implementation is internal to `Janus.Core`, registered by
+`Janus.Core`'s registration method, which `AddJanus` and the `Janus.Cli` composition
+call; a composition a job builds over another credential registers the ring the start
+filled, as it stands (CONV-DESIGN-007). A host could resolve it, but every secret it
+holds is one the host's own `ISecretSource` supplied. It holds each secret, every
+version the deployment holds, in a pinned `byte[]` allocated once, so the runtime never
+moves it and leaves no copy behind. The ring never hands out its arrays: a use borrows a
+key as `ReadOnlySpan<byte>` or `ReadOnlyMemory<byte>` for the length of that use and
+keeps nothing. Its methods return results (CONV-DESIGN-005): asked for a version it does
+not hold, it answers `model.startup.secretunavailable` with `details.key` naming the
+secret and `details.version` the version. An unwrap that meets that answer after the
+start throws it as a fault carrying the same code and details (CONV-ERR-001, OPS-SEC-003
+criterion 3), answered `system.fault` (save inside work run after a commit, which logs
+it and leaves its row to the publisher, CONV-DESIGN-003), and never passes it to its
+callers as a result. No service receives a key when it is registered or constructed;
+each asks the ring at its use. The start fills the ring in steps, the mail server's
+secret last (CONV-DESIGN-007); a read of a secret before the step that reads it is done,
+or after the ring is cleared, is a fault. The ring clears every array when the
+application stops, after the worker and the server have stopped, or when a `Janus.Cli`
+command ends.
+
+What a use derives from a key follows the rule above: inside the method, cleared after
+use. The second exception is the OIDC provider's credentials: its signing credentials,
+made from the signing keys the database holds wrapped (AUTH-KEY-001), and its encryption
+credential, derived from each held key-encryption key version (AUTH-KEY-002). The
+maintained provider takes its keys as credential objects, and replacing that with a
+hand-written key path is the risk CONV-DESIGN-008 rejects, so they are held as such
+objects, made after the ring is filled, with the library's own copy of the bytes they
+were made from cleared at once. The encryption credential is held in the provider's
+server options and changes only at a restart, since a key-encryption key version leaves
+only then (OPS-SEC-003). The signing credentials are held in the library's credential
+source (AUTH-KEY-001), which the application's start fills from the stored keys once the
+ring is filled and before the provider's options are built; the provider's signing, its
+key set and its validation read them from it each time they run, through the provider's
+own event model, and no step of the provider takes one from its options (AUTH-KEY-001).
+The provider's options are built once, at the start, and never rebuilt; of the signing
+credentials they hold only what the provider requires to start, as the same object the
+source holds. A signing credential a rotation replaces signs nothing after it. Its
+public key, which JWKS publishes during the overlap and validation uses for as long as
+AUTH-KEY-001 keeps it, is held apart from its private key object and is no secret; the
+source disposes the private key object at the first read of the signing keys after the
+overlap ends (AUTH-KEY-001), and from then nothing holds its private key undisposed, the
+options included, which can hold only that same object, disposed. Nothing else holds
+secret key material outside the ring, and no other options object holds key bytes
+(D-171).
 
 **Acceptance criteria**
-1. No string comparison is used on a hash, token or code.
+1. No equality or ordering comparison other than `CryptographicOperations.FixedTimeEquals`
+   is applied in process to a hash, token, code, secret, fingerprint, signature, nonce,
+   challenge, verifier or password, whatever its type. An equality a store's query
+   evaluates in the database against a stored hash of a secret (a keyed fingerprint, or
+   the SHA-256 of a drawn token) is a lookup, not such a comparison. A value the library
+   compiles in or publishes (a literal, a constant, a member of its error-code or factor
+   catalogue) is not a secret.
 2. No custom implementation of a hash, cipher, key derivation or random source exists.
+3. No service receives a key at registration or construction; a read of a secret before
+   the start has read it into the ring throws; the ring's clearing leaves every array
+   zero; after the application stops or the command ends, a read throws.
+4. The only secret key material outside the key ring is the OIDC provider's signing and
+   encryption credentials; the library's copy of the bytes each was made from is zero
+   when the making returns; the provider's options are never rebuilt after the start;
+   and a signing credential a rotation replaces signs nothing after it, has its public
+   key held apart from its private key object, and has the private key object disposed
+   at the first read of the signing keys after its overlap ends.
 
 ---
 
@@ -541,11 +1120,11 @@ and the gates that name them (CONV-GATE-001) SHALL rely on them and on nothing e
 | JAN0001 | A `catch` block whose path returns a permitted, authenticated or successful value | CONV-ERR-002 |
 | JAN0002 | A logging call whose argument is a type or member marked as never-logged (`[NeverLogged]` in `Janus.Core`) | CONV-LOG-003 |
 | JAN0003 | A `public` or `internal` non-abstract class that is not `sealed` | CONV-CODE-001 |
-| JAN0004 | `.Result`, `.Wait()`, `.GetAwaiter().GetResult()` on a task; an `async` method without a `CancellationToken` parameter | CONV-CODE-002 |
+| JAN0004 | `.Result`, `.Wait()`, `.GetAwaiter().GetResult()` on a task; an `async` method without a `CancellationToken` parameter, other than the implementation of `IUnitOfWork.RollbackAsync` (CONV-DESIGN-003) and a member implementing an interface of the shared framework or of a listed package that declares no token (CONV-CODE-002) | CONV-CODE-002 |
 | JAN0005 | A `Result` or `Result<T>` expression whose value is discarded | CONV-DESIGN-005 |
 | JAN0006 | A `catch` block that is empty, or whose every path neither throws, rethrows, returns a failure `Result` nor calls a logging method (D-150) | CONV-ERR-003 |
 
-*Source: D-149*
+*Source: D-149, D-183*
 
 **Acceptance criteria**
 1. Each rule has a test project case that fails and a case that passes.
@@ -562,19 +1141,24 @@ throw.**
 | Kind | Examples | Mechanism |
 |---|---|---|
 | Expected outcome | Wrong password, grant not found, consent already withdrawn | Result with value or error code |
-| Fault | Database unreachable, invalid configuration, missing policy registration | Throw |
+| Fault | Database unreachable, invalid configuration, missing policy registration, a resource type or permission named at a gate request that the model does not declare | Throw |
 | Validation | Bad model declaration, out-of-range configuration | Throw at startup |
 
-*Source: LIB-API-003, and the startup validation requirements throughout*
+*Source: LIB-API-003, and the startup validation requirements throughout; D-166*
 
 Failed authentication is routine, not exceptional. Modelling it as an exception is
 slow and — more importantly — easy to swallow accidentally, which defeats the
 fail-closed requirements in documents 02, 03 and 04.
 
 **Acceptance criteria**
-1. No authentication or authorization denial is signalled by an exception.
+1. No authentication or authorization denial is signalled by an exception: no exception
+   the library raises or makes names a code of the `auth.`, `authz.` or
+   `privacy.consent.` families, and no exception type is itself a refusal of access.
 2. A caller cannot ignore a result — the compiler requires handling both cases.
-3. Configuration faults surface at startup, never at first request.
+3. Configuration faults in what the host declares surface at startup, never at first
+   request. A resource type or permission named at a gate request that the model does not
+   declare throws at that request, at every gate entry point that takes one, before the
+   gate reads or records anything.
 
 ---
 
@@ -594,23 +1178,38 @@ pressure defeats the entire security model, and it looks reasonable in review.
 ---
 
 **CONV-ERR-003** — Exceptions SHALL NOT be swallowed. A caught exception is either
-handled meaningfully or rethrown. Empty catch blocks SHALL NOT exist.
+handled meaningfully or rethrown. Empty catch blocks SHALL NOT exist. One catch carries
+on after logging the exception: the one inside work registered to run after a commit,
+written by that work itself (CONV-DESIGN-003), since the commit stands and the publisher
+carries what that work leaves.
 
-*Source: D-150*
+*Source: D-150, D-166, D-186, D-188*
 
 **Acceptance criteria**
 1. JAN0006 (CONV-CODE-008) fails the build on an empty catch and on a catch that
    neither throws, rethrows, returns a failure result nor logs.
-2. Catch-and-log-and-continue does not appear on a security path.
+2. No catch block of the library carries on after the exception but the one inside
+   after-commit work, written by that work, which logs it (CONV-DESIGN-003): each other
+   throws, returns a failure result, or answers the request with a refusal as its last
+   act.
 
 ---
 
 ## 4. Testing
 
-**CONV-TEST-001** — One test project per source project, mirroring its layout.
+**CONV-TEST-001** — One test project per source project, mirroring its layout. A test
+project MAY reference another test project to use its fakes and helpers, and MAY
+reference a shipped project other than its own where a criterion reads it. A test that
+reads every shipped assembly (LIB-API-002 AC1, CONV-DESIGN-002 AC1, CONV-DESIGN-006 AC1,
+CONV-DESIGN-007 AC6 to AC8) SHALL live in `Janus.Hosting.Tests`, which references every
+shipped project. The consumer sample of LIB-API-002 AC2 SHALL live in
+`Janus.Conformance.Tests`.
+
+*Source: D-156, D-166, D-180, D-183*
 
 **Acceptance criteria**
 1. A test's location identifies what it covers without reading it.
+2. No project grants `InternalsVisibleTo` to the project holding the consumer sample.
 
 ---
 
@@ -623,12 +1222,19 @@ handled meaningfully or rethrown. Empty catch blocks SHALL NOT exist.
 | Contract | The public surface | Guards LIB-API-001; fails on unintended change |
 | Conformance | A host's own configuration | Shipped per LIB-TEST-001 |
 
-*Source: LIB-TEST-001, LIB-TEST-002*
+A contract test that reads the library-owned schema from a migrated database (LIB-API-001
+AC2, LIB-TEST-002 AC2) is of the integration kind; it compares with the committed schema
+file, leaf partitions excluded.
+
+*Source: LIB-TEST-001, LIB-TEST-002, D-166*
 
 **Acceptance criteria**
-1. Unit tests run without containers.
+1. Unit tests run without containers: no test class of the unit or contract kind takes
+   as a fixture, or constructs, a type that starts a container.
 2. Integration tests tear down their containers.
 3. Kinds are independently runnable.
+4. Every test class carries exactly one kind, and one pipeline job runs each kind across
+   every test project.
 
 ---
 
@@ -653,7 +1259,7 @@ These are where a gap produces a **silent** security failure rather than a crash
 
 **CONV-TEST-004** — A coverage percentage target SHALL NOT be set as a gate.
 
-*Source: convention decision*
+*Source: convention decision, D-166*
 
 A percentage measures the wrong thing: satisfiable by testing trivial code and
 skipping the hard parts, and it creates pressure to write tests that assert nothing.
@@ -661,8 +1267,8 @@ The mandatory areas above are the bar. Coverage MAY be tracked as information.
 
 **Acceptance criteria**
 1. No pipeline step fails on a coverage percentage.
-2. A change to permission logic without a corresponding truth-table change is
-   caught.
+2. A change under review that touches permission logic without a truth-table change is
+   caught (CONV-VCS-004).
 
 ---
 
@@ -708,13 +1314,13 @@ verified.
 **CONV-ENUM-001** — A value the **code branches on** SHALL be a constrained column. A
 value that **changes without code changes** SHALL be a table.
 
-*Source: D-094*
+*Source: D-094, D-108, D-183*
 
 | Kind | Storage | Examples |
 |---|---|---|
 | Code branches on it | Constrained column | Account state, erasure status, concealment behaviour |
 | Changes without a deploy | Table | Roles, permissions, a host-maintained reference list |
-| **Declared with properties the code branches on** | Table seeded from the declaration | **Lawful bases, sensitive-data categories** (D-108) |
+| **Declared with properties the code branches on** | Table seeded from the declaration | **Lawful bases** (D-108, D-183). Sensitive-data categories carry no property and stay a declaration (PRIV-SENS-001) |
 
 **The test:** could someone add a value and have it work without an engineer? If no, a
 lookup table buys nothing — the value would be inert until code handled it, and every
@@ -778,6 +1384,13 @@ so there the specification does constrain them.
 values interpolated. Every log call SHALL go through a `LoggerMessage` source-generated
 method (D-149), which fixes the event name and the field names at compile time.
 
+A log method whose last call is removed is removed with it, and neither its event
+identifier nor its event name is ever given to another method of its class, so that a
+query or an alert kept on either never comes to match another event of that class
+(D-196).
+
+*Source: D-149, D-196*
+
 **Acceptance criteria**
 1. No log call uses string interpolation for values.
 2. Logs are queryable by field.
@@ -787,7 +1400,12 @@ method (D-149), which fixes the event name and the field names at compile time.
 **CONV-LOG-002** — Every log entry SHALL carry a correlation identifier, the same one
 returned in concealment responses.
 
-*Source: AUTHZ-CONCEAL-004*
+*Source: AUTHZ-CONCEAL-004, D-166*
+
+**Values.** The identifier is the server's request identifier (`TraceIdentifier`),
+carried as `RequestId` by the scope the server opens per request while its hosting logger
+is enabled; every refusal and fault the library logs, and every rejected destination
+(API-REDIR-001 AC4), also names it as `CorrelationId` in its message.
 
 A customer's "I can't see my record" resolves to the exact decision that denied them.
 
@@ -810,11 +1428,21 @@ sensitive-data disclosure.
 **Compliance text:** the content of consent or notice text in any language. Log the
 notice **version**.
 
-*Source: PRIV-SENS-001, PRIV-PRIN-001, D-031*
+**Carriers.** `[NeverLogged]` SHALL be placed on every type whose whole value is one
+listed above, on every property, field or column of another type that holds one, and on
+every `string`, `byte[]` or `ReadOnlyMemory<byte>` parameter through which one passes, in
+a service contract and in its implementation alike. Session identifiers include the
+fingerprints a session, a pre-authentication record or a link is found by. Tokens
+include the correlation references of callbacks (INT-GEN-003). A local variable cannot
+carry the marker and is outside JAN0002; a host marks its own sensitive types.
+
+*Source: PRIV-SENS-001, PRIV-PRIN-001, D-031, D-165, D-166*
 
 **Acceptance criteria**
 1. An analyzer rule detects forbidden values and fails the build.
-2. A test asserts no log output contains an order line item.
+2. A test asserts no log output contains a field of the body of an endpoint marked
+   `SensitiveBody` (BFF-LOG-002).
+3. A test lists every carrier the library declares and asserts each is marked.
 
 ---
 
@@ -834,11 +1462,26 @@ like any other store.
 
 ---
 
-**CONV-LOG-005** — Security events SHALL be logged regardless of level configuration:
-failed authentication, denied authorization, step-up, configuration change,
-break-glass use.
+**CONV-LOG-005** — Security events SHALL be recorded in the audit trail, which no log
+level governs: failed authentication (`auth.authentication.failed`), denied authorization
+(`authz.access.denied`), step-up (`auth.session.presented`, and `auth.stepup.failed` when
+refused), configuration change (`ops.configuration.changed`), break-glass use
+(`auth.breakglass.used`).
 
-*Source: OPS-CFG-005, OPS-BOOT-002*
+*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193*
+
+**Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
+press (a link token unknown or expired included, when pressed) or on a social provider's
+return, a refused new-device verification code, or a refused break-glass credential. A
+plain open of a link, a press in another browser, a provider's own error or a cancel, a
+provider's return carrying no `code` (D-193), and a provider that cannot be reached or
+read (`auth.provider.unavailable`, IDN-LIFE-012, D-192) present nothing and are not
+failed authentication, and neither is a fault of the library's own inside a sign-in or a
+step-up, which writes no `auth.stepup.failed`; a refused factor is one refused with a
+code AUTH-ABUSE-001 lists (D-188, D-189). A `phoneCode` ask presents nothing: refused
+`auth.factor.rejected` where no factor is left, or `auth.credential.suspended` for a
+suspended number, it is no failed authentication and writes no `auth.stepup.failed`
+(AUTH-FACT-002, AUTH-RECOV-007, D-190).
 
 **Acceptance criteria**
 1. Raising the minimum log level does not suppress these.
@@ -859,10 +1502,11 @@ Two paths could disagree, and the log would be the one nobody notices is wrong.
 
 ## 6. Version control
 
-**CONV-VCS-001** — Trunk-based development with short-lived branches, merged via pull
-request.
+**CONV-VCS-001** — Trunk-based development with short-lived branches; a branch reaches
+the default branch only by pull request, and a local branch that is never pushed may be
+merged into the branch it was cut from (D-182).
 
-*Source: OPS-MIG-005*
+*Source: OPS-MIG-005, D-182*
 
 Long-lived branches combine badly with expand-and-contract migrations.
 
@@ -889,33 +1533,45 @@ current plan.
 
 ---
 
-**CONV-VCS-003** — Commit messages SHALL follow **Conventional Commits 1.0.0**: a
-type from `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, an
+**CONV-VCS-003** — Commit messages SHALL follow **Conventional Commits 1.0.0**: a type
+from `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, an
 optional scope naming the area or feature (`feat(identifiers): ...`), a description in
 the imperative of at most 72 characters, and `BREAKING CHANGE:` in the footer or `!`
-after the type for any change that breaks LIB-API-001. One logical change per commit.
-A body is present only when the diff cannot explain itself and SHALL consist of
-fragments, one per line, each beginning with a dash and at most 72 characters, stating
-a reason or a non-obvious consequence; a body SHALL NOT describe what the diff shows
-and SHALL NOT contain sentences of prose (D-150). A commit with two parents (the merge
-commit the platform writes when a pull request is merged) carries no change of its own
-and is outside this item: the gate inspects single-parent commits only (D-158).
+after the type for any change that breaks LIB-API-001. One logical change per commit. A
+body is present only when the diff cannot explain itself and SHALL consist of fragments,
+one per line, each beginning with a dash and at most 72 characters, stating a reason or
+a non-obvious consequence; a body SHALL NOT describe what the diff shows and SHALL NOT
+contain sentences of prose (D-150). A commit with two parents (the merge commit the
+platform writes when a pull request is merged, or the merge of a local branch into the
+branch it was cut from, which carries the resolution of its conflicts, D-182) is outside
+this item: the gate inspects single-parent commits only (D-158).
 
-*Source: D-149, D-158*
+*Source: D-149, D-158, D-166, D-182*
 
 **Acceptance criteria**
 1. A commit message that does not parse under Conventional Commits 1.0.0, whose
    description exceeds 72 characters, or whose body has a line that does not begin
    with a dash or exceeds 72 characters, fails a check on push and on pull request;
    commits with two parents are skipped by the check.
-2. Every breaking change to the contract carries the breaking marker.
+2. Every commit that removes or changes what the latest release published carries the
+   breaking marker: a line of a `PublicAPI.Shipped.txt`, a shipped line marked
+   `*REMOVED*` in an unshipped file, or an entry of a contract list the latest release
+   held (LIB-TEST-002, REF-001 AC2). Removing or changing what no release published is
+   not a break.
 
 ---
 
-**CONV-VCS-004** — A commit touching permission logic SHALL reference the
-corresponding truth-table change.
+**CONV-VCS-004** — A change under review (a pull request, or a push to the default
+branch) that touches permission logic SHALL change the truth table in the same change.
+Permission logic is the `Janus.Authorization` project, the authorization persistence of
+`Janus.Storage`, the model declaration types of `Janus.Core`, the mapping of the
+contract tables (`MapAuthorizationTables`), a migration that changes the view
+`effective_grants`, and the judgement in `Janus.Authentication` of whether a session
+meets a step-up gate (AUTH-STEP-002 step 1, the downgrade of AUTH-SESS-009 included),
+which admits or refuses a bound action as the judgement from a host's report does
+(D-192).
 
-*Source: AUTHZ-TEST-001, CONV-TEST-003*
+*Source: AUTHZ-TEST-001, CONV-TEST-003, D-166, D-192*
 
 If there is no truth-table change, that is the signal to stop and write one. This is
 the one place the discipline is hard rather than advisory.
@@ -925,23 +1581,33 @@ the one place the discipline is hard rather than advisory.
 
 ---
 
-**CONV-VCS-005** — A `CHANGELOG.md` SHALL be kept at the repository root in the
-**Keep a Changelog 1.1.0** format (an `Unreleased` section; one section per released
-version with its date; entries grouped under `Added`, `Changed`, `Deprecated`,
-`Removed`, `Fixed`, `Security`; written for a reader, not copied from commit
-messages). Every pull request that changes behaviour adds its line under `Unreleased`.
-A release moves `Unreleased` to a version section, moves `PublicAPI.Unshipped.txt` into
-`PublicAPI.Shipped.txt` (CONV-SETUP-003) and tags the commit `vMAJOR.MINOR.PATCH`;
-**MinVer** derives the package version from that tag (LIB-VER-001). Nothing else sets a
-version number.
+**CONV-VCS-005** — A `CHANGELOG.md` SHALL be kept at the repository root in the **Keep a
+Changelog 1.1.0** format (an `Unreleased` section; one section per released version with
+its date; entries grouped under `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
+`Security`; written for a reader, not copied from commit messages). Every pull request
+that changes behaviour adds its line under `Unreleased`. A release moves `Unreleased` to
+a version section, moves `PublicAPI.Unshipped.txt` into `PublicAPI.Shipped.txt`
+(CONV-SETUP-003) and tags the commit `vMAJOR.MINOR.PATCH`; **MinVer** derives the
+package version from that tag (LIB-VER-001). Nothing else sets a version number. The
+first version's section records what that version holds, under `Added` alone; the other
+groups measure a version against a released predecessor. Each release also refreshes the
+two embedded lists that age, each dated when drawn: the offline leaked-password list
+(AUTH-PASS-004) and the Public Suffix List (AUTH-FACT-010), the test that pins by name
+the suffix rules the conversion sets aside being reviewed and updated with the list
+(D-189). The dictionary lists (AUTH-PASS-004) are static and are not refreshed.
 
-*Source: LIB-VER-001, LIB-VER-002, D-149*
+*Source: LIB-VER-001, LIB-VER-002, D-149, D-166, D-189*
 
 **Acceptance criteria**
 1. A behaviour-changing pull request without a changelog line fails a check.
 2. The package version equals the nearest tag; no version literal exists in a project
    file.
-3. A major-version section of the changelog links the migration note of LIB-VER-002.
+3. A major-version section of the changelog links the migration note of LIB-VER-002, a
+   file in the repository; the release gate refuses a section that opens a major version
+   without the link.
+4. A release's offline leaked-password list and Public Suffix List are drawn for that
+   release and carry the date they were drawn, and the pin of the suffix rules set aside
+   matches the list drawn.
 
 ---
 
@@ -991,13 +1657,18 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110*
+*Source: D-046, D-110, D-184*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
 recurring entry — which is what keeps the accepted recurring human tasks at two
 (`06` §9). Never updating accumulates known holes; chasing releases by the calendar is
 churn.
+
+Two kinds of update are not taken one by one as they arrive: the packages and the tool
+CONV-DESIGN-008 holds at one version move together in one change, and the
+analyser-authoring packages move only by a decision-log entry, since the analysers must
+load in the compiler of every build that uses them.
 
 **Acceptance criteria**
 1. Security alerts are actioned rather than accumulating.

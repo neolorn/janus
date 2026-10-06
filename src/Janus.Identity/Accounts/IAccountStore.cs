@@ -21,6 +21,17 @@ internal interface IAccountStore
     ValueTask<Account?> FindBySubjectAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the account an identifier was issued to under a lock on its row, held until
+    /// the operation's transaction ends, so a decision made on it cannot race another
+    /// transaction deciding on the same account.
+    /// </summary>
+    /// <param name="subject">Whose account to read.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The account as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Account?> HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a newly created account.
     /// </summary>
     /// <param name="account">The account to record.</param>

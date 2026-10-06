@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using Janus.Core;
+using Janus.Identity.Identifiers;
 using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -13,7 +14,9 @@ namespace Janus.Storage.Identity.Identifiers;
 /// <remarks>
 /// Implements REG-IDENT-006 and CONV-DESIGN-003. The fingerprint is unique across the
 /// table and does not meet the identifiers table's index, so the value is held out of
-/// reach of another account while the undo lasts and released with the row.
+/// reach of another account while the undo lasts and released with the row. Each row
+/// is keyed by an identifier of its own and names the identifier it came from, so one
+/// identifier changed twice within the window stands behind two rows (D-189).
 /// </remarks>
 internal sealed class IdentifierRemovalConfiguration : IEntityTypeConfiguration<IdentifierRemovalRecord>
 {
@@ -31,6 +34,11 @@ internal sealed class IdentifierRemovalConfiguration : IEntityTypeConfiguration<
     /// The column holding the form it is compared under.
     /// </summary>
     public const string CanonicalColumn = "enc_canonical";
+
+    /// <summary>
+    /// The column naming the identifier the value came from.
+    /// </summary>
+    public const string OriginColumn = "identifier_id";
 
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<IdentifierRemovalRecord> builder)
@@ -54,12 +62,22 @@ internal sealed class IdentifierRemovalConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint(
                 "ck_identifier_removals_window",
                 "expires_at > removed_at");
+
+            table.HasCheckConstraint(
+                "ck_identifier_removals_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(removal => removal.Id).HasName("pk_identifier_removals");
 
         builder.Property(removal => removal.Id)
-            .HasColumnName("identifier_id")
+            .HasColumnName("removal_id")
+            .HasConversion(id => id.Value, value => new IdentifierRemovalId(value));
+
+        // REG-IDENT-006 (D-189): the identifier the value came from is named and is no
+        // key, so one identifier changed twice within the window stands behind two rows.
+        builder.Property(removal => removal.Origin)
+            .HasColumnName(OriginColumn)
             .HasConversion(id => id.Value, value => new IdentifierId(value));
 
         builder.Property(removal => removal.Subject)
@@ -101,6 +119,11 @@ internal sealed class IdentifierRemovalConfiguration : IEntityTypeConfiguration<
         // The sweep reads the windows that have run out and nothing else.
         builder.HasIndex(removal => removal.ExpiresAt)
             .HasDatabaseName("ix_identifier_removals_expires_at");
+
+        // The fingerprint rotation rewrites a row it names by the identifier it came
+        // from, which is no longer the key that served it (OPS-SEC-003).
+        builder.HasIndex(removal => removal.Origin)
+            .HasDatabaseName("ix_identifier_removals_identifier");
 
         // An account reads what it gave up, and the foreign key is served by the same
         // index rather than one the framework names for itself.

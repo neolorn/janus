@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
-using System.Net.Http;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,7 +40,7 @@ public static class ConformanceSuite
     /// <returns>
     /// A finding, <c>authz.policy.unregistered</c> naming the entity, for each entity
     /// that is neither a declared resource type, nor the rows of a declared
-    /// relationship, nor one of the two contract tables.
+    /// relationship, nor one of the three contract tables.
     /// </returns>
     /// <exception cref="ArgumentNullException">Either argument is absent.</exception>
     /// <remarks>
@@ -62,6 +60,7 @@ public static class ConformanceSuite
             .. declaration.Relationships.Select(relationship => relationship.Holder.Parameters[0].Type),
             typeof(AncestryEntry),
             typeof(EffectiveGrant),
+            typeof(ConsentedResource),
         ]);
 
         return new ConformanceReport(
@@ -94,9 +93,8 @@ public static class ConformanceSuite
     /// <exception cref="StartupException">The declaration is refused for a reason no code names.</exception>
     /// <remarks>
     /// Implements LIB-TEST-001 AC3 and AUTHZ-MODEL-004. The declaration is judged by
-    /// the registration a host makes, over key material drawn for the check alone and
-    /// cleared after it, so the checks are the library's and not a second copy of
-    /// them. Like startup, the judgement stops at the first failure, so a declaration
+    /// the registration a host makes, which takes no key material, so the checks are
+    /// the library's and not a second copy of them. Like startup, the judgement stops at the first failure, so a declaration
     /// that fails two ways reports the second once the first is corrected.
     /// </remarks>
     public static ConformanceReport Declaration(AuthorizationDeclaration declaration)
@@ -114,6 +112,11 @@ public static class ConformanceSuite
     /// </summary>
     /// <typeparam name="TResource">The host's type of the records asked about.</typeparam>
     /// <param name="services">The host's deployment, as it registered the library.</param>
+    /// <param name="deployment">
+    /// Builds the host's composition with the assurance provider it is given, or with
+    /// none. The suite calls it once for each step-up case and for no other, so a table
+    /// with no step-up case needs none and passes nothing.
+    /// </param>
     /// <param name="connect">
     /// Opens a connection to the deployment's database, which the suite writes the
     /// library's rows for each case through and closes.
@@ -123,16 +126,28 @@ public static class ConformanceSuite
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>
     /// A finding, <c>authz.truthtable.disagreement</c> naming the case and what each
-    /// path decided, for each case that either path decided otherwise.
+    /// path decided, for each case that either path decided otherwise; a finding on a
+    /// derived case names the relationship, and one on a step-up case the action's gate.
     /// </returns>
-    /// <exception cref="ArgumentNullException">An argument is absent.</exception>
-    /// <exception cref="ArgumentException">
-    /// The deployment declares no such type, or a case names a scenario its declaration
-    /// does not place it in.
+    /// <exception cref="ArgumentNullException">
+    /// An argument other than the factory is absent.
     /// </exception>
-    /// <remarks>Implements LIB-TEST-001 AC2, AUTHZ-TEST-001 and AUTHZ-PRIN-001.</remarks>
+    /// <exception cref="ArgumentException">
+    /// The deployment declares no such type, a case names a scenario its declaration
+    /// does not place it in, the table holds a step-up case and no factory is given, or
+    /// a step-up case names a permission the declaration binds to no step-up gate. Each
+    /// is refused before anything is written.
+    /// </exception>
+    /// <remarks>
+    /// Implements LIB-TEST-001 AC2, AUTHZ-TEST-001 and AUTHZ-PRIN-001 (D-188, D-189). A
+    /// step-up case is judged from the report of an assurance provider of the suite's
+    /// own, in a composition the factory builds for that case, so the provider the
+    /// deployment registers, or its having none, decides no case (chapter 10 section
+    /// 5.30).
+    /// </remarks>
     public static async ValueTask<ConformanceReport> TruthTableAsync<TResource>(
         IServiceProvider services,
+        DeploymentFactory? deployment,
         Func<CancellationToken, ValueTask<DbConnection>> connect,
         IConformanceRows<TResource> rows,
         IReadOnlyList<TruthTableCase> cases,
@@ -143,20 +158,22 @@ public static class ConformanceSuite
         ArgumentNullException.ThrowIfNull(connect);
         ArgumentNullException.ThrowIfNull(rows);
 
-        var library = new CaseRows(connect, services.GetRequiredService<TimeProvider>());
+        var library = new CaseRows(
+            connect,
+            services.GetRequiredService<TimeProvider>(),
+            services.GetRequiredService<RandomNumberGenerator>());
 
-        return await new TruthTable<TResource>(services, library, rows)
+        return await new TruthTable<TResource>(services, deployment, library, rows)
             .RunAsync(cases, cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Asks the deployment's provider each refusal AUTH-OIDC-006 names, as a registered
-    /// client would ask it.
+    /// Asks the deployment's provider each refusal AUTH-OIDC-006 names, as the
+    /// application's own sign-on client asks it.
     /// </summary>
-    /// <param name="client">What reaches the deployment.</param>
-    /// <param name="issuer">The provider's issuer, which its discovery document sits under.</param>
-    /// <param name="registered">A client the deployment's registry holds.</param>
+    /// <param name="services">The host's deployment, as it registered the library.</param>
+    /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>
     /// A finding, <c>auth.oidc.nonconformant</c> naming the probe, what was sent, the
@@ -164,56 +181,54 @@ public static class ConformanceSuite
     /// its document advertised.
     /// </returns>
     /// <exception cref="ArgumentNullException">An argument is absent.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The probes could not be made, since the client or its secret could not be read;
+    /// the message is the refusal's code.
+    /// </exception>
     /// <remarks>
-    /// Implements AUTH-OIDC-006 AC1 and LIB-TEST-001. The implicit and hybrid forms,
-    /// every grant beside the code and the refresh, the plain proof key and no proof
-    /// key, and a client that does not authenticate are each asked for and must be
-    /// refused. The exact-match rule and the code exchange need a person signed in, so
-    /// they are the library's own tests and not the host's.
+    /// Implements AUTH-OIDC-006 AC1 and LIB-TEST-001 AC4 and AC5 (D-172). The implicit
+    /// and hybrid forms, every grant beside the code and the refresh, the plain proof
+    /// key and no proof key, and a client that does not authenticate are each asked for
+    /// and must be refused. The probes are made by the library's own client half as the
+    /// client the host declares for this application, so the suite holds no secret and
+    /// no client is registered for it. The exact-match rule and the code exchange need
+    /// a person signed in, so they are the library's own tests and not the host's.
     /// </remarks>
     public static async ValueTask<ConformanceReport> ProviderAsync(
-        HttpClient client,
-        Uri issuer,
-        ConformanceClient registered,
+        IServiceProvider services,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(client);
-        ArgumentNullException.ThrowIfNull(issuer);
-        ArgumentNullException.ThrowIfNull(registered);
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(context);
 
-        return await new ProviderProbe(client, issuer, registered)
-            .RunAsync(cancellationToken)
-            .ConfigureAwait(false);
+        AsyncServiceScope scope = services.CreateAsyncScope();
+
+        await using (scope.ConfigureAwait(false))
+        {
+            return (await scope.ServiceProvider.GetRequiredService<IProviderProbes>()
+                    .RunAsync(context, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(
+                    findings => new ConformanceReport(
+                    [
+                        .. findings.Select(finding => new ConformanceFinding(ConformanceCheck.Provider, finding)),
+                    ]),
+                    error => throw new InvalidOperationException(error.Code.ToString()));
+        }
     }
 
     private static Result Validated(AuthorizationDeclaration declaration)
     {
-        byte[] encryption = RandomNumberGenerator.GetBytes(32);
-        byte[] fingerprint = RandomNumberGenerator.GetBytes(FingerprintKeys.MinimumLength);
-        byte[] signOn = RandomNumberGenerator.GetBytes(32);
-
         try
         {
-            _ = new ServiceCollection().AddJanus(
-                Unreached,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = encryption }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = fingerprint }),
-                signOn,
-                Encoding.UTF8.GetBytes(Unreached),
-                declaration,
-                ApplicationKind.Public);
+            _ = new ServiceCollection().AddJanus(Unreached, declaration, ApplicationKind.Public);
 
             return Result.Success();
         }
         catch (StartupException refused) when (refused.Failure is not null)
         {
             return Result.Failure(refused.Failure);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encryption);
-            CryptographicOperations.ZeroMemory(fingerprint);
-            CryptographicOperations.ZeroMemory(signOn);
         }
     }
 }

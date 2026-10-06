@@ -11,7 +11,7 @@ namespace Janus.Core;
 public enum MessageKind
 {
     /// <summary>
-    /// A code that proves control of an address or a number.
+    /// A code alone that proves control of an address: the new-device check.
     /// </summary>
     [JsonStringEnumMemberName("verification-code")]
     VerificationCode = 0,
@@ -146,4 +146,34 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("recovery-codes-reminder")]
     RecoveryCodesReminder = 20,
+
+    /// <summary>
+    /// The <c>emailCode</c> sign-in code, an authentication code and never a
+    /// verification code (AUTH-FACT-004).
+    /// </summary>
+    [JsonStringEnumMemberName("sign-in-code")]
+    SignInCode = 21,
+
+    /// <summary>
+    /// A code and a link that prove control of an address or a number being
+    /// registered, added or replaced (REG-SESS-003).
+    /// </summary>
+    [JsonStringEnumMemberName("verification-link")]
+    VerificationLink = 22,
+
+    /// <summary>
+    /// A credential was suspended by a loss report, or by a removal that would lower the
+    /// account's reachable assurance; every notice of the window carries the cancel link
+    /// (AUTH-RECOV-007).
+    /// </summary>
+    [JsonStringEnumMemberName("credential-suspended")]
+    CredentialSuspended = 23,
+
+    /// <summary>
+    /// An erasure request received out of band was fulfilled and the deletion grace
+    /// window started, sent to the security-notice set with no cancel link
+    /// (IDN-LIFE-003).
+    /// </summary>
+    [JsonStringEnumMemberName("oob-deletion-notice")]
+    OobDeletionNotice = 24,
 }

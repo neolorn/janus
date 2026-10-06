@@ -1,12 +1,16 @@
 using System;
+using System.Collections.Frozen;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
@@ -14,6 +18,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.BreakGlass;
@@ -39,6 +44,12 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private const string Generate = "/admin/break-glass/generate";
 
+    private const string Standing = "/admin/break-glass";
+
+    private const string Reason = "The operator cannot be reached.";
+
+    private const string Page = "/account/profile";
+
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -53,9 +64,10 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     private readonly SubjectId _emergency;
 
     /// <summary>
-    /// A deployment administered by one organization, whose reserved account holds the
-    /// system administrator's permissions there, and whose owner has routine alerts
-    /// turned off.
+    /// A deployment administered by one organization, whose reserved account is a member
+    /// there, as bootstrap makes it, under a policy that requires AAL2 and names
+    /// <c>google</c> among its ways in, holds the system administrator's permissions
+    /// there, and whose owner has routine alerts turned off.
     /// </summary>
     public BreakGlassEndpointTests()
     {
@@ -71,6 +83,18 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         _emergency = SubjectId.New(_randomness);
         _deployment.Reserves(_emergency);
         _deployment.Accounts.Stands(_emergency, AccountState.Active);
+        _deployment.Memberships.Place(_emergency, Administration);
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            Administration.ToString(),
+            new PolicyOverride(
+                AssuranceLevel.Aal2,
+                new[] { Factor.Passkey, Factor.Google }.ToFrozenSet(),
+                null,
+                null,
+                null,
+                null,
+                null));
 
         foreach (Permission permission in Permissions.All)
         {
@@ -130,16 +154,45 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.True(opened.SatisfiesEveryGate);
         Assert.Equal(_deployment.Clock.GetUtcNow().AddHours(2), opened.AbsoluteExpiry);
 
-        _deployment.Clock.Advance(TimeSpan.FromMinutes(119));
+        // In use inside every inactivity window, so only the lifetime ends it.
+        foreach (int minutes in new[] { 40, 40, 39 })
+        {
+            _deployment.Clock.Advance(TimeSpan.FromMinutes(minutes));
 
-        Answer live = await owner.SendAsync("GET", "/auth/session");
+            Assert.Equal(StatusCodes.Status200OK, (await owner.SendAsync("GET", "/auth/session")).Status);
+        }
 
         _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
 
         Answer ended = await owner.SendAsync("GET", "/auth/session");
 
-        Assert.Equal(StatusCodes.Status200OK, live.Status);
         Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC2: the session also ends once it has been idle for the inactivity
+    /// window of the reserved account's policy, inside its lifetime, and what it asks
+    /// for then is a full sign-in, which only the sealed credential gives.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC2_TheSessionEndsAfterItsInactivityWindowAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, credential)).Status);
+
+        Session opened = _deployment.Sessions.All.Single(session => session.Subject == _emergency);
+
+        Assert.Equal(_deployment.Clock.GetUtcNow() + Settings.SessionAal2Inactivity.Default, opened.IdleExpiry);
+
+        _deployment.Clock.Advance(Settings.SessionAal2Inactivity.Default);
+
+        Answer ended = await owner.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+        Assert.Equal("full", ended.Json().GetProperty("details").GetProperty("reauthenticate").GetString());
     }
 
     /// <summary>
@@ -164,7 +217,14 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Equal(
             [OperatorNumber, OwnerNumber],
             _deployment.Sms.Taken.Select(message => message.Destination.Value).Order(StringComparer.Ordinal));
-        Assert.Equal("used", Raised().Details["event"].GetString());
+
+        AlertRaised used = Raised(AlertCondition.BreakGlassUsed);
+
+        Assert.Equal(AlertSeverity.High, used.Severity);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.BreakGlassUsed, scope: null, Assert.Single(_deployment.BreakGlassAudit.Used).Credential.ToString()),
+            Alerts.Deduplication(used.IdempotencyKey));
+        Assert.Empty(used.Details);
     }
 
     /// <summary>
@@ -183,7 +243,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer granted = await owner.SendAsync(
             "POST",
@@ -219,7 +279,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer approved = await owner.SendAsync(
             "POST",
@@ -256,6 +316,233 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-002 AC10 and X4: the reason is required with the credential, as free text
+    /// of at most 1024 characters, and an absent, blank or longer one is refused naming
+    /// it before the credential is looked at, so nothing is spent or counted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheReasonIsRequiredWithTheCredentialAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        Answer absent = await owner.SendAsync("POST", Present, JsonSerializer.Serialize(new { credential }));
+        Answer blank = await owner.SendAsync(
+            "POST",
+            Present,
+            JsonSerializer.Serialize(new { credential, reason = "   " }));
+        Answer longer = await owner.SendAsync(
+            "POST",
+            Present,
+            JsonSerializer.Serialize(new { credential, reason = new string('r', 1025) }));
+
+        foreach (Answer refused in new[] { absent, blank, longer })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+            Assert.Equal(
+                "reason",
+                refused.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Null(Assert.Single(_deployment.BreakGlass.Issues).ConsumedAt);
+        Assert.Empty(_deployment.BreakGlassAudit.Used);
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, credential)).Status);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: the use is written down with the reason given with it, and so
+    /// is the session it opened.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheUseCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+
+        _ = await PresentedAsync(new Browser(_deployment), credential);
+
+        Assert.Equal(Reason, Assert.Single(_deployment.BreakGlassAudit.Used).BreakGlassReason);
+        Assert.Equal(
+            Reason,
+            Assert.Single(_deployment.SessionAudit.Records, record => record.Subject == _emergency).BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: a role defined in the session is written down with the reason
+    /// given at its use, beside the reason the definition states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_ARoleDefinedInTheSessionCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Answer defined = await owner.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "approvers"),
+            ("permissions", new[] { Permissions.RecoveryApprove.ToString() }),
+            ("reason", "Approvals while the operator is away."));
+
+        Assert.True(defined.Status is StatusCodes.Status200OK or StatusCodes.Status201Created, defined.Body);
+
+        Janus.Authorization.Tests.Roles.RoleAuditInMemory.RoleChange change =
+            Assert.Single(_deployment.RoleChanges.Changes);
+
+        Assert.Equal(_emergency, change.Actor);
+        Assert.Equal("Approvals while the operator is away.", change.Reason);
+        Assert.Equal(Reason, change.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10 (D-171): a session another application opens from the
+    /// break-glass session is the same emergency, so a record written in it reads back
+    /// with the reason; one written in a session opened from an ordinary sign-in reads
+    /// back with none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync()
+    {
+        await ApplicationRegisteredAsync();
+
+        (Browser administrator, string credential) = await AdministratorAsync();
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.RoleManage);
+        var owner = new Browser(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, credential)).Status);
+
+        Browser ordinary = await SignedOnAsync(administrator);
+        Browser emergency = await SignedOnAsync(owner);
+
+        foreach ((Browser browser, string name) in ((Browser, string)[])[(ordinary, "reviewers"), (emergency, "approvers")])
+        {
+            Answer defined = await browser.SendAsync(
+                "POST",
+                "/admin/roles",
+                ("name", name),
+                ("permissions", new[] { Permissions.RecoveryApprove.ToString() }),
+                ("reason", "Approvals while the operator is away."));
+
+            Assert.True(defined.Status is StatusCodes.Status200OK or StatusCodes.Status201Created, defined.Body);
+        }
+
+        Janus.Authorization.Tests.Roles.RoleAuditInMemory.RoleChange[] changes = [.. _deployment.RoleChanges.Changes];
+
+        Assert.Equal(2, changes.Length);
+        Assert.Null(changes[0].BreakGlassReason);
+        Assert.Equal(_emergency, changes[1].Actor);
+        Assert.Equal(Reason, changes[1].BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: a recovery approved in the session is written down with the
+    /// reason given at its use.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_ARecoveryApprovedInTheSessionCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+        SubjectId administrator = _deployment.Directory.Created[^1].Subject;
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
+
+        Assert.Equal(StatusCodes.Status200OK, (await ApprovedAsync(owner, administrator)).Status);
+
+        Janus.Authentication.Tests.Recovery.RecoveryAuditInMemory.Entry approval = Assert.Single(_deployment.RecoveryAudit.Written);
+
+        Assert.Equal(_emergency, approval.Approver);
+        Assert.Equal(Reason, approval.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: a configuration change made in the session is written down
+    /// with the reason given at its use, beside the reason the change states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_AConfigurationChangeInTheSessionCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Answer changed = await owner.SendAsync(
+            "PUT",
+            "/admin/config/alerting.email.destinations",
+            ("value", Rota),
+            ("reason", "The operator is unreachable."));
+
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+
+        ConfigurationChange change = Assert.Single(_deployment.Changes.Written);
+
+        Assert.Equal("The operator is unreachable.", change.Reason);
+        Assert.Equal(Reason, change.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: work a system principal does later because of the session
+    /// writes its own record, which carries no reason: a request entered in the session
+    /// carries it, and its lapse, which the deadline sweep records, does not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_BackgroundWorkTheSessionCausedCarriesNoneAsync()
+    {
+        _deployment.Configuration.Set(Settings.PrivacyCalendarTimeZone, "Africa/Cairo");
+
+        string credential = await GeneratedAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        var owner = new Browser(_deployment);
+
+        _deployment.AccountStates.Hold(subject, AccountState.Active);
+        _ = await PresentedAsync(owner, credential);
+
+        Answer entered = await owner.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", subject.Value.ToString()),
+            ("type", "restriction"),
+            ("detail", "a letter asking for a restriction"),
+            ("receivedAt", DateOnly.FromDateTime(_deployment.Clock.GetUtcNow().UtcDateTime).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, entered.Status);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(120));
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+
+        Janus.Hosting.Background.BackgroundJob deadlines = Janus.Hosting.Background.BackgroundJobs.All
+            .Single(job => job.Name == "privacy-deadlines");
+
+        Result swept = await deadlines.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(deadlines.Principal),
+            TestContext.Current.CancellationToken);
+
+        var trail = (Janus.Privacy.Tests.PrivacyAuditInMemory)scope.ServiceProvider
+            .GetRequiredService<Janus.Privacy.IPrivacyAudit>();
+
+        Assert.True(swept.Match(() => true, _ => false));
+        Assert.Equal(
+            [(AuditActions.RequestEntered, Reason, false), (AuditActions.RequestLapsed, null, true)],
+            trail.Entries.Select(entry => (entry.Action, entry.BreakGlassReason, entry.Principal is not null)));
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC6 and FE-BG-001 AC1: the session is an auth session, so another
     /// application opens from it with no further credential.
     /// </summary>
@@ -263,31 +550,15 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     [Fact]
     public async Task OPS_BOOT_002_AC6_AnApplicationOpensFromTheSessionAsync()
     {
-        const string page = "/account/profile";
-
-        await _deployment.Clients.RecordAsync(
-            new OidcClient(
-                "this-application",
-                "this-application",
-                OidcClientKind.BrowserApplication,
-                "https://identity.example.test/auth/signon/return",
-                ["openid"]),
-            OpaqueToken.Of("a-secret-the-deployment-set").Fingerprint(),
-            DateTimeOffset.MinValue,
-            TestContext.Current.CancellationToken);
+        await ApplicationRegisteredAsync();
 
         string credential = await GeneratedAsync();
         var owner = new Browser(_deployment);
-        var application = new Browser(_deployment);
 
         _ = await PresentedAsync(owner, credential);
 
-        Answer forwarded = await application.SendAsync("GET", "/auth/signon?returnTo=" + Uri.EscapeDataString(page));
-        Answer issued = await owner.SendAsync("GET", Local(forwarded.Location));
-        Answer established = await application.SendAsync("GET", Local(issued.Location));
+        Browser application = await SignedOnAsync(owner);
 
-        Assert.Equal(StatusCodes.Status302Found, established.Status);
-        Assert.Equal(page, established.Location);
         Assert.Equal(StatusCodes.Status200OK, (await application.SendAsync("GET", "/auth/session")).Status);
     }
 
@@ -305,7 +576,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer replaced = await owner.SendAsync("POST", Generate);
 
@@ -330,14 +601,23 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         _ = await _deployment.CarryAlertsAsync();
 
         SubjectId administrator = _deployment.Directory.Created[^1].Subject;
-        (SubjectId acting, _, BreakGlassCredentialId? replaced, _) =
+        (SubjectId acting, BreakGlassCredentialId issue, BreakGlassCredentialId? replaced, _, string? inSession) =
             Assert.Single(_deployment.BreakGlassAudit.Generated);
+        AlertRaised generated = Raised(AlertCondition.BreakGlassGenerated);
 
         Assert.Equal(administrator, acting);
         Assert.Null(replaced);
+        Assert.Null(inSession);
         Assert.Contains(_deployment.Mail.Taken, mail => string.Equals(mail.Destination.Value, Owner, StringComparison.Ordinal));
         Assert.Contains(_deployment.Sms.Taken, message => string.Equals(message.Destination.Value, OwnerNumber, StringComparison.Ordinal));
-        Assert.Equal("generated", Raised().Details["event"].GetString());
+        Assert.Equal(AlertSeverity.High, generated.Severity);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.BreakGlassGenerated, scope: null, issue.ToString()),
+            Alerts.Deduplication(generated.IdempotencyKey));
+        Assert.Empty(generated.Details);
+        Assert.DoesNotContain(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.BreakGlassUsed);
     }
 
     /// <summary>
@@ -430,6 +710,150 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-004 AC7 and OPS-ALERT-001: the limit reached is an attack made loud, so
+    /// the first arrival it refuses raises <c>auth-failures-sustained</c> for the
+    /// reserved account, once; the arrivals refused after it raise nothing more.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_004_AC7_TheLimitReachedIsRaisedAsync()
+    {
+        _ = await GeneratedAsync();
+        var browser = new Browser(_deployment);
+
+        for (int attempt = 1; attempt <= 5; attempt++)
+        {
+            Answer counted = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100." + attempt));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, counted.Status);
+        }
+
+        Assert.DoesNotContain(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.AuthFailuresSustained);
+
+        Answer first = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100.6"));
+        Answer second = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100.7"));
+
+        AlertRaised raised = Assert.Single(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.AuthFailuresSustained);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, first.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, second.Status);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.AuthFailuresSustained, scope: null, _emergency.ToString()),
+            Alerts.Deduplication(raised.IdempotencyKey));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-004 AC7: where no reserved account exists yet, the first arrival the
+    /// limit refuses still raises <c>auth-failures-sustained</c>, with no scope (D-170).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_004_AC7_TheLimitReachedIsRaisedWithNoReservedAccountAsync()
+    {
+        await using var unreserved = new Deployment();
+        Flow.Prepare(unreserved);
+        var browser = new Browser(unreserved);
+
+        for (int attempt = 1; attempt <= 5; attempt++)
+        {
+            Answer counted = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100." + attempt));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, counted.Status);
+        }
+
+        Answer refused = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100.6"));
+
+        AlertRaised raised = Assert.Single(
+            unreserved.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.AuthFailuresSustained);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Status);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.AuthFailuresSustained, scope: null, named: null),
+            Alerts.Deduplication(raised.IdempotencyKey));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-001 AC3: every system administrator reads whether a credential stands,
+    /// with no step-up: the absence before the first issue, when the standing one was
+    /// generated, and the absence again once it is spent, read by the administrator and
+    /// by the break-glass session alike; the read answers nothing of the credential.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC3_TheAbsenceIsReadByEverySystemAdministratorAsync()
+    {
+        Browser administrator = await SystemAdministratorAsync();
+
+        Answer none = await administrator.SendAsync("GET", Standing);
+
+        Assert.Equal(StatusCodes.Status200OK, none.Status);
+        Assert.False(none.Json().GetProperty("standing").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, none.Json().GetProperty("issuedAt").ValueKind);
+
+        Answer generated = await administrator.SendAsync("POST", Generate);
+        DateTimeOffset issued = _deployment.Clock.GetUtcNow();
+
+        // Past the step-up's recency, inside the session's inactivity window.
+        _deployment.Clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Answer stands = await administrator.SendAsync("GET", Standing);
+
+        Assert.Equal(StatusCodes.Status200OK, stands.Status);
+        Assert.True(stands.Json().GetProperty("standing").GetBoolean());
+        Assert.Equal(issued, stands.Json().GetProperty("issuedAt").GetDateTimeOffset());
+        Assert.Equal(
+            ["issuedAt", "standing"],
+            stands.Json().EnumerateObject().Select(member => member.Name).Order(StringComparer.Ordinal));
+
+        var owner = new Browser(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, generated.Text("credential"))).Status);
+
+        foreach (Browser reader in (Browser[])[administrator, owner])
+        {
+            Answer spent = await reader.SendAsync("GET", Standing);
+
+            Assert.Equal(StatusCodes.Status200OK, spent.Status);
+            Assert.False(spent.Json().GetProperty("standing").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, spent.Json().GetProperty("issuedAt").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// OPS-BOOT-001 AC3: a signed-in person without <c>system:administer</c> in the
+    /// administrative organization is refused the read with <c>authz.denied</c>, one
+    /// who holds it in another organization included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC3_OnlyASystemAdministratorReadsTheStandingAsync()
+    {
+        Browser member = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        Answer unheld = await member.SendAsync("GET", Standing);
+
+        _deployment.Gate.Grant(subject, new OrganizationId(Guid.CreateVersion7()), Permissions.SystemAdminister);
+
+        Answer elsewhere = await member.SendAsync("GET", Standing);
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+
+        Answer held = await member.SendAsync("GET", Standing);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, unheld.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), unheld.Text("code"));
+        Assert.Equal(StatusCodes.Status403Forbidden, elsewhere.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), elsewhere.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, held.Status);
+    }
+
+    /// <summary>
     /// BFF-ABUSE-001 AC2: a code presented from a source its own failures have delayed
     /// is answered 429 auth.throttled, with the instant the delay lifts in the body
     /// and the seconds to it in the header, the two agreeing.
@@ -472,7 +896,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer approved = await ApprovedAsync(owner, administrator);
         DateTimeOffset counted = _deployment.Clock.GetUtcNow();
@@ -533,22 +957,66 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-002: no factor can be enrolled on the reserved account, even from the
-    /// session that passes every other gate.
+    /// OPS-BOOT-002 AC9, AUTH-STEP-004 and CONV-DESIGN-002 AC3 (D-179): nothing that would
+    /// give the reserved account a sign-in method or a mailbox credential, or end it, is
+    /// done from the break-glass session or from a session another application opened
+    /// from it. Each route of the nine actions is refused with <c>authz.denied</c> at its
+    /// gate step, and never with the refusal a missing password, credential, enrolment or
+    /// mailbox would give: a provider link though the policy names the provider, the
+    /// upgrade of a credential the account does not hold, a generator the policy does not
+    /// admit, recovery codes without a second step, and an app password without a
+    /// mailbox.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync()
     {
+        _deployment.Configuration.Set(Settings.IdentifiersUsernameEnabled, true);
+        await ApplicationRegisteredAsync();
+
         string credential = await GeneratedAsync();
         var owner = new Browser(_deployment);
 
         _ = await PresentedAsync(owner, credential);
 
-        Answer password = await owner.SendAsync("POST", "/account/password", ("password", Flow.Password));
+        Browser opened = await SignedOnAsync(owner);
+        string absent = Guid.NewGuid().ToString();
 
-        Assert.Equal(StatusCodes.Status403Forbidden, password.Status);
-        Assert.Equal(ErrorCodes.Denied.ToString(), password.Text("code"));
+        (string Method, string Path, string Body)[] withheld =
+        [
+            ("POST", "/account/password", """{"password":"a long enough passphrase"}"""),
+            ("POST", "/account/identifiers", """{"kind":"email","value":"reserved@example.test"}"""),
+            ("PUT", "/account/identifiers/" + absent + "/replace", """{"value":"reserved@example.test"}"""),
+            ("PUT", "/account/profile", """{"username":"reserved"}"""),
+            ("POST", "/auth/webauthn/register/begin", """{"kind":"passkey"}"""),
+            ("POST", "/auth/webauthn/register/begin", """{"kind":"securityKey"}"""),
+            (
+                "POST",
+                "/auth/webauthn/register/complete",
+                """{"credential":{"credentialId":"a","clientDataJson":"a","authenticatorData":"a","publicKey":"a","algorithm":-7},"label":"Key"}"""
+            ),
+            ("POST", "/account/credentials/" + absent + "/upgrade", "{}"),
+            ("POST", "/account/factors/totp/begin", """{"label":"Phone"}"""),
+            ("POST", "/account/factors/totp/confirm", $$"""{"credentialId":"{{absent}}","code":"123456"}"""),
+            ("POST", "/account/recoverycodes", "{}"),
+            ("POST", "/account/mail/apppasswords/", """{"label":"Phone"}"""),
+            ("POST", "/account/deactivate", "{}"),
+            ("POST", "/account/delete", "{}"),
+            ("POST", "/account/link/google", "{}"),
+        ];
+
+        foreach (Browser session in (Browser[])[owner, opened])
+        {
+            foreach ((string method, string path, string body) in withheld)
+            {
+                Answer refused = await session.SendAsync(method, path, body);
+
+                Assert.True(
+                    refused.Status == StatusCodes.Status403Forbidden
+                        && string.Equals(ErrorCodes.Denied.ToString(), refused.Text("code"), StringComparison.Ordinal),
+                    $"{method} {path} answered {refused.Status} {refused.Body}.");
+            }
+        }
     }
 
     // The deployment is one origin here, so what a browser would follow across two
@@ -578,23 +1046,113 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         browser.SendAsync(
             "POST",
             Present,
-            JsonSerializer.Serialize(new { credential }),
+            JsonSerializer.Serialize(new { credential, reason = Reason }),
             source: source);
 
     private string Drawn() => BreakGlassCode.Draw(_randomness);
 
-    private AlertRaised Raised() =>
-        _deployment.Events.Of<AlertRaised>().Last(raised => raised.Condition is AlertCondition.BreakGlassUsed);
+    /// <summary>
+    /// REG-MAIL-002 AC3 and OPS-BOOT-002 (D-179): listing and revoking app passwords are
+    /// not among the actions withheld from the break-glass session, so from it, and from
+    /// a session another application opened from it, they answer as for any account
+    /// without a mailbox.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_002_AC3_TheBreakGlassSessionListsNoAppPasswordsAsync()
+    {
+        await ApplicationRegisteredAsync();
+
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Browser opened = await SignedOnAsync(owner);
+
+        foreach (Browser session in (Browser[])[owner, opened])
+        {
+            Answer listed = await session.SendAsync("GET", "/account/mail/apppasswords/");
+            Answer revoked = await session.SendAsync("DELETE", "/account/mail/apppasswords/app-password-1");
+
+            Assert.Equal(
+                [(StatusCodes.Status404NotFound, ErrorCodes.MailboxNotFound.ToString())],
+                new[] { listed, revoked }.Select(answer => (answer.Status, answer.Text("code"))).Distinct());
+        }
+    }
+
+    // The three legs of BFF-SESS-006: this application forwards a browser that holds
+    // nothing here, the authentication application issues a code against the record the
+    // holder's browser carries, and this application trades it on its own connection.
+    // The deployment is one origin, so the legs are followed as its own paths.
+    private async Task<Browser> SignedOnAsync(Browser holder)
+    {
+        var arriving = new Browser(_deployment);
+
+        Answer forwarded = await arriving.SendAsync("GET", "/auth/signon?returnTo=" + Uri.EscapeDataString(Page));
+        Answer issued = await holder.SendAsync("GET", Local(forwarded.Location));
+        Answer established = await arriving.SendAsync("GET", Local(issued.Location));
+
+        Assert.Equal(StatusCodes.Status302Found, established.Status);
+        Assert.Equal(Page, established.Location);
+
+        return arriving;
+    }
+
+    // The application another session is opened in, registered with the provider.
+    private Task ApplicationRegisteredAsync() =>
+        _deployment.Clients.AddAsync(
+            new OidcClient(
+                "this-application",
+                "this-application",
+                OidcClientKind.BrowserApplication,
+                "https://identity.example.test/auth/signon/return",
+                ["openid"]),
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
+            _deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken).AsTask();
+
+    private AlertRaised Raised(AlertCondition condition) =>
+        _deployment.Events.Of<AlertRaised>().Last(raised => raised.Condition == condition);
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the generation, and no credential is
+    /// issued or announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAGenerationAsync()
+    {
+        Browser administrator = await SystemAdministratorAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", Generate));
+
+        Assert.Empty(_deployment.BreakGlass.Issues);
+        Assert.DoesNotContain(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.BreakGlassGenerated);
+    }
 
     private async Task<string> GeneratedAsync() => (await AdministratorAsync()).Credential;
+
+    // A signed-in system administrator of the administrative organization.
+    private async Task<Browser> SystemAdministratorAsync()
+    {
+        Browser administrator = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.SystemAdminister);
+
+        return administrator;
+    }
 
     // A stepped-up system administrator generating the first issue from the management
     // application.
     private async Task<(Browser Browser, string Credential)> AdministratorAsync()
     {
-        Browser administrator = await Flow.SignedInAsync(_deployment);
-
-        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.SystemAdminister);
+        Browser administrator = await SystemAdministratorAsync();
 
         Answer generated = await administrator.SendAsync("POST", Generate);
 

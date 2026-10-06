@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -41,14 +42,15 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether a value is held out of reach by a removal whose undo has not run out.
+    /// Finds the account a value is reserved to by a removal whose undo has not run out
+    /// (REG-IDENT-006).
     /// </summary>
     /// <param name="kind">Which kind the value is.</param>
     /// <param name="canonical">The value in its canonical form.</param>
     /// <param name="now">The instant the window is judged at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether the value is out of reach.</returns>
-    ValueTask<bool> IsReservedAsync(
+    /// <returns>The account it is reserved to, or nothing where it is not reserved.</returns>
+    ValueTask<SubjectId?> ReservedToAsync(
         IdentifierKind kind,
         string canonical,
         DateTimeOffset now,
@@ -67,7 +69,8 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// One account's identifiers as they stand.
+    /// One account's identifiers as they stand, each add it has pending listed after
+    /// them as an unverified identifier (REG-IDENT-004).
     /// </summary>
     /// <param name="subject">Whose identifiers.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -75,15 +78,44 @@ internal interface IIdentifierDirectory
     ValueTask<HeldIdentifiers> HeldAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Takes an identifier on to the account, unverified.
+    /// Holds one account's identifiers under a lock until the operation's transaction
+    /// ends, so what <see cref="HeldAsync"/> and every command read after it is the set
+    /// as committed when the lock was taken (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose identifiers.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes the lock on each value, held until the operation's transaction ends: every
+    /// operation that writes a value to an account or reserves one takes it before it
+    /// judges or writes, after its own row locks and before any send's counters, every
+    /// value it locks in one call (CONV-DESIGN-003, REG-SESS-005, REG-IDENT-009).
+    /// </summary>
+    /// <param name="values">The values, each with its kind and its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the locks.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes to the account the identifier an add verified, verified from the instant
+    /// it was proved and under the identifier its pending verification was held under.
+    /// The first verified of its kind becomes the primary. A reservation of its value
+    /// to the account ends with the write (REG-IDENT-004, REG-IDENT-006). What asks
+    /// has judged the kind's maximum against the account's verified identifiers, so it
+    /// is not judged again here.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
-    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="id">The identifier the pending verification was held under.</param>
     /// <param name="kind">Which kind it is.</param>
     /// <param name="entered">The form the person entered.</param>
     /// <param name="canonical">The form it is compared under.</param>
-    /// <param name="at">When it was added.</param>
-    /// <param name="maximum">How many of its kind the account may hold.</param>
+    /// <param name="at">When it was proved.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of taking it on.</returns>
     ValueTask TakeOnAsync(
@@ -93,7 +125,6 @@ internal interface IIdentifierDirectory
         string entered,
         string canonical,
         DateTimeOffset at,
-        int maximum,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -115,7 +146,8 @@ internal interface IIdentifierDirectory
     /// <summary>
     /// Takes on the corporate address an organization asserts, verified, locked and
     /// primary, and keeps the personal email it displaces through the membership
-    /// (REG-MAIL-001).
+    /// (REG-MAIL-001). A reservation of the address to the account ends with the write
+    /// (REG-IDENT-006).
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">The identifier issued for the corporate address.</param>
@@ -169,20 +201,6 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records that a code or a same-browser link proved an identifier.
-    /// </summary>
-    /// <param name="subject">Whose it is.</param>
-    /// <param name="id">Which identifier.</param>
-    /// <param name="at">When it was proved.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of recording it.</returns>
-    ValueTask ProveAsync(
-        SubjectId subject,
-        IdentifierId id,
-        DateTimeOffset at,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Puts a new value in the place of the old one on the same identifier.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
@@ -204,7 +222,8 @@ internal interface IIdentifierDirectory
     /// Puts a new value in the place of the old one on the same identifier and holds
     /// the displaced value for as long as the undo is good for. This is the replace of
     /// single-address mode, where the row keeps its identity and its role and only the
-    /// value moves.
+    /// value moves. A reservation of the new value to the account ends with the write
+    /// (REG-IDENT-006).
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">Which identifier.</param>
@@ -252,7 +271,8 @@ internal interface IIdentifierDirectory
 
     /// <summary>
     /// Takes an unverified identifier off the account, which leaves nothing behind:
-    /// a value nobody proved holds nothing out of reach and has no undo.
+    /// a value nobody proved holds nothing out of reach and has no undo. A pending add
+    /// is no identifier and is not taken off here; its pending verification is ended.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">Which identifier.</param>
@@ -296,11 +316,25 @@ internal interface IIdentifierDirectory
     ValueTask<GivenUpIdentifier?> GivenUpAsync(byte[] undo, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts a removed identifier back, verified exactly as it was.
+    /// Puts back the value one removal holds, verified exactly as it was, and gives
+    /// that removal up; every other removal of the same identifier stands. Where the
+    /// identifier it came from was removed, the identifier is restored; what asks has
+    /// judged the kind's maximum against the account's verified identifiers, so it is
+    /// not judged again here. Where the identifier stands, the value moves back onto it
+    /// and the verified value it then holds is displaced into a removal of its own, as
+    /// a replace displaces one; an unverified value is displaced and held by nothing
+    /// (REG-IDENT-006).
     /// </summary>
-    /// <param name="id">Which identifier.</param>
-    /// <param name="maximum">How many of its kind the account may hold.</param>
+    /// <param name="undo">The fingerprint of the undo link's token, which names the removal.</param>
+    /// <param name="at">When the value is put back.</param>
+    /// <param name="expiresAt">When the undo of a value this displaces stops working.</param>
+    /// <param name="displacedUndo">The fingerprint of the token that undoes a value this displaces.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of putting it back.</returns>
-    ValueTask TakeBackAsync(IdentifierId id, int maximum, CancellationToken cancellationToken);
+    /// <returns>Whether a verified value was displaced into a removal of its own.</returns>
+    ValueTask<bool> TakeBackAsync(
+        byte[] undo,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] displacedUndo,
+        CancellationToken cancellationToken);
 }

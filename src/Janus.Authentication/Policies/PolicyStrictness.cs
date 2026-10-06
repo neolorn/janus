@@ -38,7 +38,8 @@ internal static class PolicyStrictness
                 Overridden(system.Gates, overrides.Gates),
                 overrides.CredentialRedundancy ?? system.CredentialRedundancy,
                 overrides.SelfServiceRecovery ?? system.SelfServiceRecovery,
-                overrides.EmailDomains ?? system.EmailDomains));
+                overrides.EmailDomains ?? system.EmailDomains,
+                overrides.Photos ?? system.Photos));
     }
 
     /// <summary>
@@ -64,7 +65,8 @@ internal static class PolicyStrictness
                 ? CredentialRedundancy.Enforced
                 : CredentialRedundancy.Advisory,
             first.SelfServiceRecovery && second.SelfServiceRecovery,
-            Locked(first.EmailDomains, second.EmailDomains));
+            Locked(first.EmailDomains, second.EmailDomains),
+            first.Photos && second.Photos);
     }
 
     /// <summary>
@@ -102,15 +104,19 @@ internal static class PolicyStrictness
             return "credentialRedundancy";
         }
 
-        return overrides.SelfServiceRecovery is true && !system.SelfServiceRecovery
-            ? "selfServiceRecovery"
-            : null;
+        if (overrides.SelfServiceRecovery is true && !system.SelfServiceRecovery)
+        {
+            return "selfServiceRecovery";
+        }
+
+        return overrides.Photos is true && !system.Photos ? "photos" : null;
     }
 
     /// <summary>
     /// Whether one policy grants anything another did not: a lower floor, another
     /// factor, a gate that asks less, redundancy advised where it was enforced,
-    /// recovery offered where it was withdrawn, or a domain lock that admits more.
+    /// recovery offered where it was withdrawn, a domain lock that admits more, or a
+    /// photo shown where it was not.
     /// </summary>
     /// <param name="before">What was in force.</param>
     /// <param name="after">What would be.</param>
@@ -128,7 +134,8 @@ internal static class PolicyStrictness
             || Weakened(stricter, after).Length > 0
             || stricter.CredentialRedundancy != after.CredentialRedundancy
             || stricter.SelfServiceRecovery != after.SelfServiceRecovery
-            || !Admitting(stricter.EmailDomains).SetEquals(after.EmailDomains);
+            || !Admitting(stricter.EmailDomains).SetEquals(after.EmailDomains)
+            || stricter.Photos != after.Photos;
     }
 
     /// <summary>
@@ -195,6 +202,10 @@ internal static class PolicyStrictness
                 && (Admitting(domains).SetEquals(resolved.EmailDomains)
                     || !Admitting(system.EmailDomains).SetEquals(resolved.EmailDomains))
                 ? resolved.EmailDomains
+                : null,
+            stated.Photos is { } photos
+                && (photos == resolved.Photos || resolved.Photos != system.Photos)
+                ? resolved.Photos
                 : null);
     }
 

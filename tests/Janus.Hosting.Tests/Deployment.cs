@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -42,9 +43,11 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Mailboxes;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -71,7 +74,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenIddict.Abstractions;
 
 namespace Janus.Hosting.Tests;
@@ -85,21 +90,22 @@ internal sealed class Deployment : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    // AUTH-KEY-002, OPS-SEC-001: what the codes and the refresh tokens the provider
-    // writes are encrypted under, which a deployment is handed and never generates.
-    private static readonly KeyEncryptionKeys Wrapping = new(
-        1,
-        new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
-
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
+    private readonly KeyRingService _ring;
 
     // LIB-HOST-001: where a browser holding no session is sent is a declaration no
     // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
     private static readonly AuthenticationAddresses Screen = new(
         "https://identity.example.test/signin",
         "https://identity.example.test");
+
+    // LIB-HOST-001, API-LAND-001: where a link the library sends lands is a declaration
+    // no deployment starts without, so every deployment here carries one.
+    private static readonly LandingOrigins Landed = new(
+        "https://identity.example.test",
+        "https://accounts.example.test");
 
     // LIB-HOST-001, BFF-SESS-006: which client of the provider this application is
     // is a declaration no deployment starts without either.
@@ -133,6 +139,20 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="logging">
     /// The least level the host logs at; every level, unless it says otherwise.
     /// </param>
+    /// <param name="codec">
+    /// Whether the host declares an image codec; it does, unless it says otherwise.
+    /// </param>
+    /// <param name="resolver">
+    /// Whether the host registers a DNS resolver; it does, unless it says otherwise.
+    /// </param>
+    /// <param name="signals">
+    /// What the carrier reports about a number, where the host declared something to
+    /// ask (AUTH-FACT-002b); nothing, unless it says otherwise.
+    /// </param>
+    /// <param name="verifier">
+    /// What judges a challenge token, where the host declared a challenge verifier
+    /// (AUTH-ABUSE-008); nothing, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -141,7 +161,11 @@ internal sealed class Deployment : IAsyncDisposable
         AuthenticationAddresses? signIn = null,
         SignOnClient? client = null,
         IReadOnlyList<SocialProvider>? providers = null,
-        LogLevel logging = LogLevel.Trace)
+        LogLevel logging = LogLevel.Trace,
+        bool codec = true,
+        bool resolver = true,
+        PhoneSignalProvider? signals = null,
+        ChallengeVerifier? verifier = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -149,6 +173,8 @@ internal sealed class Deployment : IAsyncDisposable
         builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
+        Directory = new RegistrationDirectoryInMemory(Identifiers);
+        Identifiers.Pending = Pending;
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
@@ -157,6 +183,18 @@ internal sealed class Deployment : IAsyncDisposable
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
+
+        // One table holds an account's state in a deployment; here the privacy area
+        // keeps its own, so a restriction it decides is carried to the areas that sign
+        // the account in and gate its changes, with the sessions it ends.
+        AccountStates.Restricted = async (subject, at) =>
+        {
+            Accounts.Stands(subject, AccountState.Restricted);
+            Restriction.Restrict(subject);
+            await Sessions.EndAccountAsync(subject, at, CancellationToken.None);
+        };
+        SocialProviders = new SocialProvidersInMemory(Clock);
+        Secrets = new SecretSourceInMemory(SocialProviders.Credentials);
 
         // Two of the keys a deployment names or does not start, which a ceremony and
         // the challenge every sign-in carries are read from (OPS-CFG-001), and the
@@ -174,7 +212,19 @@ internal sealed class Deployment : IAsyncDisposable
             addresses ?? Pages,
             signIn ?? Screen,
             client ?? Registered,
-            providers ?? [SocialProviders.Google, SocialProviders.Apple]);
+            providers ?? [SocialProviders.Google, SocialProviders.Apple],
+            codec,
+            resolver);
+
+        if (signals is not null)
+        {
+            _ = builder.Services.AddSingleton(signals);
+        }
+
+        if (verifier is not null)
+        {
+            _ = builder.Services.AddSingleton(verifier);
+        }
 
         _application = builder.Build();
 
@@ -200,20 +250,23 @@ internal sealed class Deployment : IAsyncDisposable
 
         _pipeline = ((IApplicationBuilder)_application).Build();
 
-        // AUTH-KEY-001: the server is put together with the key the store holds at
-        // startup, which is what the hosted service of the same name does in a
-        // deployment that a web server starts.
-        using (IServiceScope scope = _application.Services.CreateScope())
-        {
-            _ = _application.Services
-                .GetRequiredService<SigningCredentialSource>()
-                .CurrentAsync(
-                    scope.ServiceProvider.GetRequiredService<SigningKeys>(),
-                    CancellationToken.None)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-        }
+        // CONV-DESIGN-007: the key ring is filled from the secret source, and the mail
+        // server in use chosen, before anything asks either, which is what its hosted
+        // service does in a deployment that a web server starts.
+        _ring = _application.Services.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+        _ring.StartingAsync(CancellationToken.None).GetAwaiter().GetResult();
+        _ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        // AUTH-KEY-001 AC7: the signing keys are read once the ring is filled, and the
+        // provider's options built after, which is what the provider's hosted service
+        // does in a deployment that a web server starts.
+        _application.Services
+            .GetServices<IHostedService>()
+            .OfType<ProviderStartService>()
+            .Single()
+            .StartAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
     }
 
     /// <summary>
@@ -226,7 +279,13 @@ internal sealed class Deployment : IAsyncDisposable
     /// Google and Apple, as the deployment reads their keys and as they sign their
     /// security events (IDN-LIFE-012a).
     /// </summary>
-    public SocialProvidersInMemory SocialProviders { get; } = new();
+    public SocialProvidersInMemory SocialProviders { get; }
+
+    /// <summary>
+    /// The host's secret source, answering each provider's credential as the providers
+    /// issued it.
+    /// </summary>
+    public SecretSourceInMemory Secrets { get; }
 
     /// <summary>
     /// What was recorded of what happened to a credential.
@@ -264,6 +323,13 @@ internal sealed class Deployment : IAsyncDisposable
     public MailTransportInMemory Mail { get; } = new();
 
     /// <summary>
+    /// Whether the publisher's pass over the admitted messages follows each request, as
+    /// the worker's does within seconds. A test of what a request itself carried turns
+    /// it off and runs the pass where it wants it.
+    /// </summary>
+    public bool WorkerCarries { get; set; } = true;
+
+    /// <summary>
     /// What went out by SMS.
     /// </summary>
     public SmsTransportInMemory Sms { get; } = new();
@@ -274,14 +340,30 @@ internal sealed class Deployment : IAsyncDisposable
     public RegistrationSessionStoreInMemory Registrations { get; } = new();
 
     /// <summary>
+    /// The datacenter ranges the bot defence reads (AUTH-ABUSE-008).
+    /// </summary>
+    public DatacenterRangesInMemory Ranges { get; } = new();
+
+    /// <summary>
+    /// The registration sessions counted per source (AUTH-ABUSE-008).
+    /// </summary>
+    public RegistrationSourcesInMemory Sources { get; } = new();
+
+    /// <summary>
+    /// The bot-defence signals recorded (AUTH-ABUSE-008).
+    /// </summary>
+    public BotDefenceAuditInMemory Signalled { get; } = new();
+
+    /// <summary>
     /// The channel the waiting screen's stream waits on.
     /// </summary>
     public RegistrationSignalsInMemory Signals { get; }
 
     /// <summary>
-    /// The accounts registration created.
+    /// The accounts registration created, over the reservations the accounts' removed
+    /// identifiers hold.
     /// </summary>
-    public RegistrationDirectoryInMemory Directory { get; } = new();
+    public RegistrationDirectoryInMemory Directory { get; }
 
     /// <summary>
     /// The pre-authentication sessions as they stand.
@@ -625,6 +707,16 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.BreakGlass.BreakGlassAuditInMemory BreakGlassAudit { get; } = new();
 
     /// <summary>
+    /// What the approvals of a recovery wrote down.
+    /// </summary>
+    public RecoveryAuditInMemory RecoveryAudit { get; } = new();
+
+    /// <summary>
+    /// The approvals standing behind a recovery.
+    /// </summary>
+    public RecoveryApprovalStoreInMemory RecoveryApprovals { get; } = new();
+
+    /// <summary>
     /// The reserved emergency account as the authentication area reads it.
     /// </summary>
     private Janus.Authentication.Tests.BreakGlass.EmergencyAccountInMemory Emergency { get; } = new();
@@ -659,6 +751,13 @@ internal sealed class Deployment : IAsyncDisposable
     }
 
     /// <summary>
+    /// Opens a scope of the deployment's container, as a host calling the library in
+    /// process does.
+    /// </summary>
+    /// <returns>The scope, which the caller disposes.</returns>
+    public AsyncServiceScope Scope() => _application.Services.CreateAsyncScope();
+
+    /// <summary>
     /// Runs one pass of the alert channels, in a scope of its own as the worker would.
     /// </summary>
     /// <returns>How many raised conditions were carried.</returns>
@@ -668,10 +767,31 @@ internal sealed class Deployment : IAsyncDisposable
 
         return (await scope.ServiceProvider
                 .GetRequiredService<AlertDispatch>()
-                .CarryAsync(CancellationToken.None))
+                .CarryAsync(
+                    AccessContext.Of(BackgroundJobs.All.Single(job => job.Name == AlertDispatch.Job).Principal),
+                    CancellationToken.None))
             .Match(
                 carried => carried,
                 error => throw new InvalidOperationException("The alert channels refused: " + error.Code + "."));
+    }
+
+    /// <summary>
+    /// Runs one pass of the publisher over the admitted messages, in a scope of its own
+    /// as the worker would: what a request left to the publisher is carried here.
+    /// </summary>
+    /// <returns>How many messages the pass carried.</returns>
+    public async Task<int> CarrySendsAsync()
+    {
+        await using AsyncServiceScope scope = _application.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider
+                .GetRequiredService<SendPublisher>()
+                .RetryAsync(
+                    AccessContext.Of(BackgroundJobs.All.Single(job => job.Name == "sends").Principal),
+                    CancellationToken.None))
+            .Match(
+                carried => carried,
+                error => throw new InvalidOperationException("The publisher refused: " + error.Code + "."));
     }
 
     /// <summary>
@@ -690,6 +810,18 @@ internal sealed class Deployment : IAsyncDisposable
         context.RequestServices = scope.ServiceProvider;
 
         await _pipeline(context);
+
+        // CONV-DESIGN-006: no endpoint answers a code it does not declare, which every
+        // request a test sends is held to.
+        EndpointAnswers.Hold(context);
+
+        // The worker's passes follow every request within seconds, so what a request left
+        // to the publisher is carried before a test reads what was sent, unless the test
+        // is about what the request itself did.
+        if (WorkerCarries)
+        {
+            _ = await CarrySendsAsync();
+        }
     }
 
     // What a host mounts: the two profiles around the library's endpoints, with
@@ -710,11 +842,14 @@ internal sealed class Deployment : IAsyncDisposable
         PasskeyAddresses addresses,
         AuthenticationAddresses signIn,
         SignOnClient client,
-        IReadOnlyList<SocialProvider> providers)
+        IReadOnlyList<SocialProvider> providers,
+        bool codec,
+        bool resolver)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
         _ = services.AddSingleton<IConfigurationStore>(Configuration);
+        _ = services.AddSingleton<IConfigurationWrites>(Configuration);
         _ = services.AddSingleton<IUnitOfWork>(Work);
         _ = services.AddSingleton<IEvents>(Events);
 
@@ -743,19 +878,32 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit>(SessionAudit);
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
-        _ = services.AddSingleton(Codec.Declared);
+
+        // The codec is the host's to declare, and photos are served with or without
+        // one, as AddJanus serves them.
+        if (codec)
+        {
+            _ = services.AddSingleton(Codec.Declared);
+        }
+
         _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
-        _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
+
+        // The sweep of the pending verifications reads the records they are held by.
+        var codes = new VerificationCodeStoreInMemory();
+
+        Pending.Codes = codes;
+
+        _ = services.AddSingleton<IVerificationCodeStore>(codes);
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<ISettingsRestriction>(Restriction);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
         _ = services.AddSingleton<ILifecycleLinkStore, LifecycleLinkStoreInMemory>();
         _ = services.AddSingleton<IRecoveryLinkStore>(Links);
-        _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
+        _ = services.AddSingleton<IRecoveryApprovalStore>(RecoveryApprovals);
         _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
-        _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
+        _ = services.AddSingleton<IRecoveryAudit>(RecoveryAudit);
         _ = services.AddSingleton<IKeyCeremonyStore, KeyCeremonyStoreInMemory>();
         _ = services.AddSingleton<IOidcClientStore>(Clients);
         _ = services.AddSingleton<ISigningKeyStore>(Keys);
@@ -777,23 +925,39 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(ReservedUsernames.Default);
         _ = services.AddSingleton(addresses);
         _ = services.AddSingleton(signIn);
+        _ = services.AddSingleton(Landed);
+        _ = services.AddSingleton(new LandingLinks(Landed));
         _ = services.AddSingleton(client);
         _ = services.AddSingleton(MailClient);
 
         // BFF-SESS-006: the client half of the sign-on is the library's, and the
         // connection it trades a code on reaches this same deployment's machine
-        // profile, which is what a second application's back channel reaches.
-        _ = services.AddSingleton(new SignOnSecret(
-            Encoding.UTF8.GetBytes("a-secret-the-deployment-set")));
+        // profile, which is what a second application's back channel reaches; what
+        // it presents is the secret the registry holds for it (OPS-SEC-002).
         _ = services.AddScoped<SignOn>();
         _ = services.AddHttpClient(SignOn.Channel)
             .ConfigurePrimaryHttpMessageHandler(() => Provider);
+
+        // LIB-TEST-001, D-172: the same half makes the conformance suite's provider
+        // probes.
+        _ = services.AddScoped<IProviderProbes, ProviderProbes>();
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddSingleton<ICallbackLedger, CallbackLedgerInMemory>();
         _ = services.AddSingleton<ICallbackEvents, CallbackEventsInMemory>();
         _ = services.AddScoped<CallbackAdmission>();
         _ = services.AddScoped<DeliveryReports>();
+
+        // CONV-CODE-007, CONV-DESIGN-007: the one key ring, filled from the host's
+        // secret source, and the mail server in use, the host's own.
+        _ = services.AddSingleton<ISecretSource>(Secrets);
+        _ = services.AddCoreArea();
+        _ = services.AddSingleton<JmapMailServer>();
+        _ = services.AddHttpClient(JmapMailServer.Channel);
+        services.Add(KeyRingRegistration.HostedService());
+
+        // AUTH-KEY-001 AC7: the provider's start, after the ring's.
+        _ = services.AddSingleton<IHostedService, ProviderStartService>();
 
         // IDN-LIFE-012a: what the host declared of each provider, whose documents are
         // read from the fake that signs its events.
@@ -812,11 +976,18 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ProviderSignIn>();
         _ = services.AddSingleton<ILogger<ProviderSignIn>>(ProviderLog);
         _ = services.AddScoped<RelayRegistration>();
-        _ = services.AddScoped<SendingService>();
-        _ = services.AddScoped<INotificationHandler>(
-            provider => provider.GetRequiredService<SendingService>());
+        _ = services.AddScoped<SendAdmission>();
+        _ = services.AddScoped<GovernedSend>();
+        _ = services.AddScoped<IGovernedSend>(
+            provider => provider.GetRequiredService<GovernedSend>());
         _ = services.AddScoped<ISendingRestrictions>(
-            provider => provider.GetRequiredService<SendingService>());
+            provider => provider.GetRequiredService<GovernedSend>());
+        _ = services.AddScoped<SendPublisher>();
+        _ = services.AddScoped<IFollowedSend>(
+            provider => provider.GetRequiredService<GovernedSend>());
+        _ = services.AddScoped<ISendCarrier>(
+            provider => provider.GetRequiredService<SendPublisher>());
+        _ = services.AddScoped<INotificationHandler, NotificationHandler>();
         _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),
@@ -824,6 +995,17 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<NonExistenceNotice>();
+        _ = services.AddSingleton<IDatacenterRanges>(Ranges);
+        _ = services.AddSingleton<IRegistrationSources>(Sources);
+        _ = services.AddSingleton<IBotDefenceAudit>(Signalled);
+        _ = services.AddScoped(provider => new BotDefence(
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IDatacenterRanges>(),
+            provider.GetRequiredService<IRegistrationSources>(),
+            provider.GetRequiredService<IBotDefenceAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetService<ChallengeVerifier>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<ThrottleService>();
         _ = services.AddSingleton<IThrottleLedger, ThrottleLedgerInMemory>();
         _ = services.AddSingleton<ICredentialAudit>(CredentialAudit);
@@ -852,11 +1034,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
             provider.GetRequiredService<ISettingsRestriction>(),
-            provider.GetRequiredService<IMembershipLookup>(),
+            provider.GetRequiredService<PolicyResolution>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<ImageCodec>(),
+            provider.GetService<ImageCodec>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
@@ -886,6 +1068,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IConsents, ConsentService>();
         _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
         _ = services.AddSingleton<IAccountStates>(AccountStates);
+        _ = services.AddSingleton<Janus.Privacy.Bases.ILawfulBasisStore>(
+            new Janus.Privacy.Tests.Bases.LawfulBasisStoreInMemory());
+        _ = services.AddSingleton<Janus.Privacy.SubjectKeys.ISubjectKeyStore>(
+            new Janus.Privacy.Tests.SubjectKeys.SubjectKeyStoreInMemory());
         _ = services.AddSingleton<Janus.Privacy.Outbox.IOutboxStore>(Outbox);
         _ = services.AddSingleton<ISubjectNotices>(Notices);
         _ = services.AddScoped<WorkingCalendar>();
@@ -919,14 +1105,27 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassStore>(BreakGlass);
         _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassAudit>(BreakGlassAudit);
         _ = services.AddScoped<Janus.Authentication.BreakGlass.BreakGlassService>();
+        _ = services.AddScoped<IBreakGlass>(
+            provider => provider.GetRequiredService<Janus.Authentication.BreakGlass.BreakGlassService>());
         _ = services.AddScoped<AlertDestinationChange>();
-        _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
+        _ = services.AddScoped<IConfigurationAdministration>(provider => new ConfigurationService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetRequiredService<AlertDestinationChange>(),
+            provider.GetRequiredService<AuthorizationDeclaration>(),
+            provider.GetRequiredService<Janus.Privacy.CategoryRetention>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IUnitOfWork>()));
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
         _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
+            new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
         _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);
@@ -941,12 +1140,49 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
-        _ = services.AddScoped<IOrganizations, Janus.Authentication.Organizations.OrganizationService>();
+        _ = services.AddScoped<IOrganizations>(provider => new Janus.Authentication.Organizations.OrganizationService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationDirectory>(),
+            provider.GetRequiredService<ISessionStore>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationAudit>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetRequiredService<PolicyResolution>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);
-        _ = services.AddSingleton<IDnsResolver>(Dns);
+
+        // The resolver is the host's to declare, and the domains are served with or
+        // without one, as AddJanus serves them.
+        if (resolver)
+        {
+            _ = services.AddSingleton<IDnsResolver>(Dns);
+        }
+
         _ = services.AddScoped<Janus.Authentication.Organizations.DomainLock>();
-        _ = services.AddScoped<Janus.Authentication.Organizations.DomainReverification>();
-        _ = services.AddScoped<IOrganizationDomains, Janus.Authentication.Organizations.OrganizationDomainService>();
+        _ = services.AddScoped(provider => new Janus.Authentication.Organizations.DomainReverification(
+            provider.GetRequiredService<Janus.Authentication.Organizations.IDomainStore>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+        _ = services.AddScoped<IOrganizationDomains>(provider => new Janus.Authentication.Organizations.OrganizationDomainService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationDirectory>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IDomainStore>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationAudit>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
         _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
@@ -961,10 +1197,16 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
+        _ = services.AddScoped<RegisteredSecrets>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
-        _ = services.AddOidc(Wrapping);
+        _ = services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
+        _ = services.AddSingleton(provider => new SigningCredentialSource(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>()));
+        _ = services.AddOidc();
         _ = services.AddScoped<Janus.Authentication.Mailboxes.IMailServerTokens, Janus.Hosting.Oidc.MailServerTokens>();
+        _ = services.AddScoped<Janus.Authentication.Mailboxes.IAppPasswordLog, Janus.Hosting.Mailboxes.AppPasswordLog>();
         _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
@@ -993,6 +1235,7 @@ internal sealed class Deployment : IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        await _ring.StoppedAsync(CancellationToken.None);
         await _application.DisposeAsync();
         await Work.DisposeAsync();
 

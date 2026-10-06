@@ -1,23 +1,36 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Janus.Authentication.Oidc;
 using Janus.Core;
+using Janus.Core.Configuration;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using OpenIddict.Abstractions;
 using OpenIddict.Server;
 
 namespace Janus.Hosting.Oidc;
 
 /// <summary>
-/// What the server validates a token it wrote against.
+/// What the server validates a token it issued against: for an access token, the keys the
+/// key set publishes; for a code, a refresh token or any other token of its own, every key
+/// in the set, a retired key's kept public key included.
 /// </summary>
-/// <param name="oidc">Where the published keys are read.</param>
+/// <param name="source">The signing keys.</param>
+/// <param name="configuration">Where the cadence is read.</param>
+/// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements AUTH-KEY-001 AC2. A token outlives the key that signed it by the
-/// overlap, so what validates it is the set the deployment publishes and not the one
-/// key it is signing with now.
+/// Implements AUTH-KEY-001 AC2, AC3 and AC6 and CONV-CODE-007. It runs after the server
+/// has copied its validation parameters from the options and before it reads the token,
+/// and sets the keys on that copy, so the signing keys the options took when they were
+/// built are never read (D-181). A refresh token lives as long as its session, so the
+/// provider's own tokens are checked against the retired keys it keeps; an access token is
+/// accepted only under a key a relying party could still validate it with.
 /// </remarks>
-internal sealed class TokenValidationKeys(IOidc oidc)
+internal sealed class TokenValidationKeys(
+    SigningCredentialSource source,
+    IConfigurationStore configuration,
+    TimeProvider time)
     : IOpenIddictServerHandler<OpenIddictServerEvents.ValidateTokenContext>
 {
     /// <summary>
@@ -26,6 +39,12 @@ internal sealed class TokenValidationKeys(IOidc oidc)
     /// </summary>
     public const int Order = int.MinValue + 102_500;
 
+    // The type an access token's signed header names, bare and as a media type.
+    private const string AccessTokenType = OpenIddictConstants.JsonWebTokenTypes.AccessToken;
+
+    private const string AccessTokenMediaType =
+        OpenIddictConstants.JsonWebTokenTypes.Prefixes.Application + OpenIddictConstants.JsonWebTokenTypes.AccessToken;
+
     /// <inheritdoc/>
     public async ValueTask HandleAsync(OpenIddictServerEvents.ValidateTokenContext context)
     {
@@ -33,26 +52,38 @@ internal sealed class TokenValidationKeys(IOidc oidc)
 
         Error? failure = null;
 
-        IReadOnlyList<PublishedSigningKey> published = (await oidc
-                .KeysAsync(context.CancellationToken)
+        SigningKeySet set = (await source
+                .ReadAsync(configuration, context.CancellationToken)
                 .ConfigureAwait(false))
-            .Match(keys => keys, error => Withheld(error, ref failure));
+            .Match(read => read, error => Withheld(error, ref failure));
 
         if (failure is not null)
         {
-            return;
+            throw new InvalidOperationException("The deployment's signing keys could not be read: " + failure.Code);
         }
 
-        JsonWebKey[] set = [.. published.Select(PublishedKeys.Of)];
+        JsonWebKey[] published = [.. set.Published(time.GetUtcNow()).Select(held => held.PublicKey)];
+        JsonWebKey[] kept = [.. set.Keys.Select(held => held.PublicKey)];
+        bool accessTokensOnly = context.ValidTokenTypes.Count == 1
+            && context.ValidTokenTypes.Contains(OpenIddictConstants.TokenTypeIdentifiers.AccessToken);
 
-        context.TokenValidationParameters.IssuerSigningKeys = set;
-        context.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, _, _) => set;
+        context.TokenValidationParameters.TryAllIssuerSigningKeys = false;
+        context.TokenValidationParameters.IssuerSigningKeys = accessTokensOnly ? published : kept;
+        context.TokenValidationParameters.IssuerSigningKeyResolver = (_, token, _, _) =>
+            accessTokensOnly || IsAccessToken(token) ? published : kept;
     }
 
-    private static IReadOnlyList<PublishedSigningKey> Withheld(Error error, ref Error? failure)
+    private static SigningKeySet Withheld(Error error, ref Error? failure)
     {
         failure = error;
 
         return default!;
     }
+
+    // An access token names its type in its signed header, as the server wrote it; a
+    // media type is compared without regard to case.
+    private static bool IsAccessToken(SecurityToken token) =>
+        token is JsonWebToken { Typ: string type }
+        && (string.Equals(type, AccessTokenType, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(type, AccessTokenMediaType, StringComparison.OrdinalIgnoreCase));
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -60,7 +61,7 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.True(read.Json().GetProperty("value").GetBoolean());
         Assert.True(read.Json().GetProperty("default").GetBoolean());
         Assert.True(read.Json().GetProperty("protected").GetBoolean());
-        Assert.Equal(nameof(SettingDirection.Decrease), read.Text("direction"));
+        Assert.Equal("decrease", read.Text("direction"));
     }
 
     /// <summary>
@@ -83,7 +84,7 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal("PT30M", read.Text("value"));
         Assert.Equal("PT1H", read.Text("default"));
         Assert.False(read.Json().GetProperty("protected").GetBoolean());
-        Assert.Equal(nameof(SettingDirection.Increase), read.Text("direction"));
+        Assert.Equal("increase", read.Text("direction"));
     }
 
     /// <summary>
@@ -235,7 +236,9 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-CFG-005 and chapter 09 section 8: every change carries a reason, a
-    /// tightening included, and one without is refused with the reason code.
+    /// tightening included. One without, or with nothing but spaces, is refused with
+    /// the reason code naming the key; one past the 1024 characters of API-CONV-002 is
+    /// a request the boundary does not read, naming <c>reason</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -248,9 +251,30 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
             "/admin/config/session.aal2.inactivity",
             ("value", "PT30M"));
 
+        Answer blank = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT30M"),
+            ("reason", "   "));
+
+        Answer overlong = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT30M"),
+            ("reason", new string('r', 1025)));
+
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, blank.Status);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), blank.Text("code"));
+        Assert.Equal(
+            Settings.SessionAal2Inactivity.Key.ToString(),
+            blank.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(StatusCodes.Status400BadRequest, overlong.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), overlong.Text("code"));
+        Assert.Equal("reason", overlong.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>
@@ -450,6 +474,42 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-004a AC8 and AUTHZ-GATE-006: a restriction of the caller committed after
+    /// the gate step refuses a destination change 403 <c>authz.restricted</c> inside its
+    /// unit of work. The list in force is unchanged, no change is written down, and the
+    /// destinations it would have replaced were told of the change requested.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC8_ADestinationChangeRefusedAtTheSecondAskLeavesItsNoticeStandingAsync()
+    {
+        _deployment.Configuration.Set(Settings.NotificationLanguages, OneLanguage);
+        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, Operations);
+
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        int before = _deployment.Mail.Taken.Count;
+        int raised = _deployment.Events.Of<AlertRaised>().Count;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "PUT",
+                "/admin/config/alerting.email.destinations",
+                ("value", Elsewhere),
+                ("reason", "a new rota")));
+
+        Assert.Contains(
+            _deployment.Mail.Taken.Skip(before),
+            mail => string.Equals(mail.Destination.Value, Operations[0], StringComparison.Ordinal));
+        Assert.Equal(Operations, await InForceAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Equal(raised, _deployment.Events.Of<AlertRaised>().Count);
+    }
+
+    /// <summary>
     /// CONV-CODE-006 AC2 and chapter 09 section 8: a change whose body carries no reason
     /// is refused with the reason code, naming the key, before the service is reached,
     /// so a caller the service would refuse for want of the permission is answered for
@@ -468,13 +528,176 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
             ("reason", null));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), changed.Text("code"));
         Assert.Equal(
             Settings.SessionAal2Inactivity.Key.ToString(),
             changed.Json().GetProperty("details").GetProperty("key").GetString());
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
         Assert.Empty(_deployment.Changes.Written);
     }
+
+    /// <summary>
+    /// PRIV-RET-001 and chapter 09 section 8: the retention of a category the host
+    /// declared reads with its floor as the default where no period is written, and
+    /// changes through the route under its row's lock: a lengthening is a tightening, a
+    /// shortening is a loosening that asks the permission to loosen, a period below the
+    /// floor is refused, and each change is written down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RET_001_ACategorysRetentionIsChangedThroughTheRouteAsync()
+    {
+        ConfigurationKey key = Settings.HostCategoryRetention.For("statement");
+        string floor = Settings.HostCategoryRetention.Write(TimeSpan.FromDays(1826));
+
+        Browser manager = await AuthorisedAsync(
+            Permissions.ConfigurationRead,
+            Permissions.ConfigurationManage);
+
+        Answer read = await manager.SendAsync("GET", "/admin/config/retention.statement");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("retention.statement", read.Text("key"));
+        Assert.Equal(floor, read.Text("value"));
+        Assert.Equal(floor, read.Text("default"));
+        Assert.False(read.Json().GetProperty("protected").GetBoolean());
+        Assert.Equal("decrease", read.Text("direction"));
+
+        _deployment.Configuration.Held.Clear();
+        _deployment.Work.Reset();
+
+        Answer lengthened = await RetainedAsync(manager, "P2000D");
+
+        Assert.Equal(StatusCodes.Status204NoContent, lengthened.Status);
+        Assert.Equal([key, key], _deployment.Configuration.Held);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+
+        Answer shortened = await RetainedAsync(manager, "P1900D");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, shortened.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), shortened.Text("code"));
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(1, _deployment.Work.RolledBack);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed + _deployment.Work.RolledBack);
+
+        Answer below = await RetainedAsync(manager, "P1000D");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, below.Status);
+        Assert.Equal(ErrorCodes.ConfigurationValueBelowFloor.ToString(), below.Text("code"));
+        Assert.Equal(key.ToString(), below.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(TimeSpan.FromDays(2000), await RetainedForAsync("statement"));
+
+        ConfigurationChange tightening = Assert.Single(_deployment.Changes.Written);
+
+        Assert.Equal(key, tightening.Key);
+        Assert.Equal(floor, tightening.Before);
+        Assert.Equal("P2000D", tightening.After);
+        Assert.False(tightening.Loosening);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.SystemAdminister);
+
+        Answer loosened = await RetainedAsync(manager, "P1900D");
+
+        Assert.Equal(StatusCodes.Status204NoContent, loosened.Status);
+        Assert.Equal(TimeSpan.FromDays(1900), await RetainedForAsync("statement"));
+        Assert.True(_deployment.Changes.Written[^1].Loosening);
+    }
+
+    /// <summary>
+    /// PRIV-RET-001 and chapter 09 section 8: a retention key of a category the host
+    /// did not declare is none of the keys the route serves, read or changed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RET_001_AnUndeclaredCategoryIsNoKeyAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationRead,
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer read = await administrator.SendAsync("GET", "/admin/config/retention.undeclared");
+        Answer changed = await RetainedAsync(administrator, "P2000D", "undeclared");
+
+        foreach (Answer answer in new[] { read, changed })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code"));
+            Assert.Equal("key", answer.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 and OPS-ALERT-006 AC5: turning the export step-up off raises the
+    /// High <c>stepup-policy-weakened</c> alert naming the key as the change is made;
+    /// turning it back on weakens nothing and raises nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_TurningExportStepUpOffRaisesStepUpPolicyWeakenedAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer off = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/exfiltration.export.stepuprequired",
+            ("value", false),
+            ("reason", "a supervised migration"));
+        Answer on = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/exfiltration.export.stepuprequired",
+            ("value", true),
+            ("reason", "the migration ended"));
+
+        AlertRaised raised = Assert.Single(
+            _deployment.Events.Of<AlertRaised>(),
+            alert => alert.Condition is AlertCondition.StepUpPolicyWeakened);
+
+        Assert.Equal(StatusCodes.Status204NoContent, off.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, on.Status);
+        Assert.Equal(AlertSeverity.High, raised.Severity);
+        Assert.Equal(
+            Settings.ExfiltrationExportStepUpRequired.Key.ToString(),
+            raised.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the change of a key and of a declared category's
+    /// retention, each inside its unit of work, and neither is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAKeyAndARetentionAsync()
+    {
+        Browser administrator = await AuthorisedAsync(Permissions.ConfigurationManage);
+        TimeSpan inactivity = await InForceAsync(Settings.SessionAal2Inactivity);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => TightenedAsync(administrator));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => RetainedAsync(administrator, "P2000D"));
+
+        Assert.Equal(inactivity, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    private static Task<Answer> RetainedAsync(Browser browser, string period, string category = "statement") =>
+        browser.SendAsync(
+            "PUT",
+            "/admin/config/retention." + category,
+            ("value", period),
+            ("reason", "the statements' audit horizon"));
+
+    private async Task<TimeSpan> RetainedForAsync(string category) =>
+        (await _deployment.Configuration.ReadAsync(
+            Settings.HostCategoryRetention,
+            category,
+            TestContext.Current.CancellationToken)).Match(
+            value => value,
+            error => throw new Xunit.Sdk.XunitException($"The member was refused: {error.Code}."));
 
     private static Task<Answer> TightenedAsync(Browser browser) =>
         browser.SendAsync(

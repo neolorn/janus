@@ -10,11 +10,11 @@ using Janus.Core;
 namespace Janus.Authentication.Mailboxes;
 
 /// <summary>
-/// The daily comparison of the mailboxes the library provisions with the ones the mail
-/// server hosts, existence and enabled state both.
+/// The daily comparison of the mailboxes the library provisions with the accounts the
+/// mail server hosts, existence, address and enabled state all.
 /// </summary>
 /// <param name="mailboxes">Where the library's mailboxes are.</param>
-/// <param name="server">The mail server, absent where the deployment registered none.</param>
+/// <param name="inUse">The mail server in use, where the deployment has one.</param>
 /// <param name="alerts">Where the drift's alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -22,12 +22,17 @@ namespace Janus.Authentication.Mailboxes;
 /// OPS-OBS-002. The comparison is against the state each mailbox is owed now, so a
 /// mailbox reserved for an open or expired invitation is expected disabled and is no
 /// drift, and an account that holds none, the reserved emergency account among them,
-/// is nothing to look for. What differs is reported as <c>degradation</c> and changed
-/// on neither side: silent correction would hide the pipeline that failed.
+/// is nothing to look for. Each mailbox is compared with the account listed under its
+/// own identifier, never by address, so the two mailboxes a replacement leaves at one
+/// address stay apart (D-177); an account carrying no identifier of a mailbox the
+/// library holds is counted, and the account a mailbox of an erased holder left is
+/// among those, since that mailbox is not read at all. What differs is reported as
+/// <c>degradation</c> and changed on neither side: silent correction would hide the
+/// pipeline that failed.
 /// </remarks>
 internal sealed class MailboxReconciliation(
     IMailboxStore mailboxes,
-    IMailServer? server,
+    IMailServerInUse inUse,
     IAlertChannels alerts,
     TimeProvider time)
 {
@@ -36,11 +41,17 @@ internal sealed class MailboxReconciliation(
     /// <summary>
     /// Compares both sides once.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the comparison.</param>
     /// <returns>What differs, or the failure that stopped the comparison.</returns>
-    public async ValueTask<Result<MailboxDrift>> ReconcileAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may reconcile.</exception>
+    public async ValueTask<Result<MailboxDrift>> ReconcileAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
     {
-        if (server is null)
+        _ = Reconciling(context);
+
+        if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server)
         {
             return Result.Success(new MailboxDrift([], Unknown: 0));
         }
@@ -70,25 +81,33 @@ internal sealed class MailboxReconciliation(
         IReadOnlyList<MailboxStanding> held = await mailboxes.AllAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var enabled = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var known = new HashSet<MailboxId>(held.Select(standing => standing.Mailbox.Id));
+        var listed = new Dictionary<MailboxId, HostedMailbox>();
+        int unknown = 0;
 
-        foreach (HostedMailbox mailbox in hosted)
+        foreach (HostedMailbox account in hosted)
         {
-            enabled[mailbox.Address] = mailbox.Enabled;
+            if (account.Mailbox is MailboxId carried && known.Contains(carried))
+            {
+                listed[carried] = account;
+            }
+            else
+            {
+                unknown++;
+            }
         }
 
         var drifted = new List<MailboxId>();
-        var known = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (MailboxStanding standing in held)
         {
             Mailbox mailbox = standing.Mailbox;
             MailboxState owed = mailbox.Owed(standing.Stands);
 
-            _ = known.Add(mailbox.Address.Value);
-
-            bool agrees = enabled.TryGetValue(mailbox.Address.Value, out bool serving)
-                ? owed is not MailboxState.Removed && serving == (owed is MailboxState.Enabled)
+            bool agrees = listed.TryGetValue(mailbox.Id, out HostedMailbox? account)
+                ? owed is not MailboxState.Removed
+                    && account.Enabled == (owed is MailboxState.Enabled)
+                    && Addresses(account, mailbox)
                 : owed is MailboxState.Removed;
 
             if (!agrees)
@@ -97,9 +116,7 @@ internal sealed class MailboxReconciliation(
             }
         }
 
-        var drift = new MailboxDrift(
-            drifted,
-            enabled.Keys.Count(address => !known.Contains(address)));
+        var drift = new MailboxDrift(drifted, unknown);
 
         if (drift.IsEmpty)
         {
@@ -119,6 +136,21 @@ internal sealed class MailboxReconciliation(
             .ConfigureAwait(false);
     }
 
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may reconcile, and never as nobody.
+    private static SystemPrincipal Reconciling(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Reconciliation)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may reconcile.",
+                nameof(context));
+
+    // IDN-ACCT-004: the server's address is read in its canonical form before it is
+    // compared, and one that does not read is no mailbox's address.
+    private static bool Addresses(HostedMailbox account, Mailbox mailbox) =>
+        account.Address is EmailAddress listed
+        && string.Equals(listed.Value, mailbox.Address.Value, StringComparison.Ordinal);
+
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -132,7 +164,7 @@ internal sealed class MailboxReconciliation(
         Result<MailboxDrift> outcome,
         CancellationToken cancellationToken) =>
         (await alerts
-                .RaiseAsync(Alerts.Of(AlertCondition.Degradation, Scope, now, details), cancellationToken)
+                .RaiseAsync(Alerts.Scoped(AlertCondition.Degradation, Scope, now, details), cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => outcome, Result.Failure<MailboxDrift>);
 }

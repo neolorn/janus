@@ -9,6 +9,7 @@ using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Organizations;
@@ -84,6 +85,8 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.False(policy.GetProperty("selfServiceRecovery").GetProperty("overridden").GetBoolean());
         Assert.Equal(0, policy.GetProperty("emailDomains").GetProperty("value").GetArrayLength());
         Assert.False(policy.GetProperty("emailDomains").GetProperty("overridden").GetBoolean());
+        Assert.False(policy.GetProperty("photos").GetProperty("value").GetBoolean());
+        Assert.False(policy.GetProperty("photos").GetProperty("overridden").GetBoolean());
     }
 
     /// <summary>
@@ -177,6 +180,45 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-002 AC6 and X3 of D-166 (178): a policy change is decided on the values
+    /// in force under the locks of the system policy's row and the organization's,
+    /// taken in that order inside its one unit of work, which the write joins; a
+    /// refusal made under them rolls that unit of work back before it answers
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_002_AC6_APolicyChangeIsDecidedUnderItsRowsLocksAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        ConfigurationKey member = Settings.OrganizationPolicy.For(Branch.ToString());
+
+        _deployment.Configuration.Held.Clear();
+
+        Answer replaced = await administrator.SendAsync("PUT", PathOf(Branch), Tightened);
+
+        Assert.Equal(StatusCodes.Status204NoContent, replaced.Status);
+        Assert.Equal([Settings.PolicyDefault.Key, member, member], _deployment.Configuration.Held);
+
+        _deployment.Configuration.Held.Clear();
+        _deployment.Work.Reset();
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 });
+
+        Answer refused = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"requiredAssurance":"aal1","reason":"Fewer prompts."}""");
+
+        Assert.Equal("requiredAssurance", Below(refused));
+        Assert.Equal([Settings.PolicyDefault.Key, member], _deployment.Configuration.Held);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(1, _deployment.Work.RolledBack);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed + _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
     /// OPS-CFG-002: giving up an override the organization held is a loosening, which
     /// also needs <c>system:administer</c> and is written down as one.
     /// </summary>
@@ -237,7 +279,7 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, loosened.Status);
         Assert.Equal(AlertSeverity.High, raised.Severity);
-        Assert.Equal(Alerts.Key(AlertCondition.StepUpPolicyWeakened, Branch.ToString()), Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal(Alerts.Key(AlertCondition.StepUpPolicyWeakened, scope: null, Branch.ToString()), Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal("policy." + Branch, raised.Details["key"].GetString());
         Assert.Equal(["policy:change"], raised.Details["gates"].EnumerateArray().Select(gate => gate.GetString()));
     }
@@ -292,16 +334,25 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// Chapter 10 section 4.1a and API-CONV-002: a replacement names only the fields of
-    /// the policy object, never the domain lock, with values the object takes, a reason
-    /// and an organization the deployment holds; anything else is refused, naming the
-    /// member where it is the request that is malformed.
+    /// Chapter 10 section 4.1a, API-CONV-002 and 09 section 8a: a replacement names only
+    /// the fields of the policy object, never the domain lock, with values the object
+    /// takes and a reason; anything else is refused, naming the member where it is the
+    /// request that is malformed, and a reason absent as a configuration change without
+    /// one is, naming the organization's policy key. A member the object does not have is
+    /// refused before any permission is asked.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_STEP_002a_WhatAReplacementNamesMustBeReadableAsync()
     {
-        Browser administrator = await AuthorisedAsync();
+        (Browser administrator, SubjectId subject) = await SignedInAsync();
+
+        Answer withheld = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"emailDomains":["example.com"],"reason":"Staff only."}""");
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
 
         Answer misspelt = await administrator.SendAsync(
             "PUT",
@@ -312,12 +363,18 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
             PathOf(Branch),
             """{"emailDomains":["example.com"],"reason":"Staff only."}""");
         Answer unreasoned = await administrator.SendAsync("PUT", PathOf(Branch), """{"requiredAssurance":"aal2"}""");
+        Answer blank = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"requiredAssurance":"aal2","reason":"  "}""");
+        Answer overlong = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"requiredAssurance":"aal2","reason":""" + "\"" + new string('r', 1025) + "\"}");
         Answer numbered = await administrator.SendAsync(
             "PUT",
             PathOf(Branch),
             """{"requiredAssurance":"aal2","reason":7}""");
-        Answer unheld = await administrator.SendAsync("PUT", PathOf(new OrganizationId(Guid.NewGuid())), Tightened);
-        Answer unknown = await administrator.SendAsync("GET", PathOf(new OrganizationId(Guid.NewGuid())));
         Answer listed = await administrator.SendAsync("PUT", PathOf(Branch), "[]");
         Answer unreadable = await administrator.SendAsync(
             "PUT",
@@ -325,15 +382,69 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
             """{"requiredAssurance":"aal9","reason":"Staff hold administrative roles."}""");
 
         Assert.Equal("requiredAssurence", Member(misspelt));
+        Assert.Equal("emailDomains", Member(withheld));
         Assert.Equal("emailDomains", Member(locked));
-        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(blank));
+        Assert.Equal("reason", Member(overlong));
         Assert.Equal("reason", Member(numbered));
-        Assert.Equal("id", Member(unheld));
-        Assert.Equal("id", Member(unknown));
         Assert.Equal(StatusCodes.Status400BadRequest, listed.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), listed.Text("code"));
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), unreadable.Text("code"));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// 09 section 8a: a replacement asked in process without a reason is refused as a
+    /// configuration change without one is, naming the organization's policy key, and
+    /// nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_002a_AReplacementInProcessWithoutAReasonIsRefusedAsync()
+    {
+        (_, SubjectId subject) = await SignedInAsync();
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        IOrganizations organizations = scope.ServiceProvider.GetRequiredService<IOrganizations>();
+
+        Result replaced = await organizations.ReplacePolicyAsync(
+            AccessContext.Of(subject),
+            SessionId.New(_deployment.Clock),
+            Branch,
+            PolicyOverride.None,
+            " ",
+            TestContext.Current.CancellationToken);
+
+        Error refused = replaced.Match(() => throw new Xunit.Sdk.XunitException("replaced"), error => error);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refused.Code);
+        Assert.Equal(PolicyKey(Branch), refused.Details["key"].GetString());
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 and 09 section 8a: reading or replacing the policy of an organization
+    /// the deployment does not hold is <c>404</c> <c>identity.organization.notfound</c>,
+    /// and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_ThePolicyOfAnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var unheld = new OrganizationId(Guid.NewGuid());
+
+        Answer read = await administrator.SendAsync("GET", PathOf(unheld));
+        Answer replaced = await administrator.SendAsync("PUT", PathOf(unheld), Tightened);
+
+        Assert.Equal(StatusCodes.Status404NotFound, read.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), read.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, replaced.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), replaced.Text("code"));
         Assert.Empty(_deployment.Changes.Written);
     }
 
@@ -360,7 +471,88 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Changes.Written);
     }
 
+    /// <summary>
+    /// IDN-ATTR-002 AC4, OPS-CFG-003 AC4: where the host declares no image codec, a
+    /// change that turns photos on is refused naming the field and the declaration it
+    /// needs, for an organization's policy and for the system's alike, and nothing is
+    /// written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC4_PhotosAreNotTurnedOnWithoutACodecAsync()
+    {
+        await using var bare = new Janus.Hosting.Tests.Deployment(codec: false);
+
+        Flow.Prepare(bare);
+        bare.Administers(Administration);
+        bare.Organizations.Seed(Branch);
+
+        Browser administrator = await Flow.SignedInAsync(bare);
+        SubjectId subject = bare.Directory.Created[^1].Subject;
+
+        bare.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+        bare.Gate.Grant(subject, Administration, Permissions.ConfigurationManage);
+        bare.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+
+        Answer organization = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"photos":true,"reason":"Staff show their faces."}""");
+        Answer system = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/policy.default",
+            """{"value":{"requiredAssurance":"aal1","loginFactors":["passkey","password"],"gates":{},"credentialRedundancy":"advisory","selfServiceRecovery":true,"emailDomains":[],"photos":true},"reason":"Everyone shows a face."}""");
+
+        foreach (Answer refused in new[] { organization, system })
+        {
+            JsonElement details = refused.Json().GetProperty("details");
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+            Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), refused.Text("code"));
+            Assert.Equal("photos", details.GetProperty("field").GetString());
+            Assert.Equal("imageCodec", details.GetProperty("requires").GetString());
+        }
+
+        Assert.Empty(bare.Changes.Written);
+        Assert.False(
+            (await administrator.SendAsync("GET", PathOf(Branch)))
+                .Json()
+                .GetProperty("photos")
+                .GetProperty("value")
+                .GetBoolean());
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the replacing of a policy, which stays as
+    /// it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAPolicyChangeAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("PUT", PathOf(Branch), Tightened));
+
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Null((await OverrideAsync(Branch)).RequiredAssurance);
+    }
+
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
+
+    private static string PolicyKey(OrganizationId organization) =>
+        Settings.OrganizationPolicy.For(organization.ToString()).ToString();
+
+    private static string Unreasoned(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), answer.Text("code"));
+
+        return answer.Json().GetProperty("details").GetProperty("key").GetString()!;
+    }
 
     private static string Member(Answer answer)
     {

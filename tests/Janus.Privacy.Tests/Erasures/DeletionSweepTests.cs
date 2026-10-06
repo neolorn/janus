@@ -67,6 +67,32 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC7: a background pass returns no result, so a transaction that
+    /// does not open, or does not commit, is thrown as a fault naming the failure's code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC7_ABackgroundPassThrowsTheFailureItsTransactionAnswersAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon);
+        _clock.Advance(Settings.AccountDeletionGrace.Default);
+
+        _work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
+
+        InvalidOperationException unopened = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
+
+        InvalidOperationException uncommitted = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), unopened.Message);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), uncommitted.Message);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC4: a window the subject cancelled is not reached by the pass,
     /// whatever the clock has done since.
     /// </summary>
@@ -153,6 +179,30 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 (D-166): a takedown of an account already in its own deletion is
+    /// erased at the earlier of that window's end and the takedown's, so it never erases
+    /// later than the subject's own request would have, and it erases as a takedown.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ATakenDownDeletionIsErasedAtItsSettledInstantAsync()
+    {
+        DateTimeOffset began = Noon - Settings.AccountDeletionGrace.Default + TimeSpan.FromDays(1);
+
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, began);
+        Assert.True(await _accounts.TakeDownAsync(Ahmed, Noon, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromDays(1) - TimeSpan.FromMinutes(1));
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+        Assert.Equal((Ahmed, ErasureReason.MinorTakedown), (_eraser.Erased[0].Subject, _eraser.Erased[0].Reason));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC1: the erasure the takedown's window ends in writes the identity
     /// change with its erasures row and its outbox record, all in one transaction.
     /// </summary>
@@ -217,6 +267,28 @@ public sealed class DeletionSweepTests : IAsyncDisposable
         Assert.Same(Sweeper.Principal, recorded.Principal);
         Assert.Equal(_clock.GetUtcNow(), recorded.At);
         Assert.Equal("OutOfBandRequest", recorded.Details["deletingBy"].GetString());
+    }
+
+    /// <summary>
+    /// DR-016, chapter 10 section 5.12a: the erasure's audit record carries its reason
+    /// by the written name the ledger and the erasures table use, for a takedown's
+    /// erasure and for a request's alike.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_TheAuditCarriesTheReasonInItsWrittenSpellingAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Takedown, Noon);
+        _accounts.Deletes(Noura, DeletionOrigin.OutOfBandRequest, Noon);
+
+        _clock.Advance(Settings.AccountDeletionGrace.Default);
+
+        _ = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["minor-takedown", "erasure-request"],
+            new[] { Ahmed, Noura }.Select(subject =>
+                Assert.Single(_audit.Entries, entry => entry.Subject == subject).Details["reason"].GetString()));
     }
 
     /// <summary>

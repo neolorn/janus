@@ -4,8 +4,16 @@
 # change to the truth table, whose diff is the change under review (AUTHZ-TEST-001).
 # Permission logic is what the check and the filter decide by: the authorization area,
 # the storage its ports are answered from, the declarations of the model builder, the
-# mapping a host's filter reads the contract tables through, and the view the filter
-# reads, which only a migration writes.
+# mapping a host's filter reads the contract tables through, the view the filter
+# reads, which only a migration writes, and the judgement of whether a session meets a
+# step-up gate, which admits or refuses a bound action as the judgement from a host's
+# report does: the session record, which keeps what was reached and the last downgrade
+# (AUTH-SESS-009), and the gate's reading of it (AUTH-STEP-002 step 1), with the level
+# the gate is read at (AUTH-STEP-002a, AUTH-STEP-006, AUTH-STEP-007). What a gate the
+# session does not meet offers the account (AUTH-STEP-002 steps 2 and 3) admits and
+# refuses nothing: it is held in a file of its own beside the judgement and is not
+# watched (D-193), and neither are the services that resolve a gate's values from the
+# policy, hold a step-up's challenge and answer its calls.
 
 set -euo pipefail
 
@@ -24,6 +32,8 @@ logic=(
   'src/Janus.Core/ResourceTypeDeclaration.cs'
   'src/Janus.Core/ResourceTypeDeclarationBuilder.cs'
   'src/Janus.Hosting/AuthorizationTables.cs'
+  'src/Janus.Authentication/Sessions/Session.cs'
+  'src/Janus.Authentication/Factors/StepUp.cs'
 )
 
 # A force-pushed branch leaves the event's previous commit unreachable, which is a

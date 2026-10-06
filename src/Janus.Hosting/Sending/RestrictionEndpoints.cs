@@ -20,7 +20,10 @@ namespace Janus.Hosting.Sending;
 /// Implements AUTH-ABUSE-004, OPS-CFG-002, LIB-API-005, CONV-CODE-006 and
 /// CONV-DESIGN-006. Each is one line to <see cref="IRestrictionSet"/>, which judges the
 /// permission, the step-up and what the reason says; a body missing a member it
-/// requires is refused before it is called.
+/// requires is refused before it is called. A restriction is named by
+/// <see cref="RestrictionName"/>, bound from the route, so a name outside its rule is
+/// answered before any body is read on every route that takes one (INT-SMS-003,
+/// chapter 09 section 8).
 /// </remarks>
 internal static class RestrictionEndpoints
 {
@@ -38,11 +41,40 @@ internal static class RestrictionEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/admin/restrictions");
 
-        _ = SessionRequired.On(group.MapGet("/", AllAsync));
-        _ = SessionRequired.On(group.MapGet("/{name}", ReadAsync));
-        _ = SessionRequired.On(group.MapPut("/{name}", EditAsync));
-        _ = SessionRequired.On(group.MapDelete("/{name}", DeleteAsync));
-        _ = SessionRequired.On(group.MapPost("/{name}/grant", GrantAsync));
+        _ = SessionRequired.On(group.MapGet("/", AllAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<RestrictionView>>();
+        _ = SessionRequired.On(group.MapGet("/{name}", ReadAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.RestrictionNotFound)
+                .Binding<RestrictionName>("name"))
+            .Produces<RestrictionView>();
+        _ = SessionRequired.On(group.MapPut("/{name}", EditAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationValueNotAllowed,
+                    ErrorCodes.ConfigurationChangeReasonRequired)
+                .Binding<RestrictionName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapDelete("/{name}", DeleteAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.RestrictionNotFound,
+                    ErrorCodes.ConfigurationChangeReasonRequired)
+                .Binding<RestrictionName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/{name}/grant", GrantAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.RestrictionNotFound,
+                    ErrorCodes.ConfigurationChangeReasonRequired,
+                    ErrorCodes.ConfigurationValueNotAllowed)
+                .Binding<RestrictionName>("name"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -57,7 +89,7 @@ internal static class RestrictionEndpoints
 
         return Answers.Of(
             await restrictions
-                .AllAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .AllAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             all => TypedResults.Json<IReadOnlyList<RestrictionView>>(
                 [.. all.Select(RestrictionView.Of)],
@@ -69,7 +101,7 @@ internal static class RestrictionEndpoints
     private static async Task<IResult> ReadAsync(
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(restrictions);
@@ -77,7 +109,7 @@ internal static class RestrictionEndpoints
 
         return Answers.Of(
             await restrictions
-                .ReadAsync(AccessContext.Of(browser.Required.Subject), name, cancellationToken)
+                .ReadAsync(browser.Asking, name, cancellationToken)
                 .ConfigureAwait(false),
             restriction => TypedResults.Json(
                 RestrictionView.Of(restriction),
@@ -90,7 +122,7 @@ internal static class RestrictionEndpoints
         RestrictionBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -104,10 +136,15 @@ internal static class RestrictionEndpoints
             return Answers.Malformed(member);
         }
 
+        if (Overlong(body.Reason))
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await restrictions
                 .EditAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     replacement,
                     body.Reason,
@@ -122,17 +159,22 @@ internal static class RestrictionEndpoints
         [FromBody] RestrictionDeletionBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (Overlong(body.Reason))
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await restrictions
                 .DeleteAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     name,
                     body.Reason,
@@ -145,7 +187,7 @@ internal static class RestrictionEndpoints
         RestrictionGrantBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -164,15 +206,20 @@ internal static class RestrictionEndpoints
 
         // AUTH-ABUSE-004: every grant carries a reason, and chapter 10 names the refusal
         // of one without, so an absent one is answered by it rather than as malformed.
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
-            return Answers.Refused(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Answers.Refused(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         return Answers.Of(
             await restrictions
                 .GrantAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     name,
                     body.KeyValue,
@@ -182,4 +229,8 @@ internal static class RestrictionEndpoints
                 .ConfigureAwait(false),
             Nothing);
     }
+
+    // API-CONV-002, X4: a reason past 1024 characters after trimming is a request the
+    // boundary does not read, refused before the service is called (CONV-CODE-006 AC2).
+    private static bool Overlong(string? reason) => reason?.Trim().Length > 1024;
 }

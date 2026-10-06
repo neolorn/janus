@@ -19,7 +19,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
         modelBuilder
             .HasDefaultSchema("identity")
             .HasAnnotation("Npgsql:CollationDefinition:identity.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
-            .HasAnnotation("ProductVersion", "10.0.4")
+            .HasAnnotation("ProductVersion", "10.0.12")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -55,6 +55,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_lifecycle_links_kind", "kind IN ('deletion-cancellation', 'reactivation')");
 
+                        t.HasCheckConstraint("ck_lifecycle_links_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_lifecycle_links_token", "octet_length(token) = 32");
                     });
             });
@@ -82,6 +84,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
+
                 b.Property<string>("Condition")
                     .IsRequired()
                     .HasColumnType("text")
@@ -101,6 +107,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("RaisedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("raised_at");
+
+                b.Property<string>("Scope")
+                    .HasMaxLength(320)
+                    .HasColumnType("character varying(320)")
+                    .HasColumnName("scope");
 
                 b.HasKey("Id")
                     .HasName("pk_raised_alerts");
@@ -192,6 +203,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("break_glass_credentials", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_break_glass_credentials_ended", "consumed_at IS NULL OR replaced_at IS NULL");
+
+                        t.HasCheckConstraint("ck_break_glass_credentials_issued_by_not_max_uuid", "issued_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -209,6 +222,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("ClaimedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("claimed_at");
+
+                b.Property<DateTimeOffset?>("SettledAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("settled_at");
 
                 b.HasKey("Callback", "Identifier")
                     .HasName("pk_callback_events");
@@ -314,6 +331,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_key_ceremonies_expiry", "expires_at > issued_at");
 
                         t.HasCheckConstraint("ck_key_ceremonies_kind", "kind IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
+
+                        t.HasCheckConstraint("ck_key_ceremonies_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -332,10 +351,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("intent");
-
-                b.Property<int?>("KeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("key_version");
 
                 b.Property<byte[]>("Nonce")
                     .IsRequired()
@@ -394,8 +409,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_provider_attempts_intent", "intent IN ('link', 'register', 'signin')");
 
                         t.HasCheckConstraint("ck_provider_attempts_provider", "provider IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
-
-                        t.HasCheckConstraint("ck_provider_attempts_verifier", "num_nulls(verifier, key_version) IN (0, 2)");
                     });
             });
 
@@ -408,6 +421,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("Attempts")
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
+
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
 
                 b.Property<DateTimeOffset?>("FailedAt")
                     .HasColumnType("timestamp with time zone")
@@ -510,7 +527,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasMaxLength(64)
                     .HasColumnType("character varying(64)")
-                    .HasColumnName("label");
+                    .HasColumnName("label")
+                    .UseCollation("identity_ci");
 
                 b.Property<DateTimeOffset?>("LastUsedAt")
                     .HasColumnType("timestamp with time zone")
@@ -577,6 +595,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_authenticators_state", "state IN ('active', 'invalidated', 'suspended')");
 
+                        t.HasCheckConstraint("ck_authenticators_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_authenticators_webauthn", "(credential_id IS NULL) = (public_key IS NULL) AND (credential_id IS NULL) = (algorithm IS NULL) AND (credential_id IS NULL) = (relying_party IS NULL) AND (credential_id IS NULL) = (backup_eligible IS NULL) AND (credential_id IS NULL) = (backup_state IS NULL)");
                     });
             });
@@ -641,6 +661,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("devices", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_devices_kind", "kind IN ('remembered', 'trusted')");
+
+                        t.HasCheckConstraint("ck_devices_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -666,7 +688,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Subject", "Ordinal")
                     .HasName("pk_recovery_codes");
 
-                b.ToTable("recovery_codes", "identity");
+                b.ToTable("recovery_codes", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_recovery_codes_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", b =>
@@ -694,7 +719,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Subject")
                     .HasName("pk_recovery_code_sets");
 
-                b.ToTable("recovery_code_sets", "identity");
+                b.ToTable("recovery_code_sets", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_recovery_code_sets_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.VerificationCodeRecord", b =>
@@ -743,6 +771,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<Guid?>("Browser")
                     .HasColumnType("uuid")
                     .HasColumnName("browser");
+
+                b.Property<Guid?>("Enrolment")
+                    .HasColumnType("uuid")
+                    .HasColumnName("enrolment");
 
                 b.Property<bool>("IsReplacement")
                     .HasColumnType("boolean")
@@ -805,6 +837,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_identifier_verifications_old", "is_replacement OR (NOT old_must_confirm AND old_confirmed_at IS NULL AND old_link IS NULL)");
 
                         t.HasCheckConstraint("ck_identifier_verifications_old_link", "old_link IS NULL OR octet_length(old_link) = 32");
+
+                        t.HasCheckConstraint("ck_identifier_verifications_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -847,10 +881,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("issued_at");
 
-                b.Property<int?>("KeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("key_version");
-
                 b.Property<Guid?>("Mailbox")
                     .HasColumnType("uuid")
                     .HasColumnName("mailbox");
@@ -878,6 +908,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("token");
 
                 b.Property<byte[]>("WrappedKey")
+                    .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("wrapped_key");
 
@@ -908,7 +939,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_invitations_forgotten", "enc_identifiers IS NULL OR (revoked_at IS NULL AND acknowledged_at IS NULL)");
 
-                        t.HasCheckConstraint("ck_invitations_key", "(enc_identifiers IS NULL) = (wrapped_key IS NULL) AND (wrapped_key IS NULL) = (key_version IS NULL)");
+                        t.HasCheckConstraint("ck_invitations_invitee_not_max_uuid", "invitee <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_invitations_inviter_not_max_uuid", "inviter <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_invitations_key", "(enc_identifiers IS NULL) = (wrapped_key = decode(repeat('00', 32), 'hex'))");
 
                         t.HasCheckConstraint("ck_invitations_outcome", "revoked_at IS NULL OR acknowledged_at IS NULL");
                     });
@@ -921,6 +956,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<bool>("Attempted")
+                    .HasColumnType("boolean")
+                    .HasColumnName("attempted");
+
                 b.Property<int>("Attempts")
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
@@ -929,6 +968,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonicalisation_version");
+
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
 
                 b.Property<byte[]>("EncryptedCanonical")
                     .IsRequired()
@@ -952,10 +995,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("holder");
 
-                b.Property<int?>("KeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("key_version");
-
                 b.Property<DateTimeOffset?>("NextAttemptAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("next_attempt_at");
@@ -972,9 +1011,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("pushed");
 
-                b.Property<DateTimeOffset?>("ReleasedAt")
+                b.Property<DateTimeOffset?>("RemovalOwedAt")
                     .HasColumnType("timestamp with time zone")
-                    .HasColumnName("released_at");
+                    .HasColumnName("removal_owed_at");
 
                 b.Property<DateTimeOffset>("ReservedAt")
                     .HasColumnType("timestamp with time zone")
@@ -994,14 +1033,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Fingerprint")
                     .IsUnique()
                     .HasDatabaseName("ux_mailboxes_fingerprint")
-                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex')");
+                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex') AND removal_owed_at IS NULL");
 
                 b.HasIndex("Holder")
                     .HasDatabaseName("ix_mailboxes_holder");
 
                 b.ToTable("mailboxes", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_mailboxes_key", "(holder IS NULL) = (wrapped_key IS NOT NULL) AND (wrapped_key IS NULL) = (key_version IS NULL)");
+                        t.HasCheckConstraint("ck_mailboxes_holder_not_max_uuid", "holder <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_mailboxes_key", "(holder IS NULL) = (wrapped_key IS NOT NULL)");
 
                         t.HasCheckConstraint("ck_mailboxes_pending", "pending IS NULL OR pending IN ('disabled', 'enabled', 'removed')");
 
@@ -1009,7 +1050,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_mailboxes_pushed", "pushed IS NULL OR pushed IN ('disabled', 'enabled', 'removed')");
 
-                        t.HasCheckConstraint("ck_mailboxes_released", "released_at IS NULL OR (holder IS NULL AND retired_at IS NULL)");
+                        t.HasCheckConstraint("ck_mailboxes_removal_owed", "removal_owed_at IS NULL OR holder IS NULL OR retired_at IS NOT NULL");
                     });
             });
 
@@ -1069,7 +1110,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Id")
                     .HasName("pk_maintenance_log");
 
-                b.ToTable("maintenance_log", "identity");
+                b.ToTable("maintenance_log", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_maintenance_log_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
@@ -1129,7 +1173,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_oidc_authorizations_subject");
 
-                b.ToTable("oidc_authorizations", "identity");
+                b.ToTable("oidc_authorizations", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_oidc_authorizations_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcClientRecord", b =>
@@ -1170,6 +1217,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("secret");
+
+                b.Property<DateTimeOffset>("SecretIssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("secret_issued_at");
 
                 b.HasKey("ClientId")
                     .HasName("pk_oidc_clients");
@@ -1311,7 +1362,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_oidc_tokens_subject");
 
-                b.ToTable("oidc_tokens", "identity");
+                b.ToTable("oidc_tokens", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_oidc_tokens_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.SigningKeyRecord", b =>
@@ -1329,12 +1383,27 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
 
-                b.Property<int>("KeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("key_version");
+                b.Property<bool>("IsCurrent")
+                    .ValueGeneratedOnAddOrUpdate()
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_current")
+                    .HasComputedColumnSql("signing_from IS NOT NULL AND superseded_at IS NULL", true);
+
+                b.Property<bool>("IsNext")
+                    .ValueGeneratedOnAddOrUpdate()
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_next")
+                    .HasComputedColumnSql("signing_from IS NULL", true);
+
+                b.Property<DateTimeOffset?>("KeptUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("kept_until");
+
+                b.Property<TimeSpan>("LongestLifetime")
+                    .HasColumnType("interval")
+                    .HasColumnName("longest_lifetime");
 
                 b.Property<byte[]>("PrivateKey")
-                    .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("private_key");
 
@@ -1347,6 +1416,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("retires_at");
 
+                b.Property<DateTimeOffset?>("SigningFrom")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("signing_from");
+
                 b.Property<DateTimeOffset?>("SupersededAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("superseded_at");
@@ -1354,17 +1427,24 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("KeyId")
                     .HasName("pk_signing_keys");
 
-                b.HasIndex("KeyVersion")
-                    .HasDatabaseName("ix_signing_keys_key_version");
+                b.HasIndex("IsCurrent")
+                    .IsUnique()
+                    .HasDatabaseName("ux_signing_keys_current")
+                    .HasFilter("is_current");
+
+                b.HasIndex("IsNext")
+                    .IsUnique()
+                    .HasDatabaseName("ux_signing_keys_next")
+                    .HasFilter("is_next");
 
                 b.HasIndex("RetiresAt")
                     .HasDatabaseName("ix_signing_keys_retires_at");
 
                 b.ToTable("signing_keys", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_signing_keys_retirement", "(superseded_at IS NULL AND retires_at IS NULL) OR (superseded_at IS NOT NULL AND retires_at > superseded_at)");
+                        t.HasCheckConstraint("ck_signing_keys_private_key", "private_key IS NOT NULL OR retires_at IS NOT NULL");
 
-                        t.HasCheckConstraint("ck_signing_keys_version", "key_version >= 1");
+                        t.HasCheckConstraint("ck_signing_keys_stage", "(signing_from IS NULL AND longest_lifetime = interval '0' AND superseded_at IS NULL AND retires_at IS NULL AND kept_until IS NULL) OR (signing_from >= created_at AND superseded_at IS NULL AND retires_at IS NULL AND kept_until IS NULL) OR (signing_from >= created_at AND superseded_at >= signing_from AND retires_at > superseded_at AND kept_until >= retires_at)");
                     });
             });
 
@@ -1444,7 +1524,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Subject")
                     .HasName("pk_passwords");
 
-                b.ToTable("passwords", "identity");
+                b.ToTable("passwords", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_passwords_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Policies.PolicyRaiseRecord", b =>
@@ -1540,6 +1623,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("loss_reports", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_loss_reports_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_loss_reports_window", "invalidates_at > reported_at");
                     });
             });
@@ -1573,7 +1658,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Approver", "At")
                     .HasDatabaseName("ix_recovery_approvals_approver");
 
-                b.ToTable("recovery_approvals", "identity");
+                b.ToTable("recovery_approvals", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_recovery_approvals_approver_not_max_uuid", "approver <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_recovery_approvals_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.RecoveryLinkRecord", b =>
@@ -1586,6 +1676,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<Guid?>("Approver")
                     .HasColumnType("uuid")
                     .HasColumnName("approver");
+
+                b.Property<DateTimeOffset?>("CodesShownAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("codes_shown_at");
 
                 b.Property<DateTimeOffset>("ExpiresAt")
                     .HasColumnType("timestamp with time zone")
@@ -1637,11 +1731,17 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("recovery_links", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_recovery_links_approver_not_max_uuid", "approver <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_recovery_links_codes_shown", "codes_shown_at IS NULL OR session IS NOT NULL");
+
                         t.HasCheckConstraint("ck_recovery_links_expiry", "expires_at > issued_at");
 
                         t.HasCheckConstraint("ck_recovery_links_purpose", "purpose IN ('enrolment', 'self-service')");
 
                         t.HasCheckConstraint("ck_recovery_links_session", "session IS NULL OR spent_at IS NOT NULL");
+
+                        t.HasCheckConstraint("ck_recovery_links_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_recovery_links_token", "octet_length(token) = 32");
                     });
@@ -1677,10 +1777,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
-                b.Property<int>("KeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("key_version");
-
                 b.Property<Guid>("ProvisionalSubject")
                     .HasColumnType("uuid")
                     .HasColumnName("provisional_subject");
@@ -1701,7 +1797,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_registration_sessions_expires_at");
 
-                b.ToTable("registration_sessions", "identity");
+                b.ToTable("registration_sessions", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_registration_sessions_provisional_subject_not_max_uuid", "provisional_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
@@ -1813,9 +1912,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
 
-                b.Property<int>("KeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("key_version");
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
 
                 b.Property<byte[]>("Message")
                     .IsRequired()
@@ -1830,14 +1929,15 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("recorded_at");
 
+                b.Property<byte[]>("Reference")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("reference");
+
                 b.Property<Guid?>("Subject")
                     .HasColumnType("uuid")
                     .HasColumnName("subject");
-
-                b.Property<string>("TakenLanguages")
-                    .IsRequired()
-                    .HasColumnType("jsonb")
-                    .HasColumnName("taken_languages");
 
                 b.Property<byte[]>("WrappedKey")
                     .IsRequired()
@@ -1850,7 +1950,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("NextAttemptAt")
                     .HasDatabaseName("ix_send_outbox_due");
 
-                b.ToTable("send_outbox", "identity");
+                b.ToTable("send_outbox", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_send_outbox_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendGrantRecord", b =>
@@ -1877,6 +1980,28 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendKeyCounterRecord", b =>
+            {
+                b.Property<byte[]>("Key")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("key");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
+                b.PrimitiveCollection<DateTimeOffset[]>("SentAt")
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone[]")
+                    .HasColumnName("sent_at");
+
+                b.HasKey("Key")
+                    .HasName("pk_send_key_counters");
+
+                b.ToTable("send_key_counters", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendRecord", b =>
             {
                 b.Property<byte[]>("Reference")
@@ -1900,6 +2025,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("SettlesAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("settles_at");
+
+                b.PrimitiveCollection<byte[][]>("Spent")
+                    .IsRequired()
+                    .HasColumnType("bytea[]")
+                    .HasColumnName("spent");
+
+                b.PrimitiveCollection<int[]>("SpentVersions")
+                    .IsRequired()
+                    .HasColumnType("integer[]")
+                    .HasColumnName("spent_versions");
 
                 b.HasKey("Reference")
                     .HasName("pk_sends");
@@ -1971,10 +2106,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("registration");
 
-                b.Property<int?>("SignOnKeyVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("signon_key_version");
-
                 b.Property<string>("SignOnReturn")
                     .HasColumnType("text")
                     .HasColumnName("signon_return");
@@ -2010,7 +2141,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_preauthentication_sessions_fingerprint", "octet_length(fingerprint) = 32 AND octet_length(csrf_fingerprint) = 32");
 
-                        t.HasCheckConstraint("ck_preauthentication_sessions_signon", "num_nulls(signon_state, signon_verifier, signon_key_version, signon_return) IN (0, 4)");
+                        t.HasCheckConstraint("ck_preauthentication_sessions_signon", "num_nulls(signon_state, signon_verifier, signon_return) IN (0, 3)");
                     });
             });
 
@@ -2020,18 +2151,29 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<DateTimeOffset?>("Aal1At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("aal1_at");
+
+                b.Property<DateTimeOffset?>("Aal2At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("aal2_at");
+
+                b.Property<DateTimeOffset?>("Aal3At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("aal3_at");
+
                 b.Property<DateTimeOffset>("AbsoluteExpiry")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("absolute_expiry");
 
-                b.Property<string>("Attained")
-                    .IsRequired()
+                b.Property<string>("BreakGlassReason")
                     .HasColumnType("text")
-                    .HasColumnName("attained");
+                    .HasColumnName("breakglass_reason");
 
-                b.Property<DateTimeOffset>("AttainedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("attained_at");
+                b.Property<string>("Client")
+                    .HasColumnType("text")
+                    .HasColumnName("client");
 
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
@@ -2042,6 +2184,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("csrf_fingerprint");
+
+                b.Property<DateTimeOffset>("DelegatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("delegated_at");
+
+                b.Property<DateTimeOffset?>("DowngradedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("downgraded_at");
 
                 b.Property<DateTimeOffset?>("EndedAt")
                     .HasColumnType("timestamp with time zone")
@@ -2089,10 +2239,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("origin_place");
 
-                b.Property<bool>("PhishingResistant")
-                    .HasColumnType("boolean")
-                    .HasColumnName("phishing_resistant");
-
                 b.Property<DateTimeOffset?>("PhishingResistantAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("phishing_resistant_at");
@@ -2135,9 +2281,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("sessions", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_sessions_attained", "attained IN ('aal1', 'aal2', 'aal3', 'delegated')");
+                        t.HasCheckConstraint("ck_sessions_breakglass_reason", "breakglass_reason IS NULL OR (satisfies_every_gate AND length(btrim(breakglass_reason)) BETWEEN 1 AND 1024)");
 
-                        t.HasCheckConstraint("ck_sessions_phishing_resistant", "phishing_resistant = (phishing_resistant_at IS NOT NULL)");
+                        t.HasCheckConstraint("ck_sessions_levels", "(aal1_at IS NULL OR aal1_at <= delegated_at) AND (aal2_at IS NULL OR (aal1_at IS NOT NULL AND aal2_at <= aal1_at)) AND (aal3_at IS NULL OR (aal2_at IS NOT NULL AND aal3_at <= aal2_at))");
+
+                        t.HasCheckConstraint("ck_sessions_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_sessions_type", "type IN ('auth', 'oidc-token', 'per-app')");
                     });
@@ -2162,11 +2310,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
-                b.Property<int?>("FingerprintVersion")
+                b.Property<int>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
 
                 b.Property<byte[]>("Identifier")
+                    .IsRequired()
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("identifier");
@@ -2198,7 +2347,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
-                        t.HasCheckConstraint("ck_signin_challenges_identifier", "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
+                        t.HasCheckConstraint("ck_signin_challenges_identifier", "octet_length(identifier) = 32");
+
+                        t.HasCheckConstraint("ck_signin_challenges_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2214,10 +2365,19 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("browser");
 
+                b.Property<byte[]>("Challenge")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("challenge");
+
                 b.Property<byte[]>("Code")
                     .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("enc_code");
+
+                b.Property<Guid?>("Credential")
+                    .HasColumnType("uuid")
+                    .HasColumnName("credential");
 
                 b.Property<Guid?>("Email")
                     .HasColumnType("uuid")
@@ -2258,7 +2418,13 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_signin_links_browser", "browser IS NULL OR octet_length(browser) = 32");
 
+                        t.HasCheckConstraint("ck_signin_links_challenge", "challenge IS NULL OR octet_length(challenge) = 32");
+
+                        t.HasCheckConstraint("ck_signin_links_credential", "(credential IS NOT NULL) = (factor IN ('phoneCode'))");
+
                         t.HasCheckConstraint("ck_signin_links_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
+
+                        t.HasCheckConstraint("ck_signin_links_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_signin_links_token", "octet_length(token) = 32");
 
@@ -2294,6 +2460,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("bulk_exports", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_bulk_exports_actor", "(actor IS NULL) <> (principal IS NULL)");
+
+                        t.HasCheckConstraint("ck_bulk_exports_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2310,7 +2478,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Actor")
                     .HasName("pk_read_baselines");
 
-                b.ToTable("read_baselines", "identity");
+                b.ToTable("read_baselines", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_read_baselines_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Gate.ReadVolumeRecord", b =>
@@ -2333,7 +2504,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Day")
                     .HasDatabaseName("ix_read_volume_day");
 
-                b.ToTable("read_volume", "identity");
+                b.ToTable("read_volume", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_read_volume_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
@@ -2422,6 +2596,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("grants", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_grants_granted_by_not_max_uuid", "granted_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_grants_kind", "kind IN ('derived', 'materialised', 'stored')");
 
                         t.HasCheckConstraint("ck_grants_reason", "length(btrim(reason)) BETWEEN 1 AND 1024");
@@ -2429,6 +2605,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_grants_resource", "(resource_type IS NULL) = (resource_id IS NULL)");
 
                         t.HasCheckConstraint("ck_grants_revocation", "(revoked_at IS NULL AND revoked_by IS NULL AND revocation_reason IS NULL)\nOR (revoked_at IS NOT NULL AND revoked_by IS NOT NULL\n    AND length(btrim(revocation_reason)) BETWEEN 1 AND 1024)");
+
+                        t.HasCheckConstraint("ck_grants_revoked_by_not_max_uuid", "revoked_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_grants_subject_id_not_max_uuid", "subject_id <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_grants_subject_type", "subject_type IN ('group', 'user')");
                     });
@@ -2449,6 +2629,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("grant_versions", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_grant_versions_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
                     });
             });
@@ -2481,6 +2663,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
 
+                        t.HasCheckConstraint("ck_group_closure_member_id_not_max_uuid", "member_id <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_group_closure_member_type", "member_type IN ('group', 'user')");
                     });
             });
@@ -2507,6 +2691,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("group_members", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_group_members_member_id_not_max_uuid", "member_id <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_group_members_member_type", "member_type IN ('group', 'user')");
                     });
             });
@@ -2520,7 +2706,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Name")
                     .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("name");
+                    .HasColumnName("name")
+                    .UseCollation("identity_ci");
 
                 b.Property<Guid>("Organization")
                     .HasColumnType("uuid")
@@ -2611,6 +2798,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("resources", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_resources_contained_in", "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
+
+                        t.HasCheckConstraint("ck_resources_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2672,6 +2861,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("deleting_since");
 
+                b.Property<string>("DeletionHeld")
+                    .HasColumnType("text")
+                    .HasColumnName("deletion_held");
+
+                b.Property<DateTimeOffset?>("DeletionHeldSince")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deletion_held_since");
+
                 b.Property<bool>("IsEmergency")
                     .ValueGeneratedOnAdd()
                     .HasColumnType("boolean")
@@ -2695,6 +2892,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("SuspendedBy")
                     .HasColumnType("text")
                     .HasColumnName("suspended_by");
+
+                b.Property<string>("SuspensionHeld")
+                    .HasColumnType("text")
+                    .HasColumnName("suspension_held");
 
                 b.Property<string>("TermsVersion")
                     .HasMaxLength(64)
@@ -2725,13 +2926,25 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_accounts_deleting_by", "deleting_by IS NULL OR deleting_by IN ('oob-request', 'self', 'takedown')");
 
+                        t.HasCheckConstraint("ck_accounts_deletion_held", "deletion_held IS NULL OR deletion_held IN ('oob-request', 'self')");
+
+                        t.HasCheckConstraint("ck_accounts_deletion_held_since", "(deletion_held IS NULL) = (deletion_held_since IS NULL)");
+
+                        t.HasCheckConstraint("ck_accounts_deletion_held_state", "deletion_held IS NULL OR (state = 'deleting' AND deleting_by = 'takedown')");
+
                         t.HasCheckConstraint("ck_accounts_documents", "(terms_version IS NULL) = (notice_version IS NULL)");
 
                         t.HasCheckConstraint("ck_accounts_restriction_held", "NOT restriction_held OR state IN ('deleting', 'suspended')");
 
                         t.HasCheckConstraint("ck_accounts_state", "state IN ('active', 'deleted', 'deleting', 'restricted', 'suspended')");
 
+                        t.HasCheckConstraint("ck_accounts_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_accounts_suspended_by", "suspended_by IS NULL OR suspended_by IN ('administrator', 'self')");
+
+                        t.HasCheckConstraint("ck_accounts_suspension_held", "suspension_held IS NULL OR suspension_held IN ('administrator', 'self')");
+
+                        t.HasCheckConstraint("ck_accounts_suspension_held_state", "suspension_held IS NULL OR (state = 'deleting' AND deleting_by IN ('takedown', 'oob-request'))");
                     });
             });
 
@@ -2758,6 +2971,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("action");
 
+                b.Property<string>("BreakGlassReason")
+                    .HasColumnType("text")
+                    .HasColumnName("breakglass_reason");
+
                 b.Property<string>("Details")
                     .IsRequired()
                     .HasColumnType("jsonb")
@@ -2783,14 +3000,18 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("principal_reason");
 
+                b.Property<Guid?>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
                 b.HasKey("Category", "OccurredAt", "Id")
                     .HasName("pk_audit_records");
 
                 b.HasIndex("ActingSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_acting_subject");
 
-                b.HasIndex("EffectiveSubject", "OccurredAt")
-                    .HasDatabaseName("ix_audit_records_effective_subject");
+                b.HasIndex("Subject", "OccurredAt")
+                    .HasDatabaseName("ix_audit_records_subject");
 
                 b.ToTable("audit_records", "identity", t =>
                     {
@@ -2829,6 +3050,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_identifier_backup_settings_rule", "rule IN ('all-verified', 'primary-only') OR rule IS NULL");
 
                         t.HasCheckConstraint("ck_identifier_backup_settings_setting", "(rule IS NULL) <> (named IS NULL)");
+
+                        t.HasCheckConstraint("ck_identifier_backup_settings_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2911,6 +3134,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_identifiers_personal", "NOT is_personal OR (kind = 'email' AND verified_at IS NOT NULL AND NOT is_primary)");
 
                         t.HasCheckConstraint("ck_identifiers_primary", "NOT is_primary OR verified_at IS NOT NULL");
+
+                        t.HasCheckConstraint("ck_identifiers_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2918,7 +3143,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
             {
                 b.Property<Guid>("Id")
                     .HasColumnType("uuid")
-                    .HasColumnName("identifier_id");
+                    .HasColumnName("removal_id");
 
                 b.Property<DateTimeOffset>("AddedAt")
                     .HasColumnType("timestamp with time zone")
@@ -2956,6 +3181,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("kind");
 
+                b.Property<Guid>("Origin")
+                    .HasColumnType("uuid")
+                    .HasColumnName("identifier_id");
+
                 b.Property<DateTimeOffset>("RemovedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("removed_at");
@@ -2979,6 +3208,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_identifier_removals_expires_at");
 
+                b.HasIndex("Origin")
+                    .HasDatabaseName("ix_identifier_removals_identifier");
+
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_identifier_removals_subject");
 
@@ -2995,6 +3227,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_identifier_removals_fingerprint", "octet_length(fingerprint) = 32");
 
                         t.HasCheckConstraint("ck_identifier_removals_kind", "kind IN ('email', 'phone', 'username')");
+
+                        t.HasCheckConstraint("ck_identifier_removals_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_identifier_removals_window", "expires_at > removed_at");
                     });
@@ -3069,11 +3303,18 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
+                b.HasIndex("Subject", "Organization")
+                    .IsUnique()
+                    .HasDatabaseName("ux_memberships_current")
+                    .HasFilter("ended_at IS NULL");
+
                 b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
 
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
+
+                        t.HasCheckConstraint("ck_memberships_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3084,6 +3325,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("id");
 
                 b.Property<string>("CanonicalName")
+                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonical_name");
 
@@ -3150,7 +3392,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Subject")
                     .HasName("pk_account_preferences");
 
-                b.ToTable("account_preferences", "identity");
+                b.ToTable("account_preferences", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_account_preferences_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
@@ -3171,7 +3416,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Subject")
                     .HasName("pk_profile_photos");
 
-                b.ToTable("profile_photos", "identity");
+                b.ToTable("profile_photos", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_profile_photos_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
@@ -3195,18 +3443,55 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Subject")
                     .HasName("pk_profiles");
 
-                b.ToTable("profiles", "identity");
+                b.ToTable("profiles", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_profiles_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Privacy.Bases.LawfulBasisRow", b =>
+            {
+                b.Property<string>("Key")
+                    .HasColumnType("text")
+                    .HasColumnName("key");
+
+                b.Property<bool>("IsConsent")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_consent");
+
+                b.Property<bool>("IsObjectable")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_objectable");
+
+                b.Property<string>("Label")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("label");
+
+                b.Property<bool>("RequiresAssessment")
+                    .HasColumnType("boolean")
+                    .HasColumnName("requires_assessment");
+
+                b.Property<bool>("RequiresWrittenConsentForSensitive")
+                    .HasColumnType("boolean")
+                    .HasColumnName("requires_written_consent_for_sensitive");
+
+                b.HasKey("Key")
+                    .HasName("pk_lawful_bases");
+
+                b.ToTable("lawful_bases", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Consents.ConsentRecordRow", b =>
             {
-                b.Property<Guid>("Subject")
+                b.Property<Guid>("Id")
                     .HasColumnType("uuid")
-                    .HasColumnName("subject");
+                    .HasColumnName("id");
 
-                b.Property<string>("Purpose")
+                b.Property<string>("Document")
+                    .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("purpose");
+                    .HasColumnName("document");
 
                 b.Property<DateTimeOffset>("GrantedAt")
                     .HasColumnType("timestamp with time zone")
@@ -3227,6 +3512,15 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("notice_version");
 
+                b.Property<string>("Purpose")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
                 b.Property<DateTimeOffset?>("SupersededAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("superseded_at");
@@ -3235,11 +3529,19 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("withdrawn_at");
 
-                b.HasKey("Subject", "Purpose")
+                b.HasKey("Id")
                     .HasName("pk_consents");
 
                 b.HasIndex("NoticeVersion")
                     .HasDatabaseName("ix_consents_live")
+                    .HasFilter("withdrawn_at IS NULL AND superseded_at IS NULL");
+
+                b.HasIndex("Subject", "GrantedAt")
+                    .HasDatabaseName("ix_consents_subject");
+
+                b.HasIndex("Subject", "Purpose")
+                    .IsUnique()
+                    .HasDatabaseName("ux_consents_live")
                     .HasFilter("withdrawn_at IS NULL AND superseded_at IS NULL");
 
                 b.ToTable("consents", "identity", t =>
@@ -3249,18 +3551,21 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_consents_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_consents_purpose", "length(trim(purpose)) > 0");
+
+                        t.HasCheckConstraint("ck_consents_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Consents.ObjectionRecordRow", b =>
             {
-                b.Property<Guid>("Subject")
+                b.Property<Guid>("Id")
                     .HasColumnType("uuid")
-                    .HasColumnName("subject");
+                    .HasColumnName("id");
 
-                b.Property<string>("Purpose")
+                b.Property<string>("Document")
+                    .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("purpose");
+                    .HasColumnName("document");
 
                 b.Property<string>("Mechanism")
                     .IsRequired()
@@ -3272,22 +3577,41 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("notice_version");
 
+                b.Property<string>("Purpose")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
+
                 b.Property<DateTimeOffset>("RecordedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("recorded_at");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
 
                 b.Property<DateTimeOffset?>("WithdrawnAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("withdrawn_at");
 
-                b.HasKey("Subject", "Purpose")
+                b.HasKey("Id")
                     .HasName("pk_objections");
+
+                b.HasIndex("Subject", "Purpose")
+                    .IsUnique()
+                    .HasDatabaseName("ux_objections_standing")
+                    .HasFilter("withdrawn_at IS NULL");
+
+                b.HasIndex("Subject", "RecordedAt")
+                    .HasDatabaseName("ix_objections_subject");
 
                 b.ToTable("objections", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_objections_purpose", "length(trim(purpose)) > 0");
+
+                        t.HasCheckConstraint("ck_objections_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3392,9 +3716,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
                         t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
+
+                        t.HasCheckConstraint("ck_erasures_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3419,7 +3745,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Subject", "AssembledAt")
                     .HasDatabaseName("ix_privacy_exports_subject");
 
-                b.ToTable("privacy_exports", "identity");
+                b.ToTable("privacy_exports", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_privacy_exports_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Outbox.DeliveryConfirmationRecord", b =>
@@ -3454,6 +3783,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("Attempts")
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
+
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
 
                 b.Property<string>("Kind")
                     .IsRequired()
@@ -3502,9 +3835,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
 
-                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
                         t.HasCheckConstraint("ck_outbox_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
+
+                        t.HasCheckConstraint("ck_outbox_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3523,9 +3858,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("data_owner");
 
-                b.Property<string>("OrganisationalMeasures")
+                b.Property<string>("OrganizationalMeasures")
                     .HasColumnType("text")
-                    .HasColumnName("organisational_measures");
+                    .HasColumnName("organizational_measures");
 
                 b.Property<DateTimeOffset>("UpdatedAt")
                     .HasColumnType("timestamp with time zone")
@@ -3567,7 +3902,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("decision_reason");
 
                 b.Property<string>("Detail")
-                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("detail");
 
@@ -3582,6 +3916,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("IdentityConfirmation")
                     .HasColumnType("text")
                     .HasColumnName("identity_confirmation");
+
+                b.Property<DateTimeOffset?>("ReceiptSentAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("receipt_sent_at");
 
                 b.Property<DateOnly>("ReceivedAt")
                     .HasColumnType("date")
@@ -3623,6 +3961,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_privacy_requests_status", "status IN ('deemed-refused-by-lapse', 'fulfilled', 'granted-by-lapse', 'open', 'refused')");
 
+                        t.HasCheckConstraint("ck_privacy_requests_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_privacy_requests_type", "type IN ('erasure', 'rectification', 'restriction')");
                     });
             });
@@ -3641,7 +3981,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("completed_at");
 
-                b.Property<Guid?>("LastSubject")
+                b.Property<Guid?>("LastKey")
                     .HasColumnType("uuid")
                     .HasColumnName("last_subject");
 
@@ -3674,7 +4014,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Privacy.SubjectKeys.SubjectKeyRecord", b =>
             {
-                b.Property<Guid>("Subject")
+                b.Property<Guid>("Id")
                     .HasColumnType("uuid")
                     .HasColumnName("subject");
 
@@ -3691,7 +4031,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("wrapped_key");
 
-                b.HasKey("Subject")
+                b.HasKey("Id")
                     .HasName("pk_subject_keys");
 
                 b.HasIndex("KeyVersion")

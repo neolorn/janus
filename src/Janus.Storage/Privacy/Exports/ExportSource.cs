@@ -10,6 +10,7 @@ using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
+using Janus.Authorization.Groups;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Organizations;
@@ -29,7 +30,8 @@ namespace Janus.Storage.Privacy.Exports;
 /// <param name="recoveryCodes">Where the single-use codes are.</param>
 /// <param name="devices">Where the browsers the account knows are.</param>
 /// <param name="memberships">Where the account's memberships are.</param>
-/// <param name="grants">Where the roles the account holds are.</param>
+/// <param name="grants">Where every grant naming the account is.</param>
+/// <param name="groups">Where the groups the account belongs to are.</param>
 /// <param name="sessions">Where the live sessions and their location records are.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="time">The clock a session's expiry is judged against.</param>
@@ -51,6 +53,7 @@ internal sealed class ExportSource(
     IDeviceStore devices,
     IMembershipStore memberships,
     IGrantStore grants,
+    IGroupStore groups,
     ISessionStore sessions,
     PreferenceDeclarations declarations,
     TimeProvider time) : IExportSource
@@ -96,6 +99,12 @@ internal sealed class ExportSource(
             .LiveOfAsync(subject, now, cancellationToken)
             .ConfigureAwait(false);
 
+        IReadOnlyList<Group> belongs = await groups.HoldingAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<Grant> named = await grants.NamingAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
         return
         [
             new ExportSection("account", [new ExportRecord(Standing(subject, account))]),
@@ -108,9 +117,8 @@ internal sealed class ExportSource(
             new ExportSection("preferences", [new ExportRecord(Settled(preferences))]),
             Listed("memberships", joined.Select(Joined)),
             Listed("membership-acknowledgements", joined.SelectMany(Acknowledged)),
-            Listed(
-                "grants",
-                await ConferredAsync(subject, joined, now, cancellationToken).ConfigureAwait(false)),
+            Listed("group-memberships", belongs.Select(Belonging)),
+            Listed("grants", named.Select(Conferred)),
             new ExportSection("assurance", [new ExportRecord(Reaches(enrolled, password))]),
             Listed("sessions", live.Select(Used)),
         ];
@@ -350,11 +358,27 @@ internal sealed class ExportSource(
         }
     }
 
-    // AUTHZ-GRANT-001: what the account holds itself. A grant a group holds is the
-    // group's record, and it reaches the person through a membership of the group.
+    // REG-ACCT-001: a group the account is a member of itself, and not one it reaches
+    // through another group, which is the other group's membership.
+    private static Dictionary<string, string> Belonging(Group group)
+    {
+        Dictionary<string, string> values = Values(capacity: 3);
+
+        values["group"] = group.Id.Value.ToString();
+        values["name"] = group.Name;
+        values["organization"] = group.Organization.Value.ToString();
+
+        return values;
+    }
+
+    // AUTHZ-GRANT-001, PRIV-RIGHT-003: every grant the account holds itself, in every
+    // organization and whether it stands, expired or was revoked, with the instant it
+    // stopped. A grant a group holds is the group's record, and it reaches the person
+    // through a membership of the group. Who granted or revoked it, and why, is about
+    // the person who acted, so it does not cross.
     private static Dictionary<string, string> Conferred(Grant grant)
     {
-        Dictionary<string, string> values = Values(capacity: 9);
+        Dictionary<string, string> values = Values(capacity: 10);
 
         values["grant"] = grant.Id.Value.ToString();
         values["organization"] = grant.Organization.Value.ToString();
@@ -376,6 +400,11 @@ internal sealed class ExportSource(
         if (grant.ExpiresAt is DateTimeOffset expires)
         {
             values["expiresAt"] = Moment(expires);
+        }
+
+        if (grant.RevokedAt is DateTimeOffset revoked)
+        {
+            values["revokedAt"] = Moment(revoked);
         }
 
         return values;
@@ -504,33 +533,5 @@ internal sealed class ExportSource(
         }
 
         return values;
-    }
-
-    private async ValueTask<List<Dictionary<string, string>>> ConferredAsync(
-        SubjectId subject,
-        IReadOnlyList<Membership> joined,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        GrantSubject[] holder = [GrantSubject.Of(subject)];
-
-        var conferred = new List<Dictionary<string, string>>();
-        var asked = new HashSet<OrganizationId>();
-
-        foreach (Membership membership in joined)
-        {
-            if (!asked.Add(membership.Organization))
-            {
-                continue;
-            }
-
-            IReadOnlyList<Grant> held = await grants
-                .HeldByAsync(holder, membership.Organization, now, cancellationToken)
-                .ConfigureAwait(false);
-
-            conferred.AddRange(held.Select(Conferred));
-        }
-
-        return conferred;
     }
 }

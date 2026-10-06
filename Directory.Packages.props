@@ -8,19 +8,20 @@
   </PropertyGroup>
 
   <ItemGroup Label="Relational access">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4" />
-    <PackageVersion Include="Dapper" Version="2.1.86" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Dapper" Version="2.1.89" />
   </ItemGroup>
 
   <ItemGroup Label="Cache">
-    <PackageVersion Include="StackExchange.Redis" Version="3.3.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.3.1" />
   </ItemGroup>
 
   <ItemGroup Label="Cryptography and authentication">
     <PackageVersion Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
-    <PackageVersion Include="Fido2" Version="4.0.1" />
+    <PackageVersion Include="Fido2" Version="4.2.0" />
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
   </ItemGroup>
 
@@ -28,7 +29,6 @@
     <PackageVersion Include="OpenIddict.AspNetCore" Version="7.7.1" />
     <PackageVersion Include="OpenIddict.Server" Version="7.7.1" />
     <PackageVersion Include="OpenIddict.Validation" Version="7.7.1" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Build">

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
@@ -12,6 +13,7 @@ using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -22,38 +24,50 @@ namespace Janus.Authentication.Invitations;
 /// granted, and where the organization's mail is integrated the corporate address
 /// becomes the primary email and its mailbox the person's.
 /// </summary>
+/// <param name="gate">What judges whether the inviter may still grant what the invitation carries.</param>
+/// <param name="scope">What judges the inviter's permissions in the administrative organization.</param>
+/// <param name="roles">Where the roles the invitation names are read.</param>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="invitations">Where the invitation is read and its acknowledgement recorded.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address taken on.</param>
 /// <param name="authenticators">Where the account's credentials are read.</param>
 /// <param name="passwords">Where the account's password is read.</param>
 /// <param name="policies">What resolves the policy the account holds once the membership attaches.</param>
+/// <param name="locks">What judges the address the member will sign in with against the organization's lock.</param>
 /// <param name="memberships">Where the membership and its grants are written.</param>
 /// <param name="mailboxes">Where the corporate mailbox is given to the person.</param>
+/// <param name="sessions">Where the account's live sessions are downgraded as the membership attaches.</param>
 /// <param name="sending">What tells the security-notice set of the corporate address.</param>
-/// <param name="events">Where the membership and the new primary are announced.</param>
+/// <param name="events">Where the membership, the corporate address added and the new primary are announced.</param>
 /// <param name="configuration">Where the membership limit, the email maximum and the languages are read.</param>
 /// <param name="audit">Where the acknowledgement is written down.</param>
 /// <param name="work">The one transaction the acknowledgement runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REG-INV-001, REG-INV-002, REG-MAIL-001, IDN-LIFE-009a, IDN-LIFE-009b,
-/// IDN-MEM-002, INT-MAIL-006 and chapter 09 section 6a. Nothing of the organization is
+/// Implements REG-INV-001, REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a,
+/// IDN-LIFE-009b, IDN-MEM-002, INT-MAIL-006 and chapter 09 section 6a. Nothing of the organization is
 /// granted until the account meets its credential policy counting only the factors that
 /// policy permits, which is also what makes every other factor stop signing in once the
 /// membership attaches (IDN-LIFE-009b). Everything is written in one transaction, and
 /// the invitation forgets what it bound in it.
 /// </remarks>
 internal sealed class InvitationAcknowledgement(
+    IAccessGate gate,
+    AdministrativeScope scope,
+    IRoleCatalogue roles,
+    ISettingsRestriction restriction,
     IInvitationStore invitations,
     IOrganizationDirectory directory,
     IIdentifierDirectory identifiers,
     IAuthenticatorStore authenticators,
     IPasswordStore passwords,
     PolicyResolution policies,
+    DomainLock locks,
     IMembershipAttachment memberships,
     IMailboxStore mailboxes,
-    INotificationHandler sending,
+    ISessionStore sessions,
+    IGovernedSend sending,
     IEvents events,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
@@ -86,6 +100,13 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-ACCT-007 AC2: a membership changes the account, so a restricted account is
+        // refused before anything is read or written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
         // An invitation attached to another account is answered as one that does not
         // exist, so nothing is learned of anyone else's.
         if (await invitations.FindAsync(id, cancellationToken).ConfigureAwait(false) is not Invitation invitation
@@ -107,11 +128,22 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
         }
 
+        if (await InviterLapsedAsync(invitation, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
+        }
+
         HeldIdentifiers held = await identifiers.HeldAsync(invitee, cancellationToken).ConfigureAwait(false);
 
         if (await MismatchedAsync(bound, held, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.InvitationIdentifierMismatch));
+        }
+
+        if (await OutsideLockAsync(invitation, bound, held, cancellationToken).ConfigureAwait(false)
+            is Error outside)
+        {
+            return Result.Failure(outside);
         }
 
         Error? failure = null;
@@ -136,9 +168,14 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(failure);
         }
 
-        if (await UnmetAsync(invitee, policy, cancellationToken).ConfigureAwait(false) is Error enrol)
+        // 09 section 6a: a refusal no enrolment could meet is told before the credential
+        // policy, so nobody is sent to enrol for a membership they cannot take. The
+        // attachment judges the limit again under the account's lock.
+        if (await memberships.RefusedAsync(invitee, invitation.Organization, multiple, cancellationToken)
+                .ConfigureAwait(false)
+            is Error limited)
         {
-            return Result.Failure(enrol);
+            return Result.Failure(limited);
         }
 
         bool corporate = invitation.Mailbox is not null && bound.CorporateEmail is not null;
@@ -150,7 +187,70 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if (await UnmetAsync(invitee, policy, cancellationToken).ConfigureAwait(false) is Error enrol)
+        {
+            return Result.Failure(enrol);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again inside the unit of work,
+        // with the account's row held before any other lock, so one committed since the
+        // gate step refuses the membership before anything is written. Attaching the
+        // membership goes on to lock that row itself, so it is taken for the change.
+        await identifiers.HoldAsync(invitee, cancellationToken).ConfigureAwait(false);
+
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the invitation is read again under its lock, so a revocation
+        // committed meanwhile stops the membership, and of two acknowledgements at once
+        // only the first attaches.
+        Invitation? standing = await invitations.FindForUpdateAsync(id, cancellationToken).ConfigureAwait(false);
+
+        // D-166 X3: the organization is read again under its lock, so a deletion
+        // requested or an erasure executed meanwhile takes no new member; one that waits
+        // for this to commit ends the membership with the others.
+        if (standing is not null
+            && await directory.HoldAsync(standing.Organization, cancellationToken).ConfigureAwait(false)
+                is not { DeletionRequestedAt: null, ErasedAt: null })
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
+        }
+
+        if (standing is null || standing.Invitee != invitee || !standing.Stands)
+        {
+            ErrorCode refused = standing is null || standing.Invitee != invitee
+                ? ErrorCodes.InvitationNotFound
+                : ErrorCodes.InvitationExpired;
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(refused));
+        }
+
+        invitation = standing;
+
+        // REG-SESS-005, REG-INV-001: the corporate address is taken on under its lock, and
+        // whether an account holds it, or it is reserved for an undo to another account,
+        // is judged under that lock before anything is written.
+        if (corporate
+            && await CorporateTakenAsync(bound, invitee, now, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.InvitationIdentifierMismatch));
+        }
 
         MembershipId membership = (await memberships
                 .AttachAsync(
@@ -168,8 +268,15 @@ internal sealed class InvitationAcknowledgement(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
+
+        // AUTH-SESS-009, IDN-LIFE-009b: the membership tightens the policy in force for
+        // the account, so every session it holds is downgraded in this transaction and
+        // passes no gate until a factor the organization permits is presented.
+        _ = await sessions.DowngradeAsync(invitee, now, cancellationToken).ConfigureAwait(false);
 
         List<DomainEvent> announced =
         [
@@ -186,7 +293,7 @@ internal sealed class InvitationAcknowledgement(
 
         if (corporate)
         {
-            announced.Add(await CorporateAsync(
+            announced.AddRange(await CorporateAsync(
                     invitation,
                     bound,
                     held,
@@ -206,7 +313,9 @@ internal sealed class InvitationAcknowledgement(
                 AuditActions.InvitationAcknowledged,
                 invitation.Organization,
                 invitation.Id,
+                takeover: null,
                 invitee,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -216,11 +325,17 @@ internal sealed class InvitationAcknowledgement(
             if ((await events.PublishAsync(happened, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unpublished);
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -245,6 +360,11 @@ internal sealed class InvitationAcknowledgement(
                 ? number.Value
                 : throw new InvalidOperationException("An invitation binds a well-formed number.");
 
+    private static EmailAddress Address(string value) =>
+        EmailAddress.TryParse(value, out EmailAddress address)
+            ? address
+            : throw new InvalidOperationException("An address bound or held is well-formed.");
+
     private static HeldIdentifier? Holding(HeldIdentifiers held, IdentifierKind kind, string value)
     {
         string canonical = Canonical(kind, value);
@@ -253,14 +373,20 @@ internal sealed class InvitationAcknowledgement(
             identifier.IsVerified && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
     }
 
+    // AUTH-FACT-017 and chapter 10 section 1.1: the requirement the account is held
+    // at, with no deadline, because no grace applies to an account joining.
     private static Error Enrol(PolicyField field, string value) =>
         new(
             ErrorCodes.StepUpRequired,
-            new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
             {
                 ["outcome"] = JsonSerializer.SerializeToElement(WrittenName.Of(StepUpOutcome.Enrol)),
-                ["field"] = JsonSerializer.SerializeToElement(WrittenName.Of(field)),
-                ["value"] = JsonSerializer.SerializeToElement(value),
+                ["policyRequirement"] = JsonSerializer.SerializeToElement(
+                    new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
+                    {
+                        ["field"] = WrittenName.Of(field),
+                        ["value"] = value,
+                    }),
             });
 
     private static SendDestination Destination(HeldIdentifier identifier) =>
@@ -302,6 +428,117 @@ internal sealed class InvitationAcknowledgement(
                 is not null;
     }
 
+    private async ValueTask<bool> CorporateTakenAsync(
+        InvitedIdentifiers bound,
+        SubjectId invitee,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        string canonical = Canonical(
+            IdentifierKind.Email,
+            bound.CorporateEmail ?? throw new InvalidOperationException("The invitation names no corporate address."));
+
+        await identifiers
+            .LockValuesAsync([(IdentifierKind.Email, canonical)], cancellationToken)
+            .ConfigureAwait(false);
+
+        return await identifiers.OwnerAsync(IdentifierKind.Email, canonical, cancellationToken).ConfigureAwait(false)
+                is not null
+            || (await identifiers.ReservedToAsync(IdentifierKind.Email, canonical, now, cancellationToken).ConfigureAwait(false)
+                    is SubjectId reserved
+                && reserved != invitee);
+    }
+
+    // REG-INV-001: what the invitation attaches is granted by its inviter, so it is
+    // judged against what the inviter holds now, as issuing it was: an inviter who no
+    // longer manages the organization's memberships, or no longer may grant a role it
+    // names, leaves an invitation that grants nothing.
+    private async ValueTask<bool> InviterLapsedAsync(Invitation invitation, CancellationToken cancellationToken)
+    {
+        var inviter = AccessContext.Of(invitation.Inviter);
+
+        if (await RefusedAsync(inviter, Permissions.MembershipManage, invitation.Organization, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        if (invitation.Roles.Count is 0)
+        {
+            return false;
+        }
+
+        if (await RefusedAsync(inviter, Permissions.GrantManage, invitation.Organization, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        bool administering = false;
+
+        foreach (RoleName role in invitation.Roles)
+        {
+            administering |= (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false))
+                ?.Permissions.Contains(Permissions.SystemAdminister) is true;
+        }
+
+        return administering
+            && await scope.RefusedAsync(inviter, Permissions.SystemAdminister, cancellationToken)
+                    .ConfigureAwait(false)
+                is not null;
+    }
+
+    private async ValueTask<bool> RefusedAsync(
+        AccessContext inviter,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await gate
+            .RequireAsync(inviter, permission, organization, cancellationToken)
+            .ConfigureAwait(false))
+            .Match(() => false, _ => true);
+
+    // REG-DOM-001: the lock is judged as it now stands on the address the member will
+    // sign in with: the corporate address where one is taken on, else the bound email,
+    // else any verified email the account holds. An account holding no verified email
+    // has no address a lock admits, so it is refused wherever the lock is on
+    // (criterion 10).
+    private async ValueTask<Error?> OutsideLockAsync(
+        Invitation invitation,
+        InvitedIdentifiers bound,
+        HeldIdentifiers held,
+        CancellationToken cancellationToken)
+    {
+        string? named = invitation.Mailbox is not null && bound.CorporateEmail is string corporate
+            ? corporate
+            : bound.Email;
+
+        if (named is not null)
+        {
+            return await locks
+                .RefusedInAsync(invitation.Organization, Address(named), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Error? refused = await locks
+            .RefusedWithoutAddressInAsync(invitation.Organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (HeldIdentifier email in held.OfKind(IdentifierKind.Email).Where(identifier => identifier.IsVerified))
+        {
+            refused = await locks
+                .RefusedInAsync(invitation.Organization, Address(email.Canonical), cancellationToken)
+                .ConfigureAwait(false);
+
+            if (refused is null)
+            {
+                return null;
+            }
+        }
+
+        return refused;
+    }
+
     // REG-INV-002 AC2: the account meets the organization's required assurance, and its
     // credential redundancy where that is enforced, with the factors the organization
     // permits and nothing else.
@@ -333,7 +570,10 @@ internal sealed class InvitationAcknowledgement(
     // email the invitation named stays verified beside it through the membership, the
     // mailbox becomes the person's and is owed enabled, and the set as it stood hears
     // of the address once (REG-IDENT-004).
-    private async ValueTask<DomainEvent> CorporateAsync(
+    // REG-MAIL-001: the corporate address is added to the account as it becomes the
+    // primary, so both are announced, each keyed by the address and the instant as an
+    // added identifier is (entry 248 of D-166).
+    private async ValueTask<DomainEvent[]> CorporateAsync(
         Invitation invitation,
         InvitedIdentifiers bound,
         HeldIdentifiers held,
@@ -343,6 +583,13 @@ internal sealed class InvitationAcknowledgement(
         string source,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: the corporate address is taken on under the lock on the account's
+        // identifiers, so a promotion the person makes at the same moment either comes
+        // first and is moved, or waits and moves the role itself; never two primaries.
+        await identifiers.HoldAsync(invitee, cancellationToken).ConfigureAwait(false);
+
+        held = await identifiers.HeldAsync(invitee, cancellationToken).ConfigureAwait(false);
+
         string corporate = bound.CorporateEmail
             ?? throw new InvalidOperationException("The invitation names no corporate address.");
         HeldIdentifier personal = (bound.Email is string email ? Holding(held, IdentifierKind.Email, email) : null)
@@ -371,10 +618,17 @@ internal sealed class InvitationAcknowledgement(
         await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
         _ = await TellAsync(held.NoticeSet, invitee, source, cancellationToken).ConfigureAwait(false);
 
-        return new IdentifierPrimaryChanged(now, Key(address, now), address, IdentifierKind.Email)
-        {
-            Subject = invitee,
-        };
+        return
+        [
+            new IdentifierAdded(now, Key(address, now), address, IdentifierKind.Email)
+            {
+                Subject = invitee,
+            },
+            new IdentifierPrimaryChanged(now, Key(address, now), address, IdentifierKind.Email)
+            {
+                Subject = invitee,
+            },
+        ];
     }
 
     private async ValueTask<int> TellAsync(
@@ -387,14 +641,14 @@ internal sealed class InvitationAcknowledgement(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         string? language = RecipientLanguage.Of(settled, requested: null, languages);
         int told = 0;
 
         foreach (HeldIdentifier identifier in reached)
         {
-            var request = new SendRequest(
+            var request = new OutboundMessage(
                 Destination(identifier),
                 MessageKind.IdentifierAdded,
                 RestrictionPurpose.Notification,
@@ -408,7 +662,7 @@ internal sealed class InvitationAcknowledgement(
             // A security notice one destination refuses still reaches the rest: the
             // set exists so that no one channel can silence it.
             Result<SendReference> sent = await sending
-                .SendAsync(request, cancellationToken)
+                .UndertakeAsync(request, cancellationToken)
                 .ConfigureAwait(false);
 
             told += sent.Match(_ => 1, _ => 0);

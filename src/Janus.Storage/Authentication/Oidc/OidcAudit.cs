@@ -50,6 +50,7 @@ internal sealed class OidcAudit(IAuditStore records, TimeProvider time) : IOidcA
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -74,7 +75,7 @@ internal sealed class OidcAudit(IAuditStore records, TimeProvider time) : IOidcA
                     AuditActions.ClientRegistered,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
                     {

@@ -37,6 +37,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
         _passwords,
         new PasswordScreening(_corpus, _words, _configuration, _log, _events, _clock),
         new Argon2idHasher(_randomness),
+        _events,
         _configuration,
         _work,
         _clock);
@@ -82,6 +83,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
                 Encoding.UTF8.GetBytes(Short),
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken)));
 
         Assert.Null(await _passwords.FindAsync(alone, TestContext.Current.CancellationToken));
@@ -111,10 +113,36 @@ public sealed class PasswordServiceTests : IAsyncDisposable
                 Encoding.UTF8.GetBytes(Chosen),
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken)));
 
         Assert.Null(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
         Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a password whose enrolment cannot be announced is refused
+    /// after it was written, and the refusal ends the unit of work with nothing
+    /// committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APasswordThatCannotBeAnnouncedRollsBackAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.SetAsync(
+                Subject(),
+                Encoding.UTF8.GetBytes(Chosen),
+                [],
+                AssuranceLevel.Aal1,
+                actor: null,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -174,7 +202,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
 
         _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
             Settings.PasswordBlocklistSources,
-            new HashSet<BlocklistRejectionSource> { BlocklistRejectionSource.Context });
+            new HashSet<BlocklistRejectionSource> { BlocklistRejectionSource.Leaked, BlocklistRejectionSource.Context });
 
         PasswordVerification prompted = await VerifiedAsync(subject, Chosen, [Chosen]);
 
@@ -205,6 +233,36 @@ public sealed class PasswordServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken)));
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a password's event carries the acting and the effective
+    /// identity of the context that set it, each as the context gives it, and one set
+    /// with no context carries neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ASetPasswordCarriesBothIdentitiesOfItsContextAsync()
+    {
+        SubjectId subject = Subject();
+        var context = AccessContext.Of(Subject(), subject);
+
+        await SetAsync(subject, Chosen, AssuranceLevel.Aal1);
+
+        (await Service.SetAsync(
+            subject,
+            Encoding.UTF8.GetBytes(Chosen),
+            [],
+            AssuranceLevel.Aal1,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            _ => { },
+            error => throw new Xunit.Sdk.XunitException($"The password was refused: {error.Code}."));
+
+        IReadOnlyList<CredentialEnrolled> announced = _events.Of<CredentialEnrolled>();
+
+        Assert.Equal(2, announced.Count);
+        Assert.Equal(((SubjectId?)null, (SubjectId?)null), (announced[0].Actor, announced[0].Effective));
+        Assert.Equal((context.Acting, context.Effective), (announced[1].Actor, announced[1].Effective));
+    }
+
     private SubjectId Subject() => SubjectId.New(_randomness);
 
     private static ErrorCode Refusal<TValue>(Result<TValue> result) =>
@@ -217,6 +275,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
             Encoding.UTF8.GetBytes(password),
             [],
             reachable,
+            actor: null,
             TestContext.Current.CancellationToken);
 
         set.Switch(

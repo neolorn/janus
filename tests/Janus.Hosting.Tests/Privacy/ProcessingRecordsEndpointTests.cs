@@ -61,7 +61,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
                 "hostingLocation",
                 "crossBorderBasis",
                 "dataOwner",
-                "organisationalSecurityMeasures",
+                "organizationalSecurityMeasures",
                 "assessmentLinks",
                 "records",
                 "recipients",
@@ -105,6 +105,24 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-ROPA-002 and LIB-EXT-001, D-166 (270): a deployment that registered a mail
+    /// server and its own transports, and set no address for a shipped mail transport,
+    /// reports the mail server row the library makes true.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_002_ARegisteredMailServerIsInTheRegisterAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        JsonElement register = (await browser.SendAsync("GET", "/admin/ropa?format=template")).Json();
+
+        Assert.Contains(
+            "mail server",
+            register.GetProperty("recipients").EnumerateArray().Select(recipient => recipient.GetProperty("name").GetString()));
+    }
+
+    /// <summary>
     /// PRIV-ROPA-001 AC2, and chapter 09 section 8a: the three supplied fields are
     /// flagged while nobody has stated them, and stand in the register once someone
     /// has.
@@ -118,14 +136,14 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
         JsonElement before = (await browser.SendAsync("GET", "/admin/ropa?format=template")).Json();
 
         Assert.Equal(
-            ["data-owner-missing", "organisational-measures-missing", "assessment-links-missing"],
+            ["data-owner-missing", "organizational-measures-missing", "assessment-links-missing"],
             Findings(before).Where(Supplied));
 
         Answer stated = await browser.SendAsync(
             "PUT",
             "/admin/compliance/assessments",
             ("dataOwner", "the head of customer operations"),
-            ("organisationalSecurityMeasures", "annual training and a clear-desk rule"),
+            ("organizationalSecurityMeasures", "annual training and a clear-desk rule"),
             ("assessmentLinks", Assessments));
 
         Assert.Equal(StatusCodes.Status204NoContent, stated.Status);
@@ -135,12 +153,78 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
         Assert.Equal("the head of customer operations", after.GetProperty("dataOwner").GetString());
         Assert.Equal(
             "annual training and a clear-desk rule",
-            after.GetProperty("organisationalSecurityMeasures").GetString());
+            after.GetProperty("organizationalSecurityMeasures").GetString());
         Assert.Equal(
             ["wiki/lia-2026", "wiki/dpia-2026"],
             after.GetProperty("assessmentLinks").EnumerateArray().Select(link => link.GetString()));
 
         Assert.DoesNotContain(Findings(after), Supplied);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3 (D-183): the data owner and the organizational
+    /// security measures are free text, so one given blank or longer than 1024 characters
+    /// after trimming is refused naming it before the service is reached, and the
+    /// statement held is left as it was.
+    /// </summary>
+    /// <param name="member">The member written outside the bound.</param>
+    /// <param name="character">What it is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("dataOwner", ' ', 2)]
+    [InlineData("dataOwner", 'd', 1025)]
+    [InlineData("organizationalSecurityMeasures", ' ', 1)]
+    [InlineData("organizationalSecurityMeasures", 'd', 1025)]
+    public async Task API_CONV_002_AStatementOutsideTheBoundIsRefusedBeforeTheServiceAsync(
+        string member,
+        char character,
+        int length)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string written = new(character, length);
+
+        Answer refused = await browser.SendAsync(
+            "PUT",
+            "/admin/compliance/assessments",
+            ("dataOwner", member == "dataOwner" ? written : "the head of customer operations"),
+            (
+                "organizationalSecurityMeasures",
+                member == "dataOwner" ? "annual training" : written));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.Equal(member, refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Null(_deployment.Compliance.Held.DataOwner);
+    }
+
+    /// <summary>
+    /// API-CONV-002, 09 section 8a (D-183): a statement within the bound is kept
+    /// trimmed, and a member the statement omits is cleared.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AStatementIsKeptTrimmedAndAnOmittedOneIsClearedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer stated = await browser.SendAsync(
+            "PUT",
+            "/admin/compliance/assessments",
+            ("dataOwner", "  the head of customer operations "),
+            ("organizationalSecurityMeasures", " annual training "));
+
+        Assert.Equal(StatusCodes.Status204NoContent, stated.Status);
+        Assert.Equal("the head of customer operations", _deployment.Compliance.Held.DataOwner);
+        Assert.Equal("annual training", _deployment.Compliance.Held.OrganizationalSecurityMeasures);
+
+        Answer narrowed = await browser.SendAsync(
+            "PUT",
+            "/admin/compliance/assessments",
+            ("dataOwner", "the head of customer operations"));
+
+        Assert.Equal(StatusCodes.Status204NoContent, narrowed.Status);
+        Assert.Null(_deployment.Compliance.Held.OrganizationalSecurityMeasures);
     }
 
     /// <summary>
@@ -188,7 +272,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
 
     private static bool Supplied(string finding) =>
         finding is "data-owner-missing"
-            or "organisational-measures-missing"
+            or "organizational-measures-missing"
             or "assessment-links-missing";
 
     private static IEnumerable<string> Named(JsonElement element) =>
@@ -197,6 +281,28 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
     private static IEnumerable<string> Findings(JsonElement register) =>
         register.GetProperty("flags").EnumerateArray()
             .Select(flag => flag.GetProperty("finding").GetString()!);
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the statements, which stay as they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheStatementsAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        string? owner = _deployment.Compliance.Held.DataOwner;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                "/admin/compliance/assessments",
+                ("dataOwner", "the head of customer operations"),
+                ("organizationalSecurityMeasures", "annual training")));
+
+        Assert.Equal(owner, _deployment.Compliance.Held.DataOwner);
+    }
 
     private async Task<Browser> AuthorisedAsync()
     {

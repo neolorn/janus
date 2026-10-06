@@ -9,7 +9,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Registration;
 using Janus.Core;
-using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Registration;
@@ -19,7 +19,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="connections">The operation's connection, for the channel.</param>
-/// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which the row's own key is wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements REG-SESS-001, REG-SESS-002, REG-SESS-003 and OPS-SEC-001. Everything
@@ -29,7 +29,7 @@ namespace Janus.Storage.Authentication.Registration;
 internal sealed class RegistrationSessionStore(
     StoreContext context,
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys,
+    DeploymentDataKeyStore deployment,
     RandomNumberGenerator randomness) : IRegistrationSessionStore
 {
     /// <inheritdoc/>
@@ -41,7 +41,36 @@ internal sealed class RegistrationSessionStore(
             .FindAsync([id], cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null ? null : Read(record);
+        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<RegistrationSession?> FindForUpdateAsync(
+        RegistrationSessionId id,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A registration session's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.RegistrationSessions.Local.Any(record => record.Id == id);
+
+        RegistrationSessionRecord? held = (await context.RegistrationSessions
+                .FromSql($"SELECT * FROM identity.registration_sessions WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : await ReadAsync(held, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -66,6 +95,7 @@ internal sealed class RegistrationSessionStore(
         ArgumentNullException.ThrowIfNull(session);
 
         byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -74,8 +104,7 @@ internal sealed class RegistrationSessionStore(
                 Id = session.Id,
                 ProvisionalSubject = session.Provisional,
                 ExpiresAt = session.ExpiresAt,
-                KeyVersion = keyEncryptionKeys.CurrentVersion,
-                WrappedKey = PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span),
+                WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
                 Session = Written(dataKey, session),
             };
 
@@ -85,6 +114,7 @@ internal sealed class RegistrationSessionStore(
         finally
         {
             CryptographicOperations.ZeroMemory(dataKey);
+            CryptographicOperations.ZeroMemory(deploymentKey);
         }
 
         Relink(session, []);
@@ -100,7 +130,7 @@ internal sealed class RegistrationSessionStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The registration session has no row.");
 
-        byte[] dataKey = DataKey(record);
+        byte[] dataKey = await DataKeyAsync(record, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -160,9 +190,11 @@ internal sealed class RegistrationSessionStore(
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
 
-    private static PersonalFieldLocation Located(SubjectId provisional) =>
+    // PRIV-RIGHT-005a, D-173: the staged values belong to no subject yet, so they are
+    // bound to the session's own row.
+    private static PersonalFieldLocation Located(RegistrationSessionId session) =>
         new(
-            provisional,
+            new SubjectId(session.Value),
             RegistrationSessionConfiguration.Table,
             RegistrationSessionConfiguration.SessionColumn);
 
@@ -174,11 +206,7 @@ internal sealed class RegistrationSessionStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedCredentialDocument Written(StagedCredential staged) =>
@@ -194,7 +222,20 @@ internal sealed class RegistrationSessionStore(
             staged.WebAuthn?.Counter,
             staged.WebAuthn?.BackupEligible ?? false,
             staged.WebAuthn?.BackupState ?? false,
-            staged.ProviderSubject);
+            staged.ProviderSubject,
+            staged.Totp?.ConsumedStep);
+
+    private static StagedCeremonyDocument Written(StagedCeremony staged) =>
+        new(VocabularyConverter<Factor>.Write(staged.Kind), staged.Challenge, staged.ExpiresAt);
+
+    private static StagedGeneratorDocument Written(StagedGenerator staged) =>
+        new(staged.Id.Value, staged.Label.Value, staged.Secret.ToArray());
+
+    private static StagedCeremony Read(StagedCeremonyDocument staged) =>
+        new(VocabularyConverter<Factor>.Read(staged.Kind), staged.Challenge, staged.ExpiresAt);
+
+    private static StagedGenerator Read(StagedGeneratorDocument staged) =>
+        new(new AuthenticatorId(staged.Id), Label(staged.Label), staged.Secret);
 
     private static StagedIdentity Read(StagedIdentityDocument staged) =>
         StagedIdentity.Existing(
@@ -204,11 +245,7 @@ internal sealed class RegistrationSessionStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedCredential Read(StagedCredentialDocument staged) =>
@@ -216,7 +253,7 @@ internal sealed class RegistrationSessionStore(
             new AuthenticatorId(staged.Id),
             VocabularyConverter<Factor>.Read(staged.Factor),
             Label(staged.Label),
-            staged.TotpSecret is null ? null : new TotpMaterial(staged.TotpSecret, ConsumedStep: null),
+            staged.TotpSecret is null ? null : new TotpMaterial(staged.TotpSecret, staged.TotpConsumedStep),
             staged.CredentialId is null
                 ? null
                 : new WebAuthnMaterial(
@@ -255,31 +292,45 @@ internal sealed class RegistrationSessionStore(
             session.RecoveryCodes?.Select(hash => hash.Encoded).ToArray(),
             [.. session.Identifiers.Select(Written)],
             [.. session.Credentials.Select(Written)],
-            session.Invitation?.Value);
+            session.Invitation?.Value,
+            session.Ceremony is null ? null : Written(session.Ceremony),
+            session.Generator is null ? null : Written(session.Generator),
+            session.RecoveryCodesViewedAt);
 
         return PersonalFieldCipher.Encrypt(
             dataKey,
-            Located(session.Provisional),
+            Located(session.Id),
             JsonSerializer.SerializeToUtf8Bytes(document, StagedSession.Default.StagedSessionDocument),
             randomness);
     }
 
-    private byte[] DataKey(RegistrationSessionRecord record) =>
-        PersonalFieldCipher.Unwrap(
-            PersonalDataFormat.Marker,
-            record.KeyVersion,
-            record.WrappedKey,
-            keyEncryptionKeys);
-
-    private RegistrationSession Read(RegistrationSessionRecord record)
+    private async ValueTask<byte[]> DataKeyAsync(
+        RegistrationSessionRecord record,
+        CancellationToken cancellationToken)
     {
-        byte[] dataKey = DataKey(record);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return PersonalFieldCipher.Unwrap(record.WrappedKey, deploymentKey);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
+    }
+
+    private async ValueTask<RegistrationSession> ReadAsync(
+        RegistrationSessionRecord record,
+        CancellationToken cancellationToken)
+    {
+        byte[] dataKey = await DataKeyAsync(record, cancellationToken).ConfigureAwait(false);
         StagedSessionDocument document;
 
         try
         {
             document = JsonSerializer.Deserialize(
-                PersonalFieldCipher.Decrypt(dataKey, Located(record.ProvisionalSubject), record.Session),
+                PersonalFieldCipher.Decrypt(dataKey, Located(record.Id), record.Session),
                 StagedSession.Default.StagedSessionDocument)
                 ?? throw new InvalidOperationException("The staged registration is not a document.");
         }
@@ -310,9 +361,12 @@ internal sealed class RegistrationSessionStore(
             document.PasswordStandsAlone,
             document.PhoneSkipped,
             document.RecoveryCodes?.Select(PasswordHash.Parse).ToArray(),
+            document.RecoveryCodesViewedAt,
             termsVersion: null,
             noticeVersion: null,
-            document.Invitation is Guid invitation ? new InvitationId(invitation) : null);
+            document.Invitation is Guid invitation ? new InvitationId(invitation) : null,
+            document.Ceremony is null ? null : Read(document.Ceremony),
+            document.Generator is null ? null : Read(document.Generator));
 
         return session;
     }

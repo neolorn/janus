@@ -13,14 +13,12 @@ internal sealed partial class AddChallengeIdentifiers : Migration
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
-        // OPS-MIG-005: the previous release opens sign-ins that carry neither, so both
-        // columns are added nullable and absent together.
         migrationBuilder.AddColumn<int>(
             name: "fingerprint_version",
             schema: "identity",
             table: "signin_challenges",
             type: "integer",
-            nullable: true);
+            nullable: false);
 
         migrationBuilder.AddColumn<byte[]>(
             name: "identifier",
@@ -28,13 +26,13 @@ internal sealed partial class AddChallengeIdentifiers : Migration
             table: "signin_challenges",
             type: "bytea",
             maxLength: 32,
-            nullable: true);
+            nullable: false);
 
         migrationBuilder.AddCheckConstraint(
             name: "ck_signin_challenges_identifier",
             schema: "identity",
             table: "signin_challenges",
-            sql: "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
+            sql: "octet_length(identifier) = 32");
 
         // OPS-SEC-003 AC6: the identifier's hash stands behind no value the library
         // holds, so the rotation reads the version it was computed under and forgets

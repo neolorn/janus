@@ -156,10 +156,11 @@ Grants and roles are data, so granting, revoking and adding roles need no deploy
 
 A grant is either **stored** (a row someone wrote) or **derived** (computed from a
 relationship in the host's own data, such as "the assigned representative on an
-account may read that account's records"). Derived grants need no maintenance and
-cannot drift. Both obey identical rules.
+account may read that account's records"). A derivation evaluated at each check needs
+no maintenance and cannot drift; one materialised for cost is stored as grants and
+checked for drift daily (AUTHZ-DERIVE-005). Both obey identical rules.
 
-*Source: D-015, D-016, D-043*
+*Source: D-015, D-016, D-043, D-166*
 
 ### 3.3 Sessions
 
@@ -218,10 +219,11 @@ These are review criteria, not aspirations. Each carries a test.
 resealing of the break-glass credential (D-010), and licence and permit renewal
 (D-041 / R-18).
 
-**Two resolved tensions:** configurability against security, resolved by direction —
-tightening at runtime is free, loosening requires step-up, an audit entry, and for
-the most dangerous settings unreachable from the application entirely (D-010, D-071). Zero-maintenance against
-break-glass, resolved by the exception above.
+**Two resolved tensions:** configurability against security, resolved by direction:
+every runtime change carries a reason and an audit entry, a loosening also requires
+step-up, and the most dangerous settings are unreachable from the application entirely
+(D-010, D-071, D-166). Zero-maintenance against break-glass, resolved by the exception
+above.
 
 ---
 
@@ -321,7 +323,6 @@ Nothing is deferred silently.
 | Message templates editable outside the repository (D-059) | When a non-engineer needs to change a message |
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
-
 | Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
 
 This table carries every row of the decision log's "Deferred, with reactivation
@@ -333,21 +334,21 @@ triggers" table (D-147); a deferral recorded in the log and absent here is a def
 
 | Term | Meaning here |
 |---|---|
-| **AAL** | Authentication Assurance Level, per NIST SP 800-63B-4. AAL1 single factor; AAL2 two factors **or one multi-factor authenticator** — a passkey alone reaches AAL2; AAL3 hardware-bound. Assignments in `02-authentication` AUTH-SESS-005a |
+| **AAL** | Authentication Assurance Level, per NIST SP 800-63B-4. AAL1 single factor; AAL2 two factors **or one multi-factor authenticator** — a passkey alone reaches AAL2; AAL3 hardware-bound, which no combination the library offers reaches. Assignments in `02-authentication` AUTH-SESS-005a |
 | **Administrative organization** | Organization #1. Its members are what would elsewhere be called staff |
 | **Ancestry closure** | Precomputed table of every container above each resource. Makes inheritance a join rather than recursion |
 | **Assurance provider** | Component supplying the assurance level of a session. Required if authorization is used without authentication |
 | **Auth session** | Session held by the authentication app that makes silent SSO between apps possible |
 | **BFF** | Backend for Frontend. Holds the session; the browser holds only an opaque cookie |
 | **Break-glass** | Single-use sealed credential granting a time-boxed system-admin session. Held by the company owner |
-| **Controller / Processor** | PDPL roles. The deploying company is controller; the SMS gateway, the hosting provider, the developer and every processor the host declares are processors |
+| **Controller / Processor** | PDPL roles. The deploying company is controller. The library ships four register rows (`05` section 6): the mail server (where one is integrated or the shipped mail transport is in use), the SMS gateway and the hosting provider as processors, and password screening as a recipient. Every other processor is one the host declares, a developer who administers the deployment for the company among them (D-029, D-165, D-166) |
 | **Data user** | PDPL term covering both controllers and processors |
 | **Governing language** | The one language in which a version of a legal document is authoritative, defaulted from `legal.governinglanguage`; translations attach to the version and never govern (`04-privacy`, D-146) |
 | **Grant** | One row expressing "[somebody] has [a role] on [something]" |
 | **Model builder** | Fluent startup declaration where the host describes its resource types, containment, concealment, sensitivity and processing purposes |
 | **Organization** | A domain entity, not a tenancy boundary |
 | **Registration session** | Opaque server-side record bound to the requesting browser that stages everything registration collects and reserves nothing; the account is created in one transaction at the terms step or not at all (`20-registration-and-account` REG-SESS-001) |
-| **Restriction** | A named sending limit: a key (destination, account, source, global or host-supplied), an optional purpose, and one or more (max, interval) buckets, sliding or fixed. Every send of every kind is checked against every applicable restriction (`02-authentication` AUTH-ABUSE-004) |
+| **Restriction** | A named sending limit: a key (destination, account, source, global or host-supplied), an optional purpose, an optional channel (`sms`, `email` or `any`), and one or more (max, interval) buckets, sliding or fixed. Every send of every kind except an alert is checked against every restriction that applies to it; a security notice to an existing holder answers only to restrictions whose purpose is `notification`, and an alert only to its deduplication (`02-authentication` AUTH-ABUSE-004, D-166) |
 | **RoPA** | Record of Processing Activities. Generated, not maintained by hand |
 | **Security-notice set** | The identifiers that receive security notices and recovery links: the primary of each kind plus whatever the account's backup setting adds (`20-registration-and-account` REG-IDENT-002) |
 | **Sign-in link** | A link sent by email or SMS that signs the person in at AAL1 when pressed in the browser that asked for it; never a second step. Off by default (`loginFactors` `emailLink`, `phoneLink`) |

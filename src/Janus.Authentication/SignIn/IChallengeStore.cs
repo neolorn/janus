@@ -23,6 +23,17 @@ internal interface IChallengeStore
     ValueTask<Challenge?> FindAsync(byte[] fingerprint, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The challenge a handle answers to, read under a lock on its row held until the
+    /// operation's transaction ends, so a second completion of it waits for the first
+    /// and finds it gone (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="fingerprint">What the handle hashes to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The challenge as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Challenge?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a new challenge.
     /// </summary>
     /// <param name="challenge">The challenge.</param>

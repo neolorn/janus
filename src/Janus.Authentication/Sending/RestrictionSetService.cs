@@ -47,13 +47,11 @@ internal sealed class RestrictionSetService(
     /// <inheritdoc/>
     public async ValueTask<Result<Restriction>> ReadAsync(
         AccessContext context,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(name);
-
         return (await AllAsync(context, cancellationToken).ConfigureAwait(false)).Match(
-            declared => Named(declared, name) is Restriction restriction
+            declared => Named(declared, name.ToString()) is Restriction restriction
                 ? Result.Success(restriction)
                 : Result.Failure<Restriction>(Unnamed()),
             Result.Failure<Restriction>);
@@ -88,12 +86,12 @@ internal sealed class RestrictionSetService(
                 context,
                 session,
                 StepUpAction.RestrictionEdit,
-                (challenge, actor) => administration.EditAsync(
+                challenge => administration.EditAsync(
                     replacement.Name,
                     replacement,
                     reason,
                     challenge,
-                    actor,
+                    context,
                     cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -103,12 +101,10 @@ internal sealed class RestrictionSetService(
     public async ValueTask<Result> DeleteAsync(
         AccessContext context,
         SessionId session,
-        string name,
+        RestrictionName name,
         string? reason,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(name);
-
         Error? failure = null;
 
         IReadOnlyList<Restriction> declared = (await AllAsync(context, cancellationToken).ConfigureAwait(false))
@@ -121,7 +117,7 @@ internal sealed class RestrictionSetService(
 
         // Deleting what is not there changes nothing, and a change of nothing is not
         // one to announce or to write down.
-        if (Named(declared, name) is null)
+        if (Named(declared, name.ToString()) is null)
         {
             return Result.Failure(Unnamed());
         }
@@ -130,12 +126,12 @@ internal sealed class RestrictionSetService(
                 context,
                 session,
                 StepUpAction.RestrictionEdit,
-                (challenge, actor) => administration.EditAsync(
-                    name,
+                challenge => administration.EditAsync(
+                    name.ToString(),
                     replacement: null,
                     reason,
                     challenge,
-                    actor,
+                    context,
                     cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -145,14 +141,13 @@ internal sealed class RestrictionSetService(
     public async ValueTask<Result> GrantAsync(
         AccessContext context,
         SessionId session,
-        string name,
+        RestrictionName name,
         string keyValue,
         int credit,
         string? reason,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(keyValue);
 
         if (await scope.RefusedAsync(context, Permissions.RestrictionGrant, cancellationToken)
@@ -165,13 +160,13 @@ internal sealed class RestrictionSetService(
                 context,
                 session,
                 StepUpAction.RestrictionGrant,
-                (challenge, actor) => administration.GrantAsync(
-                    name,
+                challenge => administration.GrantAsync(
+                    name.ToString(),
                     keyValue,
                     credit,
                     reason,
                     challenge,
-                    actor,
+                    context,
                     cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -180,8 +175,9 @@ internal sealed class RestrictionSetService(
     private static Restriction? Named(IReadOnlyList<Restriction> declared, string name) =>
         declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal));
 
-    private static Error Unnamed() =>
-        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("name"));
+    // X5, D-166: a path naming a restriction the set does not hold names no record, and
+    // under /admin nothing is concealed.
+    private static Error Unnamed() => Error.From(ErrorCodes.RestrictionNotFound);
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
@@ -196,7 +192,7 @@ internal sealed class RestrictionSetService(
         AccessContext context,
         SessionId session,
         StepUpAction action,
-        Func<StepUpChallenge, SubjectId, ValueTask<Result>> operation,
+        Func<StepUpChallenge, ValueTask<Result>> operation,
         CancellationToken cancellationToken)
     {
         if (context.Acting is not SubjectId actor)
@@ -216,6 +212,6 @@ internal sealed class RestrictionSetService(
             return Result.Failure(failure);
         }
 
-        return await operation(challenge, actor).ConfigureAwait(false);
+        return await operation(challenge).ConfigureAwait(false);
     }
 }

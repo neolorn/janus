@@ -21,6 +21,11 @@ namespace Janus.Storage.Authentication.Registration;
 /// The provider's own identifier for the person, where it is a social provider's
 /// identity.
 /// </param>
+/// <param name="TotpConsumedStep">
+/// The time step the confirming code was accepted for, where it is a code generator a
+/// code confirmed, so that code is refused again once the account holds it
+/// (AUTH-FACT-005).
+/// </param>
 /// <remarks>Implements REG-SESS-006, REG-IDENT-008, AUTH-FACT-001 and AUTH-FACT-006.</remarks>
 internal sealed record StagedCredentialDocument(
     Guid Id,
@@ -34,4 +39,5 @@ internal sealed record StagedCredentialDocument(
     uint? Counter,
     bool BackupEligible,
     bool BackupState,
-    string? ProviderSubject);
+    string? ProviderSubject,
+    long? TotpConsumedStep = null);

@@ -46,21 +46,94 @@ internal static class RegistrationEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/register");
 
-        _ = group.MapPost("/", BeginAsync);
-        _ = group.MapGet("/", StateAsync);
-        _ = group.MapPut("/age", AgeAsync);
-        _ = group.MapPut("/email", EmailAsync);
-        _ = group.MapPut("/phone", PhoneAsync);
-        _ = group.MapPost("/phone/skip", SkipPhoneAsync);
-        _ = group.MapPost("/identifiers", AddAsync);
-        _ = group.MapPut("/identifiers/{id:guid}", ChangeAsync);
-        _ = group.MapDelete("/identifiers/{id:guid}", DiscardAsync);
-        _ = group.MapPost("/confirm", ConfirmAsync);
-        _ = group.MapPut("/security", SecurityAsync);
-        _ = group.MapPost("/terms", TermsAsync);
-        _ = group.MapPost("/verify/{id:guid}", VerifyAsync);
-        _ = group.MapGet("/events", EventsAsync);
-        _ = group.MapPost("/abandon", AbandonAsync);
+        _ = group.MapPost("/", BeginAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.ChallengeRequired, ErrorCodes.RegistrationSignedIn,
+                    ErrorCodes.InvitationExpired, ErrorCodes.InvitationIdentifierMismatch,
+                    ErrorCodes.Throttled))
+            .Produces<RegistrationStateView>(StatusCodes.Status201Created);
+        _ = group.MapGet("/", StateAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPut("/age", AgeAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.ProfileUnderage))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPut("/email", EmailAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
+        _ = group.MapPut("/phone", PhoneAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/phone/skip", SkipPhoneAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPost("/identifiers", AddAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
+        _ = group.MapPut("/identifiers/{id}", ChangeAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierLocked, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                .Binding<IdentifierId>("id"))
+            .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
+        _ = group.MapDelete("/identifiers/{id}", DiscardAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierLastOfKind)
+                .Binding<IdentifierId>("id"))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPost("/confirm", ConfirmAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPut("/security", SecurityAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.SessionExpired,
+                    ErrorCodes.RegistrationIncomplete, ErrorCodes.PasswordBlocklisted,
+                    ErrorCodes.PasswordTooShort, ErrorCodes.PasswordTooLong))
+            .Produces<RegistrationStateView>();
+        _ = group.MapPost("/terms", TermsAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.AffirmationRequired,
+                    ErrorCodes.PurposeNoConsent))
+            .Produces(StatusCodes.Status201Created);
+        _ = group.MapPost("/verify/{id}", VerifyAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                .Binding<IdentifierId>("id"))
+            .Produces<LinkLandingView>()
+            .Produces(StatusCodes.Status204NoContent);
+        _ = group.MapGet("/events", EventsAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound))
+            .Produces<string>(StatusCodes.Status200OK, "text/event-stream");
+        _ = group.MapPost("/abandon", AbandonAsync)
+            .Declares(EndpointDeclaration.Answering())
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -103,8 +176,10 @@ internal static class RegistrationEndpoints
                     browser.Context,
                     request.ClientId ?? string.Empty,
                     RequestOrigin.Language(context.Request),
+                    RequestOrigin.Address(context.Request),
                     RequestOrigin.Source(context.Request),
                     request.InvitationToken,
+                    request.ChallengeToken,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(begun => begun, error => Withheld<RegistrationSessionId>(error, ref failure));
@@ -179,15 +254,17 @@ internal static class RegistrationEndpoints
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken) =>
-        StageAsync(request, IdentifierKind.Email, registration, browser, cancellationToken);
+        StageAsync(request, IdentifierKind.Email, registration, browser, context, cancellationToken);
 
     private static Task<IResult> PhoneAsync(
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken) =>
-        StageAsync(request, IdentifierKind.Phone, registration, browser, cancellationToken);
+        StageAsync(request, IdentifierKind.Phone, registration, browser, context, cancellationToken);
 
     private static async Task<IResult> SkipPhoneAsync(
         IRegistration registration,
@@ -207,6 +284,7 @@ internal static class RegistrationEndpoints
         AddIdentifierRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -221,16 +299,17 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .AddAsync(session, request.Kind, value, cancellationToken)
+                    .AddAsync(session, request.Kind, value, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }
 
     private static async Task<IResult> ChangeAsync(
-        Guid id,
+        IdentifierId id,
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -245,13 +324,13 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .ChangeAsync(session, new IdentifierId(id), value, cancellationToken)
+                    .ChangeAsync(session, id, value, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }
 
     private static async Task<IResult> DiscardAsync(
-        Guid id,
+        IdentifierId id,
         IRegistration registration,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -262,7 +341,7 @@ internal static class RegistrationEndpoints
             ? Gone()
             : Answers.Of(
                 await registration
-                    .DiscardAsync(session, new IdentifierId(id), cancellationToken)
+                    .DiscardAsync(session, id, cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status200OK));
     }
@@ -351,6 +430,7 @@ internal static class RegistrationEndpoints
                     notice,
                     request.Consents ?? NoConsents,
                     origin.Device,
+                    origin.Address,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(outcome => outcome, error => Withheld<RegistrationOutcome>(error, ref failure));
@@ -390,10 +470,11 @@ internal static class RegistrationEndpoints
     }
 
     private static async Task<IResult> VerifyAsync(
-        Guid id,
+        IdentifierId id,
         VerifyRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -405,7 +486,12 @@ internal static class RegistrationEndpoints
         {
             return Answers.Of(
                 await registration
-                    .LandAsync(Carried(browser), token, request.Press, cancellationToken)
+                    .LandAsync(
+                        Carried(browser),
+                        token,
+                        request.Press,
+                        RequestOrigin.Source(context.Request),
+                        cancellationToken)
                     .ConfigureAwait(false),
                 Landed);
         }
@@ -419,7 +505,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("code")
             : Answers.Of(
                 await registration
-                    .VerifyAsync(session, new IdentifierId(id), code, cancellationToken)
+                    .VerifyAsync(session, id, code, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 _ => Nothing);
     }
@@ -464,6 +550,7 @@ internal static class RegistrationEndpoints
         IdentifierKind kind,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -479,7 +566,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .StageAsync(session, kind, value, cancellationToken)
+                    .StageAsync(session, kind, value, RequestOrigin.Source(context.Request), cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }

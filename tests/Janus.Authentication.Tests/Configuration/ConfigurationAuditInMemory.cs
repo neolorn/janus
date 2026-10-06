@@ -23,7 +23,7 @@ internal sealed class ConfigurationAuditInMemory : IConfigurationAudit
     /// <summary>
     /// Every value a system principal set, in the order it was set.
     /// </summary>
-    public List<(ConfigurationKey Key, string? Before, string After, SystemPrincipal Principal)> Principals { get; } = [];
+    public List<ConfigurationChange> Principals { get; } = [];
 
     /// <inheritdoc/>
     public ValueTask ChangedAsync(ConfigurationChange change, CancellationToken cancellationToken)
@@ -44,7 +44,7 @@ internal sealed class ConfigurationAuditInMemory : IConfigurationAudit
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Principals.Add((key, before, after, principal));
+        Principals.Add(new ConfigurationChange(key, before, after, loosening, reason, default, null, at, principal.Name));
 
         return ValueTask.CompletedTask;
     }
@@ -62,4 +62,11 @@ internal sealed class ConfigurationAuditInMemory : IConfigurationAudit
         CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<ConfigurationChange>>(
             [.. Written.Where(change => change.Actor == actor).Reverse()]);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<ConfigurationChange>> OfPrincipalAsync(
+        string principal,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<ConfigurationChange>>(
+            [.. Principals.Where(change => string.Equals(change.Principal, principal, StringComparison.Ordinal)).Reverse()]);
 }

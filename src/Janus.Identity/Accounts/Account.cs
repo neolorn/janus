@@ -28,17 +28,23 @@ internal sealed class Account
         DateTimeOffset createdAt,
         AccountState state,
         SuspensionOrigin? suspendedBy,
+        SuspensionOrigin? suspensionHeld,
         bool restrictionHeld,
         DeletionOrigin? deletingBy,
-        DateTimeOffset? deletingSince)
+        DateTimeOffset? deletingSince,
+        DeletionOrigin? deletionHeld,
+        DateTimeOffset? deletionHeldSince)
     {
         Subject = subject;
         CreatedAt = createdAt;
         State = state;
         SuspendedBy = suspendedBy;
+        SuspensionHeld = suspensionHeld;
         RestrictionHeld = restrictionHeld;
         DeletingBy = deletingBy;
         DeletingSince = deletingSince;
+        DeletionHeld = deletionHeld;
+        DeletionHeldSince = deletionHeldSince;
     }
 
     /// <summary>
@@ -63,6 +69,13 @@ internal sealed class Account
     public SuspensionOrigin? SuspendedBy { get; private set; }
 
     /// <summary>
+    /// The suspension the account was in, with its origin, when a takedown or a
+    /// fulfilled out-of-band erasure request began its deletion, so that the way back
+    /// returns it suspended by the same hand (chapter 10 section 5.12b).
+    /// </summary>
+    public SuspensionOrigin? SuspensionHeld { get; private set; }
+
+    /// <summary>
     /// Whether a restriction of processing is held while the account is away from the
     /// restricted state, so that it is in force again when the account returns
     /// (PRIV-RIGHT-004).
@@ -79,6 +92,18 @@ internal sealed class Account
     /// When the grace window began, where it is running.
     /// </summary>
     public DateTimeOffset? DeletingSince { get; private set; }
+
+    /// <summary>
+    /// The origin of the deletion a takedown found running, which its reversal returns
+    /// the account to (chapter 10 section 5.12b).
+    /// </summary>
+    public DeletionOrigin? DeletionHeld { get; private set; }
+
+    /// <summary>
+    /// When the deletion a takedown found running began, which its reversal returns the
+    /// account to with the window it had left.
+    /// </summary>
+    public DateTimeOffset? DeletionHeldSince { get; private set; }
 
     /// <summary>
     /// What the registration that created it recorded, and nothing for an account no
@@ -127,11 +152,14 @@ internal sealed class Account
     /// <param name="createdAt">The instant it was created.</param>
     /// <param name="state">The state it is in.</param>
     /// <param name="suspendedBy">Who suspended it, where it is suspended.</param>
+    /// <param name="suspensionHeld">The suspension its deletion holds, with its origin.</param>
     /// <param name="restrictionHeld">
     /// Whether a restriction is held while it is away from the restricted state.
     /// </param>
     /// <param name="deletingBy">Why its grace window began, where one is running.</param>
     /// <param name="deletingSince">When that window began.</param>
+    /// <param name="deletionHeld">The origin of the deletion its takedown holds.</param>
+    /// <param name="deletionHeldSince">When that held deletion began.</param>
     /// <param name="registration">What the registration recorded.</param>
     /// <param name="isEmergency">Whether it is the reserved emergency account.</param>
     /// <returns>The account.</returns>
@@ -140,12 +168,25 @@ internal sealed class Account
         DateTimeOffset createdAt,
         AccountState state,
         SuspensionOrigin? suspendedBy,
+        SuspensionOrigin? suspensionHeld,
         bool restrictionHeld,
         DeletionOrigin? deletingBy,
         DateTimeOffset? deletingSince,
+        DeletionOrigin? deletionHeld,
+        DateTimeOffset? deletionHeldSince,
         AccountRegistration? registration,
         bool isEmergency) =>
-        new(subject, createdAt, state, suspendedBy, restrictionHeld, deletingBy, deletingSince)
+        new(
+            subject,
+            createdAt,
+            state,
+            suspendedBy,
+            suspensionHeld,
+            restrictionHeld,
+            deletingBy,
+            deletingSince,
+            deletionHeld,
+            deletionHeldSince)
         {
             Registration = registration,
             IsEmergency = isEmergency,
@@ -236,7 +277,9 @@ internal sealed class Account
 
     /// <summary>
     /// Starts the deletion grace window. A restricted account may start it too, because
-    /// exercising a data subject right is what restriction leaves available.
+    /// exercising a data subject right is what restriction leaves available; a suspended
+    /// one starts it only on a request that arrived out of band, holding the suspension
+    /// with its origin as a takedown holds it.
     /// </summary>
     /// <param name="by">Whether the subject asked or a request arrived out of band.</param>
     /// <param name="at">The instant the window began.</param>
@@ -244,8 +287,12 @@ internal sealed class Account
     /// The origin is the takedown's, which enters the window through its own operation.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The account is neither active nor restricted.
+    /// The account is neither active nor restricted, nor suspended for a request that
+    /// arrived out of band.
     /// </exception>
+    /// <remarks>
+    /// Implements IDN-LIFE-003: a cancellation returns a held suspension as it stood.
+    /// </remarks>
     public void RequestDeletion(DeletionOrigin by, DateTimeOffset at)
     {
         if (by is DeletionOrigin.Takedown)
@@ -256,24 +303,54 @@ internal sealed class Account
                 "A takedown enters the window through its own operation.");
         }
 
-        Require(AccountState.Active, AccountState.Restricted);
+        if (by is DeletionOrigin.OutOfBandRequest && State is AccountState.Suspended)
+        {
+            SuspensionHeld = SuspendedBy;
+        }
+        else
+        {
+            Require(AccountState.Active, AccountState.Restricted);
 
-        RestrictionHeld = State is AccountState.Restricted;
+            RestrictionHeld = State is AccountState.Restricted;
+        }
+
         EnterDeletion(by, at);
     }
 
     /// <summary>
     /// Triggers a takedown: the account passes through suspension into the grace window
-    /// in one transaction, and the only way back is the reversal.
+    /// in one transaction, holding the state it was in, and the only way back is the
+    /// reversal.
     /// </summary>
     /// <param name="at">The instant the takedown was triggered.</param>
     /// <exception cref="InvalidOperationException">
-    /// The account is already deleting or deleted.
+    /// The account is already taken down, or deleted.
     /// </exception>
+    /// <remarks>
+    /// Implements IDN-LIFE-003: a suspension is held with its origin and a running
+    /// deletion with its origin and start, so the reversal restores each as it stood.
+    /// </remarks>
     public void Takedown(DateTimeOffset at)
     {
         Unreserved();
-        Require(AccountState.Active, AccountState.Restricted, AccountState.Suspended);
+        Require(AccountState.Active, AccountState.Restricted, AccountState.Suspended, AccountState.Deleting);
+
+        switch (State)
+        {
+            case AccountState.Deleting when DeletingBy is DeletionOrigin.Takedown:
+                throw new InvalidOperationException("The account is already taken down.");
+            case AccountState.Deleting:
+                DeletionHeld = DeletingBy;
+                DeletionHeldSince = DeletingSince;
+
+                break;
+            case AccountState.Suspended:
+                SuspensionHeld = SuspendedBy;
+
+                break;
+            default:
+                break;
+        }
 
         RestrictionHeld = RestrictionHeld || State is AccountState.Restricted;
         State = AccountState.Suspended;
@@ -302,12 +379,20 @@ internal sealed class Account
 
     /// <summary>
     /// Reverses a takedown inside its window, for the case where an adult was
-    /// misjudged. What the host did on its <c>TakedownExecuted</c> is not undone; a
-    /// restriction held comes back.
+    /// misjudged. What the host did on its <c>TakedownExecuted</c> is not undone. The
+    /// account returns to the deletion it was in, with its origin and start; else to
+    /// the suspension it was in, with its origin; else restricted where a restriction is
+    /// held; else active.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The account is not deleting, or its window was not entered by a takedown.
     /// </exception>
+    /// <remarks>
+    /// Implements IDN-LIFE-003 and IDN-LIFE-013: a suspension an administrator made is
+    /// still lifted only under <c>account:manage</c>, and a deactivation only by its
+    /// owner. What the restored state itself holds, a restriction or a suspension, stays
+    /// held by it.
+    /// </remarks>
     public void ReverseTakedown()
     {
         Require(AccountState.Deleting);
@@ -315,6 +400,17 @@ internal sealed class Account
         if (DeletingBy is not DeletionOrigin.Takedown)
         {
             throw new InvalidOperationException("Only a takedown is reversed.");
+        }
+
+        if (DeletionHeld is DeletionOrigin by && DeletionHeldSince is DateTimeOffset since)
+        {
+            SuspendedBy = null;
+            DeletingBy = by;
+            DeletingSince = since;
+            DeletionHeld = null;
+            DeletionHeldSince = null;
+
+            return;
         }
 
         LeaveDeletion();
@@ -330,7 +426,10 @@ internal sealed class Account
         Require(AccountState.Deleting);
 
         State = AccountState.Deleted;
+        SuspensionHeld = null;
         RestrictionHeld = false;
+        DeletionHeld = null;
+        DeletionHeldSince = null;
     }
 
     /// <summary>
@@ -376,13 +475,25 @@ internal sealed class Account
         DeletingSince = at;
     }
 
+    // Chapter 10 section 5.12b: a held suspension comes back with its origin, keeping
+    // any restriction it holds; otherwise a held restriction comes back as restricted.
     private void LeaveDeletion()
     {
-        State = RestrictionHeld ? AccountState.Restricted : AccountState.Active;
-        RestrictionHeld = false;
+        if (SuspensionHeld is SuspensionOrigin held)
+        {
+            State = AccountState.Suspended;
+            SuspendedBy = held;
+        }
+        else
+        {
+            State = RestrictionHeld ? AccountState.Restricted : AccountState.Active;
+            RestrictionHeld = false;
+            SuspendedBy = null;
+        }
+
+        SuspensionHeld = null;
         DeletingBy = null;
         DeletingSince = null;
-        SuspendedBy = null;
     }
 
     // OPS-BOOT-002: the break-glass session's account is the one way in the emergency

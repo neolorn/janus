@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
+using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Identifiers;
@@ -13,6 +16,9 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests;
@@ -30,6 +36,11 @@ namespace Janus.Storage.Tests;
 [Trait("kind", "integration")]
 public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
 {
+    private const string KeyedByItsIdentifier = "20261004125537_ClaimAnOutboxRowBeforeItIsDelivered";
+
+    private const string KeyEachIdentifierRemovalByItsOwnIdentifier =
+        "20261004230636_KeyEachIdentifierRemovalByItsOwnIdentifier";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly FingerprintKeys Elsewhere =
@@ -145,8 +156,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext reading = database.Context();
         var elsewhere = new IdentifierStore(
             reading,
-            _deployment.Keys,
-            Elsewhere,
+            new KeyRingInMemory(_deployment.Keys, Elsewhere),
             _deployment.Randomness);
 
         Assert.Null(await elsewhere.FindOwnerAsync(
@@ -220,6 +230,132 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-IDENT-006: a removal of a value replaces a removal row of the same kind and
+    /// value whose window has run out and that the sweep has not yet taken, so the
+    /// second removal never meets the unique constraint on the value: the value is
+    /// then reserved to the account that removed it last, and the lapsed row's undo
+    /// link answers to no removal.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalReplacesALapsedRemovalOfTheSameValueAsync()
+    {
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+        string given = Fresh("Hana");
+        byte[] lapsed = RandomNumberGenerator.GetBytes(32);
+        byte[] standing = RandomNumberGenerator.GetBytes(32);
+        DateTimeOffset lapses = Noon.AddHours(72);
+
+        await GivenUpAsync(first, given, Noon.AddHours(2), lapses, lapsed);
+        await GivenUpAsync(second, given, lapses, lapses.AddHours(72), standing);
+
+        await using StoreContext reading = database.Context();
+        IdentifierStore held = Store(reading);
+
+        Assert.Null(await held.FindRemovalAsync(lapsed, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            second,
+            (await held.FindRemovalAsync(standing, TestContext.Current.CancellationToken))?.Subject);
+        Assert.Equal(
+            second,
+            await held.FindReservedToAsync(
+                IdentifierKind.Email,
+                Canonicalised(given),
+                lapses.AddHours(1),
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006: only the lapsed row of the value removed goes with a removal; a
+    /// lapsed row of another value is left to the sweep.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalLeavesALapsedRemovalOfAnotherValueToTheSweepAsync()
+    {
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+        byte[] lapsed = RandomNumberGenerator.GetBytes(32);
+        DateTimeOffset lapses = Noon.AddHours(72);
+
+        await GivenUpAsync(first, Fresh("Hana"), Noon.AddHours(2), lapses, lapsed);
+        await GivenUpAsync(second, Fresh("Laila"), lapses, lapses.AddHours(72), RandomNumberGenerator.GetBytes(32));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            first,
+            (await Store(reading).FindRemovalAsync(lapsed, TestContext.Current.CancellationToken))?.Subject);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC10: a removal row written while the table was keyed on the
+    /// identifier keeps that identifier as the one it came from and takes an identifier
+    /// of its own, a version 7 value made from the instant the row carries, and a
+    /// second removal of the same identifier is then a row beside it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC10_ARowWrittenBeforeTheKeyKeepsItsIdentifierUnderOneOfItsOwnAsync()
+    {
+        const string insert =
+            """
+            INSERT INTO identity.identifier_removals
+                (identifier_id, subject, kind, fingerprint, fingerprint_version, enc_entered, enc_canonical,
+                 is_locked, added_at, verified_at, removed_at, expires_at, undo_fingerprint)
+            VALUES
+                (@identifier, @subject, 'email', @fingerprint, 1, @value, @value,
+                 FALSE, @at, @at, @at, @lapses, @undo);
+            """;
+        string moved = await database.CreateDatabaseAsync("removal_key");
+        SubjectId subject = Subjects.New();
+        var identifier = Guid.CreateVersion7(Noon);
+        await MigrateAsync(moved, KeyedByItsIdentifier);
+
+        await using (StoreContext writing = DatabaseFixture.Context(moved))
+        {
+            await new AccountStore(writing)
+                .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(insert, Row(identifier, subject, Noon.AddHours(2)));
+        await MigrateAsync(moved, KeyEachIdentifierRemovalByItsOwnIdentifier);
+        await connection.ReloadTypesAsync(TestContext.Current.CancellationToken);
+        (Guid Removal, Guid Origin) carried = await connection.QuerySingleAsync<(Guid, Guid)>(
+            "SELECT removal_id, identifier_id FROM identity.identifier_removals;");
+        await connection.ExecuteAsync(
+            insert.Replace("(identifier_id,", "(removal_id, identifier_id,", StringComparison.Ordinal)
+                .Replace("(@identifier,", "(@removal, @identifier,", StringComparison.Ordinal),
+            new
+            {
+                removal = Guid.CreateVersion7(Noon.AddHours(3)),
+                identifier,
+                subject = subject.Value,
+                fingerprint = RandomNumberGenerator.GetBytes(32),
+                value = RandomNumberGenerator.GetBytes(48),
+                at = Noon.AddHours(3),
+                lapses = Noon.AddHours(75),
+                undo = RandomNumberGenerator.GetBytes(32),
+            });
+
+        Assert.Equal(identifier, carried.Origin);
+        Assert.NotEqual(identifier, carried.Removal);
+        Assert.Equal(7, carried.Removal.Version);
+        Assert.Equal(
+            Noon.AddHours(2).ToUnixTimeMilliseconds().ToString("x12", CultureInfo.InvariantCulture),
+            carried.Removal.ToString("N", CultureInfo.InvariantCulture)[..12]);
+        Assert.Equal(
+            2,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*)::int FROM identity.identifier_removals WHERE identifier_id = @identifier;",
+                new { identifier }));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC12: reading an account's identifiers takes the subject's data
     /// key out once, however many encrypted columns the read decrypts.
     /// </summary>
@@ -236,8 +372,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext reading = database.Context();
         var store = new IdentifierStore(
             reading,
-            new KeyEncryptionKeys(1, counting),
-            Deployment.FingerprintKeys,
+            new KeyRingInMemory(new KeyEncryptionKeys(1, counting), Deployment.FingerprintKeys),
             _deployment.Randomness);
 
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
@@ -672,11 +807,117 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
             await Store(context).RecordAsync(set, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REG-IDENT-005, CONV-DESIGN-003 AC6: two promotions at once, each of another
+    /// address, read the set under its lock, so the second moves the role from the first
+    /// and the kind keeps one primary.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_005_TwoPromotionsAtOnceLeaveOnePrimaryAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId first = await WriteAsync(subject, _entered);
+        IdentifierId second = await WriteAsync(subject, Fresh("Second"));
+        IdentifierId third = await WriteAsync(subject, Fresh("Third"));
+
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(first, Noon);
+            set.Verify(second, Noon);
+            set.Verify(third, Noon);
+            set.MakePrimary(first);
+        });
+
+        await Task.WhenAll(PromotedAsync(subject, second), PromotedAsync(subject, third));
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.Single(read.All, identifier => identifier.IsPrimary);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
+    // Each promotion is its own request, reading the set before its transaction as the
+    // identifier service does and again under the set's lock.
+    private async Task PromotedAsync(SubjectId subject, IdentifierId promoted)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        IdentifierStore store = Store(context);
+
+        _ = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        await store.HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        set.MakePrimary(promoted);
+
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
+
+    // An account that holds a primary email takes a second one on, verified, and gives
+    // it up inside one unit of work, under the value's lock as a removal takes it.
+    private async Task GivenUpAsync(
+        SubjectId subject,
+        string entered,
+        DateTimeOffset at,
+        DateTimeOffset lapses,
+        byte[] undo)
+    {
+        IdentifierId primary = await WriteAsync(subject, Fresh("Primary"));
+        IdentifierId given = await WriteAsync(subject, entered);
+
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        IdentifierStore store = Store(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        await store.HoldAsync(subject, TestContext.Current.CancellationToken);
+        await store.LockValuesAsync(
+            [(IdentifierKind.Email, Canonicalised(entered))],
+            TestContext.Current.CancellationToken);
+
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        set.Verify(primary, Noon);
+        set.Verify(given, Noon);
+
+        await store.RecordRemovalAsync(
+            IdentifierRemoval.Of(set.Remove(given), at, lapses, undo),
+            TestContext.Current.CancellationToken);
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
+
     private IdentifierStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
+
+    private static async Task MigrateAsync(string connectionString, string target)
+    {
+        await using StoreContext context = DatabaseFixture.Context(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync(target, TestContext.Current.CancellationToken);
+    }
+
+    // A removal row as the table carried it while it was keyed on the identifier. The
+    // ciphertext is never read, so it is drawn and not encrypted.
+    private static object Row(Guid identifier, SubjectId subject, DateTimeOffset at) =>
+        new
+        {
+            identifier,
+            subject = subject.Value,
+            fingerprint = RandomNumberGenerator.GetBytes(32),
+            value = RandomNumberGenerator.GetBytes(48),
+            at,
+            lapses = at.AddHours(72),
+            undo = RandomNumberGenerator.GetBytes(32),
+        };
 
     // A verified primary personal email displaced by a corporate address, as an
     // acknowledgement into an organization whose mail is integrated leaves it.
@@ -709,7 +950,10 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private IdentifierDirectory Directory(StoreContext context) =>
-        new(Store(context), new PreferenceStore(context, _deployment.Keys, _deployment.Randomness));
+        new(
+            Store(context),
+            new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
+            new PendingVerificationStore(context, _deployment.Ring, _deployment.Randomness));
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";
@@ -756,7 +1000,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext context = database.Context();
 
         SubjectKeyRecord key = await context.SubjectKeys
-            .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(held => held.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         key.FormatMarker = PersonalDataFormat.ErasedMarker;
         key.WrappedKey = new byte[PersonalDataFormat.DataKeyLength];

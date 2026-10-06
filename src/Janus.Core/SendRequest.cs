@@ -1,28 +1,29 @@
 using System.Collections.Generic;
+
 namespace Janus.Core;
 
 /// <summary>
-/// One message the library needs delivered, before any restriction has looked at it.
+/// One message the library has admitted and written to its outbox, as the handler that
+/// carries it receives it.
 /// </summary>
 /// <param name="Destination">Where it goes.</param>
 /// <param name="Message">What it is for.</param>
-/// <param name="Purpose">Which restrictions it answers to.</param>
-/// <param name="Source">The address the send was asked for from.</param>
 /// <param name="Language">
-/// The recipient's language, resolved before the send, or nothing where no language
-/// of theirs is known, in which case the message goes out in every language the
-/// deployment declares.
+/// The language it goes out in, or nothing for a mail owed in every language the
+/// deployment declares, which is one message composed from each language's text. A text
+/// message always names its language.
 /// </param>
+/// <param name="Reference">The correlation reference it is carried under.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, INT-SMS-001, IDN-ATTR-001 and CONV-CONTENT-001. The
-/// library states which message in which language; the words are the deployment's.
+/// Implements LIB-EXT-001, AUTH-ABUSE-004, INT-SMS-001, IDN-ATTR-001 and
+/// CONV-CONTENT-001. It carries none of the restrictions' inputs: the handler decides no
+/// restriction and counts nothing.
 /// </remarks>
 public sealed record SendRequest(
     SendDestination Destination,
     MessageKind Message,
-    RestrictionPurpose Purpose,
-    string Source,
-    string? Language)
+    string? Language,
+    SendReference Reference)
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =
         new Dictionary<string, string>(capacity: 0);
@@ -41,15 +42,4 @@ public sealed record SendRequest(
     /// The channel the message goes out on.
     /// </summary>
     public SendKind Kind => Destination.Kind;
-
-    /// <summary>
-    /// Whether this is an alert to an operator destination, which continues below the
-    /// gateway floor when ordinary sends stop (OPS-ALERT-003).
-    /// </summary>
-    public bool IsAlert => Message is MessageKind.Alert;
-
-    /// <summary>
-    /// What a host-registered key supplier is told about the send.
-    /// </summary>
-    public SendContext Context => new(Purpose, Kind, Subject, Source);
 }

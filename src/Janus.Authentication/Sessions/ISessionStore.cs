@@ -89,6 +89,19 @@ internal interface ISessionStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Downgrades every session of an account that has not ended, in the transaction
+    /// that tightens the policy in force for it (AUTH-SESS-009).
+    /// </summary>
+    /// <param name="subject">Whose sessions.</param>
+    /// <param name="at">The instant of the downgrade.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many sessions were downgraded.</returns>
+    ValueTask<int> DowngradeAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Ends every session standing on one record.
     /// </summary>
     /// <param name="spine">The record.</param>

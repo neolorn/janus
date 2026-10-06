@@ -14,6 +14,7 @@ internal sealed class RangeApiInMemory : HttpMessageHandler
 {
     private readonly Dictionary<string, string> _ranges = new(StringComparer.Ordinal);
     private readonly List<Uri> _asked = [];
+    private readonly List<string> _agents = [];
 
     /// <summary>
     /// Whether the service is reachable at all.
@@ -24,6 +25,11 @@ internal sealed class RangeApiInMemory : HttpMessageHandler
     /// Every address the corpus asked, in order.
     /// </summary>
     public IReadOnlyList<Uri> Asked => _asked;
+
+    /// <summary>
+    /// The user agent each request named, in order.
+    /// </summary>
+    public IReadOnlyList<string> Agents => _agents;
 
     /// <summary>
     /// Names what the service answers under one prefix.
@@ -48,6 +54,7 @@ internal sealed class RangeApiInMemory : HttpMessageHandler
             ?? throw new InvalidOperationException("The request names no address.");
 
         _asked.Add(address);
+        _agents.Add(request.Headers.UserAgent.ToString());
 
         string prefix = address.Segments[^1];
 

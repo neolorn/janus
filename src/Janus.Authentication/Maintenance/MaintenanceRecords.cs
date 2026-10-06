@@ -64,15 +64,36 @@ internal sealed class MaintenanceRecords(
         }
 
         // Two entries under one identifier are one record stated twice, and which of
-        // them stands is not the library's to choose.
+        // them stands is not the library's to choose (D-166, 323).
         if (licences.DistinctBy(licence => licence.Id).Count() != licences.Count)
         {
-            return Result.Failure(Malformed("licences"));
+            return Result.Failure(Invalid("id"));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.ComplianceManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         await store.ReplaceLicencesAsync(licences, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -120,24 +141,56 @@ internal sealed class MaintenanceRecords(
             return Result.Failure<MaintenanceEntry>(Error.From(ErrorCodes.Denied));
         }
 
+        // API-CONV-002, X4: a note is optional, and one given is 1 to 1024 characters
+        // after trimming, for an in-process caller as at the endpoint.
+        string? stated = note?.Trim();
+
+        if (stated is { Length: 0 or > 1024 })
+        {
+            return Result.Failure<MaintenanceEntry>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("note")));
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         // A task is recorded once it has been performed; a date ahead of the clock
-        // would show a review as made that has not been.
+        // would show a review as made that has not been (D-166, 323).
         if (performedAt > now)
         {
-            return Result.Failure<MaintenanceEntry>(Malformed("performedAt"));
+            return Result.Failure<MaintenanceEntry>(Invalid("performedAt"));
         }
 
-        var entry = new MaintenanceEntry(MaintenanceEntryId.Of(now), task, performedAt, actor, note);
+        var entry = new MaintenanceEntry(MaintenanceEntryId.Of(now), task, performedAt, actor, stated);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<MaintenanceEntry>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.ComplianceManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<MaintenanceEntry>(since);
+        }
+
         await store.RecordAsync(entry, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<MaintenanceEntry>(notCommitted);
+        }
 
         return Result.Success(entry);
     }
 
-    private static Error Malformed(string member) =>
-        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+    // A well-formed request refused on what it means is invalid at its member (X5).
+    private static Error Invalid(string member) =>
+        Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement(member));
 }

@@ -43,6 +43,7 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
@@ -79,7 +80,7 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
     public async ValueTask MailCredentialAsync(
         AuditAction action,
         SubjectId subject,
-        string credential,
+        AppPasswordId credential,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records.AppendAsync(
@@ -90,10 +91,11 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
-                        [Credential] = JsonSerializer.SerializeToElement(credential),
+                        [Credential] = JsonSerializer.SerializeToElement(credential.ToString()),
                     }),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -115,6 +117,7 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
                     {

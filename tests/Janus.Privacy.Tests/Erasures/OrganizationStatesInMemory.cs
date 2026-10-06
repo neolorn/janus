@@ -52,6 +52,12 @@ internal sealed class OrganizationStatesInMemory : IOrganizationStates
     /// <param name="organization">Which organization.</param>
     public void Cancels(OrganizationId organization) => _deleting.Remove(organization);
 
+    /// <summary>
+    /// What another transaction committed on an organization while the erasure waited
+    /// for its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<OrganizationId>? Locking { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<PendingOrganizationDeletion>> DeletingSinceAsync(
         DateTimeOffset before,
@@ -64,24 +70,23 @@ internal sealed class OrganizationStatesInMemory : IOrganizationStates
         ]);
 
     /// <inheritdoc/>
-    public ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
+    public ValueTask<IReadOnlyList<EndedMembership>?> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at,
         TimeSpan window,
         CancellationToken cancellationToken)
     {
-        if (!_deleting.TryGetValue(organization, out PendingOrganizationDeletion? deletion))
-        {
-            throw new InvalidOperationException("The organization is not being deleted.");
-        }
+        Locking?.Invoke(organization);
 
-        if (at < deletion.Since + window)
+        if (!_deleting.TryGetValue(organization, out PendingOrganizationDeletion? deletion)
+            || Erased.Contains(organization)
+            || at < deletion.Since + window)
         {
-            throw new InvalidOperationException("The grace window has not elapsed.");
+            return ValueTask.FromResult<IReadOnlyList<EndedMembership>?>(null);
         }
 
         Erased.Add(organization);
 
-        return ValueTask.FromResult<IReadOnlyList<EndedMembership>>(_members[organization]);
+        return ValueTask.FromResult<IReadOnlyList<EndedMembership>?>(_members[organization]);
     }
 }

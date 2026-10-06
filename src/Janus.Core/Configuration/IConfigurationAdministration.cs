@@ -9,8 +9,11 @@ namespace Janus.Core.Configuration;
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-CFG-005,
-/// OPS-CFG-008 and chapter 09 section 8. The named restriction set is not one of the
-/// keys served here: it has its own operations and its own permission.
+/// OPS-CFG-008, PRIV-RET-001 and chapter 09 section 8. The keys served are the ones
+/// that exist once for the deployment and <c>retention.&lt;category&gt;</c> for each
+/// category the host declared, read with its floor as the default. The named
+/// restriction set is not one of them: it has its own operations and its own
+/// permission.
 /// </remarks>
 public interface IConfigurationAdministration
 {
@@ -42,7 +45,7 @@ public interface IConfigurationAdministration
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>config.key.protected</c>, the value codes of
-    /// chapter 10 section 1.5, <c>auth.restriction.reasonrequired</c>, or
+    /// chapter 10 section 1.5, <c>config.change.reasonrequired</c>, or
     /// <c>auth.stepup.required</c> for a loosening the session has not proved.
     /// </returns>
     ValueTask<Result> ChangeAsync(

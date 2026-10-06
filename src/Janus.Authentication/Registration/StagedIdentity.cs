@@ -1,17 +1,17 @@
 using System;
-using System.Security.Cryptography;
 using Janus.Core;
 
 namespace Janus.Authentication.Registration;
 
 /// <summary>
-/// One identifier a registration session holds: the value in both forms, what was
+/// One identifier a registration session holds: the value in both forms, the link
 /// sent to prove it, and whether it has been proved.
 /// </summary>
 /// <remarks>
 /// Implements REG-SESS-001, REG-SESS-003, REG-SESS-004 and REG-IDENT-010. Nothing
 /// here is reserved: the session holds the value and no other session is prevented
-/// from holding it too.
+/// from holding it too. The code sent to prove it is not here: it is issued and
+/// answered through its verification-code record (AUTH-FACT-004).
 /// </remarks>
 internal sealed class StagedIdentity
 {
@@ -64,33 +64,10 @@ internal sealed class StagedIdentity
     public bool IsExtra { get; }
 
     /// <summary>
-    /// The code last sent, absent where none is outstanding. It is held rather than
-    /// fingerprinted because a link opened elsewhere shows it (REG-SESS-003).
-    /// </summary>
-    [NeverLogged]
-    public byte[]? Code { get; private set; }
-
-    /// <summary>
-    /// When the code stops being accepted.
-    /// </summary>
-    public DateTimeOffset? CodeExpiresAt { get; private set; }
-
-    /// <summary>
     /// The fingerprint of the link token last sent, absent where none is outstanding.
     /// </summary>
     [NeverLogged]
     public byte[]? Link { get; private set; }
-
-    /// <summary>
-    /// How many wrong codes have been presented since the code was sent.
-    /// </summary>
-    public int WrongAttempts { get; private set; }
-
-    /// <summary>
-    /// Whether the code has been invalidated by wrong tries, after which even the
-    /// right one is refused.
-    /// </summary>
-    public bool CodeSpent { get; private set; }
 
     /// <summary>
     /// When a code or a same-browser link confirmed it.
@@ -137,11 +114,7 @@ internal sealed class StagedIdentity
     /// <param name="canonical">The value in its canonical form.</param>
     /// <param name="isLocked">Whether it is fixed against change.</param>
     /// <param name="isExtra">Whether it was added at the confirm step.</param>
-    /// <param name="code">The code outstanding.</param>
-    /// <param name="codeExpiresAt">When that code stops being accepted.</param>
     /// <param name="link">The fingerprint of the link token outstanding.</param>
-    /// <param name="wrongAttempts">How many wrong codes have been presented.</param>
-    /// <param name="codeSpent">Whether the code has been invalidated.</param>
     /// <param name="verifiedAt">When it was confirmed, where it has been.</param>
     /// <returns>The staged identifier.</returns>
     /// <exception cref="ArgumentNullException">Either form is absent.</exception>
@@ -152,11 +125,7 @@ internal sealed class StagedIdentity
         string canonical,
         bool isLocked,
         bool isExtra,
-        [NeverLogged] byte[]? code,
-        DateTimeOffset? codeExpiresAt,
         [NeverLogged] byte[]? link,
-        int wrongAttempts,
-        bool codeSpent,
         DateTimeOffset? verifiedAt)
     {
         ArgumentNullException.ThrowIfNull(entered);
@@ -164,54 +133,33 @@ internal sealed class StagedIdentity
 
         return new StagedIdentity(id, kind, entered, canonical, isLocked, isExtra)
         {
-            Code = code,
-            CodeExpiresAt = codeExpiresAt,
             Link = link,
-            WrongAttempts = wrongAttempts,
-            CodeSpent = codeSpent,
             VerifiedAt = verifiedAt,
         };
     }
 
     /// <summary>
-    /// Records the code and the link a message has just carried, replacing whatever
-    /// was outstanding.
+    /// Records the link a message has just carried, in place of any before it. The
+    /// code the same message carried is held by its verification-code record
+    /// (AUTH-FACT-004).
     /// </summary>
-    /// <param name="code">The code sent.</param>
     /// <param name="link">The fingerprint of the link token.</param>
-    /// <param name="expiresAt">When both stop being accepted.</param>
-    /// <exception cref="ArgumentNullException">Either is absent.</exception>
-    public void Sent([NeverLogged] byte[] code, [NeverLogged] byte[] link, DateTimeOffset expiresAt)
+    /// <exception cref="ArgumentNullException">The link is absent.</exception>
+    public void Linked([NeverLogged] byte[] link)
     {
-        ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(link);
 
-        Forget();
-
-        Code = code;
         Link = link;
-        CodeExpiresAt = expiresAt;
-        WrongAttempts = 0;
-        CodeSpent = false;
     }
 
     /// <summary>
-    /// Records a wrong code, which invalidates the code once the cap is reached.
+    /// Leaves no link standing: nothing was sent for the value as it now is.
     /// </summary>
-    /// <param name="cap">How many wrong tries the code survives.</param>
-    public void Missed(int cap)
-    {
-        WrongAttempts++;
-
-        if (WrongAttempts >= cap)
-        {
-            CodeSpent = true;
-        }
-    }
+    public void Unlinked() => Link = null;
 
     /// <summary>
-    /// Records that a code or a same-browser link confirmed it. Nothing outstanding
-    /// survives: the code and the link are spent by the verification they completed.
+    /// Records that a code or a same-browser link confirmed it. No link survives: it
+    /// is spent by the verification it completed or stood beside.
     /// </summary>
     /// <param name="at">When it was confirmed.</param>
     /// <exception cref="InvalidOperationException">It is verified already.</exception>
@@ -223,7 +171,7 @@ internal sealed class StagedIdentity
         }
 
         VerifiedAt = at;
-        Forget();
+        Link = null;
     }
 
     /// <summary>
@@ -247,21 +195,6 @@ internal sealed class StagedIdentity
         Entered = entered;
         Canonical = canonical;
         VerifiedAt = null;
-        WrongAttempts = 0;
-        CodeSpent = false;
-        Forget();
-    }
-
-    // The code is a secret for as long as it is outstanding and no longer.
-    private void Forget()
-    {
-        if (Code is not null)
-        {
-            CryptographicOperations.ZeroMemory(Code);
-        }
-
-        Code = null;
         Link = null;
-        CodeExpiresAt = null;
     }
 }

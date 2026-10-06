@@ -15,7 +15,7 @@ namespace Janus.Storage.Identity.Profiles;
 /// An account's profile, over the <c>profiles</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-ATTR-007, REG-PROF-001, PRIV-RIGHT-005a and CONV-DESIGN-003. The
@@ -24,7 +24,7 @@ namespace Janus.Storage.Identity.Profiles;
 /// </remarks>
 internal sealed class ProfileStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IProfileStore
 {
     private const string DateFormat = "yyyy-MM-dd";
@@ -195,10 +195,10 @@ internal sealed class ProfileStore(
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its profile under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

@@ -24,8 +24,8 @@ internal interface IPrivacyAlerts
     /// <param name="scope">Whose, or nothing where the row names no one.</param>
     /// <param name="details">The structured detail of the row.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of raising it.</returns>
-    ValueTask RaiseAsync(
+    /// <returns>Whether its row was written.</returns>
+    ValueTask<Result> RaiseAsync(
         AlertCondition condition,
         string? scope,
         IReadOnlyDictionary<string, JsonElement> details,

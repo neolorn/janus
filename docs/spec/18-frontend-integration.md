@@ -91,10 +91,13 @@ one place, so no call site can omit them.
 **FE-API-003** — The frontend SHALL render errors from **codes**, never from server
 prose.
 
-*Source: LIB-API-003, D-054*
+*Source: LIB-API-003, D-054, D-166, D-192*
 
-Every code in `10-reference.md` has a message in every configured locale. A code with
-no message is a build failure, not a runtime surprise.
+Every code in `10-reference.md` has a message in every configured locale. A code with no
+message is a build failure, not a runtime surprise. A refusal returned on a navigation
+(a social provider's round trip, or the sign-on of BFF-SESS-006, at its start or its
+return) arrives as the query member `error` (BFF-ERR-001) and is rendered from its code
+the same way.
 
 **Acceptance criteria**
 1. No error is displayed by echoing a server string.
@@ -103,12 +106,22 @@ no message is a build failure, not a runtime surprise.
 
 ---
 
-**FE-API-004** — On receiving the step-up code **or `auth.session.expired`**, the
-frontend SHALL reauthenticate **in place** and **retry the original request**, without
-requiring the person to re-enter what they had already provided. An expired session
-SHALL NOT redirect the person to a sign-in page.
+**FE-API-004** — On receiving the step-up code **or `auth.session.expired` carrying
+`details.reauthenticate`**, the frontend SHALL reauthenticate **in place** and **retry
+the original request**, without requiring the person to re-enter what they had already
+provided. An expired session SHALL NOT redirect the person to a sign-in page. A 401 with
+no `details` means no session was held, and is FE-API-006's, save on a registration
+request, where it means the registration session ended (FE-REG-005), and on a request an
+enrolment session makes on its routes (`09` `POST /enrol/begin`), where it means that
+session ended and the person needs a new link (D-188, D-189). A navigation returned with
+`error` `auth.stepup.required` or `auth.session.expired` carries no `details` and is
+rendered as FE-API-006 states; after `auth.stepup.required` the person starts the action
+again, and its own request meets the gate in place (BFF-STEP-001, D-192); for a link
+that request is `POST /account/link/{provider}`, which the frontend asks before the
+round trip (FE-ACCT-001, D-193).
 
-*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123*
+*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188, D-189,
+D-192, D-193*
 
 The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
 job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
@@ -123,19 +136,29 @@ way the interrupted request completes afterwards with its data intact.
 *Source: D-148; D-147; AUTH-SESS-005, BFF-STEP-001, D-139*
 
 **The prompt SHALL offer every combination that reaches the gate**: exactly the
-`details.options` the step-up response lists (`09` `/auth/step-up`): for a customer
-who can reach AAL2, password + TOTP, password + recovery code, password + security
-key, or a passkey, the subject choosing among them; for a password-only customer, the
-password. A combination that does not reach the gate is never shown, so a bare
-password is never offered on an account that reaches AAL2 (AUTH-STEP-002). The
-prompt has **two non-dead-end outcomes** beside presenting a factor: `enrol` (the
-frontend initiates enrolment in place, and the original request completes afterwards);
-`report-loss` (the frontend offers to report the missing factor lost,
-`POST /recovery/report-loss`, explaining that the action becomes available when the
-window completes). A `pending` outcome shows the completion time and the cancel
-option; it is a status, not an error.
+`details.options` the step-up response lists (`09` `/auth/step-up`): for a customer who
+can reach AAL2, password + TOTP, password + recovery code, password + security key, or a
+passkey, the subject choosing among them; for a password-only customer, the password. A
+combination that does not reach the gate is never shown, so a bare password is never
+offered on an account that reaches AAL2 (AUTH-STEP-002). The prompt has **two
+non-dead-end outcomes** beside presenting a factor: `enrol` (the frontend initiates
+enrolment in place, and the original request completes afterwards); `report-loss` (the
+frontend offers to report the missing factor lost, `POST /recovery/report-loss`,
+explaining that the action becomes available when the window completes). A `pending`
+outcome shows the completion time (`pendingUntil`) and the cancel option; it is a
+status, not an error, though it arrives as a 403 because the operation did not proceed
+(`09` `/auth/step-up`). A `phoneCode` ask at the step-up that is answered 200
+`factorRequired` re-presents the combinations offered, and one answered 200 with
+`required` empty retries the original request (D-188). A factor presented at the step-up
+and answered 200 is followed by the next factor of the chosen combination, one at each
+call, until what the 200 reports (`assuranceLevel`, `phishingResistant`) meets the gate
+the 403 named, and the original request is then retried, whether the answer was
+`factorRequired` or `complete`; a 200 `complete` whose report does not meet that gate
+ends the prompt, and the original request is retried and answered by its own gate
+(AUTH-STEP-002, D-190, D-191).
 
-*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141*
+*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190,
+D-191*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after
@@ -155,13 +178,15 @@ option; it is a status, not an error.
 
 ---
 
-**FE-API-005** — Throttling responses SHALL be surfaced with their retry interval,
-and the frontend SHALL NOT retry automatically before it elapses. A send refused by a
+**FE-API-005** — Throttling responses SHALL be surfaced with their retry interval, and
+the frontend SHALL NOT retry automatically before it elapses. A send refused by a
 restriction (`auth.restriction.exceeded`, AUTH-ABUSE-004) SHALL be rendered with its
-`retryAt` and the route to support, and the rendering SHALL be identical whether or
-not the address is registered.
+`retryAt` and the route to support, and the rendering SHALL be identical whether or not
+the address is registered. A navigation returned with `error=auth.throttled` or
+`error=auth.restriction.exceeded` carries `retryAt` as a query member (BFF-ABUSE-001,
+D-192) and is surfaced the same way.
 
-*Source: AUTH-ABUSE-002, BFF-ABUSE-001, D-146*
+*Source: AUTH-ABUSE-002, BFF-ABUSE-001, D-146, D-166, D-192*
 
 The wording is the frontend's (CONV-CONTENT-001), with one constraint: the refusal for
 a registered and for an unregistered address must read the same, because a difference
@@ -173,6 +198,31 @@ exceptions to the content rule).
 2. No automatic retry occurs within it.
 3. A restriction refusal shows `retryAt` and a way to reach support; the screen for a
    registered and for an unregistered address is identical in text and layout.
+4. A navigation returned with `error=auth.throttled` or
+   `error=auth.restriction.exceeded` shows the interval its `retryAt` names.
+
+---
+
+**FE-API-006** — A frontend that finds no per-app session SHALL navigate the browser to
+`GET /auth/signon?returnTo=<route>`, `<route>` being the path of its own route the
+person was on. It finds none where `GET /auth/session` answers that no session is held,
+or where any request other than a registration request (FE-REG-005) or one an enrolment
+session makes on its routes (FE-API-004, D-188, D-189) is refused 401 with no `details`
+(BFF-ORDER-001 stage 8). A route the browser was returned to with `error` (FE-API-003)
+SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
+
+*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189*
+
+The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
+the frontend knows the route the person meant to reach.
+
+**Acceptance criteria**
+1. Opening a route with no per-app session and a live authentication session navigates
+   to `GET /auth/signon` naming that route, and the route is then shown with a session
+   and no interaction.
+2. A 401 carrying `details.reauthenticate` is handled in place (FE-API-004) and never
+   starts the sign-on.
+3. A route returned to with `error` shows the refusal and starts no sign-on of its own.
 
 ---
 
@@ -406,12 +456,19 @@ portability, rectification, objection, and consent management.
 **FE-REG-001** — The originating application SHALL send its **client identifier** when
 starting registration. No return destination SHALL be sent at any step.
 
-*Source: API-REDIR-002, D-057*
+**Values (D-188).** Where `POST /register` answers 403 `auth.challenge.required`, the
+frontend runs the host's challenge, repeats the same request with the token it yields as
+`challengeToken`, and shows the challenge again where the repeat is refused alike
+(AUTH-ABUSE-008).
+
+*Source: API-REDIR-002, D-057, D-188*
 
 **Acceptance criteria**
 1. The link to registration carries the identifier from the application's own
    configuration.
 2. No registration step accepts or forwards a destination parameter.
+3. A 403 `auth.challenge.required` runs the host's challenge and repeats the request
+   with `challengeToken`; no registration session exists before the passing repeat.
 
 ---
 
@@ -477,10 +534,19 @@ show every identifier with its verification state and SHALL allow adding further
 and phones within `identifiers.email.max` and `identifiers.phone.max` (REG-SESS-004).
 The security screen SHALL follow REG-SESS-006 and FE-REG-003. The final step SHALL show
 a summary of what was set up and what was left for later and SHALL return the person per
-REG-SESS-008. The wizard SHALL read the registration session's state from the server
-(`GET /register`, `GET /register/events`) and SHALL NEVER hold it only in the browser.
+REG-SESS-008, to the origin `GET /auth/session` answers as `landing`: the terms step
+keeps the client captured at step 1 on the session it establishes, and no destination
+crosses between the applications in the frontend's hands. The wizard SHALL read the
+registration session's state from the server (`GET /register`, `GET /register/events`)
+and SHALL NEVER hold it only in the browser. A registration request refused 401
+`auth.session.expired` means the registration session has ended: the wizard shows that
+the registration ended, with the sign-in exit and a way to begin again, and neither
+reauthenticates (FE-API-004) nor starts the sign-on (FE-API-006) (REG-SESS-005, D-186);
+a provider round trip started to register and returned with `error`
+`auth.session.expired` means the same (`09`, D-192).
 
-*Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010*
+*Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010,
+API-REDIR-002, D-166, D-186, D-192*
 
 The first six steps run on the authentication application against the registration
 session; the account exists from the end of step 6; steps 7 to 10 run on the account
@@ -499,38 +565,68 @@ precedes every identifier field (REG-PROF-002).
    unverified extra removed.
 4. Reloading the browser at any step restores the same step and state from the server;
    no registration state survives in browser storage.
-5. The final step shows the summary and lands on the client's registered address with
-   an established session; no destination parameter is sent (FE-REG-001).
+5. The final step shows the summary and lands, with an established session, on the
+   `landing` origin `GET /auth/session` answers, the origin of the client's registered
+   address; no destination parameter is sent (FE-REG-001).
 
 ---
 
 ## 6a. Break-glass
 
 **FE-BG-001** — The authentication application SHALL provide a route `/break-glass`:
-one field for the sealed credential, one button, no other controls. On success it
-SHALL land the person on the management application. Its address is what the sealed
-envelope names.
+one field for the sealed credential, one labelled field for the reason, one button, no
+other controls. The reason is required and is sent with the credential
+(`POST /auth/break-glass`); the session keeps it, the session the management application opens from it takes
+it from the record it is bound to (BFF-SESS-006), and every audit record either writes
+carries it (OPS-BOOT-002, D-171). On success it SHALL land the person on the management
+application. Its address is what the sealed envelope names.
 
-*Source: OPS-BOOT-002, D-129*
+*Source: OPS-BOOT-002, D-129, D-138, D-166, D-171*
 
 The owner is not technical. The endpoint behind this page (`POST /auth/break-glass`)
 is not a procedure a non-technical person can follow; this page is.
 
 **Acceptance criteria**
-1. Pasting a valid credential and pressing the button yields a usable session and
-   lands on the management application without further input.
+1. Pasting a valid credential, stating a reason and pressing the button yields a usable
+   session and lands on the management application without further input.
 2. A consumed or invalid credential renders a localized message from its code.
 3. The page works with a stale session cookie present for the domain.
+4. The page does not submit without a reason.
+
+---
+
+**FE-BG-002** — The management application SHALL read `GET /admin/break-glass` whenever
+a system administrator opens it and, while `standing` is false, SHALL show the alert of
+OPS-BOOT-001 AC3 on every page, with no control that hides it.
+
+*Source: OPS-BOOT-001, D-133, D-166*
+
+**Acceptance criteria**
+1. With no credential standing, every page shows the alert and nothing dismisses it.
+2. After a credential is generated, the alert is gone on the next read.
 
 ---
 
 ## 6b. Link landings
 
-**FE-VER-001** — One landing component SHALL serve every verification and sign-in
-link (identifier verification at registration, identifier add and replace on an
-account, and sign-in links), landing on a frontend route (API-LAND-001), and SHALL
-behave by **where it is opened**. In the **originating browser** (the one holding the
-session cookie that sent the link) it SHALL show a control whose **press** verifies
+**FE-VER-001** — The authentication application and the account application SHALL each
+serve the route **`/link`**, and one landing component SHALL serve it on both
+(API-LAND-001). Every link the library sends is `<origin>/link#<kind>.<token>`: the
+origin is the application's declared landing origin (`LandingOrigins`, its
+`Authentication` or `Account` member, LIB-HOST-001; the enrolment link bootstrap prints
+takes the first `webauthn.origins` entry, OPS-BOOT-001), and the kind, one of `10`'s
+link kinds, decides the application, save the `identifier` link of a replace an
+enrolment session staged, which lands on the authentication application (D-190). The
+landing SHALL read the kind and the token from the fragment, SHALL remove the fragment
+from the address bar once it has read it, and SHALL dispatch on the kind. Every kind
+SHALL act only on a **press**, never on load, so that a mail scanner's prefetch changes
+nothing. The token SHALL reach a server only in the body of the call the landing makes,
+never in a request target. The response that serves the landing page SHALL carry
+`Referrer-Policy: no-referrer`.
+
+A verification or sign-in link (`registration`, `identifier`, `sign-in`) SHALL behave by
+**where it is opened**. In the **originating browser** (the one holding the session
+cookie that sent the link) the landing SHALL show a control whose **press** verifies
 (`POST /register/verify/{id}`, `POST /account/identifiers/{id}/verify`) or signs in
 (`POST /auth/factor`); the waiting screen in that browser SHALL advance by itself on the
 session's state, read from `GET /register/events` with `GET /register` polling as the
@@ -539,29 +635,55 @@ waiting and a control that ends the attempt: `POST /register/abandon` for a
 registration link, `POST /auth/link/abandon` for a sign-in link, and
 `POST /account/identifiers/{id}/abandon` for an identifier add or replace link, each
 link-borne with the token from the message (D-148). The landing SHALL NEVER
-verify or sign in **on load**.
+verify, sign in or act in any other way **on load**.
 
-*Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b*
+**Values (D-166).** The kinds, the application each lands on, and the flow the landing
+hands the token to on a press:
+
+| Kind | Application | Flow |
+|---|---|---|
+| `sign-in` | Authentication | On a press in the originating browser `POST /auth/factor` with `emailLink` or `phoneLink`; elsewhere the code and `POST /auth/link/abandon` (AUTH-FACT-003) |
+| `registration` | Authentication | On a press in the originating browser `POST /register/verify/{id}`; elsewhere the code and `POST /register/abandon` (REG-SESS-003) |
+| `recovery` | Authentication | `POST /recovery/complete` with the new password (AUTH-RECOV-005) |
+| `enrolment` | Authentication | `POST /enrol/begin` (AUTH-RECOV-002) |
+| `invitation` | Authentication | `POST /register` with the invitation token (REG-INV-001), or a sign-in followed by the membership step (REG-INV-002) |
+| `identifier` | Account; Authentication for the new address of a replace an enrolment session staged (D-190) | On a press in the originating browser `POST /account/identifiers/{id}/verify`; elsewhere the code and `POST /account/identifiers/{id}/abandon` (REG-IDENT-004, REG-IDENT-007) |
+| `identifier-confirm` | Account | The old address's confirmation of a replace where the account has no other channel: on a press, in any browser, `POST /account/identifiers/{id}/verify` with the token and `press` (REG-IDENT-007) |
+| `undo` | Account | `POST /account/identifiers/{id}/undo` (REG-IDENT-006); every session of the account then ends (IDN-LIFE-008) |
+| `deletion-cancel` | Account | `POST /account/delete/cancel` |
+| `reactivation` | Account | `POST /account/reactivate` |
+| `loss-report` | Account | `POST /recovery/report-loss/{id}/cancel` (AUTH-RECOV-007) |
+
+*Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b,
+LIB-HOST-001, D-166, D-187, D-190*
 
 The server decides which case applies: the landing call without `press` returns
 `sameBrowser` and, where false, the code (`09` `POST /register/verify/{id}`). The
 frontend renders the two outcomes and never guesses from the user agent. Acting on load
 would be completed by a mail scanner's prefetch, and would make the registration
-pre-hijack of `15` section 3.8 work. *Illustrative*: in the originating browser, a page
-with one control that confirms the address; elsewhere, the code in large type, a line
-saying where to type it, and a control to end the attempt.
+pre-hijack of `15` section 3.8 work. The token rides in the fragment because a fragment
+is no part of a request's target (RFC 9110), so no server receives it in an address.
+*Illustrative*: in the originating browser, a page with one control that confirms the
+address; elsewhere, the code in large type, a line saying where to type it, and a
+control to end the attempt.
 
 **Acceptance criteria**
-1. Loading the landing route issues no state-changing request; a press does.
+1. Loading the landing route with a link of any kind issues no state-changing request;
+   a press does.
 2. In the originating browser, a press verifies and the waiting screen advances without
    a reload; with the event stream blocked, polling advances it.
-3. In another browser, the page shows the code and the abandon control, and pressing
-   the control ends the attempt (the registration session, the pending sign-in link or
-   the staged identifier); nothing is verified from that browser.
+3. In another browser, the page shows the code and the abandon control, and pressing the
+   control ends the attempt (the registration session, the pending sign-in link, or the
+   pending add or replace); nothing is verified from that browser.
 4. The same component, with the same behaviour, serves identifier add, replace and
    sign-in links, calling the abandon operation that matches the link's kind.
 5. No token from a link appears in a URL the frontend constructs for the event stream or
    for polling.
+6. `/link` answers on the authentication and on the account application, and each
+   hands every kind of its application to the flow the table names.
+7. Once the landing has read the fragment, the address bar shows `/link` with no
+   fragment; no request the landing makes carries the token in its target; the response
+   that serves the page carries `Referrer-Policy: no-referrer`.
 
 ---
 
@@ -685,9 +807,13 @@ SHALL prompt for a **label**, defaulting to the client's description of the devi
 until a password exists** on the account. `phoneCode` SHALL be shown with its
 **less-secure flag** wherever it is listed. **Recovery codes** SHALL be shown **once**
 with copy, download and print, and a **confirm-saved** control SHALL gate continuation
-(AUTH-RECOV-006).
+(AUTH-RECOV-006); a copy, download or print SHALL be reported at
+`POST /account/recoverycodes/exported`, which sets `exportedAt` (AUTH-FACT-008), save in
+an enrolment session, where the confirm-saved control alone reports the export, once,
+since that report ends the session (AUTH-RECOV-006, D-189).
 
-*Source: D-146; AUTH-FACT-002b, AUTH-FACT-001, AUTH-RECOV-006, AUTH-FACT-008*
+*Source: D-146; AUTH-FACT-002b, AUTH-FACT-001, AUTH-RECOV-006, AUTH-FACT-008, D-162,
+D-166, D-189*
 
 The two dialogs are the one place the frontend chooses between a credential that signs
 in and one that is a second factor; the server cannot make that choice for it. Where
@@ -708,7 +834,9 @@ the passkey dialog and the frontend does not pre-empt it.
    list and the challenge.
 6. Recovery codes are shown once with copy, download and print; the flow does not
    continue until the confirm-saved control is used; the codes are not shown again
-   except by regeneration.
+   except by regeneration; a copy, download or print calls
+   `POST /account/recoverycodes/exported`, save in an enrolment session, where the
+   confirm-saved control alone calls it, once.
 
 ---
 
@@ -727,12 +855,12 @@ declaration (REG-PREF-001); and the **profile** fields the policy enables
 (REG-PROF-001).
 
 *Source: D-146; AUTH-FACT-001, AUTH-SESS-013, REG-IDENT-002, REG-IDENT-004 to
-REG-IDENT-006, REG-PREF-001, REG-PROF-001*
+REG-IDENT-006, REG-PREF-001, REG-PROF-001, AUTH-FACT-002a, D-166, D-193*
 
 Nothing about a credential beyond these fields is shown (AUTH-FACT-001). The undo is
 link-borne (`POST /account/identifiers/{id}/undo`) because after a hostile removal the
-account has no session of its own that could reach it; the account application renders
-the landing for that link. Preferences are typed from the declaration: a `boolean`
+account has no session of its own that could reach it; the account application's `/link`
+landing serves that link, kind `undo` (FE-VER-001). Preferences are typed from the declaration: a `boolean`
 renders a switch, an `enum` its values, and an administrator-only key is read-only for
 the person.
 
@@ -749,6 +877,12 @@ the person.
    never sent.
 5. Legal name and date of birth appear only where their policies are on; date of birth
    is read-only.
+6. Before a provider is linked (`POST /account/link/{provider}`), where the credential
+   list holds a second-step credential, the R-A16 disclosure is shown in one sentence
+   before the round trip starts (AUTH-FACT-002a).
+7. A link starts with `POST /account/link/{provider}`; its 403 is met in place
+   (FE-API-004), and only its 204 sends the browser to
+   `GET /auth/providers/{provider}?intent=link` (`09`, D-193).
 
 ---
 

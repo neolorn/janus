@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Recovery;
@@ -34,6 +35,37 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<RecoveryLink?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A recovery link's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.RecoveryLinks.Local.Any(record => CryptographicOperations.FixedTimeEquals(record.Token, fingerprint));
+
+        RecoveryLinkRecord? held = (await context.RecoveryLinks
+                .FromSql($"SELECT * FROM identity.recovery_links WHERE token = {fingerprint} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<RecoveryLink?> FindAsync(
         EnrolmentSessionId session,
         CancellationToken cancellationToken) =>
@@ -41,6 +73,34 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
             await context.RecoveryLinks
                 .SingleOrDefaultAsync(link => link.Session == session, cancellationToken)
                 .ConfigureAwait(false));
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<RecoveryLink?> FindForUpdateAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A recovery link's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.RecoveryLinks.Local.Any(record => record.Session == session);
+
+        RecoveryLinkRecord? held = (await context.RecoveryLinks
+                .FromSql($"SELECT * FROM identity.recovery_links WHERE session = {session.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // As for a token: a tracked row was read before the lock, so it is read again.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
+    }
 
     /// <inheritdoc/>
     public async ValueTask ReplaceAsync(RecoveryLink link, CancellationToken cancellationToken)
@@ -73,6 +133,7 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
                     MailboxLost = link.MailboxLost,
                     Session = link.Session,
                     SpentAt = link.SpentAt,
+                    CodesShownAt = link.CodesShownAt,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -90,6 +151,7 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
 
         record.Session = link.Session;
         record.SpentAt = link.SpentAt;
+        record.CodesShownAt = link.CodesShownAt;
     }
 
     /// <inheritdoc/>
@@ -126,5 +188,6 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
                 record.Approver,
                 record.MailboxLost,
                 record.Session,
-                record.SpentAt);
+                record.SpentAt,
+                record.CodesShownAt);
 }

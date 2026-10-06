@@ -84,6 +84,10 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
                         + $"(provider_subject IS NULL OR octet_length(provider_subject) = {Fingerprint.Length}) AND "
                         + $"(provider_subject IS NULL) = (fingerprint_version IS NULL) AND "
                         + $"(provider_subject IS NULL) = ({ProviderSubjectColumn} IS NULL)"));
+
+            table.HasCheckConstraint(
+                "ck_authenticators_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(credential => credential.Id).HasName("pk_authenticators");
@@ -102,7 +106,8 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
 
         builder.Property(credential => credential.Label)
             .HasColumnName("label")
-            .HasMaxLength(LabelLength);
+            .HasMaxLength(LabelLength)
+            .UseCollation(StoreContext.CaseInsensitiveCollation);
 
         builder.Property(credential => credential.State)
             .HasColumnName("state")

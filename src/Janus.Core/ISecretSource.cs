@@ -18,16 +18,22 @@ public interface ISecretSource
     /// Reads the key-encryption key and the versions retained beside it.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The versions a subject key may be wrapped or unwrapped under.</returns>
-    ValueTask<KeyEncryptionKeys> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken);
+    /// <returns>
+    /// The versions a subject key may be wrapped or unwrapped under, or the failure the
+    /// source met reading them.
+    /// </returns>
+    ValueTask<Result<KeyEncryptionKeys>> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the key the searchable fingerprints are computed under and the versions
     /// retained beside it.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The versions a stored fingerprint may be under, the one written current.</returns>
-    ValueTask<FingerprintKeys> ReadFingerprintKeysAsync(CancellationToken cancellationToken);
+    /// <returns>
+    /// The versions a stored fingerprint may be under, the one written current, or the
+    /// failure the source met reading them.
+    /// </returns>
+    ValueTask<Result<FingerprintKeys>> ReadFingerprintKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the database connection the scheduled maintenance runs under, whose login
@@ -35,14 +41,23 @@ public interface ISecretSource
     /// own configuration never carries.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The connection, as its UTF-8 bytes.</returns>
-    ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
+    /// <returns>The connection, as its UTF-8 bytes, or the failure the source met reading it.</returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the secret this application presents at the provider's token endpoint
-    /// when it exchanges a sign-on code (BFF-SESS-006).
+    /// Reads what this application presents at a declared social provider's token
+    /// endpoint, asked only for a provider the deployment declares.
+    /// </summary>
+    /// <param name="provider">The provider's name, as the factor catalogue spells it: <c>google</c> or <c>apple</c>.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The credential, or the failure the source met reading it.</returns>
+    ValueTask<Result<ProviderCredential>> ReadProviderCredentialAsync(string provider, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the mail server's management key, which the library's mail-server adapter
+    /// presents, asked only where the start chooses that adapter.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The secret, as its UTF-8 bytes.</returns>
-    ValueTask<ReadOnlyMemory<byte>> ReadSignOnSecretAsync(CancellationToken cancellationToken);
+    /// <returns>The key, as its UTF-8 bytes, or the failure the source met reading it.</returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> ReadMailServerSecretAsync(CancellationToken cancellationToken);
 }

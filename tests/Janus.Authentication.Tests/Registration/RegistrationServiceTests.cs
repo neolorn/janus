@@ -1,8 +1,10 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
@@ -12,7 +14,9 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Invitations;
 using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Organizations;
@@ -22,6 +26,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using OtpNet;
 using Xunit;
 
 namespace Janus.Authentication.Tests.Registration;
@@ -35,9 +40,17 @@ namespace Janus.Authentication.Tests.Registration;
 [Trait("kind", "unit")]
 public sealed partial class RegistrationServiceTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("registration-sweep", "REG-SESS-001", SystemOperation.ExpirySweep));
+
     private const string Client = "web";
     private const string Registered = "https://app.example.test/welcome";
+
+    // API-REDIR-002 (D-166, 145): what the completion answers of the registered address.
+    private const string Origin = "https://app.example.test";
     private const string Language = "en";
+    private const string RelyingParty = "example.test";
+    private const string WebOrigin = "https://app.example.test";
 
     private static readonly string[] Arabic = ["ar"];
     private const string Source = "198.51.100.7";
@@ -84,11 +97,19 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly ThrottleLedgerInMemory _throttle = new();
+    private readonly VerificationCodeStoreInMemory _codes = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
+    private readonly DatacenterRangesInMemory _ranges = new();
+    private readonly RegistrationSourcesInMemory _sources = new();
+    private readonly BotDefenceAuditInMemory _signalled = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    private ChallengeVerifier? _verifier;
 
     /// <summary>
     /// A deployment that has named the keys with no default: the gateway's balance
@@ -96,6 +117,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     /// </summary>
     public RegistrationServiceTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
@@ -105,11 +128,13 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             _sessions,
             _directory,
             _notifications,
+            Landing.Links,
             _notices,
             new PasswordService(
                 _passwords,
                 new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
                 new Argon2idHasher(_randomness),
+                _events,
                 _configuration,
                 _work,
                 _clock),
@@ -123,6 +148,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 _randomness),
             _sets,
             _authenticators,
+            new WebAuthnService(_authenticators, _passwords, _credentials, _configuration, _work, _clock, _randomness),
+            new TotpService(_authenticators, _passwords, _configuration, _work, _clock, _randomness),
             _clients,
             new PolicyResolution(_memberships, _configuration, _raises),
             _invitations,
@@ -136,12 +163,26 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 new PolicyResolution(_memberships, _configuration, _raises),
                 _configuration,
                 new AdministrativeScope(_gate, _administrative),
+                new StepUpGuard(
+                    _live,
+                    _authenticators,
+                    _passwords,
+                    new PolicyResolution(_memberships, _configuration, _raises),
+                    new IdentifierDirectoryInMemory(),
+                    new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
+                    _clock),
+                new AccountDirectoryInMemory(PreferenceDeclarations.None),
                 _locations,
                 new ConcurrentSessions(_live, _configuration, _events),
+                _clients,
                 _work,
                 _clock,
                 _randomness),
             new DeviceService(_devices, _configuration, _work, _events, _clock, _randomness),
+            new ThrottleService(_configuration, _throttle, _work, _events, _clock),
+            new VerificationCodes(_codes, _configuration, _work, _clock, _randomness),
+            _restrictions,
+            new BotDefence(_configuration, _ranges, _sources, _signalled, _work, _verifier, _clock),
             _consents,
             _configuration,
             _work,
@@ -192,7 +233,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, await Service.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Empty(_sessions.All);
     }
 
@@ -224,11 +265,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = await StartedAsync();
 
         Assert.Equal(
-            ErrorCodes.AffirmationRequired,
+            ErrorCodes.RegistrationIncomplete,
             Refused(await Service.StageAsync(
                 session,
                 IdentifierKind.Email,
                 Address,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
@@ -277,6 +319,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             required,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -403,6 +446,312 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4, REG-SESS-006: the set a registration's security step returned
+    /// records, as when it was viewed, the instant that step's response returned it,
+    /// staged on the session and carried into the set at the terms step.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_ARegistrationsSetIsViewedWhenTheSecurityStepReturnedItAsync()
+    {
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        DateTimeOffset returned = _clock.GetUtcNow();
+        RegistrationState settled = Ok(await Service.EnrolAsync(
+            session,
+            SecondStepCredential(),
+            TestContext.Current.CancellationToken));
+        Later();
+
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+
+        RecoveryCodeSet? held = await _sets.FindAsync(completed.Subject, TestContext.Current.CancellationToken);
+        Assert.NotNull(settled.Security.RecoveryCodes);
+        Assert.NotNull(held);
+        Assert.Equal(returned, held.ViewedAt);
+        Assert.Equal(returned + TimeSpan.FromMinutes(2), held.GeneratedAt);
+        Assert.Null(held.ExportedAt);
+    }
+
+    /// <summary>
+    /// REG-SESS-006 AC1, REG-PM-001: a passkey created against the registration
+    /// session, under its provisional handle and the staged email, completes the step
+    /// with no password, and the account the terms step creates holds it.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_006_AC1_APasskeyCreatedAgainstTheSessionCompletesTheStepAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+
+        CredentialCeremony ceremony = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        EnrolledCredential created = Ok(await Service.CompleteKeyAsync(
+            session,
+            Attestation(ceremony.Challenge),
+            "this phone",
+            TestContext.Current.CancellationToken));
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+
+        Assert.Equal(WebAuthnService.Handle(completed.Subject), ceremony.User.Id);
+        Assert.Equal(Address, ceremony.User.Name);
+        Assert.Null(created.RecoveryCodes);
+        Assert.Null(await _passwords.FindAsync(completed.Subject, TestContext.Current.CancellationToken));
+        Authenticator held = Assert.Single(_authenticators.All);
+        Assert.Equal(created.Credential, held.Id);
+        Assert.Equal(Factor.Passkey, held.Factor);
+        Assert.Equal(completed.Subject, held.Subject);
+    }
+
+    /// <summary>
+    /// REG-SESS-006 AC4: a generator confirmed against the registration session beside
+    /// a password that does not stand alone answers with the recovery codes, and the
+    /// step is done.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_006_AC4_AGeneratorConfirmedBesideAPasswordShowsRecoveryCodesAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+
+        GeneratorEnrolment begun = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        EnrolledCredential confirmed = Ok(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            Generated(begun.Secret),
+            TestContext.Current.CancellationToken));
+
+        Assert.NotNull(confirmed.RecoveryCodes);
+        Assert.Equal(Settings.FactorRecoveryCodesCount.Default, confirmed.RecoveryCodes.Count);
+        Assert.Equal(begun.Credential, confirmed.Credential);
+        Assert.Equal(RegistrationStep.Terms, Live(session).Step);
+    }
+
+    /// <summary>
+    /// REG-SESS-006: the registration session stands in for an account's session at
+    /// the security step and at no other, before which an enrolment is answered as one
+    /// asked for under no session, and a second step is refused where no password is
+    /// staged for it to stand beside (AUTH-FACT-002b).
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_006_TheSessionEnrolsOnlyAtTheSecurityStepAsync()
+    {
+        Keyed();
+        RegistrationSessionId early = await StagedAsync();
+        Later();
+        RegistrationSessionId bare = await ConfirmedAsync();
+
+        ErrorCode beforeTheStep = Refused(await Service.BeginKeyAsync(
+            early,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        ErrorCode generatorBeforeTheStep = Refused(await Service.BeginGeneratorAsync(
+            early,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        ErrorCode withoutAPassword = Refused(await Service.BeginGeneratorAsync(
+            bare,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.SessionExpired, beforeTheStep);
+        Assert.Equal(ErrorCodes.SessionExpired, generatorBeforeTheStep);
+        Assert.Equal(ErrorCodes.FactorNotPermitted, withoutAPassword);
+        Assert.Null(Live(early).Ceremony);
+        Assert.Null(Live(bare).Generator);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: a passkey ceremony and a generator begun at the security step
+    /// are staged on the session and written nowhere else.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AC5_ACeremonyAndAGeneratorBegunAreHeldOnTheSessionAloneAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+
+        CredentialCeremony ceremony = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        GeneratorEnrolment begun = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_authenticators.All);
+        Assert.Empty(_directory.Created);
+        Assert.Empty(Live(session).Credentials);
+        Assert.Equal(ceremony.Challenge, Live(session).Ceremony?.Challenge);
+        Assert.Equal(Factor.Passkey, Live(session).Ceremony?.Kind);
+        Assert.Equal(begun.Credential, Live(session).Generator?.Id);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: the terms step writes the generator a code confirmed, under
+    /// the new account's subject, and nothing of one begun and never confirmed.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AC5_TheTermsStepWritesOnlyAConfirmedGeneratorAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        GeneratorEnrolment first = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        _ = Ok(await Service.ConfirmGeneratorAsync(
+            session,
+            first.Credential,
+            Generated(first.Secret),
+            TestContext.Current.CancellationToken));
+        GeneratorEnrolment second = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "another",
+            TestContext.Current.CancellationToken));
+
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+        Assert.Equal(first.Credential, held.Id);
+        Assert.NotEqual(second.Credential, held.Id);
+        Assert.Equal(completed.Subject, held.Subject);
+        Assert.True(held.Confirmed);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: a session abandoned, and one that ran out, leave neither the
+    /// ceremony nor the generator behind.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AC5_AnAbandonedOrExpiredSessionLeavesNeitherBehindAsync()
+    {
+        Keyed();
+        RegistrationSessionId abandoned = await BegunBothAsync();
+        Later();
+        RegistrationSessionId expired = await BegunBothAsync();
+
+        Result left = await Service.AbandonAsync(abandoned, linkToken: null, TestContext.Current.CancellationToken);
+        _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
+        int swept = await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.True(left.Match(() => true, _ => false));
+        Assert.Equal(1, swept);
+        Assert.DoesNotContain(_sessions.All, held => held.Id == expired);
+        Assert.Empty(_sessions.All);
+        Assert.Empty(_authenticators.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-001: the ceremony a session has open is spent by the credential it
+    /// creates and replaced by the next one begun, so an answer to a challenge that no
+    /// longer stands creates nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_ACeremonyIsSpentOrReplacedUnderTheSessionAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        CredentialCeremony replaced = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        CredentialCeremony standing = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        ErrorCode toTheReplaced = Refused(await Service.CompleteKeyAsync(
+            session,
+            Attestation(replaced.Challenge),
+            "this phone",
+            TestContext.Current.CancellationToken));
+        _ = Ok(await Service.CompleteKeyAsync(
+            session,
+            Attestation(standing.Challenge),
+            "this phone",
+            TestContext.Current.CancellationToken));
+        ErrorCode toTheSpent = Refused(await Service.CompleteKeyAsync(
+            session,
+            Attestation(standing.Challenge),
+            "that laptop",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.FactorRejected, toTheReplaced);
+        Assert.Equal(ErrorCodes.FactorRejected, toTheSpent);
+        Assert.Null(Live(session).Ceremony);
+        Assert.Single(Live(session).Credentials);
+    }
+
+    /// <summary>
+    /// REG-SESS-001, CONV-DESIGN-003: a wrong code confirms nothing and commits
+    /// nothing, the generator stands for the right one, and the code that confirms it
+    /// spends it, so one enrolment is not confirmed twice.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AGeneratorIsSpentByTheCodeThatConfirmsItAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        GeneratorEnrolment begun = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        string right = Generated(begun.Secret);
+        _work.Reset();
+
+        ErrorCode wrong = Refused(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            string.Equals(right, "000000", StringComparison.Ordinal) ? "000001" : "000000",
+            TestContext.Current.CancellationToken));
+        int committedByTheRefusal = _work.Committed;
+        _ = Ok(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            right,
+            TestContext.Current.CancellationToken));
+        ErrorCode again = Refused(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            right,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong);
+        Assert.Equal(0, committedByTheRefusal);
+        Assert.Equal(ErrorCodes.FactorRejected, again);
+        Assert.Null(Live(session).Generator);
+        Assert.Single(Live(session).Credentials);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 (D-166, message kinds (1)): the message that verifies an address
+    /// being registered is the one worded with a code and a link, and carries both.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_ARegistrationMessageCarriesItsCodeAndItsLinkAsync()
+    {
+        _ = await AwaitingAsync();
+
+        OutboundMessage sent = Assert.Single(_notifications.Mail);
+
+        Assert.Equal(MessageKind.VerificationLink, sent.Message);
+        Assert.Equal(["code", "link"], sent.Values.Keys.Order(StringComparer.Ordinal));
+        Assert.Matches("^[0-9]+$", sent.Values["code"]);
+        Assert.NotEmpty(sent.Token());
+    }
+
+    /// <summary>
     /// REG-SESS-003 AC1: a press in the browser that started the registration
     /// verifies; a plain open, which is what a scanner does, changes nothing.
     /// </summary>
@@ -416,6 +765,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             token,
             press: false,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.False(opened.Verified);
@@ -425,6 +775,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             token,
             press: true,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.True(pressed.Verified);
@@ -446,6 +797,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session: null,
             token,
             press: true,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.False(elsewhere.Verified);
@@ -466,6 +818,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierId.New(_clock),
                 code,
+                Source,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -480,23 +833,42 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
         string code = Code(session, IdentifierKind.Email);
 
-        for (int attempt = 0; attempt < Settings.CodeVerificationAttempts.Default + 1; attempt++)
+        string wrong = string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        for (int attempt = 0; attempt < Settings.CodeVerificationAttempts.Default; attempt++)
         {
+            Waited();
+
             Assert.Equal(
                 ErrorCodes.CodeInvalid,
                 Refused(await Service.VerifyAsync(
                     session,
                     staged,
-                    "000000",
+                    wrong,
+                    Source,
                     TestContext.Current.CancellationToken)));
         }
 
+        Waited();
+
         Assert.Equal(
-            ErrorCodes.CodeInvalid,
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                session,
+                staged,
+                wrong,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Waited();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
             Refused(await Service.VerifyAsync(
                 session,
                 staged,
                 code,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Later();
@@ -505,15 +877,255 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         _ = Ok(await Service.VerifyAsync(
             session,
             staged,
             Code(session, IdentifierKind.Email),
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 and REG-SESS-003 AC6: wrong registration codes are counted by the
+    /// throttle against the source and the identifier, so while the delay stands the
+    /// right code and a further ask are refused with the instant it lifts, and once it
+    /// lifts the same code verifies.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_WrongRegistrationCodesAreHeldByTheDelayAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string right = Code(session, IdentifierKind.Email);
+        string wrong = string.Equals(right, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default; attempt++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeInvalid,
+                Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken)));
+        }
+
+        Error held = Failed(await Service.VerifyAsync(session, staged, right, Source, TestContext.Current.CancellationToken));
+        Error asked = Failed(await Service.ChangeAsync(session, staged, Address, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(ErrorCodes.Throttled, asked.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+
+        _clock.Advance(Settings.AbuseThrottleDelayInitial.Default);
+
+        _ = Ok(await Service.VerifyAsync(session, staged, right, Source, TestContext.Current.CancellationToken));
+
+        Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6, AUTH-ABUSE-001: a pressed link token that opens nothing is
+    /// counted against the source of the request that presents it, and against no
+    /// identifier, and answered <c>auth.code.expired</c>; while that source's delay
+    /// stands the press is refused with the instant it lifts; one merely opened counts
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_APressedTokenThatOpensNothingIsCountedAgainstItsSourceAsync()
+    {
+        const string presenting = "203.0.113.44";
+        const string nothing = "a-token-no-registration-sent";
+
+        Result<LinkLanding> opened = await Service.LandAsync(
+            session: null,
+            nothing,
+            press: false,
+            presenting,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(opened.Match(_ => false, _ => true));
+        Assert.Empty(_throttle.Counted);
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeExpired,
+                Failed(await Service.LandAsync(
+                    session: null,
+                    nothing,
+                    press: true,
+                    presenting,
+                    TestContext.Current.CancellationToken)).Code);
+        }
+
+        Error held = Failed(await Service.LandAsync(
+            session: null,
+            nothing,
+            press: true,
+            presenting,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal([(ThrottleScope.Source, presenting)], _throttle.Counted);
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code for an identifier the session does not hold is
+    /// answered <c>auth.code.invalid</c> and counted against the source of the request
+    /// alone, and that count is the one write the refusal commits; while that source's
+    /// delay stands a further code is refused with the instant it lifts.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodeForAnIdentifierTheSessionDoesNotHoldIsCountedAgainstItsSourceAsync()
+    {
+        const string presenting = "203.0.113.46";
+        RegistrationSessionId session = await AwaitingAsync();
+        var unheld = new IdentifierId(Guid.NewGuid());
+        _work.Reset();
+
+        ErrorCode first = Refused(await Service.VerifyAsync(session, unheld, "000000", presenting, TestContext.Current.CancellationToken));
+        int committed = _work.OutermostCommitted;
+        int rolledBack = _work.RolledBack;
+
+        for (int tried = 1; tried < Settings.AbuseThrottleThreshold.Default; tried++)
+        {
+            _ = Refused(await Service.VerifyAsync(session, unheld, "000000", presenting, TestContext.Current.CancellationToken));
+        }
+
+        Error held = Failed(await Service.VerifyAsync(session, unheld, "000000", presenting, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, first);
+        Assert.Equal(1, committed);
+        Assert.Equal(0, rolledBack);
+        Assert.Equal([(ThrottleScope.Source, presenting)], _throttle.Counted);
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code presented past its lifetime is answered
+    /// <c>auth.code.expired</c> and counted against the source alone, and against no
+    /// identifier.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodePastItsLifetimeIsCountedAgainstItsSourceAloneAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string code = Code(session, IdentifierKind.Email);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+
+        ErrorCode refused = Refused(await Service.VerifyAsync(session, staged, code, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+        Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6 (D-189): a code presented past its attempt cap is counted
+    /// against the source alone, so the identifier's count stands at the wrong codes
+    /// that reached the cap and no further.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string code = Code(session, IdentifierKind.Email);
+        string wrong = string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        for (int tried = 0; tried < Settings.CodeVerificationAttempts.Default; tried++)
+        {
+            Waited();
+            _ = Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken));
+        }
+
+        int counted = _throttle.Failures.Count;
+        Waited();
+        ErrorCode refused = Refused(await Service.VerifyAsync(session, staged, code, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.Equal(2 * Settings.CodeVerificationAttempts.Default, counted);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Failures.Skip(counted));
+    }
+
+    /// <summary>
+    /// REG-SESS-003 (D-189): every press is first held to the delay of its source, the
+    /// press of a link that would verify included, and a link merely opened is held to
+    /// none.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_APressThatWouldVerifyIsHeldToItsSourcesDelayAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        string token = Token(IdentifierKind.Email);
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            _ = Failed(await Service.LandAsync(
+                session,
+                "a-token-no-registration-sent",
+                press: true,
+                Source,
+                TestContext.Current.CancellationToken));
+        }
+
+        Error held = Failed(await Service.LandAsync(session, token, press: true, Source, TestContext.Current.CancellationToken));
+        bool verifiedWhileHeld = Identity(session, IdentifierKind.Email).IsVerified;
+        LinkLanding opened = Ok(await Service.LandAsync(session, token, press: false, Source, TestContext.Current.CancellationToken));
+        _clock.Advance(Settings.AbuseThrottleDelayInitial.Default);
+        LinkLanding pressed = Ok(await Service.LandAsync(session, token, press: true, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.False(verifiedWhileHeld);
+        Assert.False(opened.Verified);
+        Assert.True(pressed.Verified);
+        Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, REG-SESS-001: every count and delay of a registration uses the
+    /// source of the request in hand, never the address its begin arrived on: a code
+    /// asked for and a wrong try from another source are counted against that source,
+    /// and the session goes on holding the whole address it began on.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_ARegistrationCountsAgainstTheSourceOfTheRequestInHandAsync()
+    {
+        const string elsewhere = "203.0.113.45";
+
+        RegistrationSessionId session = await AgedAsync();
+
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Email,
+            Address,
+            elsewhere,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string right = Code(session, IdentifierKind.Email);
+        string wrong = string.Equals(right, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(session, staged, wrong, elsewhere, TestContext.Current.CancellationToken)));
+
+        Assert.Equal(elsewhere, Assert.Single(_notifications.Sent).Source);
+        Assert.Contains((ThrottleScope.Source, elsewhere), _throttle.Counted);
+        Assert.DoesNotContain(_throttle.Counted, counted => counted.Key == Source);
+        Assert.Equal(Source, Assert.Single(_sessions.All).Source);
     }
 
     /// <summary>
@@ -529,6 +1141,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             Token(IdentifierKind.Email),
             press: true,
+            Source,
             TestContext.Current.CancellationToken));
 
         RegistrationState watched =
@@ -553,6 +1166,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             "second@example.test",
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -582,12 +1196,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Phone,
             Mistyped,
+            Source,
             TestContext.Current.CancellationToken));
 
         _ = Ok(await Service.ChangeAsync(
             session,
             Identity(session, IdentifierKind.Phone).Id,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Number, _notifications.Texts[^1].Destination.Canonical);
@@ -612,6 +1228,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             fresh,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
@@ -622,6 +1239,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             duplicate,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(first.Step, second.Step);
@@ -634,8 +1252,321 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         StagedIdentifier two = Assert.Single(second.Identifiers);
 
         Assert.Equal(one with { Id = two.Id }, two);
-        Assert.Null(Identity(duplicate, IdentifierKind.Email).Code);
+        Assert.False(Outstanding(duplicate, IdentifierKind.Email).IsAnswerable());
         Assert.Null(Identity(duplicate, IdentifierKind.Email).Link);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC5, AUTH-FACT-004: a code presented for an address another account
+    /// holds, and for one reserved for an undo, is answered as a wrong code for a fresh
+    /// address is: invalid for each try up to the cap, expired after it, counted by the
+    /// throttle against the same components, and no code verifies it.
+    /// </summary>
+    /// <param name="reserved">Whether the address is reserved for an undo, as against held by an account.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task REG_SESS_005_AC5_ACodeForAHeldOrReservedAddressIsAnsweredAsAWrongOneForAFreshAddressAsync(
+        bool reserved)
+    {
+        const string taken = "taken@example.test";
+        const string elsewhere = "203.0.113.9";
+
+        if (reserved)
+        {
+            _directory.Reserved(IdentifierKind.Email, taken, Noon + TimeSpan.FromDays(7));
+        }
+        else
+        {
+            _directory.Held(IdentifierKind.Email, taken, SubjectId.New(_randomness));
+        }
+
+        RegistrationSessionId fresh = await AwaitingAsync();
+        RegistrationSessionId duplicate = await AgedAsync();
+        _ = Ok(await Service.StageAsync(duplicate, IdentifierKind.Email, taken, elsewhere, TestContext.Current.CancellationToken));
+        string wrong = string.Equals(Code(fresh, IdentifierKind.Email), "000000", StringComparison.Ordinal)
+            ? "111111"
+            : "000000";
+        var answers = new List<(ErrorCode Fresh, ErrorCode Duplicate)>();
+
+        for (int attempt = 0; attempt < Settings.CodeVerificationAttempts.Default + 1; attempt++)
+        {
+            Waited();
+
+            answers.Add((
+                Refused(await Service.VerifyAsync(
+                    fresh,
+                    Identity(fresh, IdentifierKind.Email).Id,
+                    wrong,
+                    Source,
+                    TestContext.Current.CancellationToken)),
+                Refused(await Service.VerifyAsync(
+                    duplicate,
+                    Identity(duplicate, IdentifierKind.Email).Id,
+                    wrong,
+                    elsewhere,
+                    TestContext.Current.CancellationToken))));
+        }
+
+        Assert.All(answers.Take(Settings.CodeVerificationAttempts.Default), answer =>
+        {
+            Assert.Equal(ErrorCodes.CodeInvalid, answer.Fresh);
+            Assert.Equal(ErrorCodes.CodeInvalid, answer.Duplicate);
+        });
+        Assert.Equal((ErrorCodes.CodeExpired, ErrorCodes.CodeExpired), answers[^1]);
+        Assert.Equal(
+            _throttle.Counted.Count(counted => counted.Scope is ThrottleScope.Source && counted.Key == Source),
+            _throttle.Counted.Count(counted => counted.Scope is ThrottleScope.Source && counted.Key == elsewhere));
+        Assert.Equal(2, _throttle.Counted.Count(counted => counted.Scope is ThrottleScope.Identifier));
+        Assert.False(Identity(duplicate, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC5, AUTH-FACT-004: the record of a held address holds no code, so
+    /// neither digits nor nothing at all verify it, and it runs out with the lifetime a
+    /// sent code has.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC5_NoCodeVerifiesAHeldAddressAndItsRecordRunsOutAsACodeDoesAsync()
+    {
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+        RegistrationSessionId session = await AgedAsync();
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Email, Address, Source, TestContext.Current.CancellationToken));
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        DateTimeOffset expiry = Outstanding(session, IdentifierKind.Email).ExpiresAt;
+
+        ErrorCode digits = Refused(await Service.VerifyAsync(session, staged, "000000", Source, TestContext.Current.CancellationToken));
+        Waited();
+        ErrorCode nothing = Refused(await Service.VerifyAsync(session, staged, string.Empty, Source, TestContext.Current.CancellationToken));
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        ErrorCode late = Refused(await Service.VerifyAsync(session, staged, "000000", Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Noon + Settings.CodeVerificationLifetime.Default, expiry);
+        Assert.Equal(ErrorCodes.CodeInvalid, digits);
+        Assert.Equal(ErrorCodes.CodeInvalid, nothing);
+        Assert.Equal(ErrorCodes.CodeExpired, late);
+        Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC14: an ask of a code for a held address, and for a reserved
+    /// one, is counted against the restrictions as its message would be, in the
+    /// message's destination, kind, purpose and language, and sends nothing of it.
+    /// </summary>
+    /// <param name="reserved">Whether the address is reserved for an undo, as against held by an account.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_ABUSE_004_AC14_AnAskForAHeldOrReservedAddressIsCountedAsItsMessageWouldBeAsync(
+        bool reserved)
+    {
+        const string taken = "taken@example.test";
+
+        _ = await AwaitingAsync();
+        OutboundMessage message = _notifications.Mail[^1];
+
+        if (reserved)
+        {
+            _directory.Reserved(IdentifierKind.Email, taken, Noon + TimeSpan.FromDays(7));
+        }
+        else
+        {
+            _directory.Held(IdentifierKind.Email, taken, SubjectId.New(_randomness));
+        }
+
+        RegistrationSessionId duplicate = await AgedAsync();
+        _ = Ok(await Service.StageAsync(duplicate, IdentifierKind.Email, taken, Source, TestContext.Current.CancellationToken));
+
+        OutboundMessage drawn = Assert.Single(_restrictions.Drawn);
+        Assert.Equal(SendKind.Email, drawn.Destination.Kind);
+        Assert.Equal(taken, drawn.Destination.Canonical);
+        Assert.Equal(message.Message, drawn.Message);
+        Assert.Equal(message.Purpose, drawn.Purpose);
+        Assert.Equal(message.Language, drawn.Language);
+        Assert.Equal(Source, drawn.Source);
+        Assert.Equal(1, _notifications.Sent.Count(sent => sent.Values.ContainsKey("code")));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC14, CONV-DESIGN-003: an ask for a held address that the
+    /// restrictions refuse is refused as the message would be, and leaves no record
+    /// and nothing committed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC14_AnAskForAHeldAddressIsRefusedByTheRestrictionsAlikeAsync()
+    {
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+        RegistrationSessionId session = await AgedAsync();
+        _restrictions.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        ErrorCode refused = Refused(await Service.StageAsync(
+            session,
+            IdentifierKind.Email,
+            Address,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, refused);
+        Assert.Empty(_codes.All);
+        Assert.Empty(_notifications.Sent);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-006 AC4: below the floor, the code asked for at a number is refused
+    /// with the floor's code, and the ask for a number another account holds or an
+    /// undo reserves is refused exactly as the one for a number no account holds;
+    /// nothing is staged, drawn or committed, so the floor tells nothing of an account.
+    /// </summary>
+    /// <param name="held">Whether an account holds the number.</param>
+    /// <param name="reserved">Whether the number is reserved for an undo.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task AUTH_ABUSE_006_AC4_ACodeTheFloorRefusesIsRefusedAlikeWhoeverHoldsTheNumberAsync(
+        bool held,
+        bool reserved)
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+
+        await VerifiedAsync(session, IdentifierKind.Email);
+
+        if (held)
+        {
+            _directory.Held(IdentifierKind.Phone, Number, SubjectId.New(_randomness));
+        }
+
+        if (reserved)
+        {
+            _directory.Reserved(IdentifierKind.Phone, Number, Noon + TimeSpan.FromDays(7));
+        }
+
+        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
+        _notifications.Refusal = floor;
+        _restrictions.Refusal = floor;
+        _work.Reset();
+
+        Error refused = (await Service.StageAsync(
+                session,
+                IdentifierKind.Phone,
+                Number,
+                Source,
+                TestContext.Current.CancellationToken))
+            .Match(
+                _ => throw new Xunit.Sdk.XunitException("The code was not refused."),
+                error => error);
+
+        Assert.Same(floor, refused);
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_restrictions.Drawn);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC2, REG-SESS-005: an address held out of reach for its owner's
+    /// undo is answered as a held one, field for field as a fresh one, with no code
+    /// drawn, nothing staged that can verify, and nobody told.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_AReservedAddressIsAnsweredAtRegistrationAsAHeldOneIsAsync()
+    {
+        RegistrationSessionId fresh = await AgedAsync();
+        RegistrationSessionId reserved = await AgedAsync();
+
+        RegistrationState first = Ok(await Service.StageAsync(
+            fresh,
+            IdentifierKind.Email,
+            Address,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        int sent = _notifications.Mail.Count;
+
+        _directory.Reserved(IdentifierKind.Email, Address, Noon + TimeSpan.FromDays(7));
+
+        Later();
+
+        RegistrationState second = Ok(await Service.StageAsync(
+            reserved,
+            IdentifierKind.Email,
+            Address,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(first.Step, second.Step);
+        Assert.Equal(first.ExpiresAt, second.ExpiresAt);
+
+        StagedIdentifier one = Assert.Single(first.Identifiers);
+        StagedIdentifier two = Assert.Single(second.Identifiers);
+
+        Assert.Equal(one with { Id = two.Id }, two);
+        Assert.False(Outstanding(reserved, IdentifierKind.Email).IsAnswerable());
+        Assert.Null(Identity(reserved, IdentifierKind.Email).Link);
+        Assert.Equal(sent, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC4: an address another account takes after it was staged ends the
+    /// session at the terms step, answered as an expired session, and no account is
+    /// created.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC4_AnAddressTakenSinceItWasStagedEndsTheSessionAtTheTermsAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refused(await AcceptedAsync(session)));
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC4, REG-IDENT-006: an address that becomes reserved for an undo
+    /// after it was staged ends the session at the terms step the same way.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC4_AnAddressReservedSinceItWasStagedEndsTheSessionAtTheTermsAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Reserved(IdentifierKind.Email, Address, _clock.GetUtcNow() + TimeSpan.FromDays(7));
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refused(await AcceptedAsync(session)));
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC6: an address another account's add took while the terms step
+    /// waited for the value's lock is judged held under that lock, so the step ends the
+    /// session, is answered as an expired one, and creates no account.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_005_AC6_AnAddressTakenWhileTheTermsStepWaitedForItsLockEndsTheSessionAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Locking = values =>
+        {
+            _directory.Locking = null;
+            _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refused(await AcceptedAsync(session)));
+        Assert.Contains((IdentifierKind.Email, Address), _directory.Locked);
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_sessions.All);
     }
 
     /// <summary>
@@ -653,6 +1584,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Empty(Assert.Single(_notifications.Mail).Values);
@@ -673,6 +1605,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -681,11 +1614,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Identity(session, IdentifierKind.Email).Id,
                 "000000",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, await Service.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Empty(_directory.Created);
     }
 
@@ -793,6 +1727,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             ["performance"] = true,
         };
 
+        _work.Reset();
+
         Result<RegistrationCompleted> refused = await Service.AcceptTermsAsync(
             session,
             Terms,
@@ -801,7 +1737,10 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Browser,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(refused));
+        Assert.Equal(ErrorCodes.PurposeNoConsent, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(0, _consents.Recorded);
     }
 
@@ -821,6 +1760,46 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         Assert.Equal(Terms, created.TermsVersion);
         Assert.Equal(Notice, created.NoticeVersion);
         Assert.Equal(Noon, created.AnsweredAgeAt);
+    }
+
+    /// <summary>
+    /// REG-SESS-007 AC2, AC5: a terms step that carries no terms version or no notice
+    /// version creates no account and is refused as incomplete; the session stays,
+    /// and the step with both completes it.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC2_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.AcceptTermsAsync(
+                session,
+                string.Empty,
+                Notice,
+                Unticked,
+                Browser,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.AcceptTermsAsync(
+                session,
+                Terms,
+                " ",
+                Unticked,
+                Browser,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_directory.Created);
+
+        _ = Ok(await AcceptedAsync(session));
+
+        NewAccount created = Assert.Single(_directory.Created);
+
+        Assert.Equal(Terms, created.TermsVersion);
+        Assert.Equal(Notice, created.NoticeVersion);
     }
 
     /// <summary>
@@ -901,6 +1880,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
+            address: null,
             TestContext.Current.CancellationToken));
 
         var devices = new DeviceService(
@@ -972,7 +1952,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         Assert.Equal(completed.Subject, signedIn.Subject);
         Assert.Equal(completed.Session, signedIn.Id);
-        Assert.Equal(Registered, completed.Landing);
+        Assert.Equal(Origin, completed.Landing);
     }
 
     /// <summary>
@@ -1010,14 +1990,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     [Fact]
     public async Task API_REDIR_002_AC2_AnUnrecognisedIdentifierIsStoredAsTheNamedDefaultAsync()
     {
-        await _clients.RecordAsync(
+        await _clients.AddAsync(
             new OidcClient(
                 "fallback",
                 "fallback",
                 OidcClientKind.BrowserApplication,
-                "https://fallback.example.test/welcome",
+                "https://fallback.example.test:8443/welcome",
                 ["openid"]),
-            [7, 8, 9],
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
@@ -1026,30 +2006,30 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = await SecuredAsync();
 
         Assert.Equal("fallback", Live(session).Client);
-        Assert.Equal("https://fallback.example.test/welcome", Ok(await AcceptedAsync(session)).Landing);
+        Assert.Equal("https://fallback.example.test:8443", Ok(await AcceptedAsync(session)).Landing);
     }
 
     /// <summary>
     /// API-REDIR-002 AC4: the return is resolved from the client the session stored,
-    /// so a deployment holding several clients returns the person to the one that
-    /// began the registration.
+    /// so a deployment holding several clients returns the person to the origin of the
+    /// one that began the registration, and to nothing more of its address (D-166, 145).
     /// </summary>
     [Fact]
     public async Task API_REDIR_002_AC4_TheReturnIsTheStoredClientsAndNoOthersAsync()
     {
         await RegisteredAsync();
-        await _clients.RecordAsync(
+        await _clients.AddAsync(
             new OidcClient(
                 "another",
                 "another",
                 OidcClientKind.BrowserApplication,
                 "https://elsewhere.example.test/welcome",
                 ["openid"]),
-            [4, 5, 6],
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(Registered, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
+        Assert.Equal(Origin, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
     }
 
     /// <summary>
@@ -1075,11 +2055,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = await StartedAsync();
 
         Assert.Equal(
-            ErrorCodes.AffirmationRequired,
+            ErrorCodes.RegistrationIncomplete,
             Refused(await Service.StageAsync(
                 session,
                 IdentifierKind.Email,
                 Address,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.Empty(Live(session).Identifiers);
@@ -1155,10 +2136,32 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _ = await AwaitingAsync();
 
-        SendRequest told = Assert.Single(_notifications.Sent);
+        OutboundMessage told = Assert.Single(_notifications.Sent);
 
         Assert.Equal(MessageKind.AccountExists, told.Message);
         Assert.Equal("ar", told.Language);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC4, REG-SESS-005: a holder's notice that a restriction refused
+    /// spends no window, so the next registration inside it that offers the address,
+    /// its notice admitted, tells the holder, and the one after that is suppressed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_AHoldersNoticeARestrictionRefusedSpendsNoWindowAsync()
+    {
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        _ = await AwaitingAsync();
+        int marked = _notices.Told.Count;
+        _notifications.Refusal = null;
+        _ = await AwaitingAsync();
+        _ = await AwaitingAsync();
+
+        Assert.Equal(0, marked);
+        Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Sent).Message);
+        Assert.Equal(Address, Assert.Single(_notices.Told).Destination);
     }
 
     /// <summary>
@@ -1179,12 +2182,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             wideAddress,
+            Source,
             TestContext.Current.CancellationToken));
         await VerifiedAsync(session, IdentifierKind.Email);
         _ = Ok(await Service.StageAsync(
             session,
             IdentifierKind.Phone,
             arabicIndicNumber,
+            Source,
             TestContext.Current.CancellationToken));
         await VerifiedAsync(session, IdentifierKind.Phone);
         _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
@@ -1222,6 +2227,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 typed,
                 IdentifierKind.Email,
                 mixed,
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.IdentifierMixedScript,
@@ -1229,6 +2235,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 changed,
                 Identity(changed, IdentifierKind.Email).Id,
                 mixed,
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.IdentifierMixedScript,
@@ -1307,11 +2314,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId unanswered = await StartedAsync();
 
         Assert.Equal(
-            ErrorCodes.AffirmationRequired,
+            ErrorCodes.RegistrationIncomplete,
             Refused(await Service.StageAsync(
                 unanswered,
                 IdentifierKind.Email,
                 Address,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         RegistrationSessionId underage = await StartedAsync();
@@ -1409,6 +2417,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 staged.Id,
                 "other@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(Address, Identity(session, IdentifierKind.Email).Canonical);
@@ -1431,6 +2440,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged.Id,
             "other@example.test",
+            Source,
             TestContext.Current.CancellationToken));
 
         StagedIdentity changed = Identity(session, IdentifierKind.Email);
@@ -1479,6 +2489,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 bound,
                 Identity(bound, IdentifierKind.Email).Id,
                 "other@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.IdentifierLocked,
@@ -1486,12 +2497,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 bound,
                 IdentifierKind.Phone,
                 Mistyped,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         RegistrationState taken = Ok(await Service.StageAsync(
             bound,
             IdentifierKind.Phone,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(RegistrationStep.Confirm, taken.Step);
@@ -1501,11 +2514,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId open = Ok(await InvitedAsync(Issued(email: "other@example.test")));
 
         _ = Ok(await Service.RecordAgeAsync(open, Adult, TestContext.Current.CancellationToken));
-        _ = Ok(await Service.StageAsync(open, IdentifierKind.Phone, Mistyped, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(open, IdentifierKind.Phone, Mistyped, Source, TestContext.Current.CancellationToken));
         _ = Ok(await Service.ChangeAsync(
             open,
             Identity(open, IdentifierKind.Phone).Id,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Number, Identity(open, IdentifierKind.Phone).Canonical);
@@ -1528,7 +2542,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _ = Refused(await Service.SkipPhoneAsync(session, TestContext.Current.CancellationToken));
 
-        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken));
 
         _ = Refused(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
 
@@ -1571,6 +2585,23 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     public async Task REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
     {
         _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+        string token = Issued(email: Address);
+
+        Assert.Equal(ErrorCodes.InvitationIdentifierMismatch, Refused(await InvitedAsync(token)));
+        Assert.Empty(_sessions.All);
+        Assert.True(_invitations.Held.Single().Opens(_clock.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC2, REG-INV-002: an email the invitation binds that is held out of
+    /// reach for its owner's undo is refused as a held one; the invitation is not spent
+    /// and no registration is opened.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_ABoundEmailReservedForAnUndoOpensNoRegistrationAsync()
+    {
+        _directory.Reserved(IdentifierKind.Email, Address, Noon + TimeSpan.FromDays(7));
 
         string token = Issued(email: Address);
 
@@ -1637,9 +2668,10 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierKind.Email,
                 "person@elsewhere.test",
+                Source,
                 TestContext.Current.CancellationToken)));
 
-        _ = Ok(await Service.StageAsync(session, IdentifierKind.Email, Address, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Email, Address, Source, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -1660,7 +2692,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId invited = Ok(await InvitedAsync(Issued(organization, email: Address, phone: Number)));
 
         _ = Ok(await Service.RecordAgeAsync(invited, Adult, TestContext.Current.CancellationToken));
-        _ = Ok(await Service.StageAsync(invited, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(invited, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken));
         await VerifiedAsync(invited, IdentifierKind.Phone);
         _ = Ok(await Service.ConfirmAsync(invited, TestContext.Current.CancellationToken));
 
@@ -1688,7 +2720,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
 
         _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
-        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken));
         await VerifiedAsync(session, IdentifierKind.Phone);
         _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
         _ = Ok(await Service.SetPasswordAsync(session, Chosen, TestContext.Current.CancellationToken));
@@ -1724,8 +2756,248 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         return token.Value;
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a link whose invitation is revoked while the press waited
+    /// for its lock rolls the unit of work back, and no registration is opened.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALinkRefusedUnderTheInvitationsLockIsRolledBackAsync()
+    {
+        string token = Issued(email: Address);
+        _invitations.Locking = held => held.Revoke(_clock.GetUtcNow());
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await InvitedAsync(token)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an age answered out of its step, decided under the session's
+    /// lock, rolls the unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnAgeAnsweredOutOfStepIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AgedAsync();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-FACT-004, AUTH-ABUSE-001: a wrong code is counted on the
+    /// code's record and against the delay, and the refusal commits those counts with
+    /// no rollback.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AWrongCodeCommitsItsCountsAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string wrong = Code(session, IdentifierKind.Email) == "000000" ? "000001" : "000000";
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(1, Outstanding(session, IdentifierKind.Email).Attempts);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, REG-PROF-002: an under-age answer is refused with the
+    /// session's end and its lock committed, the refusal's one kept write, and nothing
+    /// rolled back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnUnderAgeAnswerCommitsTheSessionsEndAndItsLockAsync()
+    {
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Required);
+
+        RegistrationSessionId session = await StartedAsync();
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.ProfileUnderage,
+            Refused(await Service.RecordAgeAsync(session, Minor, TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.True(Assert.Single(_sessions.All).AgeRefused);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, REG-SESS-005: a staged identifier taken since it was staged
+    /// ends the session at the terms step, the refusal's one kept write, which is
+    /// committed, and the step is answered as an ended session is, with no details.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnIdentifierTakenSinceCommitsTheSessionsEndAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+        _work.Reset();
+
+        Error? refused = (await AcceptedAsync(session)).Match(_ => (Error?)null, error => error);
+
+        Assert.Equal(ErrorCodes.SessionExpired, refused?.Code);
+        Assert.Empty(refused!.Details);
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Empty(_sessions.All);
+        Assert.Empty(_directory.Created);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, REG-SESS-003 AC6 (D-189): a code presented for an identifier
+    /// the session does not stage is counted against its source, so the refusal commits
+    /// that count alone, with no rollback.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACodeForNoStagedIdentifierCommitsItsCountAloneAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(
+                session,
+                IdentifierId.New(_clock),
+                "000000",
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal([(ThrottleScope.Source, Source)], _throttle.Counted);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an identifier whose code the send refuses, after it was
+    /// staged, rolls the unit of work back at the step and at the confirm step alike.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AStagedIdentifierWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId stepping = await AgedAsync();
+        RegistrationSessionId confirming = await StagedAsync();
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.StageAsync(
+                stepping,
+                IdentifierKind.Email,
+                "other@example.test",
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.AddAsync(
+                confirming,
+                IdentifierKind.Email,
+                "second@example.test",
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(2, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a bound identifier whose code the send refuses rolls the
+    /// unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ABoundIdentifierWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.StageAsync(session, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a changed identifier whose code the send refuses rolls the
+    /// unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangedIdentifierWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.ChangeAsync(
+                session,
+                staged,
+                "other@example.test",
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an address a provider supplied whose code the send refuses
+    /// rolls the unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASuppliedAddressWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AgedAsync();
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await ProvidedAsync(session, Factor.Apple, AppleSubject, Address, verified: true)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
     private async Task<Result<RegistrationSessionId>> InvitedAsync(string token) =>
-        await Service.BeginAsync(signedIn: null, Client, Language, Source, token, TestContext.Current.CancellationToken);
+        await Service.BeginAsync(
+            signedIn: null,
+            Client,
+            Language,
+            Source,
+            Source,
+            token,
+            challengeToken: null,
+            TestContext.Current.CancellationToken);
 
     private async Task<Result<RegistrationSessionId>> SignedInAsync(SubjectId holder, string? invitationToken) =>
         await Service.BeginAsync(
@@ -1733,7 +3005,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Client,
             Language,
             Source,
+            Source,
             invitationToken,
+            challengeToken: null,
             TestContext.Current.CancellationToken);
 
     // An organization locked to one domain, verified.
@@ -1754,9 +3028,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // The steps a test is not about, run the way a browser runs them, so that each
     // test says only what it is checking.
     private Task RegisteredAsync() => _clients
-        .RecordAsync(
+        .AddAsync(
             new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Registered, ["openid"]),
-            [1, 2, 3],
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken)
         .AsTask();
@@ -1764,7 +3038,15 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private async Task<RegistrationSessionId> StartedAsync()
     {
         Result<RegistrationSessionId> begun = await Service
-            .BeginAsync(signedIn: null, Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
+            .BeginAsync(
+                signedIn: null,
+                Client,
+                Language,
+                Source,
+                Source,
+                invitationToken: null,
+                challengeToken: null,
+                TestContext.Current.CancellationToken);
 
         return begun.Match(session => session, Throw<RegistrationSessionId>);
     }
@@ -1786,6 +3068,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         return session;
@@ -1806,6 +3089,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Phone,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         await VerifiedAsync(session, IdentifierKind.Phone);
@@ -1836,12 +3120,11 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
     private async Task VerifiedAsync(RegistrationSessionId session, IdentifierKind kind)
     {
-        StagedIdentity staged = Identity(session, kind);
-
         _ = Ok(await Service.VerifyAsync(
             session,
-            staged.Id,
-            VerificationCode.Read(staged.Code!),
+            Identity(session, kind).Id,
+            Code(session, kind),
+            Source,
             TestContext.Current.CancellationToken));
     }
 
@@ -1869,8 +3152,25 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private RegistrationSession Live(RegistrationSessionId session) =>
         _sessions.All.Single(held => held.Id == session);
 
+    // The code is in the message, as it is for the person reading it, and in the
+    // verification-code record it is answered from.
     private string Code(RegistrationSessionId session, IdentifierKind kind) =>
-        VerificationCode.Read(Identity(session, kind).Code!);
+        VerificationCode.Read(Outstanding(session, kind).Code);
+
+    // The verification-code record held against a staged identifier, which is the
+    // fingerprint of its session and itself (AUTH-FACT-004).
+    private VerificationCode Outstanding(RegistrationSessionId session, IdentifierKind kind) =>
+        _codes.All.Single(held => held.Holder.AsSpan().SequenceEqual(Holder(session, Identity(session, kind).Id)));
+
+    private static byte[] Holder(RegistrationSessionId session, IdentifierId staged)
+    {
+        byte[] named = new byte[32];
+
+        _ = session.Value.TryWriteBytes(named);
+        _ = staged.Value.TryWriteBytes(named.AsSpan(16));
+
+        return SHA256.HashData(named);
+    }
 
     private StagedIdentity Identity(RegistrationSessionId session, IdentifierKind kind) =>
         Live(session).Identifiers.Last(staged => staged.Kind == kind);
@@ -1879,7 +3179,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // the person reading it.
     private string Token(IdentifierKind kind) =>
         (kind is IdentifierKind.Email ? _notifications.Mail[^1] : _notifications.Texts[^1])
-            .Values["token"];
+            .Token();
 
     // What a completed WebAuthn ceremony stages, with the material a test does not
     // care about drawn once.
@@ -1906,6 +3206,65 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             new TotpMaterial(Secret(), ConsumedStep: null),
             WebAuthn: null);
 
+    // A deployment that has named its relying party and the name an authenticator
+    // app shows, neither of which has a default.
+    private void Keyed()
+    {
+        _configuration.Set(Settings.ServiceName, "Example");
+        _configuration.Set(Settings.WebAuthnRelyingPartyId, RelyingParty);
+        _configuration.Set(Settings.WebAuthnOrigins, [WebOrigin]);
+    }
+
+    // A session at its security step with a ceremony open and a generator begun.
+    private async Task<RegistrationSessionId> BegunBothAsync()
+    {
+        RegistrationSessionId session = await ConfirmedAsync();
+
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.BeginKeyAsync(session, Factor.Passkey, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.BeginGeneratorAsync(session, "authenticator", TestContext.Current.CancellationToken));
+
+        return session;
+    }
+
+    // What a browser sends back from a creation ceremony: the challenge the server
+    // issued, an origin the relying party admits, and a key the runtime can read.
+    private static AuthenticatorAttestation Attestation(string challenge)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        byte[] clientData = Encoding.UTF8.GetBytes(
+            "{\"type\":\"webauthn.create\",\"challenge\":\""
+            + challenge
+            + "\",\"origin\":\""
+            + WebOrigin
+            + "\"}");
+
+        byte[] authenticatorData = new byte[37];
+
+        SHA256.HashData(Encoding.UTF8.GetBytes(RelyingParty)).CopyTo(authenticatorData, 0);
+
+        // User present and user verified, with the two backup flags of a synced
+        // credential (AUTH-FACT-013).
+        authenticatorData[32] = 0x1D;
+
+        return new AuthenticatorAttestation(
+            Base64Url.EncodeToString(Guid.NewGuid().ToByteArray()),
+            Base64Url.EncodeToString(clientData),
+            Base64Url.EncodeToString(authenticatorData),
+            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
+            Algorithm: -7);
+    }
+
+    // The code an authenticator app shows now for the secret it was given.
+    private string Generated(string secret) =>
+        new Totp(
+                Base32Encoding.ToBytes(secret),
+                TotpCodes.StepSeconds,
+                OtpHashMode.Sha1,
+                TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
     private byte[] Secret()
     {
         byte[] drawn = new byte[32];
@@ -1929,6 +3288,13 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // The shipped restriction lets one message a minute reach an address, so a test
     // that registers twice waits as a person would (AUTH-ABUSE-004).
     private void Later() => _clock.Advance(TimeSpan.FromMinutes(2));
+
+    // Long enough for any delay the wrong tries so far have earned to lapse and short of
+    // the code's lifetime, so what a test reaches is the code's own cap (AUTH-ABUSE-001).
+    private void Waited() => _clock.Advance(TimeSpan.FromSeconds(30));
+
+    private static Error Failed<TValue>(Result<TValue> outcome) =>
+        outcome.Match(_ => throw new Xunit.Sdk.XunitException("The step was admitted."), error => error);
 
     private static TValue Ok<TValue>(Result<TValue> outcome) =>
         outcome.Match(value => value, Throw<TValue>);
@@ -1991,7 +3357,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         RegistrationSessionId session = await AwaitingAsync();
 
-        Assert.NotNull(Identity(session, IdentifierKind.Email).Code);
+        Assert.True(Outstanding(session, IdentifierKind.Email).IsAnswerable());
         Assert.Empty(_authenticators.All);
 
         _clock.Advance(TimeSpan.FromMinutes(6));
@@ -2002,6 +3368,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Identity(session, IdentifierKind.Email).Id,
                 Code(session, IdentifierKind.Email),
+                Source,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -2019,25 +3386,44 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
         string right = Code(session, IdentifierKind.Email);
 
-        for (int attempt = 0; attempt < 6; attempt++)
+        string wrong = string.Equals(right, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        for (int attempt = 0; attempt < 5; attempt++)
         {
+            Waited();
+
             Assert.Equal(
                 ErrorCodes.CodeInvalid,
                 Refused(await Service.VerifyAsync(
                     session,
                     staged,
-                    "000000",
+                    wrong,
+                    Source,
                     TestContext.Current.CancellationToken)));
         }
 
-        Assert.True(Identity(session, IdentifierKind.Email).CodeSpent);
+        Assert.Empty(_codes.All);
+
+        Waited();
 
         Assert.Equal(
-            ErrorCodes.CodeInvalid,
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                session,
+                staged,
+                wrong,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Waited();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
             Refused(await Service.VerifyAsync(
                 session,
                 staged,
                 right,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Later();
@@ -2046,6 +3432,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.NotEqual(right, Code(session, IdentifierKind.Email));
@@ -2056,6 +3443,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Identity(session, IdentifierKind.Email).Id,
                 right,
+                Source,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -2077,6 +3465,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
+            address: null,
             TestContext.Current.CancellationToken));
 
         var single = new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
@@ -2097,5 +3486,48 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             single,
             completed.Browser.Value,
             TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-SESS-007 AC6, AUTH-SESS-013 AC6: the session the terms step opens records the
+    /// whole address of the request that completes the step, whatever address the
+    /// registration began on; completed in process, with no request, it records the
+    /// address the registration began on.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC6_TheFirstSessionRecordsTheWholeAddressOfTheCompletingRequestAsync()
+    {
+        const string completing = "2001:db8:1:1::7";
+
+        RegistrationSessionId overTheWire = await SecuredAsync(Floor);
+
+        RegistrationOutcome completed = Ok(await Service.CompleteAsync(
+            overTheWire,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            completing,
+            TestContext.Current.CancellationToken));
+
+        Session opened = Assert.IsType<Session>(
+            await _live.FindAsync(completed.Session.Id, TestContext.Current.CancellationToken));
+
+        RegistrationSessionId inProcess = await SecuredAsync(Floor);
+        string began = Assert.Single(_sessions.All, held => held.Id == inProcess).Source;
+
+        RegistrationCompleted accepted = Ok(await Service.AcceptTermsAsync(
+            inProcess,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Session own = Assert.IsType<Session>(
+            await _live.FindAsync(accepted.Session, TestContext.Current.CancellationToken));
+
+        Assert.Equal(completing, opened.Origin.Address);
+        Assert.Equal((Source, Source), (began, own.Origin.Address));
     }
 }

@@ -136,6 +136,86 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-003, 09 section 8a (D-183): a publication under a name outside the rule a
+    /// document's name is held to is malformed naming <c>document</c>, whatever its body
+    /// carries, and publishes nothing.
+    /// </summary>
+    /// <param name="document">The name in the path.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("Terms")]
+    [InlineData("terms..of-service")]
+    [InlineData("-terms")]
+    [InlineData("terms%20of%20service")]
+    [InlineData("a123456789a123456789a123456789a123456789a123456789a123456789a1234")]
+    public async Task INT_SMS_003_APublicationUnderANameOutsideTheRuleIsMalformedAsync(string document)
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            $"/admin/documents/{document}/versions",
+            """{ "governingLanguage": "ar", "material": true }""");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Documents.Versions);
+    }
+
+    /// <summary>
+    /// INT-SMS-003, 09 section 8a (D-183): a translation attached under a name outside
+    /// the rule is malformed naming <c>document</c>, not a document that was not found.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_003_ATranslationUnderANameOutsideTheRuleIsMalformedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer refused = await browser.SendAsync(
+            "PUT",
+            "/admin/documents/Terms/versions/1/translations/en",
+            """{ "text": "The translation." }""");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3, 09 section 8a (D-187): the name is bound from the route as a
+    /// document name, so a publication or a translation under a name outside the rule is
+    /// answered naming <c>document</c> before its body is read: a body that is no JSON,
+    /// and one whose member does not read, are never named.
+    /// </summary>
+    /// <param name="body">A body the endpoint cannot read.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("{")]
+    [InlineData("""{ "material": "yes", "text": 7 }""")]
+    public async Task INT_SMS_003_AC3_ANameOutsideTheRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer publication = await browser.SendAsync("POST", "/admin/documents/Terms/versions", body);
+        Answer translation = await browser.SendAsync(
+            "PUT",
+            "/admin/documents/Terms/versions/1/translations/en",
+            body);
+
+        foreach (Answer refused in new[] { publication, translation })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+            Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(_deployment.Raised.Waiting);
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-005 AC1: without <c>notice:publish</c> each is refused forbidden.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -157,6 +237,36 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status403Forbidden, notice.Status);
         Assert.Equal(StatusCodes.Status403Forbidden, translation.Status);
         Assert.Empty(_deployment.Documents.Versions);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses a publication and a translation, and neither is
+    /// written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAPublicationAndATranslationAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        const string governing = """{ "text": "The governing text.", "governingLanguage": "ar", "material": false }""";
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/admin/documents/terms/versions", governing));
+
+        Assert.Empty(_deployment.Documents.Versions);
+
+        string version = (await browser.SendAsync("POST", "/admin/documents/terms/versions", governing)).Text("version");
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                $"/admin/documents/terms/versions/{version}/translations/en",
+                """{ "text": "The translation." }"""));
+
+        Assert.Empty(Assert.Single(_deployment.Documents.Versions).Translations);
     }
 
     private async Task<Browser> AuthorisedAsync()

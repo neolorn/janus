@@ -37,10 +37,14 @@ internal sealed class ClockDriftWatch(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>Nothing, or the failure where what was found could not be raised.</returns>
-    public async ValueTask<Result> WatchAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result> WatchAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Monitoring(context);
+
         if (reference is null)
         {
             return await alerts.RaiseAsync(Degraded(Absent), cancellationToken).ConfigureAwait(false);
@@ -53,11 +57,10 @@ internal sealed class ClockDriftWatch(
             return await alerts.RaiseAsync(Degraded(Unread), cancellationToken).ConfigureAwait(false);
         }
 
-        // An unreadable tolerance is the default's, so the pass still judges the clock.
         int steps = (await configuration
                 .ReadAsync(Settings.FactorTotpDrift, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.FactorTotpDrift.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         var tolerance = TimeSpan.FromSeconds((long)steps * TotpCodes.StepSeconds);
 
@@ -68,13 +71,22 @@ internal sealed class ClockDriftWatch(
 
         return await alerts
             .RaiseAsync(
-                Alerts.Of(AlertCondition.ClockDrift, scope: null, time.GetUtcNow(), Drifted(offset, tolerance)),
+                Alerts.Of(AlertCondition.ClockDrift, named: null, time.GetUtcNow(), Drifted(offset, tolerance)),
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
+
     private AlertRaised Degraded(string scope) =>
-        Alerts.Of(AlertCondition.Degradation, scope, time.GetUtcNow());
+        Alerts.Scoped(AlertCondition.Degradation, scope, time.GetUtcNow());
 
     private static Dictionary<string, JsonElement> Drifted(TimeSpan offset, TimeSpan tolerance) =>
         new(capacity: 2, StringComparer.Ordinal)

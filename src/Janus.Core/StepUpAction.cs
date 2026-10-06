@@ -219,4 +219,48 @@ public enum StepUpAction
     /// <remarks>Named <c>organization:delete</c>.</remarks>
     [JsonStringEnumMemberName("organization:delete")]
     OrganizationDelete = 29,
+
+    /// <summary>
+    /// Fulfil a privacy request of any type: an erasure's fulfilment starts a grace
+    /// window and a restriction's restricts another person's account. Refusing one is
+    /// not gated.
+    /// </summary>
+    /// <remarks>Named <c>privacyrequest:fulfil</c>.</remarks>
+    [JsonStringEnumMemberName("privacyrequest:fulfil")]
+    PrivacyRequestFulfil = 30,
+
+    /// <summary>
+    /// End a membership, which retires the corporate address and the mailbox it gave.
+    /// </summary>
+    /// <remarks>Named <c>membership:end</c>.</remarks>
+    [JsonStringEnumMemberName("membership:end")]
+    MembershipEnd = 31,
+
+    /// <summary>
+    /// Lift a processing restriction.
+    /// </summary>
+    /// <remarks>Named <c>account:restrictionlift</c>.</remarks>
+    [JsonStringEnumMemberName("account:restrictionlift")]
+    AccountRestrictionLift = 32,
+
+    /// <summary>
+    /// Cancel a deletion on the subject's behalf.
+    /// </summary>
+    /// <remarks>Named <c>account:deletioncancel</c>.</remarks>
+    [JsonStringEnumMemberName("account:deletioncancel")]
+    AccountDeletionCancel = 33,
+
+    /// <summary>
+    /// End another person's sessions.
+    /// </summary>
+    /// <remarks>Named <c>account:sessionsrevoke</c>.</remarks>
+    [JsonStringEnumMemberName("account:sessionsrevoke")]
+    AccountSessionsRevoke = 34,
+
+    /// <summary>
+    /// End every session.
+    /// </summary>
+    /// <remarks>Named <c>session:revokeall</c>.</remarks>
+    [JsonStringEnumMemberName("session:revokeall")]
+    SessionRevokeAll = 35,
 }

@@ -3,7 +3,7 @@ using System;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// The <c>sends</c> row: one message a transport took, the keys it counted against,
+/// The <c>sends</c> row: one message admitted, the keys it counted against,
 /// and when the last of those counts stops deciding anything.
 /// </summary>
 /// <remarks>
@@ -17,6 +17,18 @@ internal sealed class SendRecord
 
     /// <summary>The <c>counted</c> column.</summary>
     public byte[][] Counted { get; set; } = [];
+
+    /// <summary>
+    /// The <c>spent</c> column: the hashed keys whose granted credit the send consumed,
+    /// which a release gives back.
+    /// </summary>
+    public byte[][] Spent { get; set; } = [];
+
+    /// <summary>
+    /// The <c>spent_versions</c> column: for each key of <c>spent</c>, the version of the
+    /// fingerprint key its grant stood under.
+    /// </summary>
+    public int[] SpentVersions { get; set; } = [];
 
     /// <summary>
     /// The <c>fingerprint_version</c> column: the version of the fingerprint key the

@@ -5,9 +5,12 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -22,7 +25,7 @@ namespace Janus.Authentication.Tests.Factors;
 /// D-160).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class StepUpGuardTests : IDisposable
+public sealed class StepUpGuardTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -36,8 +39,12 @@ public sealed class StepUpGuardTests : IDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly IdentifierDirectoryInMemory _identifiers = new();
+    private readonly PhoneSignalAuditInMemory _considered = new();
+    private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly SubjectId _person;
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A person holding a password, under a system policy that raises one gate.
@@ -59,10 +66,63 @@ public sealed class StepUpGuardTests : IDisposable
             _authenticators,
             _passwords,
             new PolicyResolution(_memberships, _configuration, _raises),
+            _identifiers,
+            new PhoneSignals(_provider, _considered, _work, _clock),
             _clock);
 
     /// <inheritdoc/>
-    public void Dispose() => _randomness.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        await _work.DisposeAsync();
+        _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: where the carrier reports a recent change of SIM or of
+    /// network for the account's number, the text code is withheld from the
+    /// combinations a step-up offers and the account's other second steps are offered,
+    /// and the consideration is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromTheCombinationsAsync()
+    {
+        TwoStep();
+        Holds(Factor.PhoneCode);
+        Holds(Factor.Totp);
+
+        StepUpChallenge clear = await ChallengedAsync(Opened(Noon), "account:suspend");
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk));
+
+        StepUpChallenge risky = await ChallengedAsync(Opened(Noon), "account:suspend");
+
+        Assert.Contains(clear.Combinations, combination => combination.Contains(Factor.PhoneCode));
+        Assert.Equal(StepUpOutcome.Present, risky.Outcome);
+        Assert.DoesNotContain(risky.Combinations, combination => combination.Contains(Factor.PhoneCode));
+        Assert.Contains(risky.Combinations, combination => combination.Contains(Factor.Totp));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)_person)], _considered.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6 and AUTH-STEP-002: where the text code was the only way to the
+    /// gate, withholding it leaves no combination, and the answer is the one an account
+    /// that holds the level and cannot present it is given, never a pass.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AStepUpLeftWithNoCombinationIsToldToReportTheLossAsync()
+    {
+        TwoStep();
+        Holds(Factor.PhoneCode);
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk));
+
+        StepUpChallenge risky = await ChallengedAsync(Opened(Noon), "account:suspend");
+
+        Assert.Equal(StepUpOutcome.ReportLoss, risky.Outcome);
+        Assert.Empty(risky.Combinations);
+    }
 
     /// <summary>
     /// AUTH-STEP-002, D-160: a gate named as in section 5a costs what the policy states
@@ -117,6 +177,39 @@ public sealed class StepUpGuardTests : IDisposable
         (await Guard.ChallengeAsync(_person, session, gate, TestContext.Current.CancellationToken))
         .Match(challenge => challenge, error => throw new XunitException(error.Code.ToString()));
 
+    // A gate a password and any second step reach, which is what a text code is.
+    private void TwoStep()
+    {
+        var gates = Core.Policies.SystemDefault.Gates.ToDictionary();
+        gates[StepUpAction.AccountSuspend] = new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5));
+
+        _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault with { Gates = gates });
+
+        IdentifierId number = _identifiers.Verified(_person, IdentifierKind.Phone, "+441632960011");
+
+        _identifiers.PromoteAsync(_person, number, TestContext.Current.CancellationToken)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private void Holds(Factor factor) =>
+        _authenticators.Hold(Authenticator.Existing(
+            AuthenticatorId.New(_clock),
+            _person,
+            factor,
+            CredentialLabel.TryParse(factor.ToString(), out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The catalogue entry is no label."),
+            AuthenticatorState.Active,
+            _clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+            null,
+            isPreferred: false));
+
     private SessionId Opened(DateTimeOffset at)
     {
         var session = Session.Begin(
@@ -127,7 +220,7 @@ public sealed class StepUpGuardTests : IDisposable
             at,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         _sessions.AddAsync(session, Drawn(), Drawn(), TestContext.Current.CancellationToken)
             .AsTask()

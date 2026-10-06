@@ -87,7 +87,7 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             await connection.QueryAsync<(string, string)>(
                 """
                 SELECT principal, principal_reason FROM identity.audit_records
-                WHERE action = 'privacy.erasure.executed' AND effective_subject = ANY(@subjects)
+                WHERE action = 'privacy.erasure.executed' AND subject = ANY(@subjects)
                 """,
                 new { subjects = new[] { requested, takenDown } }));
         Assert.Equal(
@@ -95,6 +95,33 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             await connection.ExecuteScalarAsync<int>(
                 "SELECT count(*)::int FROM identity.accounts WHERE subject = @unknown",
                 new { unknown }));
+    }
+
+    /// <summary>
+    /// DR-016, chapter 10 section 5.12a: the replay's audit record carries the line's
+    /// reason by its written name, as the line spells it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_TheAuditCarriesTheReasonInItsWrittenSpellingAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Guid takenDown = await AccountAsync(connection, "suspended");
+
+        await WrittenAsync($"2026-09-19T16:04:00Z {takenDown:D} minor-takedown");
+
+        Invocation replayed = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+
+        Assert.Equal((0, string.Empty), (replayed.ExitCode, replayed.Error));
+        Assert.Equal(
+            "minor-takedown",
+            await connection.ExecuteScalarAsync<string>(
+                """
+                SELECT details->>'reason' FROM identity.audit_records
+                WHERE action = 'privacy.erasure.executed' AND subject = @takenDown
+                """,
+                new { takenDown }));
     }
 
     /// <summary>
@@ -138,6 +165,43 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             ("deleted", "oob-request", new DateTime(2026, 9, 20, 8, 0, 0, DateTimeKind.Utc), (short)0),
             await ErasedAsync(reached, subject));
         Assert.NotEqual(live, await WrappedAsync(reached, subject));
+    }
+
+    /// <summary>
+    /// DR-016 and AUTHZ-GATE-006: a line may be appended twice, as a manual completion
+    /// refused after its line was appended and made again appends it. A replay reads the
+    /// repeat as one erasure: the account is erased once, its host is told once and one
+    /// record is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_ALineAppendedTwiceIsOneErasureToAReplayAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Guid subject = await AccountAsync(connection, "active");
+        string line = $"2026-09-21T10:30:00Z {subject:D} minor-takedown";
+
+        await WrittenAsync(line, line);
+
+        Invocation replayed = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+
+        Assert.Equal((0, string.Empty), (replayed.ExitCode, replayed.Error));
+        Assert.Equal("""{"reapplied":1,"standing":1,"absent":0}""", replayed.Output.Trim());
+        Assert.Equal(
+            ("deleted", "takedown", new DateTime(2026, 9, 21, 10, 30, 0, DateTimeKind.Utc), (short)0),
+            await ErasedAsync(connection, subject));
+        Assert.Equal(
+            (1, 1, 1),
+            await connection.QuerySingleAsync<(int, int, int)>(
+                """
+                SELECT
+                    (SELECT count(*)::int FROM identity.erasures WHERE subject = @subject),
+                    (SELECT count(*)::int FROM identity.outbox WHERE subject = @subject),
+                    (SELECT count(*)::int FROM identity.audit_records
+                     WHERE action = 'privacy.erasure.executed' AND subject = @subject)
+                """,
+                new { subject }));
     }
 
     /// <summary>

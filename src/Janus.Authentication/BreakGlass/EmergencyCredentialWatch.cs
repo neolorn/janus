@@ -27,17 +27,30 @@ internal sealed class EmergencyCredentialWatch(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>Nothing, or the failure where the absence could not be raised.</returns>
-    public async ValueTask<Result> WatchAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result> WatchAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Monitoring(context);
+
         if (await store.StandingAsync(cancellationToken).ConfigureAwait(false) is not null)
         {
             return Result.Success();
         }
 
         return await alerts
-            .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, scope: null, time.GetUtcNow()), cancellationToken)
+            .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, named: null, time.GetUtcNow()), cancellationToken)
             .ConfigureAwait(false);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
 }

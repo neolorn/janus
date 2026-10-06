@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
@@ -85,15 +86,15 @@ public sealed class PrefixedAddressTests
             prefix: Prefix,
             signIn: new AuthenticationAddresses(Origin + "/signin", Origin + Prefix));
 
-        await deployment.Clients.RecordAsync(
+        await deployment.Clients.AddAsync(
             new OidcClient(
                 Client,
                 Client,
                 OidcClientKind.BrowserApplication,
                 Origin + Prefix + SignOn.ReturnPath,
                 ["openid"]),
-            OpaqueToken.Of(Secret).Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes(Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
         Browser holder = await HolderAsync(deployment);
@@ -134,7 +135,7 @@ public sealed class PrefixedAddressTests
                 deployment.Clock.GetUtcNow(),
                 TimeSpan.FromDays(1),
                 TimeSpan.FromDays(30),
-                satisfiesEveryGate: false),
+                breakGlassReason: null),
             secret.Fingerprint(),
             OpaqueToken.Draw(randomness).Fingerprint(),
             TestContext.Current.CancellationToken);

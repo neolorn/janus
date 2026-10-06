@@ -26,7 +26,9 @@ internal sealed class OidcTokenConfiguration : IEntityTypeConfiguration<OidcToke
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_oidc_tokens_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(token => token.Id).HasName("pk_oidc_tokens");
 

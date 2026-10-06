@@ -15,15 +15,28 @@ namespace Janus.Storage.Authorization.Gate;
 /// <summary>
 /// The refusals and the exports the gate records, over the <c>audit_records</c> table.
 /// </summary>
+/// <param name="context">The scope's context, read for the transaction in progress.</param>
 /// <param name="connections">Where the statements take their connection from.</param>
 /// <remarks>
 /// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, OPS-ALERT-006, CONV-LOG-005, CONV-LOG-006
-/// and CONV-DESIGN-003. The record is written through the operation's own connection, so a
-/// refusal on a path that opened no transaction stands on its own and one inside a
-/// transaction is part of it. Nothing here changes or removes a row.
+/// and CONV-DESIGN-003. Every row is written in the transaction of the scope this is
+/// resolved in: a refusal's in the unit of work the gate opens for its record in a scope
+/// of its own, outside any transaction the caller holds open, so a rollback of the
+/// caller's work leaves it standing (D-166, D-183); an export's in the action's own.
+/// Nothing here changes or removes a row.
 /// </remarks>
-internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
+internal sealed class AccessAudit(StoreContext context, DataConnections connections) : IAccessAudit
 {
+    // AUTHZ-CONCEAL-004, D-183: a refusal is written and then counted against its actor's
+    // window, so two at once would each count the window without the other. The actor's
+    // refusals are held for the rest of the transaction; no read takes this lock.
+    private const string Hold =
+        """
+        SELECT pg_advisory_xact_lock(hashtextextended(
+            'identity.audit_records/authz.access.denied/' || CAST(@acting AS text) || '/' || COALESCE(CAST(@principal AS text), ''),
+            0));
+        """;
+
     private const string Permission = "permission";
     private const string ResourceType = "resourceType";
     private const string Resource = "resource";
@@ -46,24 +59,18 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         """
         INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details)
+             organization, details, principal, principal_reason, breakglass_reason)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb));
-        """;
-
-    private const string AppendExport =
-        """
-        INSERT INTO identity.audit_records
-            (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details, principal, principal_reason)
-        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb), @principal, @reason);
+                CAST(@details AS jsonb), @principal, @reason, @breakGlassReason);
         """;
 
     private const string ById =
         """
         SELECT acting_subject AS "Acting",
                effective_subject AS "Effective",
+               principal AS "Principal",
+               principal_reason AS "PrincipalReason",
+               breakglass_reason AS "BreakGlassReason",
                organization AS "Organization",
                occurred_at AS "At",
                details AS "Details"
@@ -76,16 +83,40 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         SELECT count(*)::int
         FROM identity.audit_records
         WHERE category = @category AND action = @action AND acting_subject = @acting
+          AND principal IS NULL
           AND occurred_at >= @from AND occurred_at < @until;
         """;
 
-    private const string ByNobody =
+    // Background work records the nil subject, so the principal's rows are found through
+    // the index on the acting subject and told apart by the name.
+    private const string ByPrincipal =
         """
         SELECT count(*)::int
         FROM identity.audit_records
-        WHERE category = @category AND action = @action AND acting_subject IS NULL
+        WHERE category = @category AND action = @action AND acting_subject = @acting
+          AND principal = @principal
           AND occurred_at >= @from AND occurred_at < @until;
         """;
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId acting, string? principal, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An actor's refusals are held only inside the transaction of their record.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { acting = acting.Value, principal },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask RecordAsync(DeniedAccess denial, CancellationToken cancellationToken)
@@ -103,8 +134,15 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                     category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
                     at = denial.At.ToUniversalTime(),
                     action = Denied.ToString(),
-                    acting = denial.Acting?.Value,
-                    effective = denial.Effective?.Value,
+
+                    // AUTHZ-CONCEAL-004, IDN-AUD-001: a refusal of background work names
+                    // the nil subject under both identities beside its principal, as
+                    // every row its work leaves does.
+                    acting = (denial.Acting ?? default).Value,
+                    effective = (denial.Effective ?? default).Value,
+                    principal = denial.Principal,
+                    reason = denial.PrincipalReason,
+                    breakGlassReason = denial.BreakGlassReason,
                     organization = denial.Organization?.Value,
                     details = Written(denial),
                 },
@@ -122,7 +160,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
 
         await ambient.Connection
             .ExecuteAsync(new CommandDefinition(
-                AppendExport,
+                Append,
                 new
                 {
                     id = export.Id.Value,
@@ -138,6 +176,41 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                     details = Written(export),
                     principal = export.Principal?.Name,
                     reason = export.Principal?.Reason,
+                    breakGlassReason = export.BreakGlassReason,
+                },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RecordAsync(CorrectedGrant corrected, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(corrected);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        AuditAction action = corrected.Retracted ? AuditActions.GrantRetracted : AuditActions.GrantMaterialised;
+
+        await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Append,
+                new
+                {
+                    id = corrected.Id.Value,
+                    category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
+                    at = corrected.At.ToUniversalTime(),
+                    action = action.ToString(),
+
+                    // IDN-AUD-001: the drift check is no account, so the row names the
+                    // nil subject under both identities beside its principal.
+                    acting = default(SubjectId).Value,
+                    effective = default(SubjectId).Value,
+                    organization = (Guid?)corrected.Organization.Value,
+                    details = Written(corrected),
+                    principal = corrected.Principal.Name,
+                    reason = corrected.Principal.Reason,
+                    breakGlassReason = (string?)null,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -166,7 +239,8 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
 
     /// <inheritdoc/>
     public async ValueTask<int> CountAsync(
-        SubjectId? acting,
+        SubjectId acting,
+        string? principal,
         DateTimeOffset from,
         DateTimeOffset until,
         CancellationToken cancellationToken)
@@ -175,12 +249,13 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
 
         return await ambient.Connection
             .ExecuteScalarAsync<int>(new CommandDefinition(
-                acting is null ? ByNobody : ByActor,
+                principal is null ? ByActor : ByPrincipal,
                 new
                 {
                     category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
                     action = Denied.ToString(),
-                    acting = acting?.Value,
+                    acting = acting.Value,
+                    principal,
                     from = from.ToUniversalTime(),
                     until = until.ToUniversalTime(),
                 },
@@ -244,16 +319,34 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         return JsonSerializer.Serialize(details, AuditDocument.Default.DictionaryStringJsonElement);
     }
 
+    // AUTHZ-GRANT-003, chapter 10 section 5.24: the grant the drift check wrote or took
+    // back, and the role it confers.
+    private static string Written(CorrectedGrant corrected) =>
+        JsonSerializer.Serialize(
+            new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                [Grant] = JsonSerializer.SerializeToElement(corrected.Grant.Value),
+                [Role] = JsonSerializer.SerializeToElement(corrected.Role.ToString()),
+            },
+            AuditDocument.Default.DictionaryStringJsonElement);
+
     private static DeniedAccess Read(AuditRecordId correlation, RecordedDenial row)
     {
         Dictionary<string, JsonElement> details =
             JsonSerializer.Deserialize(row.Details, AuditDocument.Default.DictionaryStringJsonElement)
             ?? throw new InvalidOperationException("The recorded refusal carries no fields.");
 
+        // The nil subject beside a principal stands for no account, so the refusal reads
+        // back as the gate made it: under no identity, by the principal named.
+        bool ofAPerson = row.Principal is null;
+
         return new DeniedAccess(
             correlation,
-            row.Acting is Guid acting ? new SubjectId(acting) : null,
-            row.Effective is Guid effective ? new SubjectId(effective) : null,
+            ofAPerson ? new SubjectId(row.Acting) : null,
+            ofAPerson ? new SubjectId(row.Effective) : null,
+            row.Principal,
+            row.PrincipalReason,
+            row.BreakGlassReason,
             row.Organization is Guid organization ? new OrganizationId(organization) : null,
             Core.Permission.Parse(Field(details, Permission)),
             Core.ResourceType.Parse(Field(details, ResourceType)),
@@ -297,9 +390,15 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
     // The columns as the row holds them, before the fields are read back.
     private sealed class RecordedDenial
     {
-        public Guid? Acting { get; init; }
+        public Guid Acting { get; init; }
 
-        public Guid? Effective { get; init; }
+        public Guid Effective { get; init; }
+
+        public string? Principal { get; init; }
+
+        public string? PrincipalReason { get; init; }
+
+        public string? BreakGlassReason { get; init; }
 
         public Guid? Organization { get; init; }
 

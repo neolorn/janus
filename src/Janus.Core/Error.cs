@@ -65,4 +65,16 @@ public sealed record Error
     /// <returns>The failure.</returns>
     public static Error From(ErrorCode code, string name, JsonElement value) =>
         new(code, new Dictionary<string, JsonElement>(capacity: 1) { [name] = value });
+
+    /// <summary>
+    /// The refusal of a progressive delay or a rate limit: <c>auth.throttled</c>, whose
+    /// one detail says when the next attempt is looked at and nothing about why. Every
+    /// throttle of the library answers through it, in the one shape the boundary turns
+    /// into <c>Retry-After</c>.
+    /// </summary>
+    /// <param name="retryAt">The instant the next attempt is looked at.</param>
+    /// <returns>The failure, <c>details.retryAt</c> the instant in UTC.</returns>
+    /// <remarks>Implements AUTH-ABUSE-002 and BFF-ABUSE-001.</remarks>
+    public static Error Throttled(DateTimeOffset retryAt) =>
+        From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(retryAt.ToUniversalTime()));
 }

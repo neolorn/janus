@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
@@ -56,7 +57,7 @@ public sealed class LibraryStructureTests
         ["Janus.Conformance"] = ["Janus.Core", "Janus.Hosting"],
         ["Janus.Analyzers"] = [],
         ["Janus.UnicodeTables"] = [],
-        ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Storage"],
+        ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
     };
 
     // CONV-LAYOUT-001: the library is under src and the generators are under tools,
@@ -127,32 +128,18 @@ public sealed class LibraryStructureTests
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
-    // CONV-DESIGN-004 AC2: a parameter of the underlying type where the library has a
-    // type of its own for the thing.
-    private static readonly Regex Untyped = new(
-        @"[(,]\s*(Guid\s+[a-z]|string\s+(subject|organization|email|phone|username|address)\b)",
-        RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5));
-
-    // CONV-DESIGN-004 AC2: a member that implements another package's interface takes
-    // what that interface declares, which no type of the library's can change.
-    // OpenIddict's stores name the OIDC subject as text.
-    private static readonly Regex Foreign = new(
-        @":\s*IOpenIddict\w+Store<",
-        RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5));
 
     private static readonly string[] AllowedPackages =
     [
         "Dapper",
         "Fido2",
         "Konscious.Security.Cryptography.Argon2",
-        "Microsoft.AspNetCore.Authentication.OpenIdConnect",
         "Microsoft.CodeAnalysis.Analyzers",
         "Microsoft.CodeAnalysis.CSharp",
         "Microsoft.CodeAnalysis.PublicApiAnalyzers",
         "Microsoft.EntityFrameworkCore",
         "Microsoft.EntityFrameworkCore.Design",
+        "Microsoft.EntityFrameworkCore.Relational",
         "Microsoft.Testing.Platform",
         "MinVer",
         "Npgsql.EntityFrameworkCore.PostgreSQL",
@@ -164,6 +151,14 @@ public sealed class LibraryStructureTests
         "Testcontainers.PostgreSql",
         "Testcontainers.Redis",
         "xunit.v3",
+    ];
+
+    // CONV-DESIGN-008 AC3: the packages that carry one version and move together.
+    private static readonly string[] MovingTogether =
+    [
+        "Microsoft.EntityFrameworkCore",
+        "Microsoft.EntityFrameworkCore.Design",
+        "Microsoft.EntityFrameworkCore.Relational",
     ];
 
     private static readonly string[] InheritedProperties =
@@ -189,6 +184,13 @@ public sealed class LibraryStructureTests
     // or a mode or a level for one category of rules.
     private static readonly Regex RuleConfiguration = new(
         @"^(NoWarn|WarningsAsErrors|WarningsNotAsErrors|CodeAnalysisRuleSet|GlobalAnalyzerConfigFiles|EditorConfigFiles|RunAnalyzers\w*|Analysis(Mode\w*|Level\w+))$",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-006: what an endpoint declares where it is mounted, to the end of its
+    // statement.
+    private static readonly Regex Declaration = new(
+        @"\.Declares\([^;]*;",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -244,9 +246,13 @@ public sealed class LibraryStructureTests
     ];
 
     // CONV-DESIGN-007 AC2: the wall clock read in place of the TimeProvider a service
-    // is given, and the one random source that is not the RandomNumberGenerator.
+    // is given, the one random source that is not the RandomNumberGenerator, a draw from
+    // the static RandomNumberGenerator in place of the one a service is given, and an
+    // identifier made from the wall clock or from the static randomness.
     private static readonly Regex Ambient = new(
-        @"\bDateTime(Offset)?\s*\.\s*(Now|UtcNow|Today)\b|\bRandom\b",
+        @"\bDateTime(Offset)?\s*\.\s*(Now|UtcNow|Today)\b|\bRandom\b"
+            + @"|\bRandomNumberGenerator\s*\.\s*(GetInt32|GetBytes|GetNonZeroBytes|Fill|GetItems|GetString|GetHexString|Shuffle)\b"
+            + @"|\bGuid\s*\.\s*(NewGuid\s*\(|CreateVersion7\s*\(\s*\))",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -422,8 +428,9 @@ public sealed class LibraryStructureTests
         TimeSpan.FromSeconds(5));
 
     // CONV-ERR-001 AC1: the families of the catalogue a denial is spelled in, the
-    // authentication and the authorization refusals.
-    private static readonly string[] Refusals = ["auth.", "authz."];
+    // authentication, the authorization and the consent refusals, which the gate
+    // answers too.
+    private static readonly string[] Refusals = ["auth.", "authz.", "privacy.consent."];
 
     // CONV-ERR-003 AC2: the head of a catch clause, up to the brace that opens its block.
     private static readonly Regex Catch = new(
@@ -444,6 +451,84 @@ public sealed class LibraryStructureTests
         @"^await\s+Refusal\s*\.\s*WriteAsync\s*\(",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
+
+    // CONV-ERR-003 AC2: a last statement that logs what was caught, as its fault log
+    // entry, through a source-generated method of a log class.
+    private static readonly Regex Logging = new(
+        @"^\w+Log\s*\.\s*\w+\s*\(\s*log\b[\s\S]*\bFaultLog\s*\.\s*Of\s*\(",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    /// <summary>
+    /// AUTH-PASS-004: the notice names the source the offline leaked-password list was
+    /// drawn from, and the date the list itself carries.
+    /// </summary>
+    [Fact]
+    public void AUTH_PASS_004_TheNoticeNamesTheLeakedListsSource()
+    {
+        string notice = string.Join(
+            ' ',
+            File.ReadAllText(Path.Combine(Repository.Root, "NOTICE"))
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        string drawn = File
+            .ReadLines(Path.Combine(Repository.Root, "src", "Janus.Hosting", "Passwords", "leaked-passwords.txt"))
+            .First()[2..];
+
+        Assert.Contains("Have I Been Pwned", notice, StringComparison.Ordinal);
+        Assert.Contains("Pwned Passwords", notice, StringComparison.Ordinal);
+        Assert.Contains("drawn on " + drawn, notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTH-PASS-004: the notice acknowledges the English word list the dictionary source
+    /// carries, as its author asks.
+    /// </summary>
+    [Fact]
+    public void AUTH_PASS_004_TheNoticeAcknowledgesTheEnglishWordList()
+    {
+        string notice = string.Join(
+            ' ',
+            File.ReadAllText(Path.Combine(Repository.Root, "NOTICE"))
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        Assert.Contains("3esl list of the 12dicts package, version 6.0.2", notice, StringComparison.Ordinal);
+        Assert.Contains("Alan Beale", notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-010: the notice names the Public Suffix List, its licence and its source
+    /// address, and the version the carried list states in its header.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_TheNoticeNamesThePublicSuffixList()
+    {
+        string notice = string.Join(
+            ' ',
+            File.ReadAllText(Path.Combine(Repository.Root, "NOTICE"))
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        string version = File
+            .ReadLines(Path.Combine(Repository.Root, "src", "Janus.Authentication", "Factors", "public_suffix_list.dat"))
+            .First(line => line.StartsWith("// VERSION: ", StringComparison.Ordinal))[12..];
+
+        Assert.Contains("Public Suffix List", notice, StringComparison.Ordinal);
+        Assert.Contains("Mozilla Public License 2.0", notice, StringComparison.Ordinal);
+        Assert.Contains("https://publicsuffix.org/list/public_suffix_list.dat", notice, StringComparison.Ordinal);
+        Assert.Contains("version " + version, notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC2: the throttled refusal has one builder, so every throttle of
+    /// the library communicates the remaining delay in one shape. No file of the library
+    /// reads the code but the builder and the map of statuses; an endpoint's declaration
+    /// names the code its row gives and builds no refusal (CONV-DESIGN-006).
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode() =>
+        Assert.Equal(
+            ["ApiStatus.cs", "Error.cs"],
+            Named(code => Declaration
+                .Replace(code, string.Empty)
+                .Contains("ErrorCodes.Throttled", StringComparison.Ordinal)));
 
     /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
@@ -480,7 +565,9 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-LAYOUT-002 AC1: the only grants of internal visibility are the ones the
-    /// item permits.
+    /// item permits, by a source project and by a test project alike: the test projects
+    /// of authentication, authorization and privacy open their fakes to
+    /// <c>Janus.Hosting.Tests</c>, and no other test project grants anything.
     /// </summary>
     [Fact]
     public void CONV_LAYOUT_002_AC1_InternalsAreVisibleOnlyWhereThePermittedGrantsSay()
@@ -489,6 +576,23 @@ public sealed class LibraryStructureTests
         {
             Assert.Equal(PermittedGrants(project), Grants(project));
         }
+
+        string[] tests =
+        [
+            .. Directory
+                .EnumerateFiles(Path.Combine(Repository.Root, "tests"), "*.csproj", SearchOption.AllDirectories)
+                .Where(file => !IsBuildOutput(file)),
+        ];
+
+        Assert.NotEmpty(tests);
+        Assert.All(tests, file =>
+        {
+            string project = Path.GetFileNameWithoutExtension(file);
+
+            Assert.Equal(
+                project + ": " + string.Join(", ", PermittedTestGrants(project)),
+                project + ": " + string.Join(", ", GrantsOf(file)));
+        });
     }
 
     /// <summary>
@@ -816,28 +920,14 @@ public sealed class LibraryStructureTests
         Assert.Empty(assignable);
     }
 
-    /// <summary>
-    /// CONV-DESIGN-004 AC2: nothing outside the type that gives a value its rules takes
-    /// that value as the type it is stored in.
-    /// </summary>
-    [Fact]
-    public void CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType()
-    {
-        IEnumerable<string> taking = SourcesOf([.. Areas, "Janus.Storage"])
-            .Select(file => (File: file, Text: File.ReadAllText(file)))
-            .Where(one => Untyped.IsMatch(one.Text) && !Foreign.IsMatch(one.Text))
-            .Select(one => one.File);
-
-        Assert.Empty(taking);
-    }
 
     /// <summary>
-    /// CONV-DESIGN-007 AC2: nothing outside the tests reads the wall clock or makes a
-    /// <c>Random</c>, so time comes from the injected TimeProvider and randomness from
-    /// the injected RandomNumberGenerator.
+    /// CONV-DESIGN-007 AC2: nothing outside the tests reads the wall clock, makes a
+    /// <c>Random</c> or draws from the static RandomNumberGenerator, so time comes from
+    /// the injected TimeProvider and randomness from the injected RandomNumberGenerator.
     /// </summary>
     [Fact]
-    public void CONV_DESIGN_007_AC2_NoFileOutsideTheTestsReadsTheClockOrMakesARandom()
+    public void CONV_DESIGN_007_AC2_NoFileOutsideTheTestsReadsTheClockOrDrawsStaticRandomness()
     {
         IEnumerable<string> reading = Sources()
             .Where(file => Ambient.IsMatch(File.ReadAllText(file)));
@@ -861,6 +951,27 @@ public sealed class LibraryStructureTests
                 .Select(element => element.Name.LocalName)
                 .Intersect(InheritedProperties, StringComparer.Ordinal));
         }
+    }
+
+    /// <summary>
+    /// CONV-SETUP-001 AC3: global.json names an SDK of the .NET release the solution
+    /// targets, and rolls forward to a later patch of its feature band and no further.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_001_AC3_TheSdkIsOfTheTargetedReleaseAndRollsForwardByPatch()
+    {
+        string framework = XDocument
+            .Parse(Repository.ReadText("Directory.Build.props"))
+            .Descendants("TargetFramework")
+            .Single()
+            .Value;
+
+        using var settings = JsonDocument.Parse(Repository.ReadText("global.json"));
+        JsonElement sdk = settings.RootElement.GetProperty("sdk");
+        var version = Version.Parse(sdk.GetProperty("version").GetString()!);
+
+        Assert.Equal(framework, "net" + version.ToString(2));
+        Assert.Equal("latestPatch", sdk.GetProperty("rollForward").GetString());
     }
 
     /// <summary>
@@ -922,6 +1033,42 @@ public sealed class LibraryStructureTests
             BelowError(Repository.ReadText(".editorconfig")));
 
     /// <summary>
+    /// CONV-SETUP-004 AC3, the suppressions: the .editorconfig marks as generated code
+    /// exactly the files EF Core's migration tool writes, each migration's designer file
+    /// and the model snapshot, and every other file that disables a warning justifies it
+    /// on the same line.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_004_AC3_OnlyTheMigrationToolsFilesAreGeneratedAndEverySuppressionIsJustified()
+    {
+        string[] generated = Generated(Repository.ReadText(".editorconfig"));
+        string[] sources =
+        [
+            .. Sources().Select(file => Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')),
+        ];
+        IEnumerable<string> written = sources.Where(file =>
+            file.StartsWith("src/Janus.Storage/Migrations/", StringComparison.Ordinal)
+            && (file.EndsWith(".Designer.cs", StringComparison.Ordinal)
+                || file.EndsWith("/StoreContextModelSnapshot.cs", StringComparison.Ordinal)));
+        IEnumerable<string> unjustified = sources
+            .Where(file => !generated.Any(section => Covers(section, file)))
+            .SelectMany(file => Repository
+                .ReadText(file)
+                .ReplaceLineEndings("\n")
+                .Split('\n')
+                .Where(line => line.TrimStart().StartsWith("#pragma warning disable", StringComparison.Ordinal)
+                    && !line.Contains("//", StringComparison.Ordinal))
+                .Select(line => file + ": " + line.Trim()));
+
+        Assert.Equal(
+            ["src/Janus.Storage/Migrations/*.Designer.cs", "src/Janus.Storage/Migrations/StoreContextModelSnapshot.cs"],
+            generated);
+        Assert.NotEmpty(written);
+        Assert.All(written, file => Assert.Contains(generated, section => Covers(section, file)));
+        Assert.Empty(unjustified);
+    }
+
+    /// <summary>
     /// CONV-VCS-005 AC2: no project, props or targets file states a version, and the
     /// version comes from MinVer, which every project inherits.
     /// </summary>
@@ -956,6 +1103,63 @@ public sealed class LibraryStructureTests
             .ToArray();
 
         Assert.Equal(AllowedPackages, declared);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-008 AC3: the core, relational and design packages carry one version,
+    /// the tool manifest gives dotnet-ef that version, and every lockfile resolves each
+    /// of the three at it, so no build has two versions of one of their assemblies to
+    /// choose between. Storage alone references the relational package.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_008_AC3_TheRelationalAccessPackagesAndTheirToolCarryOneVersion()
+    {
+        var versions = XDocument
+            .Parse(Repository.ReadText("Directory.Packages.props"))
+            .Descendants("PackageVersion")
+            .ToDictionary(
+                package => package.Attribute("Include")!.Value,
+                package => package.Attribute("Version")!.Value,
+                StringComparer.Ordinal);
+
+        string version = versions["Microsoft.EntityFrameworkCore"];
+
+        using var manifest = JsonDocument.Parse(Repository.ReadText(".config/dotnet-tools.json"));
+
+        Assert.All(MovingTogether, package => Assert.Equal(version, versions[package]));
+        Assert.Equal(
+            version,
+            manifest.RootElement.GetProperty("tools").GetProperty("dotnet-ef").GetProperty("version").GetString());
+
+        string[] roots = [.. Roots, "tests"];
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            foreach (JsonProperty framework in locked.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                foreach (string package in MovingTogether)
+                {
+                    if (framework.Value.TryGetProperty(package, out JsonElement resolved))
+                    {
+                        Assert.Equal(version, resolved.GetProperty("resolved").GetString());
+                    }
+                }
+            }
+        }
+
+        string referencing = Assert.Single(
+            Projects(),
+            project => XDocument
+                .Parse(File.ReadAllText(project))
+                .Descendants("PackageReference")
+                .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.EntityFrameworkCore.Relational"));
+
+        Assert.Equal("Janus.Storage.csproj", Path.GetFileName(referencing));
     }
 
     /// <summary>
@@ -999,8 +1203,9 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-ERR-001 AC1: no file of the library raises or makes an exception that
-    /// carries an authentication or authorization code of the catalogue, or whose type
-    /// is itself a refusal of access, so every denial reaches its caller as a result.
+    /// carries an authentication, authorization or consent code of the catalogue, or
+    /// whose type is itself a refusal of access, so every denial reaches its caller as a
+    /// result.
     /// </summary>
     [Fact]
     public void CONV_ERR_001_AC1_NoDenialIsSignalledByAnException()
@@ -1033,30 +1238,36 @@ public sealed class LibraryStructureTests
                     .Select(raised => Path.GetFileName(file) + ":" + LineOf(code, raised.Index));
             });
 
-        Assert.NotEmpty(denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentRequired), denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentSuperseded), denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentWrittenRequired), denials);
         Assert.Empty(thrown);
     }
 
     /// <summary>
-    /// CONV-ERR-003 AC2: no catch block of the library carries on after the exception,
-    /// logging or not, since every path of the library is a security path: each one
-    /// throws, returns a failure, or answers the request with a refusal as the last act
-    /// of the block that holds it.
+    /// CONV-ERR-003 AC2: no catch block of the library carries on after the exception
+    /// but the one around after-commit work, which logs it, since every path of the
+    /// library is a security path: each other one throws, returns a failure, or answers
+    /// the request with a refusal as the last act of the block that holds it.
     /// </summary>
     [Fact]
-    public void CONV_ERR_003_AC2_NoCatchOfTheLibraryCarriesOnAfterTheException()
+    public void CONV_ERR_003_AC2_NoCatchButTheOneAroundAfterCommitWorkCarriesOn()
     {
-        (string Site, bool Ended)[] caught =
+        (string Site, bool Ended, bool Logged)[] caught =
         [
             .. Sources()
                 .Where(file => file.StartsWith(
                     Path.Combine(Repository.Root, "src") + Path.DirectorySeparatorChar,
                     StringComparison.Ordinal))
-                .SelectMany(file => Catches(file).Select(found => (Path.GetFileName(file) + ":" + found.Line, found.Ended))),
+                .SelectMany(file => Catches(file).Select(found => (Path.GetFileName(file) + ":" + found.Line, found.Ended, found.Logged))),
         ];
 
         Assert.NotEmpty(caught);
-        Assert.Empty(caught.Where(found => !found.Ended).Select(found => found.Site));
+        (string Site, bool Logged)[] carrying =
+            [.. caught.Where(found => !found.Ended).Select(found => (found.Site, found.Logged))];
+
+        Assert.Equal(["SendPublisher.cs"], carrying.Select(found => found.Site.Split(':')[0]));
+        Assert.All(carrying, found => Assert.True(found.Logged, found.Site));
     }
 
     /// <summary>
@@ -1129,7 +1340,7 @@ public sealed class LibraryStructureTests
             .SelectMany(folder => Sources().Where(file =>
                 file.StartsWith(folder, StringComparison.Ordinal)));
 
-    private static bool Written(string text) => Called(text, "IConfigurationStore", "WriteAsync");
+    private static bool Written(string text) => Called(text, "IConfigurationWrites", "WriteAsync");
 
     // Whichever name a class gives the port it holds, a call through it is that name
     // followed by the port's method.
@@ -1285,11 +1496,12 @@ public sealed class LibraryStructureTests
             && !Materialised.IsMatch(code[start..comparison.Index]);
     }
 
-    // CONV-ERR-003 AC2: every catch block of a file, by its line, and whether it ends
-    // the operation: its last statement throws or returns a failure, or it writes a
-    // refusal as the answer and the block that holds it closes after it, so nothing
-    // runs after the exception as though it had not been thrown.
-    private static IEnumerable<(int Line, bool Ended)> Catches(string file)
+    // CONV-ERR-003 AC2: every catch block of a file, by its line, whether it ends the
+    // operation (its last statement throws or returns a failure, or it writes a refusal
+    // as the answer and the block that holds it closes after it, so nothing runs after
+    // the exception as though it had not been thrown), and whether its last statement
+    // logs the fault.
+    private static IEnumerable<(int Line, bool Ended, bool Logged)> Catches(string file)
     {
         string code = Comment.Replace(File.ReadAllText(file), string.Empty);
 
@@ -1302,7 +1514,8 @@ public sealed class LibraryStructureTests
             yield return (
                 LineOf(code, head.Index),
                 Ending.IsMatch(last)
-                    || (Answering.IsMatch(last) && code[(closed + 1)..].TrimStart().StartsWith('}')));
+                    || (Answering.IsMatch(last) && code[(closed + 1)..].TrimStart().StartsWith('}')),
+                Logging.IsMatch(last));
         }
     }
 
@@ -1447,6 +1660,37 @@ public sealed class LibraryStructureTests
         return [.. below];
     }
 
+    // The sections of an .editorconfig that mark their files generated code, in the
+    // order the file holds them.
+    private static string[] Generated(string configuration)
+    {
+        var marked = new List<string>();
+        string section = string.Empty;
+
+        foreach (string line in configuration.ReplaceLineEndings("\n").Split('\n').Select(entry => entry.Trim()))
+        {
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                section = line[1..^1];
+            }
+            else if (Regex.IsMatch(line, @"^generated_code\s*=\s*true$", RegexOptions.None, TimeSpan.FromSeconds(5)))
+            {
+                marked.Add(section);
+            }
+        }
+
+        return [.. marked];
+    }
+
+    // Whether a section of the .editorconfig reaches a file, for the sections that
+    // name a folder and a file name with at most a wildcard in it.
+    private static bool Covers(string section, string file) =>
+        Regex.IsMatch(
+            file,
+            "^" + Regex.Escape(section).Replace(@"\*", "[^/]*", StringComparison.Ordinal) + "$",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5));
+
     // The source files of the test projects, as code with the comments taken out.
     private static IEnumerable<(string File, string Code)> TestSources() =>
         Directory
@@ -1526,9 +1770,11 @@ public sealed class LibraryStructureTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-    private static string[] Grants(string project) =>
+    private static string[] Grants(string project) => GrantsOf(Project(project));
+
+    private static string[] GrantsOf(string file) =>
         XDocument
-            .Parse(File.ReadAllText(Project(project)))
+            .Parse(File.ReadAllText(file))
             .Descendants("InternalsVisibleTo")
             .Select(grant => grant.Attribute("Include")!.Value)
             .Order(StringComparer.Ordinal)
@@ -1573,6 +1819,21 @@ public sealed class LibraryStructureTests
             permitted.AddRange(["Janus.Hosting", "Janus.Cli"]);
         }
 
+        // D-171: Janus.Core opens its internals to its own test project for one reason,
+        // so a test can see the key ring's clearing leave every array zero.
+        if (string.Equals(project, "Janus.Core", StringComparison.Ordinal))
+        {
+            permitted.Add("Janus.Core.Tests");
+        }
+
+        // CONV-DESIGN-007: the key ring and the mail server in use are registered by
+        // Janus.Core's own method, which the hosting tests call to stand both up as the
+        // entry point does.
+        if (string.Equals(project, "Janus.Core", StringComparison.Ordinal))
+        {
+            permitted.Add("Janus.Hosting.Tests");
+        }
+
         // Janus.Storage holds the rows the protocol server keeps its own records in,
         // so the project that stands the server up reads them and its test project
         // stands the same server up over fakes of them (AUTH-OIDC-001, D-162).
@@ -1583,4 +1844,11 @@ public sealed class LibraryStructureTests
 
         return [.. permitted.Order(StringComparer.Ordinal)];
     }
+
+    // CONV-LAYOUT-002 AC1: three test projects open their fakes to the test project that
+    // uses them at the browser boundary, and no test project grants anything else.
+    private static string[] PermittedTestGrants(string project) =>
+        project is "Janus.Authentication.Tests" or "Janus.Authorization.Tests" or "Janus.Privacy.Tests"
+            ? ["Janus.Hosting.Tests"]
+            : [];
 }

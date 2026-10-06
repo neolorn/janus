@@ -54,7 +54,6 @@ public sealed class NeverLoggedTests
             Member<OidcClientRecord>(nameof(OidcClientRecord.Secret)),
             Member<OidcTokenRecord>(nameof(OidcTokenRecord.Payload)),
             Member<SigningKeyRecord>(nameof(SigningKeyRecord.PrivateKey)),
-            Member<StagedIdentityDocument>(nameof(StagedIdentityDocument.Code)),
             Member<StagedIdentityDocument>(nameof(StagedIdentityDocument.Link)),
             Member<StagedSessionDocument>(nameof(StagedSessionDocument.Password)),
         ]));

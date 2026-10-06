@@ -18,6 +18,10 @@ internal interface IBreakGlassAudit
     /// Records that the credential was generated.
     /// </summary>
     /// <param name="acting">Who generated it: a system administrator or the emergency account.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="credential">The issue generated.</param>
     /// <param name="replaced">The issue it replaced, where one stood.</param>
     /// <param name="at">When.</param>
@@ -25,6 +29,7 @@ internal interface IBreakGlassAudit
     /// <returns>The work of recording it.</returns>
     ValueTask GeneratedAsync(
         SubjectId acting,
+        string? breakGlassReason,
         BreakGlassCredentialId credential,
         BreakGlassCredentialId? replaced,
         DateTimeOffset at,
@@ -35,6 +40,10 @@ internal interface IBreakGlassAudit
     /// effective identity.
     /// </summary>
     /// <param name="emergency">The emergency account.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="credential">The issue used.</param>
     /// <param name="session">The session it opened.</param>
     /// <param name="at">When.</param>
@@ -42,6 +51,7 @@ internal interface IBreakGlassAudit
     /// <returns>The work of recording it.</returns>
     ValueTask UsedAsync(
         SubjectId emergency,
+        string? breakGlassReason,
         BreakGlassCredentialId credential,
         SessionId session,
         DateTimeOffset at,

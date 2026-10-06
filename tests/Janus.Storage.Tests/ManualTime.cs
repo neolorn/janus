@@ -11,12 +11,27 @@ namespace Janus.Storage.Tests;
 /// never before, however long the machine takes.
 /// </summary>
 /// <remarks>Implements CONV-TEST-007: a fake, written by hand, never a mock.</remarks>
-internal sealed class ManualTime : TimeProvider
+public sealed class ManualTime : TimeProvider
 {
     private readonly Lock _gate = new();
     private readonly List<ManualTimer> _standing = [];
     private TaskCompletionSource _scheduled = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private DateTimeOffset _now = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+    private DateTimeOffset _now;
+
+    /// <summary>
+    /// A clock standing at noon on the day the storage cases are set on.
+    /// </summary>
+    public ManualTime()
+        : this(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero))
+    {
+    }
+
+    /// <summary>
+    /// A clock standing at an instant of the case's own, by which what the case records
+    /// is read back.
+    /// </summary>
+    /// <param name="now">Where the clock stands until it is moved.</param>
+    public ManualTime(DateTimeOffset now) => _now = now;
 
     /// <inheritdoc/>
     public override long TimestampFrequency => TimeSpan.TicksPerSecond;

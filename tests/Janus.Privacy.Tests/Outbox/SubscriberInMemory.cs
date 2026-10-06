@@ -41,11 +41,17 @@ internal sealed class SubscriberInMemory(string name, bool required) : ISubjectE
     /// </summary>
     public bool Faults { get; set; }
 
+    /// <summary>
+    /// What a test does while the handler holds an event.
+    /// </summary>
+    public Action? Meanwhile { get; set; }
+
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The handler is set to fault.</exception>
     public ValueTask<Result> HandleAsync(SubjectEvent raised, CancellationToken cancellationToken)
     {
         _offered.Add(raised);
+        Meanwhile?.Invoke();
 
         if (Faults)
         {

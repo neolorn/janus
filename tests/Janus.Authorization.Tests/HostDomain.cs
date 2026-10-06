@@ -120,8 +120,8 @@ internal static class HostDomain
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("content", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
-            .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("interest", "Interest", false, false, true, true))
             .SensitiveCategory("financial")
             .Permission("article:read")
             .Permission("article:edit")
@@ -143,7 +143,7 @@ internal static class HostDomain
             .Resource<Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"])
-                .Encrypted(item => item.Body, item => item.Author));
+                .Encrypted(item => item.Body, item => item.Author, "content"));
 
     // A record is named by the host's own text, whatever the host makes that of.
     private static string Named() => Guid.CreateVersion7().ToString();

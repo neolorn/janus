@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using Janus.Authentication.Alerting;
 using Janus.Core;
 using Xunit;
@@ -25,6 +26,7 @@ public sealed class AlertsTests
         "approver-volume",
         "read-volume-anomaly",
         "breakglass-used",
+        "breakglass-generated",
         "protected-setting-changed",
         "alert-destination-changed",
         "stepup-policy-weakened",
@@ -60,6 +62,7 @@ public sealed class AlertsTests
         AlertCondition.ApproverVolume,
         AlertCondition.ReadVolumeAnomaly,
         AlertCondition.BreakGlassUsed,
+        AlertCondition.BreakGlassGenerated,
         AlertCondition.ProtectedSettingChanged,
         AlertCondition.AlertDestinationChanged,
         AlertCondition.StepUpPolicyWeakened,
@@ -73,13 +76,27 @@ public sealed class AlertsTests
 
     /// <summary>
     /// OPS-ALERT-001 AC2: the conditions are the rows of the table and nothing else,
-    /// each carrying the identifier chapter 10 section 5.23 gives it, in table order.
+    /// each carrying the identifier chapter 10 section 5.23 gives it, declared in table
+    /// order. A condition added later takes the next free value (D-166, 291), so the
+    /// order is the declaration's and not the values'.
     /// </summary>
     [Fact]
     public void OPS_ALERT_001_AC2_TheConditionsAreTheTableInOrder() =>
         Assert.Equal(
             Identifiers,
-            Enum.GetValues<AlertCondition>().Select(condition => Alerts.Key(condition, null)));
+            typeof(AlertCondition)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Select(field => Alerts.Key((AlertCondition)field.GetValue(null)!, scope: null, named: null)));
+
+    /// <summary>
+    /// D-166 (291): a condition is never renumbered; the one added for a generated
+    /// break-glass credential takes the next free value.
+    /// </summary>
+    [Fact]
+    public void OPS_ALERT_001_AGeneratedBreakGlassCredentialTakesTheNextFreeValue() =>
+        Assert.Equal(
+            AlertCondition.BreakGlassGenerated,
+            Enum.GetValues<AlertCondition>().Max());
 
     /// <summary>
     /// The severity of a condition is the table's and not the caller's, so two
@@ -116,6 +133,25 @@ public sealed class AlertsTests
         Assert.NotEqual(
             Alerts.Deduplication(one.IdempotencyKey),
             Alerts.Deduplication(other.IdempotencyKey));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-002 AC3, D-177: an alert raised under a scope carries it, and its
+    /// deduplication key is the condition and the scope, so two scopes are two keys.
+    /// </summary>
+    [Fact]
+    public void OPS_ALERT_002_AC3_TheDeduplicationKeyIncludesTheScope()
+    {
+        AlertRaised one = Alerts.Scoped(AlertCondition.Degradation, "mailbox.push:one", Noon);
+        AlertRaised other = Alerts.Scoped(AlertCondition.Degradation, "mailbox.push:two", Noon);
+
+        Assert.Equal("mailbox.push:one", one.Scope);
+        Assert.Equal("degradation:mailbox.push:one", Alerts.Deduplication(one.IdempotencyKey));
+        Assert.NotEqual(Alerts.Deduplication(one.IdempotencyKey), Alerts.Deduplication(other.IdempotencyKey));
+        Assert.Null(Alerts.Of(AlertCondition.Degradation, "account-one", Noon).Scope);
+        Assert.Equal(
+            "degradation:mailbox.push:one:account-one",
+            Alerts.Key(AlertCondition.Degradation, "mailbox.push:one", "account-one"));
     }
 
     /// <summary>

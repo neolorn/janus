@@ -8,6 +8,7 @@ using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Organizations;
@@ -21,6 +22,9 @@ namespace Janus.Hosting.Tests.Organizations;
 [Trait("kind", "unit")]
 public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("domain-reverification", "REG-DOM-001", SystemOperation.ExpirySweep));
+
     private const string Domain = "example.test";
 
     private const string Listed = """{"domain":"example.test","reason":"Staff sign in with work addresses."}""";
@@ -121,7 +125,7 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         _deployment.Dns.Withdraw(listed.GetProperty("recordName").GetString()!);
         _deployment.Clock.Advance(TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1));
 
-        Result<int> swept = await Sweep().SweepAsync(CancellationToken.None);
+        Result<int> swept = await Sweep().SweepAsync(Sweeper, CancellationToken.None);
         LockedDomain checkedDomain = Assert.Single(_deployment.Domains.Held);
 
         Assert.Equal(1, swept.Match(count => count, _ => -1));
@@ -147,11 +151,11 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
         _ = await VerifiedAsync(administrator);
 
-        Assert.Equal(0, (await Sweep().SweepAsync(CancellationToken.None)).Match(count => count, _ => -1));
+        Assert.Equal(0, (await Sweep().SweepAsync(Sweeper, CancellationToken.None)).Match(count => count, _ => -1));
 
         _deployment.Clock.Advance(TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, (await Sweep().SweepAsync(CancellationToken.None)).Match(count => count, _ => -1));
+        Assert.Equal(1, (await Sweep().SweepAsync(Sweeper, CancellationToken.None)).Match(count => count, _ => -1));
         Assert.True(Assert.Single(_deployment.Domains.Held).LastCheckPassed);
         Assert.Empty(_deployment.Events.Of<AlertRaised>());
     }
@@ -205,7 +209,7 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
                 MessageKind.SignInLink,
                 kind,
                 "en",
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {token}"));
+                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
         }
 
         (Browser administrator, SubjectId member) = await AuthorisedAsync();
@@ -355,6 +359,41 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-002 AC6 and X3 of D-166 (178): a change of the list is decided on the list
+    /// in force under the lock of the organization's policy row, taken inside its one
+    /// unit of work, which the write joins; a refusal made under it rolls that unit of
+    /// work back before it answers (CONV-DESIGN-003).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_002_AC6_AListChangeIsDecidedUnderItsRowLockAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        ConfigurationKey member = Settings.OrganizationPolicy.For(Branch.ToString());
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.DomainManage);
+        _deployment.Configuration.Held.Clear();
+        _deployment.Work.Reset();
+
+        Answer withheld = await browser.SendAsync("POST", PathOf(Branch), Listed);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
+        Assert.Equal([member], _deployment.Configuration.Held);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(1, _deployment.Work.RolledBack);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed + _deployment.Work.RolledBack);
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+        _deployment.Configuration.Held.Clear();
+
+        Answer listed = await browser.SendAsync("POST", PathOf(Branch), Listed);
+
+        Assert.Equal(StatusCodes.Status201Created, listed.Status);
+        Assert.Equal([member, member], _deployment.Configuration.Held);
+    }
+
+    /// <summary>
     /// 09 section 8a: every change is written down with the domain and the reason, and
     /// the list answers each domain with where its verification stands.
     /// </summary>
@@ -417,11 +456,12 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// API-CONV-002 and IDN-ORG-006: a domain is read in its canonical ASCII form, so
-    /// the Unicode and the ASCII forms of one domain are one; what is not a domain of
-    /// two labels, a missing reason, an unlisted domain and an organization the
-    /// deployment does not hold are refused naming the member; listing a domain twice
-    /// changes nothing.
+    /// API-CONV-002, IDN-ORG-006 and 09 section 8a: a domain is read in its canonical
+    /// ASCII form, so the Unicode and the ASCII forms of one domain are one; what is not
+    /// a domain of two labels is refused naming the member, a domain the organization
+    /// does not list, never listed or removed, is not found, a missing or blank reason
+    /// is refused as a configuration change without one is, naming the organization's
+    /// policy key, with nothing written; listing a domain twice changes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -440,8 +480,15 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Answer single = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"localhost","reason":"Why not."}""");
         Answer spaced = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"not a domain.test","reason":"Why not."}""");
         Answer unreasoned = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"example.test"}""");
+        Answer blank = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"example.test","reason":" "}""");
+        Answer overlong = await administrator.SendAsync(
+            "POST",
+            PathOf(Branch),
+            ("domain", "example.test"),
+            ("reason", new string('r', 1025)));
+        Answer unverified = await administrator.SendAsync("POST", PathOf(Branch) + "/" + Domain + "/verify", "{}");
+        Answer unremoved = await administrator.SendAsync("DELETE", PathOf(Branch) + "/" + Domain, """{"reason":""}""");
         Answer unlisted = await administrator.SendAsync("POST", PathOf(Branch) + "/other.test/verify", Reasoned);
-        Answer unheld = await administrator.SendAsync("POST", PathOf(new OrganizationId(Guid.NewGuid())), Listed);
         Answer absent = await administrator.SendAsync("DELETE", PathOf(Branch) + "/other.test", Reasoned);
 
         Assert.Equal(StatusCodes.Status201Created, unicode.Status);
@@ -450,10 +497,114 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Assert.Single(_deployment.Domains.Held);
         Assert.Equal("domain", Member(single));
         Assert.Equal("domain", Member(spaced));
-        Assert.Equal("reason", Member(unreasoned));
-        Assert.Equal("domain", Member(unlisted));
-        Assert.Equal("id", Member(unheld));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(blank));
+        Assert.Equal("reason", Member(overlong));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unverified));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unremoved));
+        Assert.Single(_deployment.OrganizationChanges.Changes);
+        Assert.Equal(StatusCodes.Status404NotFound, unlisted.Status);
+        Assert.Equal(ErrorCodes.DomainNotFound.ToString(), unlisted.Text("code"));
         Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
+
+        Answer removed = await administrator.SendAsync("DELETE", PathOf(Branch) + "/xn--bcher-kva.example", Reasoned);
+        Answer gone = await administrator.SendAsync("POST", PathOf(Branch) + "/xn--bcher-kva.example/verify", Reasoned);
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, gone.Status);
+        Assert.Equal(ErrorCodes.DomainNotFound.ToString(), gone.Text("code"));
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC12 and X6 of D-166: a domain is verified by its TXT record, so a
+    /// deployment that registered no DNS resolver lists none; the addition is refused
+    /// naming the field and the declaration it requires, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AC12_ADomainIsNotListedWithoutAResolverAsync()
+    {
+        await using var unresolved = new Janus.Hosting.Tests.Deployment(resolver: false);
+
+        Flow.Prepare(unresolved);
+        unresolved.Administers(Administration);
+        unresolved.Organizations.Seed(Branch);
+
+        Browser administrator = await Flow.SignedInAsync(unresolved);
+        SubjectId subject = unresolved.Directory.Created[^1].Subject;
+
+        unresolved.Gate.Grant(subject, Administration, Permissions.DomainManage);
+        unresolved.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+        unresolved.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        Answer refused = await administrator.SendAsync("POST", PathOf(Branch), Listed);
+        JsonElement details = refused.Json().GetProperty("details");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), refused.Text("code"));
+        Assert.Equal("emailDomains", details.GetProperty("field").GetString());
+        Assert.Equal("dnsResolver", details.GetProperty("requires").GetString());
+        Assert.Empty(unresolved.Domains.Held);
+        Assert.Empty(unresolved.OrganizationChanges.Changes);
+        Assert.Empty(unresolved.Changes.Written);
+    }
+
+    /// <summary>
+    /// 09 section 8a: a change of the list asked in process without a reason is refused
+    /// as a configuration change without one is, naming the organization's policy key,
+    /// and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AChangeInProcessWithoutAReasonIsRefusedAsync()
+    {
+        (_, SubjectId subject) = await AuthorisedAsync();
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        IOrganizationDomains domains = scope.ServiceProvider.GetRequiredService<IOrganizationDomains>();
+        var session = SessionId.New(_deployment.Clock);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Error[] refusals =
+        [
+            Refusal(await domains.AddDomainAsync(AccessContext.Of(subject), session, Branch, Domain, "", cancellationToken)),
+            Refusal(await domains.VerifyDomainAsync(AccessContext.Of(subject), session, Branch, Domain, " ", cancellationToken)),
+            (await domains.RemoveDomainAsync(AccessContext.Of(subject), session, Branch, Domain, "\t", cancellationToken))
+                .Match(() => throw new Xunit.Sdk.XunitException("removed"), error => error),
+        ];
+
+        Assert.All(refusals, refused => Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refused.Code));
+        Assert.All(refusals, refused => Assert.Equal(PolicyKey(Branch), refused.Details["key"].GetString()));
+        Assert.Empty(_deployment.Domains.Held);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// REG-DOM-001 and 09 section 8a: listing, adding, verifying and removing a domain
+    /// of an organization the deployment does not hold is <c>404</c>
+    /// <c>identity.organization.notfound</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync();
+        string unheld = PathOf(new OrganizationId(Guid.NewGuid()));
+
+        Answer[] answers =
+        [
+            await administrator.SendAsync("GET", unheld),
+            await administrator.SendAsync("POST", unheld, Listed),
+            await administrator.SendAsync("POST", unheld + "/" + Domain + "/verify", Reasoned),
+            await administrator.SendAsync("DELETE", unheld + "/" + Domain, Reasoned),
+        ];
+
+        Assert.All(answers, answer => Assert.Equal(StatusCodes.Status404NotFound, answer.Status));
+        Assert.All(answers, answer => Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), answer.Text("code")));
+        Assert.Empty(_deployment.Domains.Held);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>
@@ -482,9 +633,9 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-CODE-006 AC2: a body missing a member adding, verifying or removing a domain
-    /// requires is refused naming the member before the service is reached, so a caller
-    /// the service would refuse for want of the permission is answered for the body,
-    /// and the lock holds nothing.
+    /// requires is refused before the service is reached, a missing reason by its own
+    /// code naming the organization's policy key, so a caller the service would refuse
+    /// for want of the permission is answered for the body, and the lock holds nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -499,15 +650,65 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unnamed.Text("code"));
         Assert.Equal("domain", Member(unnamed));
-        Assert.Equal("reason", Member(unreasoned));
-        Assert.Equal("reason", Member(unverified));
-        Assert.Equal("reason", Member(unremoved));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unverified));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unremoved));
         Assert.Empty(_deployment.Domains.Held);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the adding, the verifying and the removing
+    /// of a domain, each leaving the list as it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachDomainChangeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", PathOf(Branch), Listed));
+
+        Assert.Empty(await _deployment.Domains.OfAsync(Branch, TestContext.Current.CancellationToken));
+
+        JsonElement added = (await administrator.SendAsync("POST", PathOf(Branch), Listed)).Json();
+
+        _deployment.Dns.Publish(added.GetProperty("recordName").GetString()!, added.GetProperty("recordValue").GetString()!);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", PathOf(Branch) + "/" + Domain + "/verify", Reasoned));
+
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", PathOf(Branch) + "/" + Domain, Reasoned));
+
+        Assert.True(Assert.Single(await _deployment.Domains.OfAsync(Branch, TestContext.Current.CancellationToken)).IsListed);
+        Assert.Equal(
+            [AuditActions.OrganizationDomainAdded],
+            _deployment.OrganizationChanges.Changes.Select(change => change.Action));
     }
 
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/domains";
 
     private static string PolicyOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
+
+    private static string PolicyKey(OrganizationId organization) =>
+        Settings.OrganizationPolicy.For(organization.ToString()).ToString();
+
+    private static Error Refusal(Result<OrganizationDomain> outcome) =>
+        outcome.Match(_ => throw new Xunit.Sdk.XunitException("changed"), error => error);
+
+    private static string Unreasoned(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), answer.Text("code"));
+
+        return answer.Json().GetProperty("details").GetProperty("key").GetString()!;
+    }
 
     private static string Member(Answer answer)
     {

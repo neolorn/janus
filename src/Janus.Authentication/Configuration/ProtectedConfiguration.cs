@@ -5,7 +5,9 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
-using Janus.Authentication.Organizations;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
+using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -17,9 +19,9 @@ namespace Janus.Authentication.Configuration;
 /// </summary>
 /// <param name="configuration">Where the value in force is read.</param>
 /// <param name="settings">Where a protected key's value is written.</param>
-/// <param name="organizations">Whether the organization a member names exists.</param>
 /// <param name="audit">Where each change is written down.</param>
-/// <param name="alerts">Where each change is raised.</param>
+/// <param name="alerts">Where each change is raised, with its event, in the change's transaction.</param>
+/// <param name="redirects">The start's check of the default client a browser lands on.</param>
 /// <param name="work">The one transaction the change runs in.</param>
 /// <param name="time">When.</param>
 /// <remarks>
@@ -27,15 +29,16 @@ namespace Janus.Authentication.Configuration;
 /// 4.8, as entry 319 of the decisions pending review settles them. Whoever holds the
 /// server can already do worse than change a setting (D-071), so the command asks for no
 /// step-up; what it cannot skip is the reason, the record and the alert. A change that
-/// would leave the deployment unable to start is refused by the rule the host's start
-/// applies, and nothing of it is written.
+/// would leave the deployment unable to start is refused by the rules the host's start
+/// applies, run over the written values before the commit (D-166), and nothing of it is
+/// written.
 /// </remarks>
 internal sealed class ProtectedConfiguration(
     IConfigurationStore configuration,
     IProtectedSettings settings,
-    IOrganizationDirectory organizations,
     IConfigurationAudit audit,
-    IRaisedAlerts alerts,
+    IAlertChannels alerts,
+    RedirectValidation redirects,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -63,56 +66,69 @@ internal sealed class ProtectedConfiguration(
 
         if (string.IsNullOrWhiteSpace(reason))
         {
-            return Result.Failure(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Result.Failure(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         foreach (ProtectedValue value in values)
         {
-            if (value.Organization is OrganizationId organization
-                && await organizations.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
-            {
-                return Result.Failure(new Error(
-                    ErrorCodes.ConfigurationValueNotAllowed,
-                    new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-                    {
-                        ["key"] = JsonSerializer.SerializeToElement(value.Key.ToString()),
-                        ["field"] = JsonSerializer.SerializeToElement("organization"),
-                    }));
-            }
-
             bool loosening = await value.LoosensAsync(configuration, cancellationToken).ConfigureAwait(false);
-            string? before = await settings.WriteAsync(value.Key, value.Written, cancellationToken).ConfigureAwait(false);
+            string? before = await value.BeforeAsync(configuration, cancellationToken).ConfigureAwait(false);
+
+            _ = await settings.WriteAsync(value.Key, value.Written, cancellationToken).ConfigureAwait(false);
 
             await audit
                 .ChangedAsync(value.Key, before, value.Written, loosening, reason, Principal, now, cancellationToken)
                 .ConfigureAwait(false);
 
-            await RaiseAsync(AlertCondition.ProtectedSettingChanged, value.Key, now, cancellationToken).ConfigureAwait(false);
+            if (await RaiseAsync(AlertCondition.ProtectedSettingChanged, value.Key, now, cancellationToken).ConfigureAwait(false)
+                is Error unannounced)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unannounced);
+            }
 
             // OPS-CFG-004: the governing language is protected on its own ground and its
             // change is told under its own condition as well.
-            if (value.Key == Settings.LegalGoverningLanguage.Key)
+            if (value.Key == Settings.LegalGoverningLanguage.Key
+                && await RaiseAsync(AlertCondition.GoverningLanguageChanged, value.Key, now, cancellationToken).ConfigureAwait(false)
+                    is Error unannouncedLanguage)
             {
-                await RaiseAsync(AlertCondition.GoverningLanguageChanged, value.Key, now, cancellationToken).ConfigureAwait(false);
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unannouncedLanguage);
             }
         }
 
         if ((await CompleteAsync(cancellationToken).ConfigureAwait(false)).Match(() => (Error?)null, failure => failure)
             is Error incomplete)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(incomplete);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
 
-    private async ValueTask RaiseAsync(
+    // OPS-ALERT-001 and D-166 (308): the alert is raised through the channels, so its
+    // event is written with the row in the change's transaction, and a change whose
+    // alert cannot be raised is not made.
+    private async ValueTask<Error?> RaiseAsync(
         AlertCondition condition,
         ConfigurationKey key,
         DateTimeOffset now,
@@ -123,15 +139,18 @@ internal sealed class ProtectedConfiguration(
             ["key"] = JsonSerializer.SerializeToElement(key.ToString()),
         };
 
-        await alerts
-            .AddAsync(new RaisedAlert(RaisedAlertId.Of(now), Alerts.Of(condition, key.ToString(), now, details)), cancellationToken)
-            .ConfigureAwait(false);
+        return (await alerts
+                .RaiseAsync(Alerts.Of(condition, key.ToString(), now, details), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
     }
 
-    // LIB-HOST-001: the rule the host's start applies, over what the settings table
-    // holds once the change is written, so a change the command accepts leaves a
-    // deployment that starts. The records of processing are served by every deployment
-    // (entry 273).
+    // LIB-HOST-001 and D-166 (319): the rules the host's start applies, over what the
+    // settings table holds once the change is written, so a change the command accepts
+    // leaves a deployment that starts: the keys it has to name, the relying party
+    // (AUTH-FACT-010), the endpoints (INT-GEN-001), the signing algorithm (AUTH-KEY-001)
+    // and the default client (API-REDIR-002), each refused with the code the start
+    // gives. The records of processing are served by every deployment (entry 273).
     private async ValueTask<Result> CompleteAsync(CancellationToken cancellationToken)
     {
         IReadOnlySet<ConfigurationKey> held = await settings.HeldAsync(cancellationToken).ConfigureAwait(false);
@@ -167,7 +186,42 @@ internal sealed class ProtectedConfiguration(
             return Result.Failure(unnamed.Failure ?? Error.From(ErrorCodes.StartupDeclarationMissing));
         }
 
-        return Result.Success();
+        try
+        {
+            _ = await RelyingParty.ForAsync(configuration, cancellationToken).ConfigureAwait(false);
+        }
+        catch (StartupException unsettled)
+        {
+            return Result.Failure(unsettled.Failure ?? Error.From(ErrorCodes.StartupRelyingPartyId));
+        }
+
+        if (await SendingValidation.InsecureAsync(configuration, cancellationToken).ConfigureAwait(false)
+            is Error insecure)
+        {
+            return Result.Failure(insecure);
+        }
+
+        string algorithm = (await configuration
+                .ReadAsync(Settings.TokenSigningAlgorithm, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        // AUTH-KEY-001: the algorithm the key is made for at the next rotation. A key the
+        // version cannot make is a value the key does not admit.
+        if (!SigningKeys.Signs(algorithm))
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.ConfigurationValueNotAllowed,
+                "key",
+                JsonSerializer.SerializeToElement(Settings.TokenSigningAlgorithm.Key.ToString())));
+        }
+
+        return await redirects.ValidateAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

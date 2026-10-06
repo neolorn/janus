@@ -53,13 +53,11 @@ internal sealed class DeletionSweep(
         SystemPrincipal principal = Sweeping(context);
         DateTimeOffset now = time.GetUtcNow();
 
-        TimeSpan grace = await ReadAsync(Settings.AccountDeletionGrace, cancellationToken)
-            .ConfigureAwait(false);
-        TimeSpan takedown = await ReadAsync(Settings.TakedownGrace, cancellationToken)
+        DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<PendingDeletion> elapsed = await accounts
-            .DeletingSinceAsync(now - (grace < takedown ? grace : takedown), cancellationToken)
+            .DeletingSinceAsync(now - windows.Shortest, cancellationToken)
             .ConfigureAwait(false);
 
         int erased = 0;
@@ -68,7 +66,7 @@ internal sealed class DeletionSweep(
         {
             // IDN-LIFE-003: a takedown borrows the deletion timer and not its length,
             // so each window is measured by its own key.
-            if (deletion.Since > now - (deletion.By is DeletionOrigin.Takedown ? takedown : grace))
+            if (windows.ErasureDue(deletion.By, deletion.Since, deletion.HeldSince) > now)
             {
                 continue;
             }
@@ -90,12 +88,6 @@ internal sealed class DeletionSweep(
                 "The pass runs as a system principal that may sweep what has expired.",
                 nameof(context));
 
-    private async ValueTask<TimeSpan> ReadAsync(
-        DurationSetting setting,
-        CancellationToken cancellationToken) =>
-        (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => setting.Default);
-
     // IDN-LIFE-003: a takedown ends in the same erasure as a request, and the
     // subscribers are told which of the two reached them.
     private static ErasureReason Because(DeletionOrigin origin) => origin switch
@@ -112,7 +104,8 @@ internal sealed class DeletionSweep(
     {
         ErasureReason reason = Because(deletion.By);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         _ = await eraser.EraseAsync(deletion.Subject, reason, now, cancellationToken)
             .ConfigureAwait(false);
@@ -130,11 +123,13 @@ internal sealed class DeletionSweep(
                 Erased,
                 principal,
                 deletion.Subject,
+                organization: null,
                 now,
                 Named(deletion, reason),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private static Dictionary<string, JsonElement> Named(
@@ -142,7 +137,7 @@ internal sealed class DeletionSweep(
         ErasureReason reason) =>
         new(capacity: 3, StringComparer.Ordinal)
         {
-            ["reason"] = JsonSerializer.SerializeToElement(reason.ToString()),
+            ["reason"] = JsonSerializer.SerializeToElement(ErasureLedgerLine.Spelling(reason)),
             ["deletingBy"] = JsonSerializer.SerializeToElement(deletion.By.ToString()),
             ["deletingSince"] = JsonSerializer.SerializeToElement(deletion.Since),
         };

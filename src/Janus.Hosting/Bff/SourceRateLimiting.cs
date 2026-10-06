@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -12,17 +11,19 @@ namespace Janus.Hosting.Bff;
 /// The flood limit every request from one source passes before anything reads a
 /// session.
 /// </summary>
-/// <param name="admissions">What this instance admitted from each source.</param>
-/// <param name="configuration">Where the limit comes from.</param>
+/// <param name="admissions">What this instance admitted from each source and each /48.</param>
+/// <param name="configuration">Where the limits come from.</param>
 /// <param name="log">Where a source going over its limit is recorded.</param>
 /// <remarks>
-/// Implements BFF-ORDER-001 stage 4 and AC3. The source is the address the connection
-/// arrived on, the same one every other count per source is kept by, so a deployment
-/// behind a proxy names the proxies it trusts to the framework and a deployment that
-/// does not is one source. A source already over its limit is refused from memory,
-/// without the limit being read, so a flood past the limit reaches no store; a limit
-/// that cannot be read is answered as the failure it is, and the request goes no
-/// further. The refusal carries the instant the source is admitted again.
+/// Implements BFF-ORDER-001 stage 4, AC3, AC6 and AC7. The source is the one every other
+/// count per source is kept by (AUTH-ABUSE-001), so a deployment behind a proxy names
+/// the proxies it trusts to the framework and a deployment that does not is one source.
+/// An IPv6 source is also counted by the /48 that encloses it. A source or a /48 already
+/// over its limit is refused from memory, without either limit being read and without a
+/// line for each refusal, so a flood past the limit reaches no store and fills no log;
+/// the line is written once, when the hold begins. A limit that cannot be read is
+/// answered as the failure it is, and the request goes no further. The refusal carries
+/// the instant the source is admitted again.
 /// </remarks>
 internal sealed class SourceRateLimiting(
     SourceAdmissions admissions,
@@ -42,26 +43,38 @@ internal sealed class SourceRateLimiting(
         ArgumentNullException.ThrowIfNull(next);
 
         string source = RequestOrigin.Source(context.Request);
+        string? site = RequestOrigin.Site(context.Request);
 
-        if (admissions.HeldUntil(source) is DateTimeOffset held)
+        if (((site is null ? null : admissions.HeldUntil(site)) ?? admissions.HeldUntil(source))
+            is DateTimeOffset held)
         {
             await ThrottledAsync(context, held).ConfigureAwait(false);
 
             return;
         }
 
-        Result<int> limit = await configuration
-            .ReadAsync(Settings.AbuseSourceRateLimit, context.RequestAborted)
-            .ConfigureAwait(false);
+        Error? unread = null;
 
-        if (limit.Match(_ => (Error?)null, error => error) is Error unread)
+        int limit = (await configuration
+                .ReadAsync(Settings.AbuseSourceRateLimit, context.RequestAborted)
+                .ConfigureAwait(false))
+            .Match(within => within, error => Withheld(error, ref unread));
+
+        int siteLimit = unread is null && site is not null
+            ? (await configuration
+                    .ReadAsync(Settings.AbuseSourceSiteLimit, context.RequestAborted)
+                    .ConfigureAwait(false))
+                .Match(within => within, error => Withheld(error, ref unread))
+            : 0;
+
+        if (unread is not null)
         {
             await Refusal.WriteAsync(context, unread, context.RequestAborted).ConfigureAwait(false);
 
             return;
         }
 
-        if (admissions.Admit(source, limit.Match(within => within, _ => 0)) is DateTimeOffset lifts)
+        if (admissions.Admit(source, limit, site, siteLimit) is DateTimeOffset lifts)
         {
             BrowserProfileLog.SourceOverLimit(log, context.TraceIdentifier, lifts);
             await ThrottledAsync(context, lifts).ConfigureAwait(false);
@@ -73,8 +86,12 @@ internal sealed class SourceRateLimiting(
     }
 
     private static Task ThrottledAsync(HttpContext context, DateTimeOffset lifts) =>
-        Refusal.WriteAsync(
-            context,
-            Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts)),
-            context.RequestAborted);
+        Refusal.WriteAsync(context, Error.Throttled(lifts), context.RequestAborted);
+
+    private static int Withheld(Error error, ref Error? failure)
+    {
+        failure = error;
+
+        return 0;
+    }
 }

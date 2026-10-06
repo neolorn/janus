@@ -32,7 +32,7 @@ public sealed class SubjectSetsTests
     {
         var groups = new GroupsInMemory();
         var grants = new GrantsInMemory();
-        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory());
+        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory());
         var context = AccessContext.Of(Subject());
 
         for (int check = 0; check < 10; check++)
@@ -60,7 +60,7 @@ public sealed class SubjectSetsTests
         grants.Bump(subject);
         grants.Bump(subject);
 
-        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory())
+        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(AccessContext.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, resolved.Version);
@@ -78,7 +78,7 @@ public sealed class SubjectSetsTests
     {
         var groups = new GroupsInMemory();
         var grants = new GrantsInMemory();
-        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory());
+        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory());
         SubjectId subject = Subject();
         var context = AccessContext.Of(subject);
 
@@ -89,7 +89,7 @@ public sealed class SubjectSetsTests
         SubjectSet again = await sets.OfAsync(context, TestContext.Current.CancellationToken);
         int held = groups.Reads;
 
-        SubjectSet afterwards = await new SubjectSets(groups, grants, new RestrictionsInMemory())
+        SubjectSet afterwards = await new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(context, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, held);
@@ -127,7 +127,7 @@ public sealed class SubjectSetsTests
                 TestContext.Current.CancellationToken);
         }
 
-        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory())
+        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(AccessContext.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(
@@ -143,7 +143,7 @@ public sealed class SubjectSetsTests
     [Fact]
     public async Task AUTHZ_PRIN_003_AC2_APrincipalWithNoAccountResolvesToNothingAsync()
     {
-        SubjectSet resolved = await new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), new RestrictionsInMemory())
+        SubjectSet resolved = await new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(
                 AccessContext.Of(SystemPrincipal.ForOrganization(
                     "retention",
@@ -171,6 +171,53 @@ public sealed class SubjectSetsTests
         Assert.All(
             typeof(SubjectSet).GetProperties(),
             property => Assert.DoesNotContain(property.Name, NotHeld, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: inside a transaction a restriction is judged on the state
+    /// read with the account's row held, never on the set resolved before it, so one
+    /// committed after the set was resolved refuses.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_InsideATransactionTheRestrictionIsReadUnderTheHoldAsync()
+    {
+        var restrictions = new RestrictionsInMemory();
+        var sets = new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), restrictions, new AdministrativeOrganizationInMemory());
+        SubjectId subject = Subject();
+        var context = AccessContext.Of(subject);
+
+        Assert.False(await sets.RestrictedAsync(context, TestContext.Current.CancellationToken));
+        Assert.Empty(restrictions.Held);
+
+        restrictions.Restrict(subject);
+
+        Assert.False(await sets.RestrictedAsync(context, TestContext.Current.CancellationToken));
+
+        restrictions.InTransaction = true;
+
+        Assert.True(await sets.RestrictedAsync(context, TestContext.Current.CancellationToken));
+        Assert.Equal([subject], restrictions.Held);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006: a principal holding no account has no row to hold and no
+    /// restriction to be refused by.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_APrincipalWithNoAccountHoldsNoRowAsync()
+    {
+        var restrictions = new RestrictionsInMemory { InTransaction = true };
+        var sets = new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), restrictions, new AdministrativeOrganizationInMemory());
+
+        Assert.False(await sets.RestrictedAsync(
+            AccessContext.Of(SystemPrincipal.ForOrganization(
+                "retention",
+                "the nightly sweep",
+                new OrganizationId(Guid.NewGuid()))),
+            TestContext.Current.CancellationToken));
+        Assert.Empty(restrictions.Held);
     }
 
     private static SubjectId Subject()

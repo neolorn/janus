@@ -18,6 +18,17 @@ namespace Janus.Authorization.Resources;
 internal interface IResourceStore
 {
     /// <summary>
+    /// Holds one organization's tree of records, as a create and a move hold it, until
+    /// the operation's transaction ends, so what is computed from the tree is computed
+    /// on it as committed (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="organization">Whose tree.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding it.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one registered record.
     /// </summary>
     /// <param name="reference">Which record.</param>

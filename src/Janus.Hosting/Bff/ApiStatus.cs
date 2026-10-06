@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using Janus.Core;
@@ -13,7 +14,10 @@ namespace Janus.Hosting.Bff;
 /// rather than a decision taken at each endpoint, so that one failure cannot answer
 /// 409 in one place and 422 in another, and so that a code added without a status is
 /// a failing test rather than a surprise in production. A code the table does not
-/// name answers as a fault, which discloses nothing the table did not decide.
+/// name answers as a fault, which discloses nothing the table did not decide. The one
+/// code whose status is not its own alone is <c>integration.callback.rejected</c>:
+/// 429 where the callback rate limit refused it and it carries <c>retryAt</c>, and the
+/// table's 422 otherwise (10 section 6, entry 276).
 /// </remarks>
 internal static class ApiStatus
 {
@@ -22,20 +26,24 @@ internal static class ApiStatus
         // Startup validation never crosses the boundary: a host is refused its model
         // before it serves anything, so arriving here would be a fault. So is a
         // missing policy or a missing derivation source, which 10 calls a fault
-        // rather than a denial, and a conformance finding, which a suite the host
-        // runs reports and no request raises.
+        // rather than a denial, a conformance finding, which a suite the host runs
+        // reports and no request raises, and a rotation's seal, which only the command
+        // line confirms.
         [ErrorCodes.StartupGoverningLanguage] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupDeclarationMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupDeclarationInvalid] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupSubscriberName] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupPreferenceDeclaration] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupContainmentCycle] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUnindexedDerivation] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupNoOrganizationPath] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupTypeReserved] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupMissingAssessment] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupHostingConsent] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredTypeReference] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredPermission] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredDerivationReference] = StatusCodes.Status500InternalServerError,
-        [ErrorCodes.StartupKeyUnavailable] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupSecretUnavailable] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRedirectClient] = StatusCodes.Status500InternalServerError,
@@ -44,6 +52,7 @@ internal static class ApiStatus
         [ErrorCodes.TruthTableDisagreement] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.ProviderNonconformant] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.DerivationSourcesMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.RotationNotReady] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.SystemFault] = StatusCodes.Status500InternalServerError,
 
         // The request itself could not be read, so nothing about the deployment was
@@ -60,7 +69,6 @@ internal static class ApiStatus
         [ErrorCodes.ChallengeRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Denied] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Restricted] = StatusCodes.Status403Forbidden,
-        [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PhotoNotEnabled] = StatusCodes.Status403Forbidden,
@@ -68,16 +76,24 @@ internal static class ApiStatus
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.RoleNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.RestrictionNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ResourceNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TakedownNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.AccountNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.PhotoNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ErasureNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.InvitationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.MailboxNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.OrganizationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.DomainNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierPrimary] = StatusCodes.Status409Conflict,
+        [ErrorCodes.IdentifierUnverified] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierLastOfKind] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierLocked] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierMaximum] = StatusCodes.Status409Conflict,
@@ -86,6 +102,7 @@ internal static class ApiStatus
         [ErrorCodes.UsernameCoolingOff] = StatusCodes.Status409Conflict,
         [ErrorCodes.LinkLastCredential] = StatusCodes.Status409Conflict,
         [ErrorCodes.MembershipLimitReached] = StatusCodes.Status409Conflict,
+        [ErrorCodes.MembershipNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.OrganizationProtected] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,
@@ -95,16 +112,24 @@ internal static class ApiStatus
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
+        [ErrorCodes.FactorPasswordRequired] = StatusCodes.Status409Conflict,
+        [ErrorCodes.FactorNotEnrolled] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDecided] = StatusCodes.Status409Conflict,
         [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,
         [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
         [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,
+        [ErrorCodes.AccountStateConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status409Conflict,
         [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
+        [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
+        [ErrorCodes.MailboxTaken] = StatusCodes.Status409Conflict,
+        [ErrorCodes.CallbackInProgress] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RequestInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ChangeWindowElapsed] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.IdentifierInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.IdentifierDomainNotAllowed] = StatusCodes.Status422UnprocessableEntity,
@@ -112,12 +137,12 @@ internal static class ApiStatus
         [ErrorCodes.IdentifierMixedScript] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.InvitationExpired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.InvitationIdentifierMismatch] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.InvitationAddressRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PhotoInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PhotoTooLarge] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.UsernameInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PreferenceUndeclared] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PreferenceWrongType] = StatusCodes.Status422UnprocessableEntity,
@@ -147,15 +172,17 @@ internal static class ApiStatus
         [ErrorCodes.WebAuthnCounterMismatch] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.WebAuthnRelyingPartyChanged] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.WebAuthnUserVerificationRequired] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.RestrictionReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationChangeReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationChangeSuperseded] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.GrantUnresolved] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationValueBelowFloor] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationValueAboveCeiling] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationValueNotAllowed] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationKeyProtected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationLastDestination] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationPolicyBelowSystem] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.CallbackRejected] = StatusCodes.Status429TooManyRequests,
+        [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PurposeNoConsent] = StatusCodes.Status422UnprocessableEntity,
@@ -169,16 +196,19 @@ internal static class ApiStatus
         [ErrorCodes.ReactivationTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
 
         // What 10 section 1.2 calls a status and not a refusal: the removal is
-        // accepted and the window it takes is what the answer carries, and the
-        // held sign-in is answered with what it still needs.
+        // accepted and the window it takes is what the answer carries.
         [ErrorCodes.CredentialLastSecondFactor] = StatusCodes.Status202Accepted,
-        [ErrorCodes.DeviceVerificationRequired] = StatusCodes.Status200OK,
 
         // Throttled, which carries the interval and not the reason. A send a
         // restriction refused is the same answer: 09 gives it 429 wherever it names
         // it, and 10 section 6 reserves 429 for what carries Retry-After.
         [ErrorCodes.Throttled] = StatusCodes.Status429TooManyRequests,
         [ErrorCodes.RestrictionExceeded] = StatusCodes.Status429TooManyRequests,
+
+        // A dependency outside the deployment that could not be reached or read. Only
+        // a navigation's redirect carries the code, so no response bears the status
+        // (10 section 6).
+        [ErrorCodes.ProviderUnavailable] = StatusCodes.Status502BadGateway,
     }.ToFrozenDictionary();
 
     /// <summary>
@@ -190,6 +220,22 @@ internal static class ApiStatus
         Statuses.TryGetValue(code, out int status)
             ? status
             : StatusCodes.Status500InternalServerError;
+
+    /// <summary>
+    /// The status a failure answers with: its code's, save for a callback the rate
+    /// limit refused, which carries the instant it is admitted again.
+    /// </summary>
+    /// <param name="error">The failure.</param>
+    /// <returns>The status.</returns>
+    /// <exception cref="ArgumentNullException">The failure is absent.</exception>
+    public static int Of(Error error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+
+        return error.Code == ErrorCodes.CallbackRejected && error.Details.ContainsKey("retryAt")
+            ? StatusCodes.Status429TooManyRequests
+            : Of(error.Code);
+    }
 
     /// <summary>
     /// Whether the table names the code, which every code the library raises is

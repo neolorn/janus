@@ -33,11 +33,30 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
         _held[authenticator.Id] = authenticator;
     }
 
+    /// <summary>
+    /// What another transaction committed on a credential's row while this one waited
+    /// for its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<Authenticator>? Locking { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<Authenticator?> FindAsync(
         AuthenticatorId id,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(_held.GetValueOrDefault(id));
+
+    /// <inheritdoc/>
+    public ValueTask<Authenticator?> FindForUpdateAsync(
+        AuthenticatorId id,
+        CancellationToken cancellationToken)
+    {
+        if (_held.GetValueOrDefault(id) is Authenticator held)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return FindAsync(id, cancellationToken);
+    }
 
     /// <inheritdoc/>
     public ValueTask<Authenticator?> ByCredentialAsync(
@@ -54,6 +73,19 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(
             _linked.TryGetValue((provider, providerSubject), out AuthenticatorId id) ? _held.GetValueOrDefault(id) : null);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Authenticator>> OfForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        foreach (Authenticator held in _held.Values.Where(credential => credential.Subject == subject).ToList())
+        {
+            Locking?.Invoke(held);
+        }
+
+        return OfAsync(subject, cancellationToken);
+    }
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Authenticator>> OfAsync(
@@ -88,6 +120,22 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> LabelHeldAsync(
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        AuthenticatorId? except,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_held.Values.Any(credential =>
+            credential.Subject == subject
+            && credential.Factor == factor
+            && credential.Id != except
+            && string.Equals(
+                CanonicalForm.Of(credential.Label.Value),
+                CanonicalForm.Of(label.Value),
+                StringComparison.Ordinal)));
 
     /// <inheritdoc/>
     public ValueTask RemoveAsync(AuthenticatorId id, CancellationToken cancellationToken)

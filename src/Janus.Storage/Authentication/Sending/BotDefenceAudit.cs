@@ -43,6 +43,7 @@ internal sealed class BotDefenceAudit(IAuditStore records, TimeProvider time) : 
                     // account yet for the record to name (AUTH-ABUSE-008).
                     default,
                     default,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {

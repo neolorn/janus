@@ -247,8 +247,7 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-ORG-002 and API-CONV-002: a change names a name and a reason of 1 to 1024
-    /// characters and an organization the deployment holds; anything else is a
-    /// malformed request naming the field.
+    /// characters; anything else is a malformed request naming the field.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -271,16 +270,35 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             "/admin/organizations",
             ("name", "Southern branch"));
         Answer silent = await RequestedAsync(administrator, Branch, reason: " ");
-        Answer unheld = await RequestedAsync(administrator, new OrganizationId(Guid.NewGuid()));
-        Answer unknown = await CancelledAsync(administrator, new OrganizationId(Guid.NewGuid()));
 
         Assert.Equal("name", Member(unnamed));
         Assert.Equal("name", Member(overlong));
         Assert.Equal("reason", Member(unreasoned));
         Assert.Equal("reason", Member(silent));
-        Assert.Equal("id", Member(unheld));
-        Assert.Equal("id", Member(unknown));
         Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC13 and 09 section 8a: a deletion request or cancellation whose path
+    /// names no organization the deployment holds is <c>404</c>
+    /// <c>identity.organization.notfound</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC13_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        var unheld = new OrganizationId(Guid.NewGuid());
+
+        Answer requested = await RequestedAsync(administrator, unheld);
+        Answer cancelled = await CancelledAsync(administrator, unheld);
+
+        Assert.Equal(StatusCodes.Status404NotFound, requested.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), requested.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, cancelled.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), cancelled.Text("code"));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>
@@ -379,11 +397,77 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.OrganizationChanges.Changes);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a name or a reason past 1024 characters
+    /// after trimming is malformed before the service is reached, so a caller without
+    /// the permission is answered for the body, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await SignedInAsync();
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer named = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", overlong),
+            ("reason", "Opening a branch."));
+        Answer created = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Southern branch"),
+            ("reason", overlong));
+        Answer requested = await RequestedAsync(caller, Branch, reason: overlong);
+        Answer cancelled = await caller.SendAsync(
+            "POST",
+            "/admin/organizations/" + Branch + "/delete/cancel",
+            ("reason", overlong));
+
+        Assert.Equal("name", Member(named));
+        Assert.Equal("reason", Member(created));
+        Assert.Equal("reason", Member(requested));
+        Assert.Equal("reason", Member(cancelled));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
 
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the creating of an organization, a
+    /// deletion's request and its cancelling, and nothing of any is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachLifecycleChangeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        OrganizationId leaving = new(Guid.NewGuid());
+        DateTimeOffset requested = _deployment.Clock.GetUtcNow() - TimeSpan.FromDays(2);
+
+        _deployment.Organizations.Seed(leaving, deletionRequestedAt: requested);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "POST",
+                "/admin/organizations",
+                ("name", "Northern branch"),
+                ("reason", "Opening a branch.")));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => RequestedAsync(administrator, Branch));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => CancelledAsync(administrator, leaving));
+
+        Assert.Null((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(requested, (await StandingAsync(leaving)).DeletionRequestedAt);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     private static Task<Answer> RequestedAsync(
@@ -412,7 +496,7 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             _deployment.Clock.GetUtcNow(),
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         await _deployment.Sessions.AddAsync(
             session,

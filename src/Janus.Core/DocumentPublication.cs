@@ -21,7 +21,7 @@ namespace Janus.Core;
 /// Implements PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-007 and chapter 09 section 8a.
 /// </remarks>
 public sealed record DocumentPublication(
-    string DocumentName,
+    DocumentName DocumentName,
     string Text,
     string? GoverningLanguage,
     IReadOnlyList<DocumentTranslation> Translations,

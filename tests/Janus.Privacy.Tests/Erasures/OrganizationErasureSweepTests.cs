@@ -100,7 +100,46 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ORG-003: the erasure is announced once it has committed, naming the
+    /// IDN-ORG-003 AC2, CONV-DESIGN-003 AC6: a cancellation committed after the pass
+    /// read its list is the one the organization follows, so nothing is erased, counted,
+    /// recorded or announced for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC2_AWindowCancelledMeanwhileIsLeftBeAsync()
+    {
+        _organizations.Deletes(Acme, Noon, members: 2);
+        _organizations.Locking = _organizations.Cancels;
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        Assert.Equal(0, await ErasedAsync());
+        Assert.Empty(_organizations.Erased);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: an erasure that finds its window cancelled meanwhile wrote
+    /// nothing, so its unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnErasureOfAWindowCancelledMeanwhileIsRolledBackAsync()
+    {
+        _organizations.Deletes(Acme, Noon, members: 2);
+        _organizations.Locking = _organizations.Cancels;
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        Assert.Equal(0, await ErasedAsync());
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003: the erasure is announced in its own transaction, naming the
     /// organization, how many memberships it ended and nobody at all.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -128,7 +167,7 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-MEM-001: every membership the erasure ended is announced as ended, each
-    /// under its own key and naming whose it was, once the erasure has committed.
+    /// under its own key and naming whose it was, in the erasure's transaction.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -180,15 +219,15 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ORG-003: the erasure has committed by the time it is announced, so a
-    /// consumer that will not take the announcement stops the pass with its refusal
-    /// rather than leaving an organization half erased.
+    /// IDN-ORG-003 AC6, X1 of D-166: an event row that cannot be written fails the
+    /// erasure before it commits, so the pass answers the failure and nothing of the
+    /// erasure stands; the next organization is not begun.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ORG_003_APassWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync()
+    public async Task IDN_ORG_003_AnErasureWhoseEventRowFailsErasesNothingAsync()
     {
-        _organizations.Deletes(Acme, Noon);
+        _organizations.Deletes(Acme, Noon, members: 1);
         _organizations.Deletes(Beta, Noon.AddMinutes(1));
 
         _clock.Advance(Settings.OrganizationDeletionGrace.Default + TimeSpan.FromMinutes(1));
@@ -200,9 +239,81 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.SystemFault,
             swept.Match(_ => null, error => (ErrorCode?)error.Code));
-
-        Assert.Equal(Acme, Assert.Single(_organizations.Erased));
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_work.Open);
+        Assert.Empty(_events.Published);
     }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an erasure that ended no membership and whose own event row
+    /// cannot be written is refused after its unit of work began, and rolls it back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnErasureThatCannotBeAnnouncedRollsBackAsync()
+    {
+        _organizations.Deletes(Acme, Noon);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default + TimeSpan.FromMinutes(1));
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<int> swept = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            swept.Match(_ => null, error => (ErrorCode?)error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC7, X2 of D-166: a window that cannot be read is a fault, and the
+    /// pass erases nothing rather than reading a window of its own.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_APassThatCannotReadItsWindowErasesNothingAsync()
+    {
+        _organizations.Deletes(Acme, Noon, members: 1);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        _configuration.Unreachable = Settings.OrganizationDeletionGrace.Key;
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_organizations.Erased);
+        Assert.Equal(0, _work.Opened);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// IDN-ORG-005, D-166 (155): the erasure's record is filed under the organization it
+    /// erased, so the organization's trail carries its end.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_005_TheErasureIsFiledUnderTheOrganizationAsync()
+    {
+        _organizations.Deletes(Acme, Noon);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        _ = await ErasedAsync();
+
+        PrivacyAuditEntry written = Assert.Single(_audit.Entries);
+
+        Assert.Equal(AuditActions.OrganizationErased, written.Action);
+        Assert.Equal(Acme, written.Organization);
+        Assert.NotNull(written.Principal);
+    }
+
 
     private async ValueTask<int> ErasedAsync() =>
         (await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken))

@@ -25,14 +25,13 @@ namespace Janus.Hosting.Background;
 /// down, with anything short of a pass raised.
 /// </summary>
 /// <param name="instance">What restores into a throwaway instance, where the deployment registered it.</param>
-/// <param name="keyEncryptionKeys">The keys this process runs on, which the restored fields are opened with.</param>
-/// <param name="fingerprintKeys">The keys this process runs on, which the restored identifiers are found with.</param>
+/// <param name="ring">The key ring this process runs on, whose keys open the restored fields and find the restored identifiers.</param>
 /// <param name="configuration">Where the objective and the canary are read.</param>
 /// <param name="audit">Where each run is recorded.</param>
 /// <param name="alerts">Where a failed run goes.</param>
 /// <param name="work">The transaction the record and the alert share.</param>
 /// <param name="time">The clock the run is timed and stamped by.</param>
-/// <param name="log">Where a step that threw is written down, by the type of what it threw.</param>
+/// <param name="log">Where a step that threw is written down, by the fault log entry of what it threw.</param>
 /// <remarks>
 /// Implements DR-007, DR-008 and OPS-ALERT-001, as entry 334 of the decisions pending
 /// review settles them. No person runs it and no person watches it. The restored
@@ -44,8 +43,7 @@ namespace Janus.Hosting.Background;
 /// </remarks>
 internal sealed class RestoreTest(
     IRestoreTestInstance? instance,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    IKeyRing ring,
     IConfigurationStore configuration,
     IPrivacyAudit audit,
     IAlertChannels alerts,
@@ -72,17 +70,15 @@ internal sealed class RestoreTest(
     {
         SystemPrincipal principal = Monitoring(context);
 
-        // An unreadable objective is the default's, which is also its ceiling, so the test
-        // is never judged more loosely than the chapter allows.
         TimeSpan objective = (await configuration
                 .ReadAsync(Settings.BackupRestoreTestObjective, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.BackupRestoreTestObjective.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         SubjectId? canary = (await configuration
                 .ReadAsync(Settings.BackupRestoreTestCanary, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(Canary, _ => null);
+            .Match(Canary, error => throw new InvalidOperationException(error.Code.ToString()));
 
         RestoreTestOutcome outcome = RestoreTestOutcome.Unrestored;
         TimeSpan elapsed = TimeSpan.Zero;
@@ -106,8 +102,9 @@ internal sealed class RestoreTest(
             }
 
             // DR-007: whatever step the objective cut short, the test failed by running
-            // out of time.
-            if (elapsed > objective)
+            // out of time. The deadline having fired decides it, since the stopwatch can
+            // read short of the objective at the instant the deadline's timer fires.
+            if (deadline.IsCancellationRequested || elapsed > objective)
             {
                 outcome = RestoreTestOutcome.Overrun;
             }
@@ -167,9 +164,10 @@ internal sealed class RestoreTest(
         };
 
     // AUTH-PRIN-001 AC3: a step that throws is a step that failed, written down by the
-    // type of what it threw and by what its failure is read as. A cancellation is the
-    // worker's own only when the worker is stopping; one the objective threw fails the
-    // step like any other fault, and the time taken judges the run.
+    // fault log entry of what it threw and by what its failure is read as. A
+    // cancellation is the worker's own only when the worker is stopping; one the
+    // objective threw fails the step like any other fault, and the time taken judges
+    // the run.
     private async ValueTask<Result<TValue>> ContainedAsync<TValue>(
         string failedAs,
         Func<ValueTask<Result<TValue>>> step,
@@ -181,12 +179,14 @@ internal sealed class RestoreTest(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !stopping.IsCancellationRequested)
         {
-            BackgroundLog.RestoreTestFaulted(log, failedAs, fault.GetType().Name);
+            string entry = FaultLog.Of(fault);
+
+            BackgroundLog.RestoreTestFaulted(log, failedAs, entry);
 
             return Result.Failure<TValue>(Error.From(
                 ErrorCodes.SystemFault,
                 "fault",
-                JsonSerializer.SerializeToElement(fault.GetType().Name)));
+                JsonSerializer.SerializeToElement(entry)));
         }
     }
 
@@ -271,7 +271,8 @@ internal sealed class RestoreTest(
         var services = new ServiceCollection();
 
         services.AddSingleton(time);
-        services.AddStorageArea(unpooled.ConnectionString, keyEncryptionKeys, fingerprintKeys);
+        services.AddSingleton(ring);
+        services.AddStorageArea(unpooled.ConnectionString);
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
@@ -287,21 +288,39 @@ internal sealed class RestoreTest(
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await audit
-            .RecordedAsync(AuditActions.RestoreTestCompleted, principal, subject: null, now, measured, cancellationToken)
+            .RecordedAsync(
+                AuditActions.RestoreTestCompleted,
+                principal,
+                subject: null,
+                organization: null,
+                now,
+                measured,
+                cancellationToken)
             .ConfigureAwait(false);
 
         if ((outcome is not RestoreTestOutcome.Passed || outlived)
             && (await alerts
-                    .RaiseAsync(Alerts.Of(AlertCondition.RestoreTestFailed, scope: null, now, measured), cancellationToken)
+                    .RaiseAsync(Alerts.Of(AlertCondition.RestoreTestFailed, named: null, now, measured), cancellationToken)
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

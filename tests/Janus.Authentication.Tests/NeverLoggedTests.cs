@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.BreakGlass;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
@@ -12,6 +13,7 @@ using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Core;
@@ -42,7 +44,8 @@ public sealed class NeverLoggedTests
             typeof(VerificationCode),
             typeof(RecoveryCodeEntry),
             typeof(PreparedRecoveryCodes),
-            typeof(SigningMaterial),
+            typeof(HeldSigningKey),
+            typeof(SigningKeySet),
         ]));
 
     /// <summary>
@@ -59,7 +62,6 @@ public sealed class NeverLoggedTests
             Member<LossReport>(nameof(LossReport.Cancel)),
             Member<RecoveryLink>(nameof(RecoveryLink.Fingerprint)),
             Member<PendingVerification>(nameof(PendingVerification.OldLink)),
-            Member<StagedIdentity>(nameof(StagedIdentity.Code)),
             Member<StagedIdentity>(nameof(StagedIdentity.Link)),
             Member<PreAuthentication>(nameof(PreAuthentication.Fingerprint)),
             Member<PreAuthentication>(nameof(PreAuthentication.CsrfFingerprint)),
@@ -71,12 +73,44 @@ public sealed class NeverLoggedTests
             Member<GeneratedBreakGlass>(nameof(GeneratedBreakGlass.Credential)),
         ]));
 
+    /// <summary>
+    /// CONV-LOG-003 AC1: the correlation reference authenticates an unsigned callback,
+    /// so it is a token: its type, the member a delivery report carries it in, and
+    /// every parameter it passes through before it is hashed are marked.
+    /// </summary>
+    [Fact]
+    public void CONV_LOG_003_AC1_EveryCorrelationReferenceIsMarked() =>
+        Assert.Empty(UnmarkedCarriers(
+        [
+            typeof(SendReference),
+            Member<SmsDeliveryReport>(nameof(SmsDeliveryReport.Reference)),
+            Parameter(typeof(DeliveryReports), nameof(DeliveryReports.ReportAsync), "reference"),
+            Parameter(typeof(SendReferences), nameof(SendReferences.Of), "presented"),
+            Parameter(typeof(CallbackReferences), nameof(CallbackReferences.RecognisesAsync), "presented"),
+            Parameter(typeof(CallbackReferences), "Hashed", "reference"),
+        ]));
+
     private static PropertyInfo Member<T>(string name) =>
         typeof(T).GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException($"{typeof(T).Name} has no member {name}.");
+
+    // The one parameter of that name among the methods of that name, so an overload
+    // that takes no such parameter is passed over.
+    private static ParameterInfo Parameter(Type type, string method, string name) =>
+        type.GetMethods(BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(candidate => candidate.Name == method)
+            .SelectMany(candidate => candidate.GetParameters())
+            .Single(parameter => parameter.Name == name);
 
     private static IEnumerable<string> Unmarked(IEnumerable<MemberInfo> carriers) =>
         carriers
             .Where(carrier => !carrier.IsDefined(typeof(NeverLoggedAttribute), inherit: false))
             .Select(carrier => carrier is Type type ? type.Name : $"{carrier.DeclaringType!.Name}.{carrier.Name}");
+
+    private static IEnumerable<string> UnmarkedCarriers(IReadOnlyList<object> carriers) =>
+        Unmarked(carriers.OfType<MemberInfo>())
+            .Concat(carriers
+                .OfType<ParameterInfo>()
+                .Where(carrier => !carrier.IsDefined(typeof(NeverLoggedAttribute), inherit: false))
+                .Select(carrier => $"{carrier.Member.DeclaringType!.Name}.{carrier.Member.Name}({carrier.Name})"));
 }

@@ -34,9 +34,14 @@ public sealed class VocabularyContractTests
         "provider:unlink",
         "recovery:approve",
         "invitation:issue",
+        "membership:end",
         "grant:manage",
         "account:suspend",
         "account:reactivate",
+        "account:restrictionlift",
+        "account:deletioncancel",
+        "account:sessionsrevoke",
+        "session:revokeall",
         "account:takedown",
         "account:takedownreverse",
         "erasure:complete",
@@ -48,6 +53,7 @@ public sealed class VocabularyContractTests
         "restriction:grant",
         "breakglass:replace",
         "organization:delete",
+        "privacyrequest:fulfil",
     ];
 
     // The catalogue of chapter 02 AUTH-FACT-002 that carries an identifier.
@@ -75,6 +81,7 @@ public sealed class VocabularyContractTests
         "approver-volume",
         "read-volume-anomaly",
         "breakglass-used",
+        "breakglass-generated",
         "protected-setting-changed",
         "alert-destination-changed",
         "stepup-policy-weakened",
@@ -226,7 +233,7 @@ public sealed class VocabularyContractTests
             ["awaiting-subscribers", "complete", "failed"],
             WireNames<ErasureStatus>());
         Assert.Equal(
-            ["erasure-request", "minor-takedown", "organization-erasure"],
+            ["erasure-request", "minor-takedown"],
             WireNames<ErasureReason>());
     }
 
@@ -279,6 +286,7 @@ public sealed class VocabularyContractTests
                 "account-exists",
                 "alert",
                 "credential-enrolled",
+                "credential-suspended",
                 "deactivation-notice",
                 "deletion-notice",
                 "enrolment-link",
@@ -289,14 +297,17 @@ public sealed class VocabularyContractTests
                 "identifier-settings-changed",
                 "invitation-link",
                 "no-account",
+                "oob-deletion-notice",
                 "privacy-request-lapsed",
                 "privacy-request-received",
                 "recovery-codes-reminder",
                 "recovery-link",
                 "secondstep-code",
                 "security-notice",
+                "sign-in-code",
                 "signin-link",
                 "verification-code",
+                "verification-link",
             ],
             WireNames<MessageKind>());
         Assert.Equal(["email", "sms"], WireNames<SendKind>());

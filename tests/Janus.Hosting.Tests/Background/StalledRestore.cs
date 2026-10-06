@@ -10,6 +10,13 @@ namespace Janus.Hosting.Tests.Background;
 /// <remarks>Implements CONV-TEST-007: a fake, written by hand, never a mock.</remarks>
 internal sealed class StalledRestore : IRestoreTestInstance
 {
+    private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Completes once a restore has begun, by which time the run's deadline stands.
+    /// </summary>
+    public Task Started => _started.Task;
+
     /// <summary>
     /// How many times a teardown was asked for.
     /// </summary>
@@ -18,6 +25,8 @@ internal sealed class StalledRestore : IRestoreTestInstance
     /// <inheritdoc/>
     public async ValueTask<Result<string>> RestoreAsync(CancellationToken cancellationToken)
     {
+        _ = _started.TrySetResult();
+
         await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
 
         return Result.Success(string.Empty);

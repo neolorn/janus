@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Tests.Credentials;
@@ -42,6 +43,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     // what the fault names and the answer withholds.
     private const string Ledger = "erasure-ledger";
 
+    // The head every library logger's category carries, read from the core's
+    // namespace so no string spells the product name (CONV-NAME-001).
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
+
     private static readonly OrganizationId Company =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -72,7 +77,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{link}"));
             }
         }
     }
@@ -132,7 +137,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Contains(resolved, line => line.Contains(ErrorCodes.Denied.ToString(), StringComparison.Ordinal));
         Assert.Equal(resolved, [.. written.Where(line => line.Contains(correlation, StringComparison.Ordinal))]);
         Assert.All(
-            written.Where(line => line.StartsWith("Janus.", StringComparison.Ordinal)),
+            written.Where(line => line.StartsWith(Library, StringComparison.Ordinal)),
             line => Assert.Contains(correlation, line, StringComparison.Ordinal));
         Assert.DoesNotContain(
             Resolved(other.Text("correlationId")),
@@ -221,7 +226,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("factor", "password"),
             ("value", Flow.Password));
 
-        (SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented) raised =
+        (SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented, string? _) raised =
             quiet.SessionAudit.Records[presented];
 
         Answer denied = await administrator.SendAsync("GET", Erasures);
@@ -242,7 +247,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, used.Status);
         Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
 
-        (SessionId Session, SubjectId Subject, Factor Presented) unraised =
+        (SessionId Session, SubjectId Subject, Factor Presented, string? _) unraised =
             Assert.Single(quiet.SessionAudit.StepUpsFailed);
 
         Assert.Equal<(SubjectId?, Factor)>(
@@ -260,10 +265,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-LOG-005 AC1: with the host logging nothing at all, a handle that opens no
-    /// sign-in, a wrong device-verification code, a pressed sign-in link that lands on
-    /// no sign-in, an identity token that does not hold up and an identity linked to no
-    /// account are each recorded as a failed authentication, none of it through the
-    /// log.
+    /// sign-in, a wrong device-verification code (as that verification, naming no
+    /// factor), a pressed sign-in link that lands on no sign-in, an identity token that
+    /// does not hold up and an identity linked to no account are each recorded as a
+    /// failed authentication, none of it through the log.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -283,7 +288,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             MessageKind.SignInLink,
             SendKind.Email,
             Language,
-            new MessageTemplate("link", "{code} {token}"));
+            new MessageTemplate("link", "{code} {link}"));
 
         _ = await Flow.SignedInAsync(quiet);
 
@@ -350,12 +355,12 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Equal<(SubjectId?, Factor)>(
             [
                 (null, Factor.Password),
-                (subject, Factor.EmailCode),
                 (subject, Factor.EmailLink),
                 (null, Factor.Google),
                 (null, Factor.Google),
             ],
             quiet.SessionAudit.Failed);
+        Assert.Equal([subject], quiet.SessionAudit.DeviceVerificationsFailed);
         Assert.Empty(quiet.Logs.Lines);
     }
 
@@ -466,7 +471,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Answer recovered = await recovering.SendAsync(
             "POST",
             "/recovery/complete",
-            ("token", _deployment.Mail.Taken[^1].Body.Trim()),
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)),
             ("password", Renewed));
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), refused.Text("code"));
@@ -523,7 +528,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
     // The break-glass credential presented as it was typed.
     private static Task<Answer> BrokenAsync(Browser browser, string credential) =>
-        browser.SendAsync("POST", "/auth/break-glass", JsonSerializer.Serialize(new { credential }));
+        browser.SendAsync(
+            "POST",
+            "/auth/break-glass",
+            JsonSerializer.Serialize(new { credential, reason = "The operator cannot be reached." }));
 
     private static async Task<string> BegunAsync(Browser browser, string identifier)
     {

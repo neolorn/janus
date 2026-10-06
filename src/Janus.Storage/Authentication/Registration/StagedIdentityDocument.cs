@@ -12,11 +12,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// <param name="Canonical">The form it is compared and sent to under.</param>
 /// <param name="IsLocked">Whether it is fixed against change.</param>
 /// <param name="IsExtra">Whether it was added at the confirm step.</param>
-/// <param name="Code">The code outstanding, which a link opened elsewhere shows.</param>
-/// <param name="CodeExpiresAt">When that code stops being accepted.</param>
 /// <param name="Link">The fingerprint of the link token outstanding.</param>
-/// <param name="WrongAttempts">How many wrong codes have been presented.</param>
-/// <param name="CodeSpent">Whether the code has been invalidated.</param>
 /// <param name="VerifiedAt">When it was confirmed, where it has been.</param>
 /// <remarks>Implements REG-SESS-003 and REG-SESS-004.</remarks>
 internal sealed record StagedIdentityDocument(
@@ -26,9 +22,5 @@ internal sealed record StagedIdentityDocument(
     string Canonical,
     bool IsLocked,
     bool IsExtra,
-    [property: NeverLogged] byte[]? Code,
-    DateTimeOffset? CodeExpiresAt,
     [property: NeverLogged] byte[]? Link,
-    int WrongAttempts,
-    bool CodeSpent,
     DateTimeOffset? VerifiedAt);

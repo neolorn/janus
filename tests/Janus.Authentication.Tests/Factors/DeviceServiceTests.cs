@@ -263,6 +263,39 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10: a trust revoked while the check waited for the browser's
+    /// row is answered as no trust having written nothing, so the unit of work is
+    /// rolled back, and a trust that stands commits the use it records.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ATrustRevokedMeanwhileIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        OpaqueToken trust = await TrustedAsync(subject);
+
+        _work.Reset();
+
+        Assert.True(await Service.TrustsAsync(
+            subject,
+            trust.Value,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+
+        _work.Reset();
+        _devices.Locking = device => device.Revoke();
+
+        Assert.False(await Service.TrustsAsync(
+            subject,
+            trust.Value,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-FACT-015 AC6: how many failures in a row it takes is what the deployment
     /// configures.
     /// </summary>
@@ -318,25 +351,44 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-015: one account removes none of another's browsers.
+    /// CONV-DESIGN-002 AC3, AUTH-FACT-015, D-166: one account removes none of another's
+    /// browsers, and another account's browser is answered as one that does not exist,
+    /// with the same code and no details, and the trust stands.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task RemoveAsync_ABrowserOfAnotherAccount_IsRefusedAsync()
+    public async Task CONV_DESIGN_002_AC3_AnotherAccountsBrowserIsAnsweredAsNoneAsync()
     {
         SubjectId subject = Subject();
-        await TrustedAsync(subject);
+        OpaqueToken trust = await TrustedAsync(subject);
 
         DeviceSummary held = Assert.Single(Value(await Service.ListAsync(
             AccessContext.Of(subject),
             TestContext.Current.CancellationToken)));
 
-        Assert.Equal(
-            ErrorCodes.Denied,
-            Refusal(await Service.RemoveAsync(
-                AccessContext.Of(Subject()),
-                held.Id,
-                TestContext.Current.CancellationToken)));
+        Error theirs = Failure(await Service.RemoveAsync(
+            AccessContext.Of(Subject()),
+            held.Id,
+            TestContext.Current.CancellationToken));
+        Error unknown = Failure(await Service.RemoveAsync(
+            AccessContext.Of(Subject()),
+            new DeviceId(Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
+
+        Assert.All(
+            new[] { theirs, unknown },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.ResourceNotFound, refusal.Code);
+                Assert.Empty(refusal.Details);
+            });
+        Assert.True(await Service.TrustsAsync(
+            subject,
+            trust.Value,
+            TestContext.Current.CancellationToken));
+
+        static Error Failure(Result result) =>
+            result.Match(() => throw new Xunit.Sdk.XunitException("The removal was not refused."), error => error);
     }
 
     /// <summary>

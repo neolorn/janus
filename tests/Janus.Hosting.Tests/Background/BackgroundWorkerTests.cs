@@ -1,14 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Background;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Alerting;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
 using Janus.Hosting.Background;
+using Janus.Hosting.Tests.Sending;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -31,9 +37,14 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly JobRunsInMemory _runs = new();
     private readonly EventsInMemory _alerts = new();
+    private readonly NotificationHandlerInMemory _sent = new();
+    private readonly SendOutboxInMemory _outbox = new();
+    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly LogsInMemory _logs = new();
     private readonly ILoggerFactory _logging;
     private readonly ServiceProvider _services;
+    private readonly Lock _gate = new();
+    private readonly List<UnitOfWorkInMemory> _units = [];
 
     /// <summary>
     /// A deployment's container, with the ports the worker reads over fakes.
@@ -41,13 +52,34 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     public BackgroundWorkerTests()
     {
         _logging = LoggerFactory.Create(logging => logging.AddProvider(_logs));
+        _configuration.Set<IReadOnlyList<string>>(Settings.NotificationLanguages, ["en"]);
 
         var services = new ServiceCollection();
 
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<IJobRuns>(_runs);
         services.AddSingleton<IAlertChannels>(_alerts);
-        services.AddScoped<IUnitOfWork, UnitOfWorkInMemory>();
+        services.AddSingleton<ISendOutbox>(_outbox);
+        services.AddScoped(provider => new SendingPath(
+            _configuration,
+            new SendLedgerInMemory(),
+            _outbox,
+            new MessageTemplatesInMemory(),
+            new MailTransportInMemory(),
+            new SmsTransportInMemory(),
+            new SmsBalanceLedgerInMemory(),
+            (UnitOfWorkInMemory)provider.GetRequiredService<IUnitOfWork>(),
+            _alerts,
+            _clock,
+            _randomness)
+        {
+            Replaced = _sent,
+        }.Send);
+        services.AddScoped<IFollowedSend>(provider => provider.GetRequiredService<GovernedSend>());
+        services.AddSingleton<IAlertLedger, AlertLedgerInMemory>();
+        services.AddSingleton<IAlertLog, AlertLogInMemory>();
+        services.AddScoped<AlertRouter>();
+        services.AddScoped<IUnitOfWork>(_ => Begun());
 
         _services = services.BuildServiceProvider();
     }
@@ -58,6 +90,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         await _services.DisposeAsync();
         _logging.Dispose();
         _logs.Dispose();
+        _randomness.Dispose();
     }
 
     /// <summary>
@@ -71,18 +104,18 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         int ran = 0;
         using BackgroundWorker worker = Worker(Counted("counted", () => ran++));
 
-        Assert.Equal(Sweep, await worker.RunDueAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(Sweep, await RoundAsync(worker));
         Assert.Equal(1, ran);
         Assert.Equal(Noon, _runs.SucceededAt("counted"));
 
         _clock.Advance(Sweep - TimeSpan.FromSeconds(1));
 
-        Assert.Equal(TimeSpan.FromSeconds(1), await worker.RunDueAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(TimeSpan.FromSeconds(1), await RoundAsync(worker));
         Assert.Equal(1, ran);
 
         _clock.Advance(TimeSpan.FromSeconds(1));
 
-        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(worker);
 
         Assert.Equal(2, ran);
     }
@@ -100,11 +133,11 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         _configuration.Set(Settings.SweepInterval, TimeSpan.FromMinutes(1));
 
-        Assert.Equal(TimeSpan.FromMinutes(1), await worker.RunDueAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(TimeSpan.FromMinutes(1), await RoundAsync(worker));
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
-        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(worker);
 
         Assert.Equal(2, ran);
     }
@@ -123,8 +156,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         using BackgroundWorker first = Worker(job);
         using BackgroundWorker second = Worker(job);
 
-        _ = await first.RunDueAsync(TestContext.Current.CancellationToken);
-        _ = await second.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(first);
+        _ = await RoundAsync(second);
 
         Assert.Equal(1, ran);
     }
@@ -163,8 +196,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
     /// <summary>
     /// INF-BG-001 AC2: a job that throws does not stop the others, is written down by
-    /// the type of what it threw and never by its message (CONV-LOG-003), and lapses
-    /// like one that failed.
+    /// the full type name and frames of what it threw and never by its message
+    /// (CONV-LOG-003), and lapses like one that failed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -177,7 +210,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         Assert.Equal(4, ran);
         Assert.Equal("throwing", Assert.Single(_alerts.Of<AlertRaised>()).Details["job"].GetString());
-        Assert.Contains(_logs.Lines, line => line.Contains("Failure=InvalidOperationException", StringComparison.Ordinal));
+        Assert.Contains(_logs.Lines, line => line.Contains("Failure=System.InvalidOperationException", StringComparison.Ordinal));
         Assert.DoesNotContain(_logs.Lines, line => line.Contains("person@example.test", StringComparison.Ordinal));
     }
 
@@ -196,6 +229,90 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         Assert.Equal(
             ["stopped"],
             _alerts.Of<AlertRaised>().Select(raised => raised.Details["job"].GetString()));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a lapse whose alert cannot be raised is refused after its
+    /// unit of work began, and rolls it back, so the claim on the lapse is not kept; a
+    /// turn that finds no lapse wrote nothing and rolls back too (AC10), so nothing
+    /// commits.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALapseThatCannotBeRaisedRollsBackAsync()
+    {
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        using BackgroundWorker worker = Worker(Failing("failing"));
+
+        await TurnsAsync(worker, 4);
+
+        UnitOfWorkInMemory[] units;
+
+        lock (_gate)
+        {
+            units = [.. _units];
+        }
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+        Assert.All(units, unit => Assert.False(unit.Open));
+        Assert.True(units.Sum(unit => unit.Opened) > 1);
+        Assert.Equal(units.Sum(unit => unit.Opened), units.Sum(unit => unit.RolledBack));
+        Assert.Equal(0, units.Sum(unit => unit.Committed));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: of the turns of a job that keeps failing, the one that
+    /// claims the lapse and raises it commits, and each turn that finds no lapse to
+    /// claim wrote nothing and rolls its unit of work back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ATurnThatFindsNoLapseRollsBackAsync()
+    {
+        using BackgroundWorker worker = Worker(Failing("failing"));
+
+        await TurnsAsync(worker, 4);
+
+        UnitOfWorkInMemory[] units;
+
+        lock (_gate)
+        {
+            units = [.. _units];
+        }
+
+        _ = Assert.Single(_alerts.Of<AlertRaised>());
+        Assert.All(units, unit => Assert.False(unit.Open));
+        Assert.Equal(1, units.Sum(unit => unit.Committed));
+        Assert.Equal(units.Sum(unit => unit.Opened) - 1, units.Sum(unit => unit.RolledBack));
+        Assert.True(units.Sum(unit => unit.RolledBack) > 0);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 AC4 and INF-BG-001 AC2: with <c>alert-dispatch</c> stalled, its
+    /// lapse is still raised through the channels and is also delivered by the router
+    /// straight from the worker, so it reaches the destinations; the lapse of any other
+    /// job waits for the carrier.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC4_TheLapseOfAStalledCarrierReachesTheDestinationsAsync()
+    {
+        _configuration.Set<IReadOnlyList<string>>(Settings.AlertingEmailDestinations, ["ops@example.test"]);
+        _configuration.Set<IReadOnlyList<string>>(Settings.AlertingSmsDestinations, ["+201001234567"]);
+
+        using BackgroundWorker worker = Worker(Failing(AlertDispatch.Job), Failing("stopped"));
+
+        await TurnsAsync(worker, 4);
+
+        SendRequest delivered = Assert.Single(_sent.Mail);
+
+        Assert.Equal(MessageKind.Alert, delivered.Message);
+        Assert.Equal("background-job-failed", delivered.Values["condition"]);
+        Assert.Equal(AlertDispatch.Job, delivered.Values["job"]);
+        Assert.Equal(
+            [AlertDispatch.Job, "stopped"],
+            _alerts.Of<AlertRaised>().Select(raised => raised.Details["job"].GetString()).Order(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -222,7 +339,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         using BackgroundWorker worker = Worker(job);
 
-        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(worker);
 
         Assert.NotNull(handed);
         Assert.Same(job.Principal, handed.Principal);
@@ -235,6 +352,60 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
             SystemOperation.ExpirySweep,
             Settings.SweepInterval,
             (_, _, _) => ValueTask.FromResult(Result.Success())));
+    }
+
+    /// <summary>
+    /// INF-BG-001 (D-166, 334): a run in progress holds no other job's turn. The worker
+    /// starts it and goes on, keeps no second run of the job in flight however many
+    /// rounds pass, judges the job's lapse after its own run, and waits for it when it
+    /// stops.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_001_ARunInProgressHoldsNoOtherJobsTurnAsync()
+    {
+        var release = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int started = 0;
+        int beside = 0;
+
+        var slow = BackgroundJob.Every(
+            "slow",
+            "OPS-OBS-003",
+            SystemOperation.ExpirySweep,
+            Settings.SweepInterval,
+            async (_, _, cancellationToken) =>
+            {
+                _ = Interlocked.Increment(ref started);
+
+                return await release.Task.WaitAsync(cancellationToken);
+            });
+
+        using BackgroundWorker worker = Worker(slow, Counted("beside", () => beside++));
+
+        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+
+        for (int turn = 0; turn < 3; turn++)
+        {
+            await BesideEndedAsync(worker);
+
+            Assert.Equal(turn + 1, Volatile.Read(ref beside));
+
+            _clock.Advance(Sweep);
+            _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(1, Volatile.Read(ref started));
+        Assert.Null(_runs.SucceededAt("slow"));
+        Assert.Empty(_alerts.Of<AlertRaised>());
+
+        release.SetResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
+
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, Volatile.Read(ref started));
+        Assert.Equal(
+            ["slow"],
+            _alerts.Of<AlertRaised>().Select(raised => raised.Details["job"].GetString()));
     }
 
     /// <summary>
@@ -257,6 +428,19 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         });
     }
 
+    // Each scope's unit of work, kept so a test reads how every one of them ended.
+    private UnitOfWorkInMemory Begun()
+    {
+        var unit = new UnitOfWorkInMemory();
+
+        lock (_gate)
+        {
+            _units.Add(unit);
+        }
+
+        return unit;
+    }
+
     private BackgroundWorker Worker(params IReadOnlyList<BackgroundJob> jobs) =>
         new(
             _services.GetRequiredService<IServiceScopeFactory>(),
@@ -264,14 +448,40 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
             _clock,
             _logging.CreateLogger<BackgroundWorker>());
 
+    // One round run to its end: the runs it started are awaited, and what comes back is
+    // how long the worker then waits.
+    private static async Task<TimeSpan> RoundAsync(BackgroundWorker worker)
+    {
+        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        return await worker.RunDueAsync(TestContext.Current.CancellationToken);
+    }
+
     // Each turn moves the clock on by the sweep interval and runs what is due.
     private async Task TurnsAsync(BackgroundWorker worker, int turns)
     {
         for (int turn = 0; turn < turns; turn++)
         {
-            _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+            _ = await RoundAsync(worker);
 
             _clock.Advance(Sweep);
+        }
+    }
+
+    // The run of the job beside the slow one has ended, while the slow one is still in
+    // flight: the worker knows when its next turn is, and with the clock standing,
+    // starts nothing.
+    private static async Task BesideEndedAsync(BackgroundWorker worker)
+    {
+        using var patience = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        patience.CancelAfter(TimeSpan.FromSeconds(10));
+
+        while (await worker.RunDueAsync(patience.Token) != Sweep)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(5), patience.Token);
         }
     }
 

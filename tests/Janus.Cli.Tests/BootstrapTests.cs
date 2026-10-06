@@ -23,7 +23,7 @@ namespace Janus.Cli.Tests;
 [Trait("kind", "integration")]
 public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFixture<BootstrappedDeployment>
 {
-    private const string Link = Invocation.Origin + "/enrol#token=";
+    private const string Link = Invocation.Origin + "/link#enrolment.";
 
     /// <summary>
     /// OPS-BOOT-001: a fresh deployment is stood up by the command, which answers with
@@ -378,6 +378,31 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// IDN-ATTR-002 AC3 and OPS-BOOT-001: bootstrap cannot see whether the host declares
+    /// an image codec, so it writes the administrative organization's photos off, and
+    /// turning them on is an administrator's change of policy.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC3_BootstrapWritesTheAdministrativeOrganizationsPhotosOffAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Guid organization = await connection.QuerySingleAsync<Guid>(
+            "SELECT id FROM identity.organizations WHERE administrative");
+        string parameter = organization.ToString("D", System.Globalization.CultureInfo.InvariantCulture);
+        string stored = await connection.QuerySingleAsync<string>(
+            "SELECT value FROM identity.settings WHERE key = @Key",
+            new { Key = Settings.OrganizationPolicy.For(parameter).ToString() });
+
+        PolicyOverride policy = Settings.OrganizationPolicy
+            .Read(parameter, stored)
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.False(policy.Photos);
+    }
+
+    /// <summary>
     /// Chapter 10 section 3: the three administrative roles are seeded so the system is
     /// usable at once.
     /// </summary>
@@ -442,6 +467,108 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         ];
 
         Assert.Equal(named.Order(StringComparer.Ordinal), set.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// OPS-CFG-005: each value bootstrap sets is recorded with what the key was, which is
+    /// the written form of its default where no row stood, and nothing only for a
+    /// required key (D-170).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_BootstrapRecordsWhatEachKeyWasBeforeItAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        var before = (await connection.QueryAsync<(string Key, string? Before)>(
+                """
+                SELECT details->>'key', details->>'before' FROM identity.audit_records
+                WHERE action = 'ops.configuration.changed' AND principal = 'bootstrap'
+                """))
+            .ToDictionary(row => row.Key, row => row.Before, StringComparer.Ordinal);
+        string organization = await connection.ExecuteScalarAsync<string>(
+            "SELECT id::text FROM identity.organizations WHERE administrative") ?? string.Empty;
+
+        Assert.All(Invocation.Named().Keys, key => Assert.Null(before[key.ToString()]));
+        Assert.Equal(
+            Settings.BackupRestoreTestCanary.Write(Settings.BackupRestoreTestCanary.Default),
+            before[Settings.BackupRestoreTestCanary.Key.ToString()]);
+        Assert.Equal(
+            Settings.OrganizationPolicy.Write(Settings.OrganizationPolicy.Default),
+            before[Settings.OrganizationPolicy.For(organization).ToString()]);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003: no grant bootstrap makes names its holder, or any person, as the
+    /// one who granted it; each names the nil subject and the reason bootstrap states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_TheFirstGrantsNameNoPersonAsTheirGranterAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        List<(string GrantedBy, string Reason)> grants = [.. await connection
+            .QueryAsync<(string GrantedBy, string Reason)>(
+                """
+                SELECT g.granted_by::text, g.reason FROM identity.grants g
+                JOIN identity.organizations o ON o.id = g.organization
+                WHERE o.administrative
+                """)];
+
+        Assert.NotEmpty(grants);
+        Assert.All(grants, grant => Assert.Equal((Unheld, "OPS-BOOT-001"), grant));
+    }
+
+    /// <summary>
+    /// D-162: each membership bootstrap attaches (the administrator, <c>emergency</c> and
+    /// the canary) is announced by one <c>MembershipChanged</c> that says it began,
+    /// written with the rows it announces.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task D_162_EachMembershipBootstrapAttachesEmitsMembershipChangedAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        List<string> memberships = [.. await connection.QueryAsync<string>(
+            """
+            SELECT m.id::text FROM identity.memberships m
+            JOIN identity.organizations o ON o.id = m.organization
+            WHERE o.administrative
+            """)];
+        List<(string Membership, string Change)> announced = [.. await connection
+            .QueryAsync<(string Membership, string Change)>(
+                """
+                SELECT payload->'Membership'->>'Value', payload->>'Change'
+                FROM identity.events WHERE kind = 'MembershipChanged'
+                """)];
+
+        Assert.Equal(3, memberships.Count);
+        Assert.Equal(
+            memberships.Order(StringComparer.Ordinal),
+            announced.Select(one => one.Membership).Order(StringComparer.Ordinal));
+        Assert.All(announced, one => Assert.Equal("began", one.Change));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 and OPS-BOOT-001 AC3: that no emergency credential exists is raised
+    /// through the alert channels, so the <c>AlertRaised</c> event is written with the
+    /// raised row, in bootstrap's transaction.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_TheMissingEmergencyCredentialIsAnnouncedAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        long raised = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM identity.raised_alerts WHERE condition = 'no-emergency-credential'");
+        IEnumerable<string?> announced = await connection.QueryAsync<string?>(
+            "SELECT payload->>'Condition' FROM identity.events WHERE kind = 'AlertRaised'");
+
+        Assert.Equal(1, raised);
+        Assert.Equal(["no-emergency-credential"], announced);
     }
 
     // The identity a system principal acts under, which no account holds.

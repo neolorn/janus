@@ -9,15 +9,19 @@ namespace Janus.UnicodeTables;
 /// The vendored Unicode Character Database, read at one pinned version.
 /// </summary>
 /// <remarks>
-/// Every file but <c>UnicodeData.txt</c> carries its version in its first line. Reading
-/// it back and refusing a mismatch is what makes the pin real: a file replaced by hand
-/// at another version fails here rather than silently changing a canonical form.
+/// Every file but <c>UnicodeData.txt</c> carries its version in its header: a file of the
+/// database in its first line, the IDNA mapping table of UTS #46 in a version line
+/// further down. Reading it back and refusing a mismatch is what makes the pin real: a
+/// file replaced by hand at another version fails here rather than silently changing a
+/// canonical form.
 /// <c>UnicodeData.txt</c> carries no version line, so its pin rests on the vendored copy
 /// and on the gate that regenerates the tables and fails on a diff.
 /// </remarks>
 internal sealed class DatabaseFiles
 {
     private const string Missing = "# @missing:";
+
+    private const string VersionLine = "# Version: ";
 
     private readonly string _directory;
     private readonly string _version;
@@ -95,6 +99,7 @@ internal sealed class DatabaseFiles
         string path = Path.Combine(_directory, name.Replace('/', Path.DirectorySeparatorChar));
         string expected = Path.GetFileNameWithoutExtension(name) + "-" + _version + ".txt";
         bool first = true;
+        bool pinned = true;
 
         foreach (string raw in File.ReadLines(path))
         {
@@ -103,13 +108,19 @@ internal sealed class DatabaseFiles
             if (first)
             {
                 first = false;
+                pinned = !line.StartsWith('#') || line.Contains(expected, StringComparison.Ordinal);
+            }
+            else if (!pinned && line == VersionLine + _version)
+            {
+                pinned = true;
+            }
 
-                if (line.StartsWith('#') && !line.Contains(expected, StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException(string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{path} is not {expected}; the vendored database is at another version."));
-                }
+            // A header that has not named the version by its first data line never will.
+            if (!pinned && line.Length > 0 && !line.StartsWith('#'))
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{path} is not {expected}; the vendored database is at another version."));
             }
 
             yield return line;

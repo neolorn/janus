@@ -1,9 +1,16 @@
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Callbacks;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Sending;
@@ -28,7 +35,7 @@ public sealed class DeliveryReportEndpointTests
         await using Deployment deployment = Prepared();
 
         string reference = await SentAsync(deployment);
-        var destination = new RestrictionKey("sms.destination", Flow.Number);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
 
         Assert.Single(deployment.SendLedger.Sends(destination));
 
@@ -53,24 +60,27 @@ public sealed class DeliveryReportEndpointTests
 
         _ = await SentAsync(deployment);
         var machine = new Machine(deployment);
-        var destination = new RestrictionKey("sms.destination", Flow.Number);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
 
         Answer forged = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed");
         Answer unreadable = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA");
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, forged.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Status);
         Assert.Equal(ErrorCodes.CallbackRejected.ToString(), forged.Text("code"));
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unreadable.Status);
+        Assert.Null(forged.Header(HeaderNames.RetryAfter));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
+        Assert.Null(unreadable.Header(HeaderNames.RetryAfter));
         Assert.Single(deployment.SendLedger.Sends(destination));
     }
 
     /// <summary>
-    /// BFF-MACH-001 AC2: the delivery report refuses a request carrying a browser's
-    /// session cookie, as every machine route does.
+    /// BFF-MACH-001 AC2, chapter 09 section 10: a delivery report carrying a browser's
+    /// session cookie is refused as every rejected callback is, 422 with no interval,
+    /// is counted as a rejection, and releases nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRefusedAsync()
+    public async Task BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRejectedAndCountedAsync()
     {
         await using Deployment deployment = Prepared();
 
@@ -80,8 +90,42 @@ public sealed class DeliveryReportEndpointTests
             "/callbacks/sms/dlr?reference=" + reference + "&status=failed",
             BrowserCookies.Session + "=stale");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", Flow.Number)));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), refused.Text("code"));
+        Assert.Null(refused.Header(HeaderNames.RetryAfter));
+        Assert.Single(Counted(deployment), callback => callback.Rejected);
+        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number)));
+    }
+
+    /// <summary>
+    /// INT-GEN-003 AC4 and BFF-MACH-001 AC2: a delivery report carrying a session
+    /// cookie from a source past <c>integration.callback.ratelimit</c> is answered 429
+    /// with the interval, as any report past it is, and is not counted as a rejection.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_GEN_003_AC4_ADeliveryReportCarryingASessionCookiePastTheRateLimitIsAnswered429Async()
+    {
+        await using Deployment deployment = Prepared();
+
+        deployment.Configuration.Set(Settings.IntegrationCallbackRateLimit, 0);
+
+        Answer flooded = await new Machine(deployment).CallCarryingAsync(
+            "/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed",
+            BrowserCookies.Session + "=stale");
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, flooded.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), flooded.Text("code"));
+        Assert.NotNull(flooded.Header(HeaderNames.RetryAfter));
+        Assert.DoesNotContain(Counted(deployment), callback => callback.Rejected);
+    }
+
+    // Every callback the deployment counted, in order.
+    private static List<(string Source, DateTimeOffset At, bool Rejected)> Counted(Deployment deployment)
+    {
+        using AsyncServiceScope scope = deployment.Scope();
+
+        return ((CallbackLedgerInMemory)scope.ServiceProvider.GetRequiredService<ICallbackLedger>()).Counted;
     }
 
     // A deployment whose messages carry the code, as the shipped templates do.

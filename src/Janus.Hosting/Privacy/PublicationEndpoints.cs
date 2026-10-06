@@ -17,11 +17,13 @@ namespace Janus.Hosting.Privacy;
 /// <remarks>
 /// Implements PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-007, LIB-API-005 and
 /// CONV-DESIGN-006. Each is one line to <see cref="ILegalDocuments"/>, which judges the
-/// permission and refuses a version without its governing text.
+/// permission and refuses a version without its governing text. A document is named by
+/// <see cref="DocumentName"/>, bound from the route, so a name outside its rule is
+/// answered before the body is read (INT-SMS-003, chapter 09 section 8a).
 /// </remarks>
 internal static class PublicationEndpoints
 {
-    private const string Notice = "privacy-notice";
+    private static readonly DocumentName Notice = DocumentName.Parse("privacy-notice");
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
@@ -35,11 +37,27 @@ internal static class PublicationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapPost("/admin/notices", PublishNoticeAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/documents/{document}/versions", PublishAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/notices", PublishNoticeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.NoticeGoverningTextMissing))
+            .Produces<DocumentVersionView>();
+        _ = SessionRequired.On(endpoints.MapPost("/admin/documents/{document}/versions", PublishAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.NoticeGoverningTextMissing)
+                .Binding<DocumentName>("document"))
+            .Produces<DocumentVersionView>();
         _ = SessionRequired.On(endpoints.MapPut(
             "/admin/documents/{document}/versions/{version}/translations/{language}",
-            TranslateAsync));
+            TranslateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.DocumentNotFound)
+                .Binding<DocumentName>("document"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -55,7 +73,7 @@ internal static class PublicationEndpoints
         PublicationBody body,
         ILegalDocuments documents,
         RequestSession browser,
-        string document,
+        DocumentName document,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -77,7 +95,7 @@ internal static class PublicationEndpoints
         return Answers.Of(
             await documents
                 .PublishAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new DocumentPublication(
                         document,
                         body.Text ?? string.Empty,
@@ -93,7 +111,7 @@ internal static class PublicationEndpoints
         TranslationBody body,
         ILegalDocuments documents,
         RequestSession browser,
-        string document,
+        DocumentName document,
         string version,
         string language,
         CancellationToken cancellationToken)
@@ -110,7 +128,7 @@ internal static class PublicationEndpoints
         return Answers.Of(
             await documents
                 .TranslateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     document,
                     version,
                     new DocumentTranslation(language, text),

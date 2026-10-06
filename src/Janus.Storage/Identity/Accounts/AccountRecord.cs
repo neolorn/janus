@@ -34,6 +34,11 @@ internal sealed class AccountRecord
     public SuspensionOrigin? SuspendedBy { get; set; }
 
     /// <summary>
+    /// The <c>suspension_held</c> column.
+    /// </summary>
+    public SuspensionOrigin? SuspensionHeld { get; set; }
+
+    /// <summary>
     /// The <c>restriction_held</c> column.
     /// </summary>
     public bool RestrictionHeld { get; set; }
@@ -53,6 +58,16 @@ internal sealed class AccountRecord
     /// The <c>deleting_since</c> column.
     /// </summary>
     public DateTimeOffset? DeletingSince { get; set; }
+
+    /// <summary>
+    /// The <c>deletion_held</c> column.
+    /// </summary>
+    public DeletionOrigin? DeletionHeld { get; set; }
+
+    /// <summary>
+    /// The <c>deletion_held_since</c> column.
+    /// </summary>
+    public DateTimeOffset? DeletionHeldSince { get; set; }
 
     /// <summary>
     /// The <c>adult_affirmed</c> column.

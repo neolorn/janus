@@ -165,5 +165,5 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
     }
 
     private ProfilePhotoStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 }

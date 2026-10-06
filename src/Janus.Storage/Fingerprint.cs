@@ -44,6 +44,56 @@ internal static class Fingerprint
         Compute(canonical, keys.Current.Span);
 
     /// <summary>
+    /// Computes the fingerprint a write stores, under the current version the ring lends.
+    /// </summary>
+    /// <param name="canonical">The canonical form, as UTF-8 bytes.</param>
+    /// <param name="ring">The key ring the fingerprint key is borrowed from.</param>
+    /// <returns>The fingerprint.</returns>
+    /// <exception cref="ArgumentNullException">The ring is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no fingerprint key.</exception>
+    public static byte[] Compute(ReadOnlyMemory<byte> canonical, IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowFingerprintKeys(keys => Compute(canonical.Span, keys))
+            .Match(fingerprint => fingerprint, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// Computes the fingerprint under every version the ring lends: what a lookup matches.
+    /// </summary>
+    /// <param name="canonical">The canonical form, as UTF-8 bytes.</param>
+    /// <param name="ring">The key ring the fingerprint key is borrowed from.</param>
+    /// <returns>The fingerprints, one to a version, the current first.</returns>
+    /// <exception cref="ArgumentNullException">The ring is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no fingerprint key.</exception>
+    public static IReadOnlyList<byte[]> Candidates(ReadOnlyMemory<byte> canonical, IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowFingerprintKeys(keys => Candidates(canonical.Span, keys))
+            .Match(fingerprints => fingerprints, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// The version of the fingerprint key every fingerprint is written under.
+    /// </summary>
+    /// <param name="ring">The key ring the version is read from.</param>
+    /// <returns>The current version.</returns>
+    /// <exception cref="ArgumentNullException">The ring is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no fingerprint key.</exception>
+    public static int CurrentVersion(IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowFingerprintKeys(keys => keys.CurrentVersion)
+            .Match(version => version, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
     /// Computes the fingerprint under every version held, the current first and the
     /// others newest first: what a lookup matches.
     /// </summary>

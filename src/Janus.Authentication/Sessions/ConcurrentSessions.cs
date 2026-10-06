@@ -19,10 +19,12 @@ namespace Janus.Authentication.Sessions;
 /// <remarks>
 /// <para>
 /// Implements OPS-ALERT-007. Two sessions are implausible when both were used inside
-/// <c>alerting.sessions.window</c> and their resolved cities lie further apart than
-/// <c>alerting.sessions.distance</c> or in different countries. The same city, or a
-/// city unresolved on either side, never raises anything. Sessions standing on one
-/// record are one session held more than one way and are never compared.
+/// <c>alerting.sessions.window</c> and their known countries differ, whatever their
+/// cities, or their cities lie further apart than <c>alerting.sessions.distance</c>.
+/// The distance is measured only where both places name a city. The same city, the
+/// same country with a city unknown on either side, or a place with no country, never
+/// raises anything. Sessions standing on one record are one session held more than
+/// one way and are never compared.
 /// </para>
 /// <para>
 /// A use is looked at when it begins a stretch: a session begun, a use from a city
@@ -63,7 +65,7 @@ internal sealed class ConcurrentSessions(
         TimeSpan window = (await configuration
                 .ReadAsync(Settings.AlertingSessionsWindow, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.AlertingSessionsWindow.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (before is not null
             && usedBefore is DateTimeOffset at
@@ -76,7 +78,7 @@ internal sealed class ConcurrentSessions(
         int distance = (await configuration
                 .ReadAsync(Settings.AlertingSessionsDistance, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.AlertingSessionsDistance.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         foreach (Session other in await sessions
                      .LiveOfAsync(session.Subject, now, cancellationToken)
@@ -104,7 +106,7 @@ internal sealed class ConcurrentSessions(
     }
 
     private static bool Resolved(SessionOrigin origin) =>
-        origin.Location?.City is not null && origin.Coordinates is not null;
+        origin.Location?.Country is not null;
 
     private static bool SameCity(SessionOrigin one, SessionOrigin other) =>
         string.Equals(one.Location?.City, other.Location?.City, StringComparison.OrdinalIgnoreCase)
@@ -117,14 +119,14 @@ internal sealed class ConcurrentSessions(
             return false;
         }
 
-        if (one.Location?.Country is string country
-            && other.Location?.Country is string otherCountry
-            && !string.Equals(country, otherCountry, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(one.Location?.Country, other.Location?.Country, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        return one.Coordinates!.Value.KilometresTo(other.Coordinates!.Value) > distance;
+        return one is { Location.City: not null, Coordinates: Coordinates here }
+            && other is { Location.City: not null, Coordinates: Coordinates there }
+            && here.KilometresTo(there) > distance;
     }
 
     // What the operator needs to find the two sessions, and nothing of where either

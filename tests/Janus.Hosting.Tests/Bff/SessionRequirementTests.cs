@@ -23,45 +23,47 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     // does not is kept out of it: the stage refuses exactly this list.
     private static readonly string[] Held =
     [
-        "DELETE /account/devices/{id:guid}",
-        "DELETE /account/identifiers/{id:guid}",
+        "DELETE /account/credentials/{id}",
+        "DELETE /account/devices/{id}",
+        "DELETE /account/identifiers/{id}",
         "DELETE /account/link/apple",
         "DELETE /account/link/google",
         "DELETE /account/mail/apppasswords/{id}",
         "DELETE /account/photo",
-        "DELETE /account/sessions/{id:guid}",
-        "DELETE /admin/grants/{id:guid}",
-        "DELETE /admin/groups/{id:guid}",
-        "DELETE /admin/groups/{id:guid}/members",
-        "DELETE /admin/organizations/{id:guid}/domains/{domain}",
-        "DELETE /admin/organizations/{id:guid}/invitations/{invitationId:guid}",
-        "DELETE /admin/organizations/{id:guid}/memberships/{subject:guid}",
+        "DELETE /account/sessions/{id}",
+        "DELETE /admin/grants/{id}",
+        "DELETE /admin/groups/{id}",
+        "DELETE /admin/groups/{id}/members",
+        "DELETE /admin/organizations/{id}/domains/{domain}",
+        "DELETE /admin/organizations/{id}/invitations/{invitationId}",
+        "DELETE /admin/organizations/{id}/memberships/{subject}",
         "DELETE /admin/restrictions/{name}",
         "DELETE /admin/roles/{name}",
         "DELETE /privacy/objections/{purpose}",
         "GET /account/",
         "GET /account/credentials",
         "GET /account/devices/",
-        "GET /account/explanations/{correlationId:guid}",
+        "GET /account/explanations/{correlationId}",
         "GET /account/invitation",
         "GET /account/mail/apppasswords/",
         "GET /account/photo",
         "GET /account/preferences",
         "GET /account/sessions",
         "GET /admin/access",
-        "GET /admin/accounts/{subject:guid}/photo",
-        "GET /admin/accounts/{subject:guid}/takedown/",
+        "GET /admin/accounts/{subject}/photo",
+        "GET /admin/accounts/{subject}/takedown/",
         "GET /admin/audit",
+        "GET /admin/break-glass",
         "GET /admin/compliance/licences",
         "GET /admin/compliance/maintenance",
         "GET /admin/config/{key}",
         "GET /admin/erasures/",
-        "GET /admin/erasures/{id:guid}",
-        "GET /admin/explanations/{correlationId:guid}",
+        "GET /admin/erasures/{id}",
+        "GET /admin/explanations/{correlationId}",
         "GET /admin/grants",
         "GET /admin/groups",
-        "GET /admin/organizations/{id:guid}/domains",
-        "GET /admin/organizations/{id:guid}/policy",
+        "GET /admin/organizations/{id}/domains",
+        "GET /admin/organizations/{id}/policy",
         "GET /admin/privacy/requests/",
         "GET /admin/ropa",
         "GET /admin/restrictions/",
@@ -71,39 +73,41 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /privacy/consents",
         "GET /privacy/export",
         "GET /privacy/objections",
-        "PATCH /account/credentials/{id:guid}",
+        "PATCH /account/credentials/{id}",
+        "POST /account/credentials/{id}/upgrade",
         "POST /account/deactivate",
         "POST /account/delete",
         "POST /account/identifiers",
-        "POST /account/identifiers/{id:guid}/primary",
+        "POST /account/identifiers/{id}/primary",
         "POST /account/invitation/acknowledge",
         "POST /account/link/apple",
         "POST /account/link/google",
         "POST /account/mail/apppasswords/",
-        "POST /admin/accounts/{subject:guid}/delete/cancel",
-        "POST /admin/accounts/{subject:guid}/reactivate",
-        "POST /admin/accounts/{subject:guid}/restriction/lift",
-        "POST /admin/accounts/{subject:guid}/suspend",
-        "POST /admin/accounts/{subject:guid}/takedown/",
-        "POST /admin/accounts/{subject:guid}/takedown/reverse",
-        "POST /admin/accounts/{subject:guid}/sessions/revoke",
+        "POST /account/recoverycodes",
+        "POST /admin/accounts/{subject}/delete/cancel",
+        "POST /admin/accounts/{subject}/reactivate",
+        "POST /admin/accounts/{subject}/restriction/lift",
+        "POST /admin/accounts/{subject}/suspend",
+        "POST /admin/accounts/{subject}/takedown/",
+        "POST /admin/accounts/{subject}/takedown/reverse",
+        "POST /admin/accounts/{subject}/sessions/revoke",
         "POST /admin/break-glass/generate",
         "POST /admin/compliance/maintenance",
         "POST /admin/documents/{document}/versions",
-        "POST /admin/erasures/{id:guid}/complete",
+        "POST /admin/erasures/{id}/complete",
         "POST /admin/grants",
         "POST /admin/groups",
-        "POST /admin/groups/{id:guid}/members",
+        "POST /admin/groups/{id}/members",
         "POST /admin/notices",
         "POST /admin/organizations",
-        "POST /admin/organizations/{id:guid}/delete",
-        "POST /admin/organizations/{id:guid}/delete/cancel",
-        "POST /admin/organizations/{id:guid}/domains",
-        "POST /admin/organizations/{id:guid}/domains/{domain}/verify",
-        "POST /admin/organizations/{id:guid}/invitations",
+        "POST /admin/organizations/{id}/delete",
+        "POST /admin/organizations/{id}/delete/cancel",
+        "POST /admin/organizations/{id}/domains",
+        "POST /admin/organizations/{id}/domains/{domain}/verify",
+        "POST /admin/organizations/{id}/invitations",
         "POST /admin/privacy/requests/",
-        "POST /admin/privacy/requests/{request:guid}/fulfil",
-        "POST /admin/privacy/requests/{request:guid}/refuse",
+        "POST /admin/privacy/requests/{request}/fulfil",
+        "POST /admin/privacy/requests/{request}/refuse",
         "POST /admin/recovery/approve",
         "POST /admin/restrictions/{name}/grant",
         "POST /admin/roles",
@@ -123,9 +127,23 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /admin/compliance/assessments",
         "PUT /admin/compliance/licences",
         "PUT /admin/config/{key}",
-        "PUT /admin/organizations/{id:guid}/policy",
+        "PUT /admin/organizations/{id}/policy",
         "PUT /admin/restrictions/{name}",
         "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
+    ];
+
+    // Every route chapter 09 lists for the enrolment session at POST /enrol/begin, by
+    // method and path: the only routes on which stage 5 resolves one.
+    private static readonly string[] Reached =
+    [
+        "POST /account/factors/totp/begin",
+        "POST /account/factors/totp/confirm",
+        "POST /account/identifiers/{id}/verify",
+        "POST /account/password",
+        "POST /account/recoverycodes/exported",
+        "POST /auth/webauthn/register/begin",
+        "POST /auth/webauthn/register/complete",
+        "PUT /account/identifiers/{id}/replace",
     ];
 
     private readonly Deployment _deployment = new();
@@ -150,6 +168,23 @@ public sealed class SessionRequirementTests : IAsyncDisposable
                 .Where(SessionRequired.Asks)
                 .Select(Named)
                 .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 stage 5, D-189: the routes on which an enrolment session is
+    /// resolved are fixed where they are mounted and are exactly those chapter 09 lists
+    /// at <c>POST /enrol/begin</c>; none of them is a route that requires a session.
+    /// </summary>
+    [Fact]
+    public void BFF_ORDER_001_TheRoutesAnEnrolmentSessionIsResolvedOnAreTheOnesListed()
+    {
+        Assert.Equal(
+            Reached.Order(StringComparer.Ordinal),
+            _deployment.Endpoints
+                .Where(EnrolmentRoute.Is)
+                .Select(Named)
+                .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(_deployment.Endpoints, endpoint => EnrolmentRoute.Is(endpoint) && SessionRequired.Asks(endpoint));
     }
 
     /// <summary>
@@ -187,13 +222,35 @@ public sealed class SessionRequirementTests : IAsyncDisposable
 
         _deployment.Clock.Advance(TimeSpan.FromDays(100));
 
-        Answer begun = await browser.SendAsync(
-            "POST",
-            "/auth/begin",
-            ("identifier", Flow.Address),
-            ("clientId", "web"));
+        Answer begun = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
 
-        Assert.NotEqual(StatusCodes.Status401Unauthorized, begun.Status);
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.NotEmpty(begun.Text("challengeId"));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 stage 5: once the ended session's row has been swept, the token
+    /// the browser carries was bound to a session nothing holds, so the step refuses it
+    /// once with a fresh pair and answers the retry.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_ASweptSessionIsRefusedOnceAndTheRetrySucceedsAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(400));
+        _ = await _deployment.Sessions.SweepAsync(
+            _deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Answer refused = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer begun = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.SessionCsrfInvalid.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.NotEmpty(begun.Text("challengeId"));
     }
 
     /// <summary>

@@ -52,7 +52,7 @@ public sealed class PersonalFieldCipherTests
         byte[] wrapped = PersonalFieldCipher.Wrap(dataKey, keys.Current.Span);
 
         Assert.NotEqual(dataKey, wrapped);
-        Assert.Equal(dataKey, PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, keys));
+        Assert.Equal(dataKey, PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, Ring(keys)));
     }
 
     /// <summary>
@@ -158,7 +158,35 @@ public sealed class PersonalFieldCipherTests
         byte[] erased = new byte[32];
 
         Assert.ThrowsAny<CryptographicException>(() =>
-            PersonalFieldCipher.Unwrap(Erased, 1, erased, keys));
+            PersonalFieldCipher.Unwrap(Erased, 1, erased, Ring(keys)));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a: the erased value is 32 zero bytes with no marker byte in them,
+    /// wherever a wrapped key is held, and an unwrap under the deployment's data key
+    /// refuses it before it is tried; a value of another length, or one that is not all
+    /// zero, is not the erased value.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_TheErasedValueIsThirtyTwoZeroBytesAndIsRefusedBeforeTheUnwrap()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] deploymentKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] wrapped = PersonalFieldCipher.Wrap(PersonalFieldCipher.NewDataKey(randomness), deploymentKey);
+
+        byte[] erased = PersonalFieldCipher.ErasedKey();
+
+        Assert.Equal(new byte[32], erased);
+        Assert.True(PersonalFieldCipher.IsErased(erased));
+        Assert.False(PersonalFieldCipher.IsErased(new byte[33]));
+        Assert.False(PersonalFieldCipher.IsErased(new byte[wrapped.Length]));
+        Assert.False(PersonalFieldCipher.IsErased(wrapped));
+
+        CryptographicException refused = Assert.Throws<CryptographicException>(() =>
+            PersonalFieldCipher.Unwrap(erased, deploymentKey));
+
+        Assert.Equal("The key has been erased.", refused.Message);
+        Assert.Equal(32, PersonalFieldCipher.Unwrap(wrapped, deploymentKey).Length);
     }
 
     /// <summary>
@@ -213,20 +241,21 @@ public sealed class PersonalFieldCipherTests
 
         KeyEncryptionKeys rotated = TwoVersions(first.Current, randomness);
         byte[] reWrapped = PersonalFieldCipher.Wrap(
-            PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, rotated),
+            PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, Ring(rotated)),
             rotated.Current.Span);
 
         Assert.Equal(
             Plaintext,
             PersonalFieldCipher.Decrypt(
-                PersonalFieldCipher.Unwrap(Scheme, 2, reWrapped, rotated),
+                PersonalFieldCipher.Unwrap(Scheme, 2, reWrapped, Ring(rotated)),
                 field,
                 stored));
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC3: once a version is retired a key still wrapped under it is
-    /// refused with a named error rather than read under another version.
+    /// OPS-SEC-003 AC3 (D-183): once a version is retired a key still wrapped under it
+    /// fails to unwrap as a fault, never read under another version and never a result
+    /// its callers are handed; the fault carries the code, the key and the version.
     /// </summary>
     [Fact]
     public void OPS_SEC_003_AC3_AKeyUnderARetiredVersionFailsWithANamedError()
@@ -237,10 +266,28 @@ public sealed class PersonalFieldCipherTests
 
         byte[] wrapped = PersonalFieldCipher.Wrap(dataKey, keys.Current.Span);
 
-        CryptographicException refused = Assert.ThrowsAny<CryptographicException>(
-            () => PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, keys));
+        CodedFault fault = Assert.Throws<CodedFault>(
+            () => PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, Ring(keys)));
 
-        Assert.Equal("The subject's key is wrapped under a retired version.", refused.Message);
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, fault.Failure.Code);
+        Assert.Equal("keyEncryptionKeys", fault.Failure.Details["key"].GetString());
+        Assert.Equal(1, fault.Failure.Details["version"].GetInt32());
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 AC3 (D-183): the erased value is read before the version is asked for,
+    /// so an erased key under a version the application no longer holds reads as erased
+    /// and is no fault.
+    /// </summary>
+    [Fact]
+    public void OPS_SEC_003_AC3_AnErasedKeyUnderARetiredVersionReadsAsErased()
+    {
+        KeyEncryptionKeys keys = OneVersion(2);
+
+        CryptographicException erased = Assert.Throws<CryptographicException>(
+            () => PersonalFieldCipher.Unwrap(Erased, 1, new byte[32], Ring(keys)));
+
+        Assert.IsNotType<CodedFault>(erased);
     }
 
     /// <summary>
@@ -257,6 +304,9 @@ public sealed class PersonalFieldCipherTests
         Assert.ThrowsAny<CryptographicException>(() =>
             PersonalFieldCipher.Decrypt(dataKey, field, new byte[8]));
     }
+
+    // The ring a store borrows the versions from, holding these alone.
+    private static KeyRingInMemory Ring(KeyEncryptionKeys keys) => new(keys, Deployment.FingerprintKeys);
 
     private static KeyEncryptionKeys OneVersion(int version)
     {

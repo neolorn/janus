@@ -42,13 +42,8 @@ internal sealed class MailboxRecord
     public byte[] EncryptedCanonical { get; set; } = [];
 
     /// <summary>
-    /// The <c>key_version</c> column: the key-encryption key the row's own key is
-    /// wrapped under, while nobody holds the mailbox.
-    /// </summary>
-    public int? KeyVersion { get; set; }
-
-    /// <summary>
-    /// The <c>wrapped_key</c> column: the row's own key, while nobody holds the mailbox.
+    /// The <c>wrapped_key</c> column: the row's own key, wrapped under the deployment's
+    /// data key, while nobody holds the mailbox.
     /// </summary>
     public byte[]? WrappedKey { get; set; }
 
@@ -68,9 +63,9 @@ internal sealed class MailboxRecord
     public DateTimeOffset? RetiredAt { get; set; }
 
     /// <summary>
-    /// The <c>released_at</c> column.
+    /// The <c>removal_owed_at</c> column.
     /// </summary>
-    public DateTimeOffset? ReleasedAt { get; set; }
+    public DateTimeOffset? RemovalOwedAt { get; set; }
 
     /// <summary>
     /// The <c>pushed</c> column.
@@ -101,4 +96,15 @@ internal sealed class MailboxRecord
     /// The <c>failed_at</c> column.
     /// </summary>
     public DateTimeOffset? FailedAt { get; set; }
+
+    /// <summary>
+    /// The <c>attempted</c> column.
+    /// </summary>
+    public bool Attempted { get; set; }
+
+    /// <summary>
+    /// The <c>claimed_until</c> column: when the claim of the pass that holds the row's
+    /// push times out, or nothing where no pass holds it (CONV-DESIGN-003).
+    /// </summary>
+    public DateTimeOffset? ClaimedUntil { get; set; }
 }

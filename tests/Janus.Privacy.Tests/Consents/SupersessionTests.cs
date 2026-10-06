@@ -221,7 +221,7 @@ public sealed class SupersessionTests : IAsyncDisposable
 
         _ = await Documents.PublishAsync(
             AccessContext.Of(Officer),
-            new DocumentPublication("terms-of-service", "The terms", "en", [], Material: true),
+            new DocumentPublication(DocumentName.Parse("terms-of-service"), "The terms", "en", [], Material: true),
             CancellationToken.None);
 
         Assert.True(Assert.Single(await HeldAsync(Ahmed)).Live);
@@ -307,13 +307,63 @@ public sealed class SupersessionTests : IAsyncDisposable
         Assert.Empty(await HeldAsync(Ahmed));
     }
 
+    /// <summary>
+    /// PRIV-CONS-001 AC2: a consent names the document it was given against and the
+    /// version of that document, the privacy notice where its purpose names none and
+    /// the purpose's own document where it names one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC2_AConsentNamesTheDocumentAndVersionItWasGivenAgainstAsync()
+    {
+        Holds(Declaration.Newsletter, "7");
+
+        await GrantAsync(Ahmed, Recommendations);
+        await GrantAsync(Ahmed, Newsletter);
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync(Ahmed);
+        ConsentRecord notice = Assert.Single(held, record => record.Purpose == Recommendations);
+        ConsentRecord own = Assert.Single(held, record => record.Purpose == Newsletter);
+
+        Assert.Equal((ConsentService.Notice, "1"), (notice.Document, notice.NoticeVersion));
+        Assert.Equal((Declaration.Newsletter, "7"), (own.Document, own.NoticeVersion));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-007: a material revision of a document ends a live consent of a
+    /// purpose naming it that was given against another document, although the version
+    /// that consent names is the one just published.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC1_AConsentGivenAgainstAnotherDocumentIsEndedByARevisionAsync()
+    {
+        Holds(Declaration.Newsletter, "1");
+
+        _consents.Keep(
+            Ahmed,
+            new ConsentRecord(
+                Newsletter,
+                ConsentService.Notice,
+                "2",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Ordinary,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null));
+
+        await PublishAsync(Declaration.Newsletter, material: true);
+
+        Assert.False(Assert.Single(await HeldAsync(Ahmed)).Live);
+    }
+
     private void Holds(string document, string version) =>
         _documents.Hold(new DocumentVersion(document, version, "ar", "النص", [], Noon));
 
     private async Task PublishAsync(string document, bool material) =>
         _ = await Documents.PublishAsync(
             AccessContext.Of(Officer),
-            new DocumentPublication(document, "النص الجديد", "ar", [], material),
+            new DocumentPublication(DocumentName.Parse(document), "النص الجديد", "ar", [], material),
             CancellationToken.None);
 
     private async Task GrantAsync(SubjectId subject, string purpose) =>
@@ -326,7 +376,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     private async Task PublishAsync(bool material) =>
         _ = await Documents.PublishAsync(
             AccessContext.Of(Officer),
-            new DocumentPublication(ConsentService.Notice, "النص الجديد", "ar", [], material),
+            new DocumentPublication(DocumentName.Parse(ConsentService.Notice), "النص الجديد", "ar", [], material),
             CancellationToken.None);
 
     private async Task<IReadOnlyList<ConsentRecord>> HeldAsync(SubjectId subject) =>

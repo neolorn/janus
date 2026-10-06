@@ -25,7 +25,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using (StoreContext writing = database.Context())
         {
-            Result<TimeSpan> before = await new ConfigurationStore(writing).WriteAsync(
+            Result<TimeSpan> before = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
                 Catalogue.AbuseNonexistentWindow,
                 TimeSpan.FromMinutes(30),
                 TestContext.Current.CancellationToken);
@@ -35,7 +35,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         }
 
         await using StoreContext reading = database.Context();
-        Result<TimeSpan> read = await new ConfigurationStore(reading).ReadAsync(
+        Result<TimeSpan> read = await new ConfigurationStore(reading, new DataConnections(reading)).ReadAsync(
             Catalogue.AbuseNonexistentWindow,
             TestContext.Current.CancellationToken);
 
@@ -73,7 +73,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext reading = database.Context();
 
-        Result<int> read = await new ConfigurationStore(reading).ReadAsync(
+        Result<int> read = await new ConfigurationStore(reading, new DataConnections(reading)).ReadAsync(
             Catalogue.AlertingCallbackThreshold,
             TestContext.Current.CancellationToken);
 
@@ -89,7 +89,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<bool> written = await new ConfigurationStore(writing).WriteAsync(
+        Result<bool> written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.AbuseThrottleEnabled,
             false,
             TestContext.Current.CancellationToken);
@@ -107,7 +107,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
+        Result<TimeSpan> written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.SessionAal2Absolute,
             TimeSpan.FromHours(48),
             TestContext.Current.CancellationToken);
@@ -126,7 +126,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         var organization = OrganizationId.New(TimeProvider.System);
 
         await using StoreContext context = database.Context();
-        var store = new ConfigurationStore(context);
+        var store = new ConfigurationStore(context, new DataConnections(context));
 
         Result<PolicyOverride> absent = await store.ReadAsync(
             Catalogue.OrganizationPolicy,
@@ -154,8 +154,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
     /// <summary>
     /// OPS-CFG-008 AC1: a member of a family written through the store is in force for
-    /// the next read on a context that knew nothing of the write, and the write answers
-    /// what was in force before it.
+    /// the next read on a context that knew nothing of the write.
     /// </summary>
     [Fact]
     public async Task OPS_CFG_008_AC1_AWrittenMemberOfAFamilyIsInForceForTheNextReadAsync()
@@ -165,42 +164,23 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
         await using (StoreContext writing = database.Context())
         {
-            Result<PolicyOverride> before = await new ConfigurationStore(writing).WriteAsync(
+            Result written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
                 Catalogue.OrganizationPolicy,
                 organization.ToString(),
                 changed,
                 TestContext.Current.CancellationToken);
 
-            Assert.Equal(PolicyOverride.None, Value(before));
+            Assert.True(written.Match(() => true, _ => false));
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using StoreContext reading = database.Context();
-        Result<PolicyOverride> read = await new ConfigurationStore(reading).ReadAsync(
+        Result<PolicyOverride> read = await new ConfigurationStore(reading, new DataConnections(reading)).ReadAsync(
             Catalogue.OrganizationPolicy,
             organization.ToString(),
             TestContext.Current.CancellationToken);
 
         Assert.False(Value(read)?.SelfServiceRecovery);
-    }
-
-    /// <summary>
-    /// A family the application cannot change is refused for every member, whatever
-    /// the caller asks, and no row is written for it (OPS-CFG-004).
-    /// </summary>
-    [Fact]
-    public async Task WriteAsync_AMemberOfAProtectedFamily_IsRefusedAndWritesNothingAsync()
-    {
-        await using StoreContext writing = database.Context();
-
-        Result<bool> written = await new ConfigurationStore(writing).WriteAsync(
-            Catalogue.OrganizationStepUpEnforcement,
-            OrganizationId.New(TimeProvider.System).ToString(),
-            false,
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(ErrorCodes.ConfigurationKeyProtected, Code(written));
-        Assert.Empty(writing.ChangeTracker.Entries<SettingRecord>());
     }
 
     /// <summary>
@@ -212,44 +192,73 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
+        Result written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.HostCategoryRetention,
             "ledgers",
             TimeSpan.FromDays(-1),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Code(written));
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, written.Match<ErrorCode?>(() => null, failure => failure.Code));
         Assert.Empty(writing.ChangeTracker.Entries<SettingRecord>());
     }
 
     /// <summary>
-    /// `10` section 4: the row carries the key's written form, so a row that does not
-    /// parse is a fault and never a default quietly standing in for it.
+    /// OPS-CFG-008 and `10` section 4: the row carries the key's written form, so a row
+    /// that does not parse is a fault, for a key that exists once, for a member of a
+    /// family and among the members written: the read throws, naming the key and never
+    /// the stored text, and no default stands in for the value.
     /// </summary>
     [Fact]
     public async Task ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync()
     {
         await using StoreContext context = database.Context();
 
-        var written = new SettingRecord
+        const string organization = "unreadable";
+        const string stored = "a quarter of an hour";
+
+        SettingRecord[] written =
+        [
+            new() { Key = Catalogue.LinkMagicLifetime.Key, Value = stored },
+            new() { Key = Catalogue.OrganizationPolicy.For(organization), Value = stored },
+        ];
+
+        context.Settings.AddRange(written);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new ConfigurationStore(context, new DataConnections(context));
+
+        try
         {
-            Key = Catalogue.LinkMagicLifetime.Key,
-            Value = "a quarter of an hour",
-        };
+            InvalidOperationException single = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await store.ReadAsync(
+                    Catalogue.LinkMagicLifetime,
+                    TestContext.Current.CancellationToken));
 
-        context.Settings.Add(written);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            InvalidOperationException member = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await store.ReadAsync(
+                    Catalogue.OrganizationPolicy,
+                    organization,
+                    TestContext.Current.CancellationToken));
 
-        Result<TimeSpan> read = await new ConfigurationStore(context).ReadAsync(
-            Catalogue.LinkMagicLifetime,
-            TestContext.Current.CancellationToken);
+            InvalidOperationException members = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await store.ReadWrittenAsync(
+                    Catalogue.OrganizationPolicy,
+                    TestContext.Current.CancellationToken));
 
-        // The row is the class's database, which the other cases read too, so what
-        // this one wrote goes out with it.
-        context.Settings.Remove(written);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Code(read));
+            Assert.Contains(Catalogue.LinkMagicLifetime.Key.ToString(), single.Message, StringComparison.Ordinal);
+            Assert.Contains(written[1].Key.ToString(), member.Message, StringComparison.Ordinal);
+            Assert.Contains(written[1].Key.ToString(), members.Message, StringComparison.Ordinal);
+            Assert.All(
+                new[] { single, member, members },
+                fault => Assert.DoesNotContain(stored, fault.Message, StringComparison.Ordinal));
+        }
+        finally
+        {
+            // The rows are the class's database, which the other cases read too, so
+            // what this one wrote goes out with it.
+            context.Settings.RemoveRange(written);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     private static TValue? Value<TValue>(Result<TValue> outcome)

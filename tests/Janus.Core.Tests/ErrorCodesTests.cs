@@ -25,6 +25,7 @@ public sealed class ErrorCodesTests
 
     private static readonly string[] Catalogue =
     [
+        "api.request.invalid",
         "api.request.malformed",
         "auth.breakglass.consumed",
         "auth.breakglass.invalid",
@@ -37,9 +38,10 @@ public sealed class ErrorCodesTests
         "auth.credential.notfound",
         "auth.credential.notupgradable",
         "auth.credential.suspended",
-        "auth.device.verificationrequired",
         "auth.enrolment.tokeninvalid",
+        "auth.factor.notenrolled",
         "auth.factor.notpermitted",
+        "auth.factor.passwordrequired",
         "auth.factor.rejected",
         "auth.factor.required",
         "auth.lossreport.notpermitted",
@@ -49,13 +51,14 @@ public sealed class ErrorCodesTests
         "auth.password.toolong",
         "auth.password.tooshort",
         "auth.policy.graceexpired",
+        "auth.provider.unavailable",
         "auth.recovery.channelnotonaccount",
         "auth.recovery.reasonrequired",
         "auth.recovery.selfapproval",
         "auth.recovery.tokenexpired",
         "auth.recovery.tokeninvalid",
         "auth.restriction.exceeded",
-        "auth.restriction.reasonrequired",
+        "auth.restriction.notfound",
         "auth.screening.unavailable",
         "auth.session.csrfinvalid",
         "auth.session.expired",
@@ -72,14 +75,17 @@ public sealed class ErrorCodesTests
         "authz.grant.expired",
         "authz.grant.notfound",
         "authz.grant.reasonrequired",
+        "authz.grant.unresolved",
         "authz.group.cycle",
         "authz.group.inuse",
         "authz.policy.unregistered",
         "authz.resource.notfound",
         "authz.restricted",
         "authz.role.inuse",
+        "authz.role.notfound",
         "authz.truthtable.disagreement",
-        "config.change.stepuprequired",
+        "config.change.reasonrequired",
+        "config.change.superseded",
         "config.key.protected",
         "config.policy.belowsystem",
         "config.value.aboveceiling",
@@ -87,10 +93,13 @@ public sealed class ErrorCodesTests
         "config.value.lastdestination",
         "config.value.notallowed",
         "identity.account.adminsuspended",
+        "identity.account.notfound",
+        "identity.account.stateconflict",
         "identity.affirmation.required",
         "identity.change.pending",
         "identity.change.windowelapsed",
         "identity.deletion.windowelapsed",
+        "identity.domain.notfound",
         "identity.domain.unverified",
         "identity.identifier.domainnotallowed",
         "identity.identifier.invalid",
@@ -99,14 +108,22 @@ public sealed class ErrorCodesTests
         "identity.identifier.maximum",
         "identity.identifier.mixedscript",
         "identity.identifier.primary",
+        "identity.identifier.unverified",
+        "identity.invitation.addressrequired",
         "identity.invitation.expired",
         "identity.invitation.identifiermismatch",
+        "identity.invitation.mailboxheld",
         "identity.invitation.notfound",
         "identity.link.lastcredential",
+        "identity.mailbox.notfound",
+        "identity.mailbox.taken",
         "identity.membership.limitreached",
+        "identity.membership.notfound",
+        "identity.organization.notfound",
         "identity.organization.protected",
         "identity.photo.invalid",
         "identity.photo.notenabled",
+        "identity.photo.notfound",
         "identity.photo.toolarge",
         "identity.preference.administratoronly",
         "identity.preference.toolarge",
@@ -125,24 +142,30 @@ public sealed class ErrorCodesTests
         "identity.username.invalid",
         "identity.username.reserved",
         "identity.username.taken",
+        "integration.callback.inprogress",
         "integration.callback.rejected",
         "integration.endpoint.insecure",
+        "integration.mailserver.conflict",
         "integration.sms.balancefloor",
         "model.containment.cycle",
         "model.derivation.undeclaredreference",
         "model.derivation.unindexed",
+        "model.purpose.hostingconsent",
         "model.purpose.missingassessment",
         "model.role.undeclaredpermission",
+        "model.rotation.notready",
+        "model.startup.declarationinvalid",
         "model.startup.declarationmissing",
         "model.startup.governinglanguage",
-        "model.startup.kekunavailable",
         "model.startup.labellimit",
         "model.startup.preferencedeclaration",
         "model.startup.redirectclient",
         "model.startup.rpid",
         "model.startup.schemamismatch",
+        "model.startup.secretunavailable",
         "model.startup.subscribername",
         "model.type.noorganizationpath",
+        "model.type.reserved",
         "model.type.undeclaredreference",
         "privacy.consent.required",
         "privacy.consent.superseded",
@@ -190,10 +213,8 @@ public sealed class ErrorCodesTests
     }
 
     /// <summary>
-    /// REF-001 AC1: a code the catalogue holds and chapter 10 does not fails here,
-    /// unless the ledger owes chapter 10 its row. A row the ledger owes that names no
-    /// code of the catalogue fails as well, so what is owed cannot outlive the code it
-    /// is owed for.
+    /// REF-001 AC1: a code the catalogue holds that is no live row of chapter 10 fails
+    /// here. The test reads chapter 10 alone (D-183).
     /// </summary>
     [Fact]
     public void REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference()
@@ -201,12 +222,20 @@ public sealed class ErrorCodesTests
         string[] declared = [.. Codes().Values];
 
         Assert.Empty(Undocumented(declared));
-        Assert.Empty(ReferenceRows.OwedCodes.Except(declared, StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// BFF-ERR-001 AC3: every code the boundary can answer with is a row of chapter 10
-    /// or one the ledger owes it. A code is made only through
+    /// REF-001 AC1: a live row of chapter 10 section 1 naming a code the catalogue does
+    /// not hold fails here. A struck row, and one whose cell after the code opens
+    /// "Retired" or "Withdrawn", is not live and names nothing the source owes.
+    /// </summary>
+    [Fact]
+    public void REF_001_AC1_EveryLiveRowOfTheReferenceIsACodeInTheSource() =>
+        Assert.Empty(ReferenceRows.ChapterCodes.Except(Codes().Values, StringComparer.Ordinal));
+
+    /// <summary>
+    /// BFF-ERR-001 AC3: every code the boundary can answer with is a row of chapter 10.
+    /// A code is made only through
     /// <see cref="ErrorCode.Parse"/>, since no other constructor is reachable, so the
     /// codes a response can carry are the literals the library's source parses; no
     /// source parses a code it computed.
@@ -253,10 +282,9 @@ public sealed class ErrorCodesTests
         }
     }
 
-    // The codes of those given that chapter 10 holds no live row for and the ledger
-    // does not owe it.
+    // The codes of those given that chapter 10 holds no live row for.
     private static string[] Undocumented(IReadOnlyList<string> codes) =>
-        [.. codes.Except(ReferenceRows.ChapterCodes.Concat(ReferenceRows.OwedCodes), StringComparer.Ordinal)];
+        [.. codes.Except(ReferenceRows.ChapterCodes, StringComparer.Ordinal)];
 
     private static Dictionary<string, string> Codes() =>
         typeof(ErrorCodes)

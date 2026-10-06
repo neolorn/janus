@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
@@ -18,6 +19,9 @@ namespace Janus.Authentication.Tests.Factors;
 [Trait("kind", "unit")]
 public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("recovery-code-reminder", "AUTH-FACT-008", SystemOperation.ExpirySweep));
+
     private const string Address = "person@example.test";
     private const string Number = "+441632960011";
 
@@ -27,11 +31,21 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
 
     private readonly RecoveryCodeStoreInMemory _sets = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    /// <summary>
+    /// A deployment that names the one language its notices are written in, as every
+    /// deployment names at least one.
+    /// </summary>
+    public RecoveryCodeRemindersTests()
+    {
+        _notifications.Work = _work;
+        _configuration.Set(Settings.NotificationLanguages, ["en"]);
+    }
 
     private RecoveryCodeReminders Reminders =>
         new(_sets, _identifiers, _notifications, _configuration, _work, _clock);
@@ -124,8 +138,8 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-008 AC5: a channel that refuses the reminder does not make it owed
-    /// again, and a pass reminds every set that is due however many there are.
+    /// AUTH-FACT-008 AC5: a pass reminds every set that is due however many there are,
+    /// and each once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -138,12 +152,164 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
             await IssuedAsync(subject);
         }
 
-        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
         _clock.Advance(Year);
 
         Assert.Equal(250, await RemindedAsync());
         Assert.Equal(0, await RemindedAsync());
         Assert.Equal(250, _work.Committed);
+        Assert.Equal(500, _notifications.Sent.Count);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5: a set whose every notice was refused is not closed as
+    /// reminded, so the reminder stays owed and the next pass that a channel takes it
+    /// on closes it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_ASetWhoseEveryNoticeIsRefusedStaysOwedAsync()
+    {
+        SubjectId subject = Held();
+
+        await IssuedAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _clock.Advance(Year);
+
+        Assert.Equal(0, await RemindedAsync());
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+
+        _notifications.Refusal = null;
+
+        Assert.Equal(1, await RemindedAsync());
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5, CONV-DESIGN-003 AC10: a reminder whose every send is refused
+    /// wrote nothing, so its unit of work is rolled back and nothing is committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_AReminderWhoseEverySendIsRefusedIsRolledBackAsync()
+    {
+        SubjectId subject = Held();
+
+        await IssuedAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _clock.Advance(Year);
+
+        Assert.Equal(0, await RemindedAsync());
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5, AUTH-ABUSE-004 AC18: a reminder one channel refuses and
+    /// another admits is recorded once its one send is admitted, and commits.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_AReminderOneChannelAdmitsIsRecordedAndCommittedAsync()
+    {
+        SubjectId subject = Held();
+
+        await IssuedAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _notifications.RefusedChannel = SendKind.Sms;
+        _clock.Advance(Year);
+
+        Assert.Equal(1, await RemindedAsync());
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(SendKind.Email, Assert.Single(_notifications.Carried).Kind);
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5: a set whose account holds no channel a reminder can reach is
+    /// closed as reminded, since no later pass could reach it either.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_ASetNoChannelCanReachIsClosedAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        await IssuedAsync(subject);
+        _clock.Advance(Year);
+
+        Assert.Equal(1, await RemindedAsync());
+        Assert.Empty(_notifications.Sent);
+        Assert.NotNull((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5, AUTH-ABUSE-004 AC12: a reminder is asked for by no request, so
+    /// it counts under no source, and as a notice to a holder it answers to the
+    /// notification restriction of its own destination alone. Twenty sets due together
+    /// are therefore each reminded under the shipped restrictions, on both channels,
+    /// where one shared source would have refused the eleventh text message.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_TwentySetsDueTogetherAreEachRemindedUnderTheShippedRestrictionsAsync()
+    {
+        var ledger = new SendLedgerInMemory { Work = _work };
+        var outbox = new SendOutboxInMemory { Work = _work };
+        var carrier = new SendCarrierInMemory();
+        var events = new EventsInMemory();
+        var gateway = new SmsTransportInMemory();
+
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+
+        var send = new GovernedSend(
+            new SendAdmission(
+                _configuration,
+                ledger,
+                RestrictionKeySuppliers.None,
+                new SmsBalance(_configuration, gateway, new SmsBalanceLedgerInMemory(), _work, events, _clock)),
+            outbox,
+            carrier,
+            Considered.Nothing(_work, _clock),
+            _configuration,
+            _work,
+            _clock,
+            _randomness);
+
+        var reminders = new RecoveryCodeReminders(_sets, _identifiers, send, _configuration, _work, _clock);
+
+        for (int holder = 0; holder < 20; holder++)
+        {
+            var subject = SubjectId.New(_randomness);
+
+            _ = _identifiers.Verified(subject, IdentifierKind.Email, $"person{holder}@example.test");
+            _ = _identifiers.Verified(subject, IdentifierKind.Phone, $"+4416329600{holder:D2}");
+
+            await IssuedAsync(subject);
+        }
+
+        _clock.Advance(Year);
+
+        int reminded = (await reminders.RemindAsync(Sweeper, TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(20, reminded);
+        Assert.Equal(40, outbox.Waiting.Count);
+        Assert.Equal(20, outbox.Waiting.Count(waiting => waiting.Requested.Kind is SendKind.Sms));
+        Assert.All(outbox.Waiting, waiting => Assert.Null(waiting.Requested.Source));
+        Assert.All(ledger.Keys, key => Assert.Equal("notification.destination", key.Restriction));
+        Assert.Equal(40, ledger.Keys.Count);
+        Assert.Equal(40, carrier.Attempted.Count);
     }
 
     private SubjectId Held()
@@ -162,6 +328,6 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     private async ValueTask<int> RemindedAsync() =>
-        (await Reminders.RemindAsync(TestContext.Current.CancellationToken))
+        (await Reminders.RemindAsync(Sweeper, TestContext.Current.CancellationToken))
             .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 }

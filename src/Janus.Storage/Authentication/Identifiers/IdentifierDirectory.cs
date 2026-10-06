@@ -16,6 +16,7 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// </summary>
 /// <param name="identifiers">Where the account's identifiers are read and written.</param>
 /// <param name="preferences">Where the account's language is read.</param>
+/// <param name="pending">Where the adds the account has pending are read.</param>
 /// <remarks>
 /// Implements REG-IDENT-002 to REG-IDENT-009 and CONV-LAYOUT-001. Every rule that
 /// holds across a set lives in the set, so each command here reads the set, tells it
@@ -23,7 +24,8 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// </remarks>
 internal sealed class IdentifierDirectory(
     IIdentifierStore identifiers,
-    IPreferenceStore preferences) : IIdentifierDirectory
+    IPreferenceStore preferences,
+    IPendingVerificationStore pending) : IIdentifierDirectory
 {
     /// <inheritdoc/>
     public ValueTask<SubjectId?> OwnerAsync(
@@ -40,12 +42,12 @@ internal sealed class IdentifierDirectory(
         identifiers.FindHolderAsync(kind, canonical, cancellationToken);
 
     /// <inheritdoc/>
-    public ValueTask<bool> IsReservedAsync(
+    public ValueTask<SubjectId?> ReservedToAsync(
         IdentifierKind kind,
         string canonical,
         DateTimeOffset now,
         CancellationToken cancellationToken) =>
-        identifiers.IsReservedAsync(kind, canonical, now, cancellationToken);
+        identifiers.FindReservedToAsync(kind, canonical, now, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<bool> IsHeldAsync(
@@ -69,6 +71,14 @@ internal sealed class IdentifierDirectory(
             all.Add(Held(identifier));
         }
 
+        // REG-IDENT-004: an add is no identifier until it verifies, and is listed as an
+        // unverified one meanwhile, so it counts toward its kind's maximum.
+        foreach (PendingVerification add in await pending.AddsOfAsync(subject, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            all.Add(HeldIdentifier.Pending(add));
+        }
+
         var backups = new List<HeldBackup>();
 
         foreach (BackupSetting setting in set.Backups)
@@ -87,6 +97,18 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        identifiers.HoldAsync(subject, cancellationToken);
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken) =>
+        identifiers.LockValuesAsync(values, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask TakeOnAsync(
         SubjectId subject,
         IdentifierId id,
@@ -94,7 +116,6 @@ internal sealed class IdentifierDirectory(
         string entered,
         string canonical,
         DateTimeOffset at,
-        int maximum,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entered);
@@ -103,9 +124,16 @@ internal sealed class IdentifierDirectory(
         IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        set.Add(Taken(subject, id, kind, entered, canonical, at), maximum);
+        // The identifier service judged the maximum against the verified identifiers of
+        // the kind, so the set is not asked to judge it again.
+        set.Add(Taken(subject, id, kind, entered, canonical, at), int.MaxValue);
+        set.Verify(id, at);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        await identifiers
+            .EndReservationAsync(subject, kind, canonical, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -154,6 +182,10 @@ internal sealed class IdentifierDirectory(
         set.KeepPersonal(personal);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        await identifiers
+            .EndReservationAsync(subject, IdentifierKind.Email, address.Value, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -200,21 +232,6 @@ internal sealed class IdentifierDirectory(
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
         return vouched.Id;
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask ProveAsync(
-        SubjectId subject,
-        IdentifierId id,
-        DateTimeOffset at,
-        CancellationToken cancellationToken)
-    {
-        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        set.Verify(id, at);
-
-        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -265,6 +282,13 @@ internal sealed class IdentifierDirectory(
         displaced.Replace(entered, canonical, at);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        // REG-IDENT-006: a replace back to a value the account replaced writes that
+        // value to the account it is reserved to, which ends the reservation before the
+        // displaced value takes one of its own.
+        await identifiers
+            .EndReservationAsync(subject, displaced.Kind, canonical, cancellationToken)
+            .ConfigureAwait(false);
 
         await identifiers.RecordRemovalAsync(removal, cancellationToken).ConfigureAwait(false);
     }
@@ -377,7 +401,7 @@ internal sealed class IdentifierDirectory(
         return removal is null
             ? null
             : new GivenUpIdentifier(
-                removal.Id,
+                removal.Origin,
                 removal.Subject,
                 removal.Kind,
                 removal.Entered,
@@ -386,12 +410,17 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
-    public async ValueTask TakeBackAsync(
-        IdentifierId id,
-        int maximum,
+    public async ValueTask<bool> TakeBackAsync(
+        byte[] undo,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] displacedUndo,
         CancellationToken cancellationToken)
     {
-        IdentifierRemoval removal = await identifiers.FindRemovalAsync(id, cancellationToken)
+        ArgumentNullException.ThrowIfNull(undo);
+        ArgumentNullException.ThrowIfNull(displacedUndo);
+
+        IdentifierRemoval removal = await identifiers.FindRemovalAsync(undo, cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The identifier was not given up.");
 
@@ -399,20 +428,38 @@ internal sealed class IdentifierDirectory(
             .FindBySubjectAsync(removal.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // A replace left the row standing under its new value, so the undo moves the
-        // old value back onto it; a removal took the row away, so the undo adds it.
-        if (set.Find(id) is Identifier standing)
+        IdentifierRemoval? displaced = null;
+
+        // A replace left the row standing under another value, so the undo moves its own
+        // value back onto it; a removal took the row away, so the undo adds it.
+        if (set.Find(removal.Origin) is Identifier standing)
         {
+            // REG-IDENT-006 (D-189): what the identifier then holds is displaced as a
+            // replace displaces a value, into a removal of its own taken before the
+            // value moves. A value nobody proved is discarded, not removed.
+            displaced = standing.IsVerified ? IdentifierRemoval.Of(standing, at, expiresAt, displacedUndo) : null;
+
             standing.Replace(removal.Entered, removal.Canonical, removal.VerifiedAt);
         }
         else
         {
-            set.Add(removal.Restored(), maximum);
+            // The identifier service judged the maximum against the verified identifiers
+            // of the kind, so the set is not asked to judge it again.
+            set.Add(removal.Restored(), int.MaxValue);
         }
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
-        await identifiers.DiscardRemovalAsync(id, cancellationToken).ConfigureAwait(false);
+        // The removal the link named is given up and no other: a second removal of the
+        // same identifier keeps its value reserved and its undo good.
+        await identifiers.DiscardRemovalAsync(removal.Id, cancellationToken).ConfigureAwait(false);
+
+        if (displaced is not null)
+        {
+            await identifiers.RecordRemovalAsync(displaced, cancellationToken).ConfigureAwait(false);
+        }
+
+        return displaced is not null;
     }
 
     private static HeldIdentifier Held(Identifier identifier) =>

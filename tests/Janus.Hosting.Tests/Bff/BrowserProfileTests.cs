@@ -8,13 +8,23 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
+using Janus.Authentication.Oidc;
+using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Oidc;
+using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -434,22 +444,38 @@ public sealed class BrowserProfileTests : IDisposable
     /// needs less than the stages give it (BFF-STEP-001). The third reader is the
     /// logging of BFF-LOG-002, which only ever takes a body out of a log, and the
     /// fourth is error translation, which asks only whether routing found an endpoint,
-    /// once every stage has run, to answer a path none serves. The one stage that
-    /// reads a key is the flood limit of stage 4, which reads that key alone, runs
-    /// before the token is checked and either refuses the request or hands it on to
-    /// every stage after it.
+    /// once every stage has run, to answer a path none serves. The fifth is the
+    /// declaration of CONV-DESIGN-006, which the stage that answers a request the
+    /// framework could not bind reads after the endpoint was reached, to name the value
+    /// that did not parse; it enforces nothing and excuses nothing. The sixth is the
+    /// mark of a route an enrolment session reaches, which stage 5 reads to resolve
+    /// that session there and nowhere else (BFF-ORDER-001); a route without it is
+    /// given less, and none is taken out of a stage by it. The one stage that
+    /// reads a key is the flood limit of stage 4, which reads its two limits and nothing
+    /// else (BFF-ORDER-001), runs before the token is checked and either refuses the
+    /// request or hands it on to every stage after it.
     /// </summary>
     [Fact]
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
     {
         Assert.Equal(
-            ["ErrorTranslation.cs", "SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
+            [
+                "EndpointDeclaration.cs",
+                "EndpointDeclarations.cs",
+                "EnrolmentRoute.cs",
+                "ErrorTranslation.cs",
+                "MalformedRequest.cs",
+                "SensitiveBodyLogging.cs",
+                "SessionRequired.cs",
+                "SessionRequirement.cs",
+                "SessionResolution.cs",
+            ],
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
         Assert.Equal(["SourceRateLimiting.cs"], Reading("IConfigurationStore", "Settings."));
         Assert.Equal(
-            ["Settings.AbuseSourceRateLimit"],
+            ["Settings.AbuseSourceRateLimit", "Settings.AbuseSourceSiteLimit"],
             Regex.Matches(Repository.Source("SourceRateLimiting"), @"Settings\.\w+").Select(read => read.Value));
     }
 
@@ -559,13 +585,28 @@ public sealed class BrowserProfileTests : IDisposable
     /// a request, and that is settled in the one place the library names the routes.
     /// The one other reader of the metadata is the logging of BFF-LOG-002, which
     /// enforces no token and only ever takes a body out of a log; error translation
-    /// reads no metadata, only whether an endpoint was found, after every stage.
+    /// reads no metadata, only whether an endpoint was found, after every stage. The
+    /// declaration of CONV-DESIGN-006 is read by the stage that answers a request the
+    /// framework could not bind, after the endpoint was reached, to name the value that
+    /// did not parse; it enforces no token and excuses none. The mark of a route an
+    /// enrolment session reaches is read by stage 5 to resolve that session there and
+    /// nowhere else (BFF-ORDER-001); the token is checked on it as on any other.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
     {
         Assert.Equal(
-            ["ErrorTranslation.cs", "SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
+            [
+                "EndpointDeclaration.cs",
+                "EndpointDeclarations.cs",
+                "EnrolmentRoute.cs",
+                "ErrorTranslation.cs",
+                "MalformedRequest.cs",
+                "SensitiveBodyLogging.cs",
+                "SessionRequired.cs",
+                "SessionRequirement.cs",
+                "SessionResolution.cs",
+            ],
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
@@ -1142,6 +1183,17 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<AdministrativeScope>();
         services.AddSingleton<IAlertChannels, EventsInMemory>();
         services.AddScoped<ConcurrentSessions>();
+        services.AddSingleton<IOidcClientStore, OidcClientStoreInMemory>();
+        services.AddSingleton<IPasswordStore, PasswordStoreInMemory>();
+        services.AddSingleton<IAccountDirectory>(new AccountDirectoryInMemory(PreferenceDeclarations.None));
+        services.AddSingleton<IIdentifierDirectory, IdentifierDirectoryInMemory>();
+        services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
+        services.AddScoped(provider => new PhoneSignals(
+            provider.GetService<PhoneSignalProvider>(),
+            provider.GetRequiredService<IPhoneSignalAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<StepUpGuard>();
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
@@ -1217,7 +1269,7 @@ public sealed class BrowserProfileTests : IDisposable
                 Noon,
                 TimeSpan.FromDays(1),
                 TimeSpan.FromDays(30),
-                satisfiesEveryGate: false),
+                breakGlassReason: null),
             secret.Fingerprint(),
             token.Fingerprint(),
             TestContext.Current.CancellationToken);

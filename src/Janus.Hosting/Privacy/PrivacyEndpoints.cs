@@ -24,7 +24,7 @@ namespace Janus.Hosting.Privacy;
 /// </remarks>
 internal static class PrivacyEndpoints
 {
-    private const string Notice = "privacy-notice";
+    private static readonly DocumentName Notice = DocumentName.Parse("privacy-notice");
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
@@ -40,29 +40,84 @@ internal static class PrivacyEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/privacy");
 
-        _ = group.MapGet("/notice", NoticeAsync);
-        _ = group.MapGet("/documents/{document}", DocumentAsync);
+        _ = group.MapGet("/notice", NoticeAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.DocumentNotFound))
+            .Produces<DocumentVersionView>();
+        _ = group.MapGet("/documents/{document}", DocumentAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.DocumentNotFound)
+                .Binding<DocumentName>("document"))
+            .Produces<DocumentVersionView>();
 
-        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync));
-        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync));
-        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync));
+        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<ConsentView>>();
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNoConsent))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PurposeNoConsent))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync));
-        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync));
-        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync));
+        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<ObjectionView>>();
+        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNotObjectable))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PurposeNotObjectable))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync));
-        _ = SessionRequired.On(group.MapGet("/export", ExportAsync));
+        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
+        _ = SessionRequired.On(group.MapGet("/export", ExportAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Throttled))
+            .Produces<ExportView>()
+            .Produces<PortableExportView>();
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.RequestMalformed, ErrorCodes.Denied))
+            .Produces<ProcessingRegisterView>();
+        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted))
+            .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
 
-        _ = SessionRequired.On(queue.MapGet("/", QueueAsync));
-        _ = SessionRequired.On(queue.MapPost("/", EnterAsync));
-        _ = SessionRequired.On(queue.MapPost("/{request:guid}/fulfil", FulfilAsync));
-        _ = SessionRequired.On(queue.MapPost("/{request:guid}/refuse", RefuseAsync));
+        _ = SessionRequired.On(queue.MapGet("/", QueueAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<PrivacyRequestView>>();
+        _ = SessionRequired.On(queue.MapPost("/", EnterAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.RequestReceivedFuture, ErrorCodes.RequestInvalid))
+            .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
+        _ = SessionRequired.On(queue.MapPost("/{request}/fulfil", FulfilAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.RequestNotFound, ErrorCodes.RequestDecided)
+                .Binding<PrivacyRequestId>("request"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(queue.MapPost("/{request}/refuse", RefuseAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestNotFound,
+                    ErrorCodes.RequestDecided)
+                .Binding<PrivacyRequestId>("request"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -89,34 +144,15 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        AccessContext holder = Asking(browser);
-
         // PRIV-CONS-001, PRIV-CONS-007: this one endpoint serves both the grant a
-        // subject makes on their own pages and the prompt a material revision raised,
-        // and what tells them apart is the record the subject already holds: one the
-        // revision ended and the subject never took back.
-        ConsentMechanism mechanism = Reasked(
-            await consents.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
-            purpose);
-
+        // subject makes on their own pages and the prompt a material revision raised;
+        // the service tells them apart.
         return Answers.Of(
             await consents
-                .GrantAsync(holder, purpose, mechanism, cancellationToken)
+                .GrantAsync(Asking(browser), purpose, ConsentMechanism.Dashboard, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
-
-    private static ConsentMechanism Reasked(
-        Result<IReadOnlyList<ConsentRecord>> held,
-        string purpose) =>
-        held.Match(
-            records => records.Any(record =>
-                string.Equals(record.Purpose, purpose, StringComparison.Ordinal)
-                && record.SupersededAt is not null
-                && record.WithdrawnAt is null)
-                ? ConsentMechanism.Reconsent
-                : ConsentMechanism.Dashboard,
-            _ => ConsentMechanism.Dashboard);
 
     private static async Task<IResult> WithdrawAsync(
         IConsents consents,
@@ -192,12 +228,15 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (Asked(body.Type) is not PrivacyRequestType type)
+        // 09 section 7: erasure is not a request type on this endpoint, so a body naming
+        // it is not the shape the endpoint takes (API-CONV-003).
+        if (Asked(body.Type) is not PrivacyRequestType type || type is PrivacyRequestType.Erasure)
         {
             return Answers.Malformed("type");
         }
 
-        if (body.Detail is not { Length: > 0 } detail)
+        // API-CONV-002: a free-text member is 1 to 1024 characters after trimming.
+        if (body.Detail?.Trim() is not { Length: > 0 and <= 1024 } detail)
         {
             return Answers.Malformed("detail");
         }
@@ -313,6 +352,22 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(records);
 
+        // 09 section 8a, API-CONV-002 (D-183): the two statements are free text, so one
+        // given is trimmed and refused blank or past the bound; one omitted is cleared.
+        string? dataOwner = request.DataOwner?.Trim();
+
+        if (dataOwner is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("dataOwner");
+        }
+
+        string? measures = request.OrganizationalSecurityMeasures?.Trim();
+
+        if (measures is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("organizationalSecurityMeasures");
+        }
+
         AccessContext holder = Asking(browser);
 
         return Answers.Of(
@@ -320,8 +375,8 @@ internal static class PrivacyEndpoints
                 .DeclareAsync(
                     holder,
                     new ComplianceRecord(
-                        request.DataOwner,
-                        request.OrganisationalSecurityMeasures,
+                        dataOwner,
+                        measures,
                         request.AssessmentLinks ?? []),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -380,12 +435,22 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("receivedAt");
         }
 
-        if (body.Channel is not { Length: > 0 } channel)
+        // 09 section 8a: the detail is optional, absent or null recording none, and one
+        // given is 1 to 1024 characters after trimming, as the channel and the
+        // confirmation are (API-CONV-002).
+        string? detail = body.Detail?.Trim();
+
+        if (detail is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("detail");
+        }
+
+        if (body.Channel?.Trim() is not { Length: > 0 and <= 1024 } channel)
         {
             return Answers.Malformed("channel");
         }
 
-        if (body.IdentityConfirmation is not { Length: > 0 } confirmation)
+        if (body.IdentityConfirmation?.Trim() is not { Length: > 0 and <= 1024 } confirmation)
         {
             return Answers.Malformed("identityConfirmation");
         }
@@ -399,7 +464,7 @@ internal static class PrivacyEndpoints
                     new PrivacyRequestEntry(
                         new SubjectId(subject),
                         type,
-                        body.Detail ?? string.Empty,
+                        detail,
                         receivedAt,
                         channel,
                         confirmation),
@@ -411,7 +476,7 @@ internal static class PrivacyEndpoints
     private static async Task<IResult> FulfilAsync(
         IPrivacyRequests requests,
         RequestSession browser,
-        Guid request,
+        PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requests);
@@ -420,7 +485,11 @@ internal static class PrivacyEndpoints
 
         return Answers.Of(
             await requests
-                .FulfilAsync(holder, new PrivacyRequestId(request), cancellationToken)
+                .FulfilAsync(
+                    holder,
+                    browser.Required.Id,
+                    request,
+                    cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -429,13 +498,13 @@ internal static class PrivacyEndpoints
         PrivacyDecisionBody body,
         IPrivacyRequests requests,
         RequestSession browser,
-        Guid request,
+        PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -444,7 +513,7 @@ internal static class PrivacyEndpoints
 
         return Answers.Of(
             await requests
-                .RefuseAsync(holder, new PrivacyRequestId(request), reason, cancellationToken)
+                .RefuseAsync(holder, request, reason, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -500,24 +569,22 @@ internal static class PrivacyEndpoints
 
     private static Task<IResult> DocumentAsync(
         ILegalDocuments documents,
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken) =>
         ReadAsync(documents, document, version, cancellationToken);
 
     private static async Task<IResult> ReadAsync(
         ILegalDocuments documents,
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(documents);
 
-        return document is not { Length: > 0 }
-            ? Answers.Malformed("document")
-            : Answers.Of(
-                await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),
-                Published);
+        return Answers.Of(
+            await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),
+            Published);
     }
 
     private static IResult Published(DocumentVersion version) =>
@@ -533,6 +600,7 @@ internal static class PrivacyEndpoints
             [
                 .. records.Select(record => new ConsentView(
                     record.Purpose,
+                    record.Document,
                     record.NoticeVersion,
                     record.Mechanism,
                     record.GrantedAt,
@@ -549,6 +617,7 @@ internal static class PrivacyEndpoints
             [
                 .. records.Select(record => new ObjectionView(
                     record.Purpose,
+                    record.Document,
                     record.NoticeVersion,
                     record.Mechanism,
                     record.RecordedAt,
@@ -565,6 +634,6 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 }

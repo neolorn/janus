@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -41,26 +42,112 @@ internal static class OrganizationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations", CreateAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/delete", RequestDeletionAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/delete/cancel", CancelDeletionAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id:guid}/policy", PolicyAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/organizations/{id:guid}/policy", ReplacePolicyAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id:guid}/domains", DomainsAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/domains", AddDomainAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations", CreateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.IdentifierMixedScript))
+            .Produces<CreatedOrganizationView>(StatusCodes.Status201Created);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete", RequestDeletionAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.OrganizationProtected)
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete/cancel", CancelDeletionAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.OrganizationProtected, ErrorCodes.DeletionWindowElapsed)
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/policy", PolicyAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationPolicyView>();
+        _ = SessionRequired.On(endpoints.MapPut("/admin/organizations/{id}/policy", ReplacePolicyAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.ConfigurationChangeReasonRequired,
+                    ErrorCodes.ConfigurationPolicyBelowSystem, ErrorCodes.ConfigurationValueBelowFloor,
+                    ErrorCodes.ConfigurationValueNotAllowed)
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/domains", DomainsAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
+                .Binding<OrganizationId>("id"))
+            .Produces<IReadOnlyList<OrganizationDomainView>>();
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/domains", AddDomainAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.ConfigurationChangeReasonRequired,
+                    ErrorCodes.ConfigurationValueNotAllowed)
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationDomainView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapPost(
-            "/admin/organizations/{id:guid}/domains/{domain}/verify",
-            VerifyDomainAsync));
+            "/admin/organizations/{id}/domains/{domain}/verify",
+            VerifyDomainAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.DomainNotFound, ErrorCodes.DomainUnverified,
+                    ErrorCodes.ConfigurationChangeReasonRequired)
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationDomainView>();
         _ = SessionRequired.On(endpoints.MapDelete(
-            "/admin/organizations/{id:guid}/domains/{domain}",
-            RemoveDomainAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/invitations", InviteAsync));
+            "/admin/organizations/{id}/domains/{domain}",
+            RemoveDomainAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.ConfigurationChangeReasonRequired)
+                .Binding<OrganizationId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/invitations", InviteAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
+                    ErrorCodes.InvitationMailboxHeld, ErrorCodes.MailboxTaken,
+                    ErrorCodes.InvitationAddressRequired, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.IdentifierMixedScript, ErrorCodes.IdentifierInvalid,
+                    ErrorCodes.GrantUnresolved, ErrorCodes.RequestInvalid,
+                    ErrorCodes.RestrictionExceeded)
+                .Binding<OrganizationId>("id"))
+            .Produces<IssuedInvitationView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete(
-            "/admin/organizations/{id:guid}/invitations/{invitationId:guid}",
-            RevokeInvitationAsync));
+            "/admin/organizations/{id}/invitations/{invitationId}",
+            RevokeInvitationAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.InvitationNotFound, ErrorCodes.InvitationExpired)
+                .Binding<OrganizationId>("id")
+                .Binding<InvitationId>("invitationId"))
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapDelete(
-            "/admin/organizations/{id:guid}/memberships/{subject:guid}",
-            EndMembershipAsync));
+            "/admin/organizations/{id}/memberships/{subject}",
+            EndMembershipAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.StepUpRequired, ErrorCodes.MembershipNotFound)
+                .Binding<OrganizationId>("id")
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -75,12 +162,14 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Name is not { Length: > 0 } name)
+        // API-CONV-002, X4: free text is 1 to 1024 characters after trimming, refused
+        // before the service is called (CONV-CODE-006 AC2).
+        if (body.Name?.Trim() is not { Length: > 0 and <= 1024 } name)
         {
             return Answers.Malformed("name");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -88,7 +177,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .CreateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     name,
                     reason,
                     cancellationToken)
@@ -104,14 +193,14 @@ internal static class OrganizationEndpoints
         OrganizationReasonBody body,
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -119,9 +208,9 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .RequestDeletionAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -132,14 +221,14 @@ internal static class OrganizationEndpoints
         OrganizationReasonBody body,
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -147,9 +236,9 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .CancelDeletionAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -159,7 +248,7 @@ internal static class OrganizationEndpoints
     private static async Task<IResult> PolicyAsync(
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organizations);
@@ -167,7 +256,7 @@ internal static class OrganizationEndpoints
 
         return Answers.Of(
             await organizations
-                .PolicyAsync(AccessContext.Of(browser.Required.Subject), new OrganizationId(id), cancellationToken)
+                .PolicyAsync(browser.Asking, id, cancellationToken)
                 .ConfigureAwait(false),
             policy => TypedResults.Json(
                 OrganizationPolicyView.Of(policy),
@@ -180,16 +269,15 @@ internal static class OrganizationEndpoints
         JsonElement body,
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
-        var organization = new OrganizationId(id);
         Error? failure = null;
         (PolicyOverride replacement, string reason) = OrganizationPolicyBody
-            .Read(body, organization)
+            .Read(body, id)
             .Match(read => read, error => Withheld<(PolicyOverride, string)>(error, ref failure));
 
         if (failure is not null)
@@ -197,12 +285,17 @@ internal static class OrganizationEndpoints
             return Answers.Refused(failure);
         }
 
+        if (Unexplained(id, reason) is IResult unexplained)
+        {
+            return unexplained;
+        }
+
         return Answers.Of(
             await organizations
                 .ReplacePolicyAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    organization,
+                    id,
                     replacement,
                     reason,
                     cancellationToken)
@@ -213,7 +306,7 @@ internal static class OrganizationEndpoints
     private static async Task<IResult> DomainsAsync(
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(domains);
@@ -221,7 +314,7 @@ internal static class OrganizationEndpoints
 
         return Answers.Of(
             await domains
-                .DomainsAsync(AccessContext.Of(browser.Required.Subject), new OrganizationId(id), cancellationToken)
+                .DomainsAsync(browser.Asking, id, cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<OrganizationDomainView>>(
                 [.. held.Select(OrganizationDomainView.Of)],
@@ -236,7 +329,7 @@ internal static class OrganizationEndpoints
         OrganizationDomainBody body,
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -248,19 +341,19 @@ internal static class OrganizationEndpoints
             return Answers.Malformed("domain");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (Unexplained(id, body.Reason) is IResult unexplained)
         {
-            return Answers.Malformed("reason");
+            return unexplained;
         }
 
         return Answers.Of(
             await domains
                 .AddDomainAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     domain,
-                    reason,
+                    body.Reason!,
                     cancellationToken)
                 .ConfigureAwait(false),
             added => TypedResults.Json(
@@ -274,7 +367,7 @@ internal static class OrganizationEndpoints
         OrganizationReasonBody body,
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         string domain,
         CancellationToken cancellationToken)
     {
@@ -282,19 +375,19 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (Unexplained(id, body.Reason) is IResult unexplained)
         {
-            return Answers.Malformed("reason");
+            return unexplained;
         }
 
         return Answers.Of(
             await domains
                 .VerifyDomainAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     domain,
-                    reason,
+                    body.Reason!,
                     cancellationToken)
                 .ConfigureAwait(false),
             verified => TypedResults.Json(
@@ -310,7 +403,7 @@ internal static class OrganizationEndpoints
         [FromBody] OrganizationReasonBody body,
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         string domain,
         CancellationToken cancellationToken)
     {
@@ -318,19 +411,19 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (Unexplained(id, body.Reason) is IResult unexplained)
         {
-            return Answers.Malformed("reason");
+            return unexplained;
         }
 
         return Answers.Of(
             await domains
                 .RemoveDomainAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     domain,
-                    reason,
+                    body.Reason!,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -341,7 +434,7 @@ internal static class OrganizationEndpoints
         IInvitations invitations,
         RequestSession browser,
         HttpContext context,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -359,9 +452,9 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await invitations
                 .IssueAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     request,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
@@ -376,8 +469,8 @@ internal static class OrganizationEndpoints
     private static async Task<IResult> RevokeInvitationAsync(
         IInvitations invitations,
         RequestSession browser,
-        Guid id,
-        Guid invitationId,
+        OrganizationId id,
+        InvitationId invitationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitations);
@@ -386,9 +479,9 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await invitations
                 .RevokeAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new OrganizationId(id),
-                    new InvitationId(invitationId),
+                    browser.Asking,
+                    id,
+                    invitationId,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -398,8 +491,8 @@ internal static class OrganizationEndpoints
         IInvitations invitations,
         RequestSession browser,
         HttpContext context,
-        Guid id,
-        Guid subject,
+        OrganizationId id,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitations);
@@ -409,14 +502,30 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await invitations
                 .EndMembershipAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new OrganizationId(id),
-                    new SubjectId(subject),
+                    browser.Asking,
+                    browser.Required.Id,
+                    id,
+                    subject,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
+
+    // 09 section 8a: a change of an organization's policy or of its domains is a
+    // configuration change of its policy key, so a reason absent or blank is refused
+    // with the code a change without one is, naming that key, before any permission is
+    // asked; one past the bound of API-CONV-002 is a request the boundary does not read.
+    private static IResult? Unexplained(OrganizationId organization, string? reason) =>
+        (reason?.Trim().Length ?? 0) switch
+        {
+            0 => Answers.Refused(Error.From(
+                ErrorCodes.ConfigurationChangeReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(Settings.OrganizationPolicy.For(organization.ToString()).ToString()))),
+            > 1024 => Answers.Malformed("reason"),
+            _ => null,
+        };
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

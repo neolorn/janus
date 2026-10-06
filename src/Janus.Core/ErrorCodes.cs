@@ -37,11 +37,17 @@ public static class ErrorCodes
     public static ErrorCode ConfigurationValueNotAllowed { get; } = ErrorCode.Parse("config.value.notallowed");
 
     /// <summary>
-    /// Loosening a control requires step-up authentication and a written reason.
-    /// Present both and repeat the change.
+    /// A configuration change arrived without a written reason: a runtime key, an
+    /// organization's policy or its locked domains, any edit of the restriction set, a
+    /// tightening included, a restriction grant, or a protected key set from the server.
+    /// The details name the setting where one is changed. State the reason and submit it
+    /// again.
     /// </summary>
-    /// <remarks>Implements OPS-CFG-002, chapter 10 section 1.5.</remarks>
-    public static ErrorCode ConfigurationChangeStepUpRequired { get; } = ErrorCode.Parse("config.change.stepuprequired");
+    /// <remarks>
+    /// Implements OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, OPS-CFG-008, AUTH-ABUSE-004,
+    /// chapter 10 section 1.5.
+    /// </remarks>
+    public static ErrorCode ConfigurationChangeReasonRequired { get; } = ErrorCode.Parse("config.change.reasonrequired");
 
     /// <summary>
     /// An organization policy field is looser than the system default. Tighten the
@@ -65,6 +71,14 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements LIB-HOST-001, chapter 10 section 1.5.</remarks>
     public static ErrorCode StartupDeclarationMissing { get; } = ErrorCode.Parse("model.startup.declarationmissing");
+
+    /// <summary>
+    /// Startup: a declaration is present but malformed. The details name it under
+    /// <c>declaration</c> and the member at fault under <c>field</c>; correct the
+    /// declaration.
+    /// </summary>
+    /// <remarks>Implements LIB-HOST-001, IDN-LIFE-012, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupDeclarationInvalid { get; } = ErrorCode.Parse("model.startup.declarationinvalid");
 
     /// <summary>
     /// Startup: two subject-event subscribers are registered under one name, or one is
@@ -103,11 +117,26 @@ public static class ErrorCodes
     public static ErrorCode StartupNoOrganizationPath { get; } = ErrorCode.Parse("model.type.noorganizationpath");
 
     /// <summary>
+    /// Startup: a resource type takes the name <c>organization</c>, which the library
+    /// reserves for the whole organization. Name the type something else.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-002, AUTHZ-MODEL-004, D-166, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupTypeReserved { get; } = ErrorCode.Parse("model.type.reserved");
+
+    /// <summary>
     /// Startup: a purpose rests on a basis that requires an assessment and names
     /// none. Name the legitimate interest assessment, or rest the purpose elsewhere.
     /// </summary>
     /// <remarks>Implements PRIV-BASIS-002, chapter 10 section 1.5.</remarks>
     public static ErrorCode StartupMissingAssessment { get; } = ErrorCode.Parse("model.purpose.missingassessment");
+
+    /// <summary>
+    /// Startup: a purpose named for the hosting or its cross-border transfer rests on
+    /// consent. Rest it on the regulator's permit's basis, never on consent;
+    /// <c>details.key</c> names the type and the purpose.
+    /// </summary>
+    /// <remarks>Implements INT-HOST-002, PRIV-CONS-010, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupHostingConsent { get; } = ErrorCode.Parse("model.purpose.hostingconsent");
 
     /// <summary>
     /// Startup: a resource type references a type the model does not declare. Declare
@@ -131,12 +160,16 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
-    /// Startup: the key-encryption key or the fingerprint key could not be obtained
-    /// from the secrets manager. Make the secrets manager reachable and the values
-    /// readable; the library holds no fallback and starts without neither.
+    /// Startup: a secret the library reads through the host's secret source was not
+    /// supplied, or was supplied empty or unusable; the details name it under
+    /// <c>key</c>. Also a value wrapped under a key version no longer held. Make the
+    /// secret readable; the library holds no fallback and does not start without it.
     /// </summary>
-    /// <remarks>Implements AUTH-KEY-002, OPS-SEC-001, chapter 10 section 1.5.</remarks>
-    public static ErrorCode StartupKeyUnavailable { get; } = ErrorCode.Parse("model.startup.kekunavailable");
+    /// <remarks>
+    /// Implements AUTH-KEY-002, OPS-SEC-001, OPS-MIG-003a, OPS-SEC-003, LIB-EXT-001,
+    /// chapter 10 section 1.5.
+    /// </remarks>
+    public static ErrorCode StartupSecretUnavailable { get; } = ErrorCode.Parse("model.startup.secretunavailable");
 
     /// <summary>
     /// Startup: the relying party identifier is not a registrable suffix of a
@@ -172,6 +205,15 @@ public static class ErrorCodes
     public static ErrorCode StartupSchemaMismatch { get; } = ErrorCode.Parse("model.startup.schemamismatch");
 
     /// <summary>
+    /// A key rotation's seal was confirmed where no rotation of that kind awaits one,
+    /// where the latest has retired, or while values stand under a previous version;
+    /// the details count them under <c>pending</c>. Finish the rotation, or wait until
+    /// what stands under the previous version has lapsed, and confirm again.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003, chapter 10 section 1.5.</remarks>
+    public static ErrorCode RotationNotReady { get; } = ErrorCode.Parse("model.rotation.notready");
+
+    /// <summary>
     /// The social provider's credential is the account's only remaining way to sign in,
     /// so it is not unlinked. Enrol a password or a passkey first, then unlink.
     /// </summary>
@@ -188,11 +230,34 @@ public static class ErrorCodes
     public static ErrorCode MembershipLimitReached { get; } = ErrorCode.Parse("identity.membership.limitreached");
 
     /// <summary>
+    /// The account holds no current membership of the organization: it never held one,
+    /// or it has ended. Name an account that is a member of the organization now.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001 and API-CONV-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MembershipNotFound { get; } = ErrorCode.Parse("identity.membership.notfound");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>
     /// <remarks>Implements IDN-ORG-004, chapter 10 section 1.1.</remarks>
     public static ErrorCode OrganizationProtected { get; } = ErrorCode.Parse("identity.organization.protected");
+
+    /// <summary>
+    /// The path names no organization the deployment holds. Name an organization the
+    /// deployment holds.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-ORG-003, IDN-MEM-001 and API-CONV-003, chapter 10 section 1.1.
+    /// </remarks>
+    public static ErrorCode OrganizationNotFound { get; } = ErrorCode.Parse("identity.organization.notfound");
+
+    /// <summary>
+    /// The organization does not list the domain: it was never listed, or it was
+    /// removed. List the domain first.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and API-CONV-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode DomainNotFound { get; } = ErrorCode.Parse("identity.domain.notfound");
 
     /// <summary>
     /// The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or
@@ -294,6 +359,26 @@ public static class ErrorCodes
     public static ErrorCode AccountAdministrativelySuspended { get; } = ErrorCode.Parse("identity.account.adminsuspended");
 
     /// <summary>
+    /// The subject an administrative operation names is borne by no account. Name the
+    /// subject of an account the deployment holds.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, chapter 10
+    /// section 1.1.
+    /// </remarks>
+    public static ErrorCode AccountNotFound { get; } = ErrorCode.Parse("identity.account.notfound");
+
+    /// <summary>
+    /// The operation does not apply to the state the account is in. The details name
+    /// the state and, where it is suspended, who suspended it.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-ACCT-007, IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, chapter 10
+    /// section 1.1.
+    /// </remarks>
+    public static ErrorCode AccountStateConflict { get; } = ErrorCode.Parse("identity.account.stateconflict");
+
+    /// <summary>
     /// The identifier is the primary of its kind, which is not removable. Set another
     /// primary first, then remove it.
     /// </summary>
@@ -306,6 +391,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements REG-IDENT-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
+
+    /// <summary>
+    /// The identifier is not verified, so it is not made the primary of its kind or
+    /// named as its backup, and nothing changes. Verify it first.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-005, REG-IDENT-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierUnverified { get; } = ErrorCode.Parse("identity.identifier.unverified");
 
     /// <summary>
     /// The address's domain is outside the verified domains an organization the
@@ -374,11 +466,46 @@ public static class ErrorCodes
     public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
 
     /// <summary>
+    /// The invitation is into an organization whose mail is integrated and names no
+    /// personal email, no corporate address, or the corporate address as the personal
+    /// one. Name both, and different. The details name the member at fault.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001 and REG-MAIL-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationAddressRequired { get; } = ErrorCode.Parse("identity.invitation.addressrequired");
+
+    /// <summary>
+    /// The corporate address names a mailbox someone has held, and the invitation does
+    /// not say what becomes of it. Name <c>formerMailbox</c>, <c>transfer</c> or
+    /// <c>replace</c>, with a reason.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001, REG-MAIL-003 and INT-MAIL-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationMailboxHeld { get; } = ErrorCode.Parse("identity.invitation.mailboxheld");
+
+    /// <summary>
+    /// The corporate address is held by a member, or reserved by a standing invitation
+    /// that has not expired. Revoke that invitation first, or name another address. The
+    /// details name <c>corporateEmail</c>.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001 and INT-MAIL-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MailboxTaken { get; } = ErrorCode.Parse("identity.mailbox.taken");
+
+    /// <summary>
+    /// The account holds no mailbox the mail server is told to enable, or the deployment
+    /// has no mail server registered; the app passwords are not present for it. A member
+    /// of the administrative organization is given a mailbox by invitation.
+    /// </summary>
+    /// <remarks>
+    /// Implements INT-MAIL-006, REG-MAIL-002 and CONV-DESIGN-007, chapter 10 section 1.1.
+    /// </remarks>
+    public static ErrorCode MailboxNotFound { get; } = ErrorCode.Parse("identity.mailbox.notfound");
+
+    /// <summary>
     /// The step the request is for is not the step the registration has reached: its
     /// predecessor is incomplete, or it is complete already. Read the session's state
-    /// and answer the step it names.
+    /// and answer the step it names. A confirmation while a staged identifier is
+    /// unverified is such a step.
     /// </summary>
-    /// <remarks>Implements REG-SESS-002, REG-SESS-004, chapter 10 section 1.1.</remarks>
+    /// <remarks>Implements REG-SESS-002, REG-SESS-003, REG-SESS-004, chapter 10 section 1.1.</remarks>
     public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
 
     /// <summary>
@@ -431,6 +558,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements IDN-ATTR-002, chapter 10 section 1.1.</remarks>
     public static ErrorCode PhotoNotEnabled { get; } = ErrorCode.Parse("identity.photo.notenabled");
+
+    /// <summary>
+    /// The account shows no photo: none is set, or an organization it belongs to does
+    /// not show photos, answered alike. Set a photo, or read none.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-002, IDN-ATTR-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoNotFound { get; } = ErrorCode.Parse("identity.photo.notfound");
 
     /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
@@ -516,6 +650,21 @@ public static class ErrorCodes
     public static ErrorCode FactorRequired { get; } = ErrorCode.Parse("auth.factor.required");
 
     /// <summary>
+    /// A second step or a recovery-code set was asked for on an account that holds no
+    /// password, and a second step is second to one. Set a password first.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-002b, AUTH-FACT-008, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorPasswordRequired { get; } =
+        ErrorCode.Parse("auth.factor.passwordrequired");
+
+    /// <summary>
+    /// The account holds no enrolment of the kind the operation acts on. Enrol one,
+    /// then ask again.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-008, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorNotEnrolled { get; } = ErrorCode.Parse("auth.factor.notenrolled");
+
+    /// <summary>
     /// The account holds no such credential. Name one the credential list carries.
     /// </summary>
     /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
@@ -538,8 +687,11 @@ public static class ErrorCodes
         ErrorCode.Parse("auth.credential.notupgradable");
 
     /// <summary>
-    /// The credential is reported lost and stands suspended. Cancel the report from
-    /// the link a notification carried, or from any session of the account.
+    /// The credential stands suspended: reported lost, suspended by a removal that would
+    /// lower the account's reachable assurance, or a social credential held after its
+    /// provider's security event. Cancel the report from the link a notification
+    /// carried, or from any session of the account; a held social credential stands
+    /// again once the person signs in by another factor.
     /// </summary>
     /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 1.2.</remarks>
     public static ErrorCode CredentialSuspended { get; } = ErrorCode.Parse("auth.credential.suspended");
@@ -672,18 +824,19 @@ public static class ErrorCodes
     public static ErrorCode SessionCsrfInvalid { get; } = ErrorCode.Parse("auth.session.csrfinvalid");
 
     /// <summary>
-    /// The sign-in is held until the code sent to the account's primary email is
-    /// entered. A status, not a refusal.
-    /// </summary>
-    /// <remarks>Implements AUTH-FACT-016, chapter 10 section 1.2.</remarks>
-    public static ErrorCode DeviceVerificationRequired { get; } = ErrorCode.Parse("auth.device.verificationrequired");
-
-    /// <summary>
     /// The account does not meet a raised requirement and the run-up has elapsed. The
     /// sign-in stops at enrolment.
     /// </summary>
     /// <remarks>Implements AUTH-FACT-017, chapter 10 section 1.2.</remarks>
     public static ErrorCode PolicyGraceExpired { get; } = ErrorCode.Parse("auth.policy.graceexpired");
+
+    /// <summary>
+    /// A social provider's round trip could not reach or read the provider: its
+    /// discovery document, its published keys or its token endpoint. Start the round
+    /// trip again once the provider answers.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-012, chapter 10 section 1.2.</remarks>
+    public static ErrorCode ProviderUnavailable { get; } = ErrorCode.Parse("auth.provider.unavailable");
 
     /// <summary>
     /// The credential's signature algorithm is outside the allow-list. Enrol an
@@ -693,8 +846,9 @@ public static class ErrorCodes
     public static ErrorCode WebAuthnAlgorithmNotAllowed { get; } = ErrorCode.Parse("auth.webauthn.algorithmnotallowed");
 
     /// <summary>
-    /// The signature counter moved backwards, which is what a cloned credential looks
-    /// like. Remove the credential and enrol again.
+    /// The signature counter did not advance, where it or the stored value is above
+    /// nought, which is what a cloned credential looks like. Remove the credential and
+    /// enrol again.
     /// </summary>
     /// <remarks>Implements AUTH-FACT-014, chapter 10 section 1.2.</remarks>
     public static ErrorCode WebAuthnCounterMismatch { get; } = ErrorCode.Parse("auth.webauthn.countermismatch");
@@ -728,17 +882,11 @@ public static class ErrorCodes
     public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
 
     /// <summary>
-    /// A runtime configuration change, a restriction grant, or an edit that loosens a
-    /// restriction, arrived without a written reason. State the reason and submit it
-    /// again.
+    /// The restriction named in the path is not in the set. Name a restriction the set
+    /// holds.
     /// </summary>
-    /// <remarks>
-    /// Implements AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-005, chapter 9
-    /// <c>PUT /admin/config/{key}</c> and chapter 10 section 1.2. The code is the one
-    /// chapter 9 names for a configuration change with no reason, which is why a code
-    /// of the restriction area answers for every setting.
-    /// </remarks>
-    public static ErrorCode RestrictionReasonRequired { get; } = ErrorCode.Parse("auth.restriction.reasonrequired");
+    /// <remarks>Implements AUTH-ABUSE-004, D-166, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RestrictionNotFound { get; } = ErrorCode.Parse("auth.restriction.notfound");
 
     /// <summary>
     /// A conformance finding: the provider admitted a request it refuses, or its
@@ -795,6 +943,14 @@ public static class ErrorCodes
     public static ErrorCode GrantReasonRequired { get; } = ErrorCode.Parse("authz.grant.reasonrequired");
 
     /// <summary>
+    /// A grant names a role the deployment does not hold, or a group that does not
+    /// exist or belongs to another organization. Name a role and a holder that exist
+    /// where the grant is made.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-001, REG-INV-001, D-166, chapter 10 section 1.3.</remarks>
+    public static ErrorCode GrantUnresolved { get; } = ErrorCode.Parse("authz.grant.unresolved");
+
+    /// <summary>
     /// Adding the member would make a group contain itself. Add it somewhere the
     /// group does not already reach.
     /// </summary>
@@ -821,8 +977,10 @@ public static class ErrorCodes
     /// the caller holds a permission on.
     /// </summary>
     /// <remarks>
-    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003 and BFF-ERR-003. The
-    /// browser profile answers it; nothing in the library returns it from an operation.
+    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003, BFF-ERR-003 and
+    /// D-166. The browser profile answers it for a concealed denial, and an operation on
+    /// the caller's own browsers and sessions returns it, with empty details, for one
+    /// the account does not hold.
     /// </remarks>
     public static ErrorCode ResourceNotFound { get; } = ErrorCode.Parse("authz.resource.notfound");
 
@@ -841,6 +999,13 @@ public static class ErrorCodes
     public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
 
     /// <summary>
+    /// The role named in the path is not one the deployment holds. Name a role that
+    /// exists.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004, D-166, chapter 10 section 1.3.</remarks>
+    public static ErrorCode RoleNotFound { get; } = ErrorCode.Parse("authz.role.notfound");
+
+    /// <summary>
     /// A conformance finding: a case of the host's truth table decided otherwise than
     /// the table states, through the single check, the list filter, or both. The
     /// details name the case and what each path decided; correct whichever of the
@@ -857,11 +1022,28 @@ public static class ErrorCodes
     public static ErrorCode ConfigurationLastDestination { get; } = ErrorCode.Parse("config.value.lastdestination");
 
     /// <summary>
+    /// A change of an alert destination list found, under its row's lock, a value in
+    /// force other than the one whose destinations it had notified: another change
+    /// committed meanwhile. Nothing was changed. Read the list again and make the change
+    /// against what now stands.
+    /// </summary>
+    /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
+    public static ErrorCode ConfigurationChangeSuperseded { get; } = ErrorCode.Parse("config.change.superseded");
+
+    /// <summary>
     /// A callback carried an unknown correlation reference, or arrived faster than the
     /// callback rate allows. Call again with the reference the send returned.
     /// </summary>
     /// <remarks>Implements INT-GEN-003, AUTH-ABUSE-007, chapter 10 section 1.6.</remarks>
     public static ErrorCode CallbackRejected { get; } = ErrorCode.Parse("integration.callback.rejected");
+
+    /// <summary>
+    /// A delivery of an event whose earlier delivery is still being carried. Not a
+    /// rejection; deliver it again once <c>integration.callback.claimtimeout</c> has
+    /// passed.
+    /// </summary>
+    /// <remarks>Implements BFF-MACH-002 AC3, chapter 10 section 1.6.</remarks>
+    public static ErrorCode CallbackInProgress { get; } = ErrorCode.Parse("integration.callback.inprogress");
 
     /// <summary>
     /// Startup: an integration endpoint is not TLS. The details name the integration
@@ -870,6 +1052,19 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements INT-GEN-001, chapter 10 section 1.6.</remarks>
     public static ErrorCode EndpointInsecure { get; } = ErrorCode.Parse("integration.endpoint.insecure");
+
+    /// <summary>
+    /// A mail server's answer to a mailbox push, never a route's: the server holds an
+    /// account at the mailbox's name that does not carry the mailbox's identifier, so the
+    /// push adopted nothing and changed nothing there. Find out whose the account is and
+    /// resolve it at the mail server; the push begun again the next day then goes through.
+    /// </summary>
+    /// <remarks>
+    /// Implements INT-MAIL-001, INT-MAIL-007, LIB-HOST-001 and REG-MAIL-003, chapter 10
+    /// section 1.6. The push is marked failed at that attempt and raises
+    /// <c>degradation</c> scoped <c>mailbox.conflict:&lt;mailbox id&gt;</c>.
+    /// </remarks>
+    public static ErrorCode MailServerConflict { get; } = ErrorCode.Parse("integration.mailserver.conflict");
 
     /// <summary>
     /// The gateway balance is below the configured floor, so ordinary sends are
@@ -986,6 +1181,14 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements API-CONV-002, chapter 10 sections 1.5 and 6.</remarks>
     public static ErrorCode RequestMalformed { get; } = ErrorCode.Parse("api.request.malformed");
+
+    /// <summary>
+    /// The request is well formed and refused on its meaning, where no more specific
+    /// code exists: it names something that does not exist or cannot be acted on.
+    /// <c>details.member</c> names the member.
+    /// </summary>
+    /// <remarks>Implements API-CONV-003, chapter 10 section 1.5.</remarks>
+    public static ErrorCode RequestInvalid { get; } = ErrorCode.Parse("api.request.invalid");
 
     /// <summary>
     /// An unhandled fault. The body carries the correlation identifier and nothing

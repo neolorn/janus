@@ -20,7 +20,7 @@ namespace Janus.Storage.Identity.Audit;
 /// </summary>
 /// <param name="context">The context the subject keys are read through.</param>
 /// <param name="connections">Where the append takes its connection from.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-AUD-001, IDN-PRIN-001, PRIV-RET-002, PRIV-RET-003 and CONV-DESIGN-003.
@@ -32,16 +32,17 @@ namespace Janus.Storage.Identity.Audit;
 internal sealed class AuditStore(
     StoreContext context,
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IAuditStore
 {
     private const string Append =
         """
         INSERT INTO identity.audit_records
-            (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details, enc_details, principal, principal_reason)
-        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb), @personal, @principal, @reason);
+            (id, category, occurred_at, action, acting_subject, effective_subject, subject,
+             organization, details, enc_details, principal, principal_reason,
+             breakglass_reason)
+        VALUES (@id, @category, @at, @action, @acting, @effective, @subject, @organization,
+                CAST(@details AS jsonb), @personal, @principal, @reason, @breakGlassReason);
         """;
 
     /// <inheritdoc/>
@@ -66,11 +67,13 @@ internal sealed class AuditStore(
                     action = record.Action.ToString(),
                     acting = record.ActingSubject.Value,
                     effective = record.EffectiveSubject.Value,
+                    subject = record.Subject?.Value,
                     organization = record.Organization?.Value,
                     details = Written(record.Details),
                     personal,
                     principal = record.Principal,
                     reason = record.Reason,
+                    breakGlassReason = record.BreakGlassReason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -83,7 +86,7 @@ internal sealed class AuditStore(
         CancellationToken cancellationToken)
     {
         List<AuditRowRecord> rows = await context.AuditRecords
-            .Where(row => row.EffectiveSubject == subject)
+            .Where(row => row.Subject == subject)
             .OrderByDescending(row => row.OccurredAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -136,7 +139,7 @@ internal sealed class AuditStore(
         CancellationToken cancellationToken)
     {
         List<AuditRowRecord> rows = await context.AuditRecords
-            .Where(row => row.EffectiveSubject == subject || row.ActingSubject == subject)
+            .Where(row => row.Subject == subject || row.ActingSubject == subject)
             .OrderByDescending(row => row.OccurredAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -152,29 +155,36 @@ internal sealed class AuditStore(
             row.OccurredAt,
             row.ActingSubject,
             row.EffectiveSubject,
+            row.Subject,
             row.Organization,
             Fields(Encoding.UTF8.GetBytes(row.Details)),
-            row.PersonalDetails is null || dataKey is null
+            row.PersonalDetails is null || dataKey is null || row.Subject is not SubjectId concerned
                 ? new Dictionary<string, JsonElement>(capacity: 0, StringComparer.Ordinal)
                 : Fields(PersonalFieldCipher.Decrypt(
                     dataKey,
-                    Located(row.EffectiveSubject),
+                    Located(concerned),
                     row.PersonalDetails)),
             row.Principal,
-            row.PrincipalReason);
+            row.PrincipalReason,
+            row.BreakGlassReason);
 
     private async ValueTask<byte[]> SealedAsync(
         AuditRecord record,
         CancellationToken cancellationToken)
     {
-        byte[] dataKey = await DataKeyAsync(record.EffectiveSubject, cancellationToken)
+        // IDN-AUD-001 (D-166): what a record holds under a key is held under the key of
+        // the data subject it concerns.
+        SubjectId concerned = record.Subject
+            ?? throw new InvalidOperationException("A record that holds attributes under a key names the subject it concerns.");
+
+        byte[] dataKey = await DataKeyAsync(concerned, cancellationToken)
             .ConfigureAwait(false);
 
         try
         {
             return PersonalFieldCipher.Encrypt(
                 dataKey,
-                Located(record.EffectiveSubject),
+                Located(concerned),
                 Encoding.UTF8.GetBytes(Written(record.PersonalDetails)),
                 randomness);
         }
@@ -191,21 +201,21 @@ internal sealed class AuditStore(
         CancellationToken cancellationToken)
     {
         SubjectKeyRecord? key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false);
 
         return key is null || key.FormatMarker == PersonalDataFormat.ErasedMarker
             ? null
-            : PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+            : PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to hold the attribute under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

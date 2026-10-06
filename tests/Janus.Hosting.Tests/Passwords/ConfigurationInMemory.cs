@@ -25,9 +25,22 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
     /// <param name="setting">The setting.</param>
     /// <param name="value">The value.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The setting does not take the value, which no deployment could then hold.
+    /// </exception>
     public void Set<TValue>(Setting<TValue> setting, TValue value)
         where TValue : notnull =>
-        _values[setting.Key] = value;
+        _values[setting.Key] = setting.Accept(value).Match(
+            admitted => (object)admitted,
+            refused => throw new InvalidOperationException(refused.Code.ToString()));
+
+    /// <summary>
+    /// Takes back the value named for a key, so it reads as it does in a deployment
+    /// that never named one.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the setting's value.</typeparam>
+    /// <param name="setting">The setting.</param>
+    public void Forget<TValue>(Setting<TValue> setting) => _values.Remove(setting.Key);
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
@@ -80,52 +93,6 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
 
         return ValueTask.FromResult(
             Result.Success<IReadOnlyDictionary<string, TValue>>(written));
-    }
-
-    /// <inheritdoc/>
-    public ValueTask<Result<TValue>> WriteAsync<TValue>(
-        Setting<TValue> setting,
-        TValue value,
-        CancellationToken cancellationToken)
-    {
-        if (setting.Scope is SettingScope.Protected)
-        {
-            return ValueTask.FromResult(
-                Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing)));
-        }
-
-        Result<TValue> before = Read(setting);
-
-        return ValueTask.FromResult(setting.Accept(value).Match(
-            admitted =>
-            {
-                _values[setting.Key] = admitted!;
-                return before;
-            },
-            Result.Failure<TValue>));
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
-        SettingFamily<TValue> family,
-        string parameter,
-        TValue value,
-        CancellationToken cancellationToken)
-    {
-        if (family.Scope is SettingScope.Protected)
-        {
-            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing));
-        }
-
-        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken);
-
-        return family.Read(parameter, family.Write(value)).Match(
-            admitted =>
-            {
-                _values[family.For(parameter)] = admitted!;
-                return before;
-            },
-            Result.Failure<TValue>);
     }
 
     // A required key the deployment never named is undeclared, not a value nobody

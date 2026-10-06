@@ -19,7 +19,7 @@ namespace Janus.Privacy.Tests.Documents;
 [Trait("kind", "unit")]
 public sealed class LegalDocumentTests : IAsyncDisposable
 {
-    private const string Notice = "privacy-notice";
+    private static readonly DocumentName Notice = DocumentName.Parse("privacy-notice");
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
@@ -226,6 +226,32 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002, PRIV-CONS-006 AC3: a condition whose row cannot be written is
+    /// what the publication is answered with, so no refusal claims a raise that did
+    /// not happen.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_ARaiseThatCannotBeWrittenIsTheAnswerAsync()
+    {
+        Permit();
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<DocumentVersion> refused = await Documents.PublishAsync(
+            Acting,
+            new DocumentPublication(
+                Notice,
+                string.Empty,
+                "ar",
+                [new DocumentTranslation("en", "The text")],
+                Material: false),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(_ => default, error => error.Code));
+        Assert.Empty(_store.Versions);
+    }
+
+    /// <summary>
     /// PRIV-CONS-005 AC3: the governing text and every attached translation come back
     /// together, from a read that is told no interface language at all.
     /// </summary>
@@ -292,7 +318,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     public async Task LIB_API_005_AC2_TranslatingWithoutThePermissionIsRefusedAsync()
     {
         await _store.AddAsync(
-            new DocumentVersion(Notice, "1", "ar", "النص", [], Noon),
+            new DocumentVersion(Notice.ToString(), "1", "ar", "النص", [], Noon),
             CancellationToken.None);
 
         Result refused = await Documents.TranslateAsync(
@@ -336,6 +362,66 @@ public sealed class LegalDocumentTests : IAsyncDisposable
 
         Assert.Equal(1, _work.Opened);
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a material publication whose supersession cannot announce a
+    /// consent it ended is refused after its unit of work began, and rolls it back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APublicationRefusedAfterItBeganRollsBackAsync()
+    {
+        Permit();
+
+        _consents.Keep(
+            Officer,
+            new ConsentRecord(
+                "recommendations",
+                Notice.ToString(),
+                "0",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Ordinary,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null));
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<DocumentVersion> refused = await Documents.PublishAsync(
+            Acting,
+            new DocumentPublication(Notice, "النص", "ar", [], Material: true),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(_ => default(ErrorCode?), error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-004 AC3 and INT-SMS-003: a caller in process names a document by its
+    /// value type alone, and a name that was never read fails where it is first read:
+    /// nothing is published, nothing is raised and no unit of work begins.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_004_AC3_ADocumentNameNeverReadPublishesNothingAsync()
+    {
+        Permit();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Documents.PublishAsync(
+                Acting,
+                new DocumentPublication(default, "The text", "en", [], Material: false),
+                CancellationToken.None));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Documents.PublishAsync(
+                Acting,
+                new DocumentPublication(default, string.Empty, "en", [], Material: false),
+                CancellationToken.None));
+
+        Assert.Empty(_store.Versions);
+        Assert.Empty(_alerts.Raised);
+        Assert.Equal(0, _work.Opened);
     }
 
     private static DocumentVersion Read(Result<DocumentVersion> outcome) =>

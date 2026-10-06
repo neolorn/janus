@@ -50,9 +50,11 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
+    private readonly SettingsRestrictionInMemory _restriction = new();
+
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly SubjectId _person;
@@ -63,6 +65,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     /// </summary>
     public AccountLifecycleTests()
     {
+        _notifications.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
@@ -75,16 +78,20 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private AccountLifecycle Lifecycle =>
         new(
             _directory,
+            _restriction,
             _identifiers,
             _links,
             _sessions,
             _notifications,
+            Landing.Links,
             _audit,
             new StepUpGuard(
                 _sessions,
                 _authenticators,
                 _passwords,
                 new PolicyResolution(_memberships, _configuration, _raises),
+                _identifiers,
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             _events,
             _configuration,
@@ -181,6 +188,36 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             Refused(await Lifecycle.ReactivateAsync(Link(), TestContext.Current.CancellationToken)));
 
         Assert.Equal(AccountState.Suspended, await StateAsync());
+    }
+
+    /// <summary>
+    /// IDN-LIFE-013, CONV-DESIGN-003 AC6: an administrator's suspension committed while
+    /// the link waited for the account's row is found under the lock, so the link is
+    /// refused and the suspension stands.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_ASuspensionCommittedMeanwhileIsNotReversedByALinkAsync()
+    {
+        Accepted(await Lifecycle.DeactivateAsync(
+            Acting,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        _directory.Holding = held => _directory.Suspended(held, SuspensionOrigin.Administrator);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.AccountAdministrativelySuspended,
+            Refused(await Lifecycle.ReactivateAsync(Link(), TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(AccountState.Suspended, await StateAsync());
+        Assert.Equal(
+            SuspensionOrigin.Administrator,
+            await _directory.SuspendedByAsync(_person, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -306,6 +343,30 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-008: a grace that does not read is a fault, as the store throws it, and
+    /// never a window of no length: the link inside the window is not told the window
+    /// has run out, and the account stays as it was.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AMalformedGraceIsAFaultAndNotAnElapsedWindowAsync()
+    {
+        _ = Value(await Lifecycle.DeleteAsync(
+            Acting,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string link = Link();
+
+        _configuration.Unreachable = Settings.AccountDeletionGrace.Key;
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Lifecycle.CancelDeletionAsync(link, TestContext.Current.CancellationToken));
+
+        Assert.Equal(AccountState.Deleting, await StateAsync());
+    }
+
+    /// <summary>
     /// IDN-LIFE-003: a takedown is not the subject's to undo, and says so rather
     /// than answering as a window that has run out.
     /// </summary>
@@ -346,6 +407,59 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
 
         Assert.Equal(AccountState.Active, await StateAsync());
         Assert.Empty(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 (D-166), X5: an account takes itself down only from a state that
+    /// admits it. A restricted one is refused as the restriction refuses a modifying
+    /// action, and one deleting is refused naming its state, each before the step-up,
+    /// so a session that has not stepped up is answered for the state.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_ADeactivationTheStateDoesNotAdmitIsRefusedBeforeTheStepUpAsync()
+    {
+        _directory.Deleting(_person, DeletionOrigin.Self, _clock.GetUtcNow());
+
+        Result deleting = await Lifecycle.DeactivateAsync(Acting, Stale(), Source, TestContext.Current.CancellationToken);
+        Result<DateTimeOffset> again = await Lifecycle.DeleteAsync(Acting, Stale(), Source, TestContext.Current.CancellationToken);
+
+        _directory.Stands(_person, AccountState.Restricted);
+        _restriction.Restrict(_person);
+
+        Result restricted = await Lifecycle.DeactivateAsync(Acting, Stale(), Source, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(deleting));
+        Assert.Equal("deleting", Conflicted(deleting, "state"));
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(again));
+        Assert.Equal(ErrorCodes.Restricted, Refused(restricted));
+        Assert.Empty(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 (D-166), CONV-DESIGN-003 AC6: an administrator's suspension committed
+    /// while a deactivation waited for the account's row is found under the lock and
+    /// named, and the account stays as the administrator left it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_ASuspensionCommittedMeanwhileIsNamedToADeactivationAsync()
+    {
+        _directory.Holding = held =>
+        {
+            _directory.Holding = null;
+            _directory.Suspended(held, SuspensionOrigin.Administrator);
+        };
+
+        Result refused = await Lifecycle.DeactivateAsync(Acting, Stepped(), Source, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(refused));
+        Assert.Equal("suspended", Conflicted(refused, "state"));
+        Assert.Equal("administrator", Conflicted(refused, "suspendedBy"));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(
+            SuspensionOrigin.Administrator,
+            await _directory.SuspendedByAsync(_person, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -404,13 +518,169 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)));
 
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_events.Published);
         Assert.Empty(_audit.Recorded);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a deactivation that a restriction refuses fails
+    /// nothing. The account is deactivated, its sessions ended, the change audited and
+    /// announced, and all of it committed, with the answer it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ADeactivationWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Accepted(await Lifecycle.DeactivateAsync(
+            Acting,
+            session,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(AccountState.Suspended, await StateAsync());
+        Assert.Empty(await LiveAsync());
+        Assert.Equal("identity.account.deactivated", Assert.Single(_audit.Recorded).Action.ToString());
+        _ = Assert.Single(_events.Of<AccountSuspended>());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a deletion that a restriction refuses fails
+    /// nothing. The grace window begins, the sessions end, the request is audited and
+    /// announced, and all of it is committed, with the answer it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ADeletionWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        DateTimeOffset erasesAt = Value(await Lifecycle.DeleteAsync(
+            Acting,
+            session,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Noon + Settings.AccountDeletionGrace.Default, erasesAt);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(AccountState.Deleting, await StateAsync());
+        Assert.Empty(await LiveAsync());
+        Assert.Equal("identity.deletion.requested", Assert.Single(_audit.Recorded).Action.ToString());
+        _ = Assert.Single(_events.Of<AccountDeletionRequested>());
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a deletion refused under the account's lock, for a suspension
+    /// committed since it was first judged, rolls its unit of work back and commits
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADeletionRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _directory.Holding = held => _directory.Suspended(held, SuspensionOrigin.Administrator);
+
+        Assert.Equal(
+            ErrorCodes.AccountStateConflict,
+            Refused(await Lifecycle.DeleteAsync(Acting, Stepped(), Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(await _directory.DeletingAsync(_person, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a cancellation by the link refused under the account's lock,
+    /// for a takedown begun since it was first judged, rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACancellationRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _ = Value(await Lifecycle.DeleteAsync(Acting, Stepped(), Source, TestContext.Current.CancellationToken));
+        _directory.Holding = held => _directory.Deleting(held, DeletionOrigin.Takedown, Noon);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.TakedownActive,
+            Refused(await Lifecycle.CancelDeletionAsync(Link(), TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(AccountState.Deleting, await StateAsync());
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a deactivation's event carries the acting and the effective
+    /// identity of the context that deactivated, each as the context gives it, and the
+    /// reactivation raised from the link its notice carried, with no context, carries
+    /// neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ADeactivationCarriesBothIdentitiesAndItsLinkNeitherAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), _person);
+
+        Accepted(await Lifecycle.DeactivateAsync(
+            context,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Lifecycle.ReactivateAsync(Link(), TestContext.Current.CancellationToken));
+
+        AccountSuspended suspended = Assert.Single(_events.Of<AccountSuspended>());
+        AccountReactivated reactivated = Assert.Single(_events.Of<AccountReactivated>());
+
+        Assert.Equal((context.Acting, context.Effective), (suspended.Actor, suspended.Effective));
+        Assert.Equal((_person, null, null), (reactivated.Subject, reactivated.Actor, reactivated.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a requested deletion's event carries the acting and the
+    /// effective identity of the context that asked, each as the context gives it, and
+    /// the cancellation raised from the link its notice carried, with no context, carries
+    /// neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ARequestedDeletionCarriesBothIdentitiesAndItsLinkNeitherAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), _person);
+
+        _ = Value(await Lifecycle.DeleteAsync(
+            context,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Lifecycle.CancelDeletionAsync(Link(), TestContext.Current.CancellationToken));
+
+        AccountDeletionRequested requested = Assert.Single(_events.Of<AccountDeletionRequested>());
+        AccountDeletionCancelled cancelled = Assert.Single(_events.Of<AccountDeletionCancelled>());
+
+        Assert.Equal((context.Acting, context.Effective), (requested.Actor, requested.Effective));
+        Assert.Equal((_person, null, null), (cancelled.Subject, cancelled.Actor, cancelled.Effective));
+    }
+
     private static void Accepted(Result outcome) =>
         outcome.Switch(() => { }, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+    private static string? Conflicted(Result outcome, string detail) =>
+        outcome.Match(() => null, error => error.Details[detail].GetString());
 
     private static ErrorCode Refused(Result outcome) =>
         outcome.Match<ErrorCode>(
@@ -428,7 +698,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             error => error.Code);
 
     // The token the notice carried, read off the body the template put it in.
-    private string Link() => _notifications.Mail[^1].Values["token"];
+    private string Link() => _notifications.Mail[^1].Token();
 
     private async Task<AccountState?> StateAsync() =>
         await _directory.StateAsync(_person, TestContext.Current.CancellationToken);
@@ -454,7 +724,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             at,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         _sessions.AddAsync(session, Drawn(), Drawn(), TestContext.Current.CancellationToken)
             .AsTask()

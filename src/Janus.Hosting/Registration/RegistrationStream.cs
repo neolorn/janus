@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Registration;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 
 namespace Janus.Hosting.Registration;
@@ -28,7 +29,8 @@ internal static class RegistrationStream
 
     /// <summary>
     /// Answers a browser that carries no registration session, which is a browser
-    /// with nothing here to stream (BFF-CSRF-005b AC1).
+    /// with nothing here to stream: the absent resource, as the library answers one
+    /// (BFF-CSRF-005b AC1, chapter 09 section 2).
     /// </summary>
     /// <param name="context">The request.</param>
     /// <returns>The work of answering it.</returns>
@@ -37,9 +39,7 @@ internal static class RegistrationStream
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-
-        return Task.CompletedTask;
+        return Refusal.WriteAsync(context, ErrorCodes.ResourceNotFound, context.RequestAborted);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ internal static class RegistrationStream
         TimeSpan interval = (await configuration
                 .ReadAsync(Settings.RegistrationEventsPollInterval, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(read => read, _ => Settings.RegistrationEventsPollInterval.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         string? last = null;
 

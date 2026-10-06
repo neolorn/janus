@@ -12,6 +12,7 @@ using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Core;
@@ -42,6 +43,7 @@ namespace Janus.Authentication.Credentials;
 /// <param name="audit">Where what became of a credential is recorded.</param>
 /// <param name="events">Where a completed enrolment is announced.</param>
 /// <param name="configuration">Where the lifetimes and the service name come from.</param>
+/// <param name="registration">What stages a credential on a registration session.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -50,7 +52,9 @@ namespace Janus.Authentication.Credentials;
 /// reach the same operations: a session, which every gate applies to, and the
 /// enrolment session an approved recovery opened, which stands in for the gates
 /// somebody locked out could never pass (D-148) and ends the moment the enrolment
-/// completes.
+/// completes. A third, the registration session at its security step, reaches the
+/// four enrolment operations alone, which stage on the session what an account would
+/// hold and write no account row (REG-SESS-006, REG-SESS-001).
 /// </remarks>
 internal sealed class CredentialService(
     WebAuthnService keys,
@@ -68,10 +72,11 @@ internal sealed class CredentialService(
     IPasswordStore held,
     IIdentifierDirectory identifiers,
     ISessionStore sessions,
-    INotificationHandler sending,
+    IGovernedSend sending,
     ICredentialAudit audit,
     IEvents events,
     IConfigurationStore configuration,
+    RegistrationService registration,
     IUnitOfWork work,
     TimeProvider time) : ICredentials
 {
@@ -98,7 +103,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.PasswordSet, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -117,21 +122,52 @@ internal sealed class CredentialService(
             return Result.Failure(gate);
         }
 
-        _ = (await SetAsync(acting.Subject, password, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref failure));
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
+        {
+            failure = Error.From(ErrorCodes.SessionExpired);
+        }
+        else
+        {
+            _ = (await SetAsync(acting.Subject, acting.Context, password, cancellationToken).ConfigureAwait(false))
+                .Match(() => true, error => Withheld<bool>(error, ref failure));
+        }
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
-        // IDN-LIFE-008: a changed password ends what was held under the old one.
-        await EndOthersAsync(acting, cancellationToken).ConfigureAwait(false);
+        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
 
-        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        // IDN-LIFE-008: a changed password ends what was held under the old one.
+        await EndOthersAsync(acting, cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -142,9 +178,16 @@ internal sealed class CredentialService(
         Factor kind,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration.BeginKeyAsync(registering, kind, cancellationToken).ConfigureAwait(false);
+        }
+
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -165,7 +208,7 @@ internal sealed class CredentialService(
             return Result.Failure<CredentialCeremony>(gate);
         }
 
-        return await OpenAsync(acting.Subject, kind, upgrading: null, cancellationToken)
+        return await OpenAsync(acting, kind, upgrading: null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -177,7 +220,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -210,7 +253,7 @@ internal sealed class CredentialService(
             return Result.Failure<CredentialCeremony>(gate);
         }
 
-        return await OpenAsync(acting.Subject, discoverable, credential, cancellationToken)
+        return await OpenAsync(acting, discoverable, credential, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -224,10 +267,18 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(label);
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration
+                .CompleteKeyAsync(registering, attestation, label, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -255,6 +306,52 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(gate);
         }
 
+        // AUTH-FACT-001 AC5: a label is held once per kind per account, compared as the
+        // database compares it.
+        if (await authenticators
+            .LabelHeldAsync(acting.Subject, ceremony.Kind, named, except: null, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CredentialLabelInvalid));
+        }
+
+        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<EnrolledCredential>(failure);
+        }
+
+        // CONV-DESIGN-002: the key, the ceremony's end and everything the enrolment
+        // settles are one transaction, which the key's own write joins.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolledCredential>(notBegun);
+        }
+
+        if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        // D-166 X3: a second step is enrolled under the lock on the account's row, which
+        // the invalidation of a reported credential holds while it judges what is left.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself, so one committed since the gate step refuses the
+        // enrolment before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(since);
+        }
+
         AuthenticatorId enrolled = (await keys
                 .EnrolAsync(
                     acting.Subject,
@@ -269,14 +366,14 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<EnrolledCredential>(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await ceremonies.RemoveAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return await SettledAsync(acting, enrolled, ceremony.Kind, source, cancellationToken)
+        return await SettledAsync(acting, enrolled, ceremony.Kind, policy, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -287,10 +384,16 @@ internal sealed class CredentialService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(label);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration.BeginGeneratorAsync(registering, label, cancellationToken).ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -318,6 +421,31 @@ internal sealed class CredentialService(
             return Result.Failure<GeneratorEnrolment>(gate);
         }
 
+        // AUTH-FACT-001 AC5: as for a key, a generator's label is held once per account.
+        if (await authenticators
+            .LabelHeldAsync(acting.Subject, generated, named, except: null, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return Result.Failure<GeneratorEnrolment>(Error.From(ErrorCodes.CredentialLabelInvalid));
+        }
+
+        // AUTHZ-GATE-006, D-183: the generator's own write joins a unit of work begun
+        // here, where the restriction is asked again with the account's row held before
+        // any other lock, so one committed since the gate step refuses the enrolment
+        // before anything is written.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GeneratorEnrolment>(notBegun);
+        }
+
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratorEnrolment>(since);
+        }
+
         TotpEnrolment begun = (await generators
                 .BeginAsync(acting.Subject, named, cancellationToken)
                 .ConfigureAwait(false))
@@ -325,27 +453,24 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<GeneratorEnrolment>(failure);
         }
 
-        byte[] secret = begun.Secret.ToArray();
-
-        try
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
-            string text = TotpCodes.Text(secret);
+            return Result.Failure<GeneratorEnrolment>(notCommitted);
+        }
 
-            return Result.Success(new GeneratorEnrolment(
+        return Result.Success(await generators
+            .ShownAsync(
                 begun.Id,
-                text,
-                TotpCodes.Address(
-                    await IssuerAsync(cancellationToken).ConfigureAwait(false),
-                    await AccountAsync(acting.Subject, cancellationToken).ConfigureAwait(false),
-                    text)));
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(secret);
-        }
+                begun.Secret,
+                await AccountAsync(acting.Subject, cancellationToken).ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false));
     }
 
     /// <inheritdoc/>
@@ -358,15 +483,60 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration
+                .ConfirmGeneratorAsync(registering, credential, code, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure<EnrolledCredential>(failure);
+        }
+
+        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<EnrolledCredential>(failure);
+        }
+
+        // CONV-DESIGN-002: as for a key, the confirmation joins the one transaction the
+        // enrolment settles in.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolledCredential>(notBegun);
+        }
+
+        if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        // D-166 X3: a second step is enrolled under the lock on the account's row, which
+        // the invalidation of a reported credential holds while it judges what is left.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself, so one committed since the gate step refuses the
+        // enrolment before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(since);
         }
 
         _ = (await generators
@@ -376,6 +546,8 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<EnrolledCredential>(failure);
         }
 
@@ -383,6 +555,7 @@ internal sealed class CredentialService(
                 acting,
                 credential,
                 FactorCatalogue.Generated,
+                policy,
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -395,7 +568,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.RecoveryCodesGenerate, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -415,16 +588,82 @@ internal sealed class CredentialService(
         if (!await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
             .ConfigureAwait(false))
         {
-            return Result.Failure<GeneratedRecoveryCodes>(Error.From(ErrorCodes.FactorNotPermitted));
+            return Result.Failure<GeneratedRecoveryCodes>(Error.From(ErrorCodes.FactorPasswordRequired));
+        }
+
+        // AUTHZ-GATE-006, D-183: the set's own write joins a unit of work begun here,
+        // where the restriction is asked again with the account's row held before any
+        // other lock, so one committed since the gate step refuses the codes before
+        // anything is written.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GeneratedRecoveryCodes>(notBegun);
+        }
+
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratedRecoveryCodes>(since);
         }
 
         IReadOnlyList<string> generated = (await codes
                 .GenerateAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<string>>(error, ref failure));
 
-        return failure is not null
-            ? Result.Failure<GeneratedRecoveryCodes>(failure)
-            : Result.Success(new GeneratedRecoveryCodes(generated, time.GetUtcNow()));
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratedRecoveryCodes>(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GeneratedRecoveryCodes>(notCommitted);
+        }
+
+        return Result.Success(new GeneratedRecoveryCodes(generated, time.GetUtcNow()));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> MarkRecoveryCodesExportedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // CONV-DESIGN-002: the set is the caller's own, so the gate step is that the
+        // context names an account, and the set is read for that account alone.
+        return context.Effective is SubjectId subject
+            ? await ExportReportedAsync(context, subject, cancellationToken).ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> MarkRecoveryCodesExportedAsync(
+        EnrolmentSessionId enrolment,
+        CancellationToken cancellationToken)
+    {
+        // Chapter 09 POST /enrol/begin, D-188: the report is one of the operations an
+        // enrolment session reaches, for the account it was opened for and no other,
+        // and one that has ended is a session that has ended.
+        if (await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            is not EnrolmentSession opened)
+        {
+            return Result.Failure(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        // AUTH-RECOV-006, D-189, D-190: where the session's second step showed the codes,
+        // the report is what completes the enrolment. Before it has shown any, the
+        // session reaches the report for no set: it is refused before any other refusal
+        // and before the restriction is asked, and records nothing, since an export of
+        // a set the person did not see in this session would be a false one.
+        return await enrolments.ShowedCodesAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            ? await EnrolmentReportedAsync(opened, cancellationToken).ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
     }
 
     /// <inheritdoc/>
@@ -438,7 +677,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.FactorRemove, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -453,53 +692,76 @@ internal sealed class CredentialService(
             return Result.Failure(gate);
         }
 
-        Authenticator? going = await authenticators.FindAsync(credential, cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
 
-        if (going is null || going.Subject != acting.Subject)
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
-            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
+            return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the account's credentials are read under their locks, so of two
+        // removals at once the second decides on what the first left.
         IReadOnlyList<Authenticator> enrolled = await authenticators
-            .OfAsync(acting.Subject, cancellationToken)
+            .OfForUpdateAsync(acting.Subject, cancellationToken)
             .ConfigureAwait(false);
+
+        Authenticator? going = enrolled.FirstOrDefault(each => each.Id == credential);
 
         bool password = await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
             .ConfigureAwait(false);
 
         // IDN-LIFE-012 AC3: a provider's identity that is the account's last way in is
         // not removed by this route either.
-        if (IsLinked(going) && !HeldFactors.KeptWithout(enrolled, going, password))
-        {
-            return Result.Failure(Error.From(ErrorCodes.LinkLastCredential));
-        }
+        Error? refusal = going is null
+            ? Error.From(ErrorCodes.CredentialNotFound)
+            : IsLinked(going) && !HeldFactors.KeptWithout(enrolled, going, password)
+                ? Error.From(ErrorCodes.LinkLastCredential)
+                : null;
 
         // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
         // reaching less than it does now runs the notified window instead, so the
         // credential is refused at once and gone only once somebody has been told.
-        if (Lowers(enrolled, going, password))
+        bool lowers = refusal is null && Lowers(enrolled, going!, password);
+
+        if (refusal is not null || lowers)
         {
-            return (await losses.SuspendAsync(going, source, cancellationToken).ConfigureAwait(false))
-                .Match(
-                    reported => Result.Failure(Error.From(
-                        ErrorCodes.CredentialLastSecondFactor,
-                        "invalidatesAt",
-                        JsonSerializer.SerializeToElement(reported.InvalidatesAt))),
-                    Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return refusal is not null
+                ? Result.Failure(refusal)
+                : (await losses.SuspendAsync(acting.Context, going!, source, cancellationToken).ConfigureAwait(false))
+                    .Match(
+                        reported => Result.Failure(Error.From(
+                            ErrorCodes.CredentialLastSecondFactor,
+                            "invalidatesAt",
+                            JsonSerializer.SerializeToElement(reported.InvalidatesAt))),
+                        Result.Failure);
         }
 
-        DateTimeOffset now = time.GetUtcNow();
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await authenticators.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Removed, acting.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -572,25 +834,67 @@ internal sealed class CredentialService(
         DateTimeOffset now = time.GetUtcNow();
         var linked = Authenticator.Linked(AuthenticatorId.New(time), acting.Subject, provider, label, now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: one identity of a provider per account is judged again on the
+        // account's row under its lock, so two links of one provider at once write one.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself, so one committed since the gate step refuses the link
+        // before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        if ((await authenticators.OfAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Any(credential => credential.Factor == provider))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
+        }
+
         await authenticators.LinkAsync(linked, providerSubject, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Enrolled, acting.Subject, linked.Id, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        // CONV-DESIGN-002: the link is announced in the transaction that makes it.
+        if ((await events
+                .PublishAsync(
+                    new CredentialEnrolled(now, Announced + ":" + linked.Id, linked.Id, provider)
+                    {
+                        Subject = acting.Subject,
+                        Actor = acting.Context.Acting,
+                        Effective = acting.Context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
             .ConfigureAwait(false);
 
-        return await events
-            .PublishAsync(
-                new CredentialEnrolled(now, Announced + ":" + linked.Id, linked.Id, provider)
-                {
-                    Subject = acting.Subject,
-                    Actor = acting.Subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
@@ -605,17 +909,12 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.ProviderUnlink, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure(failure);
-        }
-
-        if (acting.Session is null)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
@@ -648,15 +947,55 @@ internal sealed class CredentialService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the last way in is judged again on the credentials under their locks,
+        // so of two unlinks at once, or an unlink and a provider's withdrawal, the second
+        // decides on what the first left.
+        IReadOnlyList<Authenticator> standing = await authenticators
+            .OfForUpdateAsync(acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Error? moved = standing.FirstOrDefault(credential => credential.Id == linked.Id) is not Authenticator still
+            ? Error.From(ErrorCodes.CredentialNotFound)
+            : !HeldFactors.KeptWithout(standing, still, password)
+                ? Error.From(ErrorCodes.LinkLastCredential)
+                : null;
+
+        if (moved is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
+        }
+
         await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Removed, acting.Subject, linked.Id, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -685,17 +1024,12 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await HoldingAsync(authority, StepUpAction.ProviderLink, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure<Acting>(failure);
-        }
-
-        if (acting.Session is null)
-        {
-            return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
         }
 
         if (!IsProvider(provider))
@@ -747,43 +1081,190 @@ internal sealed class CredentialService(
             : null;
     }
 
-    // Who is acting, and under what: a session the gates apply to, or the enrolment
+    // Who is acting, and under what, in an operation chapter 09 names for the enrolment
+    // session (POST /enrol/begin): a session the gates apply to, or the enrolment
     // session an approved recovery opened, which is read afresh so that one that has
-    // run out reaches nothing (D-147).
+    // ended is answered as a session that has ended and reaches nothing (D-147, D-188).
+    // The action is the operation's, whose refusal to the break-glass session is part
+    // of this gate step (OPS-BOOT-002, D-179).
     private async ValueTask<Result<Acting>> ActingAsync(
         CredentialAuthority authority,
+        StepUpAction action,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authority);
 
-        Acting acting;
-
         if (authority.Enrolment is EnrolmentSessionId opened)
         {
-            if (await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
-                is not EnrolmentSession enrolment)
-            {
-                return Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
-            }
+            // IDN-ACCT-007: the enrolment an approved recovery opened, and the one a
+            // policy hold stops a sign-in at, are how a restricted account gets back in,
+            // so neither is asked about the restriction.
+            return await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
+                is EnrolmentSession enrolment
+                ? Result.Success(new Acting(
+                    enrolment.Subject,
+                    Session: null,
+                    opened,
+                    AccessContext.Of(enrolment.Subject)))
+                : Result.Failure<Acting>(Error.From(ErrorCodes.SessionExpired));
+        }
 
-            acting = new Acting(enrolment.Subject, Session: null, opened);
-        }
-        else if (authority.Context?.Effective is SubjectId subject && authority.Session is SessionId live)
-        {
-            acting = new Acting(subject, live, Enrolment: null);
-        }
-        else
+        return await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Who is acting in an operation the enrolment session does not reach (chapter 09
+    // POST /enrol/begin): a session, and no other authority. CONV-DESIGN-002, D-189:
+    // a context of an enrolment session's authority is refused as a missing permission
+    // is, first in the gate step and before any load, so the session is not read and
+    // one that has ended is refused the same.
+    private async ValueTask<Result<Acting>> HoldingAsync(
+        CredentialAuthority authority,
+        StepUpAction action,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authority);
+
+        return authority.Enrolment is null
+            ? await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false)
+            : Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
+    }
+
+    private async ValueTask<Result<Acting>> SignedInAsync(
+        CredentialAuthority authority,
+        StepUpAction action,
+        CancellationToken cancellationToken)
+    {
+        if (authority.Context is not { Effective: SubjectId subject } held || authority.Session is not SessionId live)
         {
             return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
         }
 
-        // IDN-ACCT-007 AC2: a restricted account changes none of its credentials, and
-        // every operation here changes one.
-        return await restriction.RefusedAsync(acting.Subject, cancellationToken)
+        if (StepUpGuard.RefusedInBreakGlass(held, action) is Error withheld)
+        {
+            return Result.Failure<Acting>(withheld);
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its credentials from a
+        // session, and every operation here changes one.
+        return await restriction.RefusedAsync(held, cancellationToken)
                 .ConfigureAwait(false) is Error restricted
             ? Result.Failure<Acting>(restricted)
-            : Result.Success(acting);
+            : Result.Success(new Acting(subject, live, Enrolment: null, held));
     }
+
+    // AUTH-RECOV-006 AC2 and AC5, D-189: the one report of an enrolment session whose
+    // second step showed the codes. It sets the export and ends the session in one
+    // unit of work, with the session held under its link's lock, so a second report at
+    // once waits and finds the session ended. IDN-ACCT-007: it asks nothing about the
+    // restriction, being admitted for a restricted account as the second step it
+    // completes was.
+    private async ValueTask<Result> EnrolmentReportedAsync(
+        EnrolmentSession opened,
+        CancellationToken cancellationToken)
+    {
+        if (!await codes.IssuedAsync(opened.Subject, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
+        }
+
+        Result<bool> begun = await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if (begun.Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        if (!await enrolments.HoldAsync(opened.Id, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        Error? failure = null;
+
+        // An export an earlier report set stands as it is, and the session ends all
+        // the same.
+        _ = (await codes.ExportedAsync(opened.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
+        await enrolments.EndAsync(opened.Id, cancellationToken).ConfigureAwait(false);
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-008, IDN-ACCT-007: the report of an export made under a session. It
+    // asks no step-up, and it asks the gate about the restriction, since the report is
+    // a change to the set's record that the restriction's exemptions do not name.
+    private async ValueTask<Result> ExportReportedAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
+        if (!await codes.IssuedAsync(subject, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
+        }
+
+        Result<bool> begun = await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if (begun.Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        bool outermost = begun.Match(level => level, _ => false);
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the report before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        Error? failure = null;
+
+        bool written = (await codes.ExportedAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref failure));
+
+        // CONV-DESIGN-003: a report that changed nothing, an earlier one standing, is a
+        // success that wrote nothing: it rolls back where its level is the outermost, and
+        // a level that joined another operation's commits.
+        if (failure is not null || (!written && outermost))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return failure is null ? Result.Success() : Result.Failure(failure);
+        }
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTHZ-GATE-006, D-183: the restriction asked again inside the unit of work, where
+    // the gate judges it with the account's row held. An enrolment session that sets or
+    // enrols a credential is not asked about the restriction, there as at the gate step
+    // (IDN-ACCT-007).
+    private async ValueTask<Error?> RestrictedSinceAsync(Acting acting, CancellationToken cancellationToken) =>
+        acting.Session is null
+            ? null
+            : await restriction.RefusedAsync(acting.Context, cancellationToken).ConfigureAwait(false);
 
     // AUTH-STEP-007: the gate applies to a session and is stated as the lower of what
     // the account reaches and what the credential contributes. An enrolment session
@@ -832,19 +1313,20 @@ internal sealed class CredentialService(
 
         return SecondStep.Is(kind)
             && !await SecondStep.AvailableAsync(held, subject, cancellationToken).ConfigureAwait(false)
-                ? Error.From(ErrorCodes.FactorNotPermitted)
+                ? Error.From(ErrorCodes.FactorPasswordRequired)
                 : null;
     }
 
     // One ceremony stands per account: opening another replaces it, so an abandoned
     // challenge is never a second way in (AUTH-FACT-014).
     private async ValueTask<Result<CredentialCeremony>> OpenAsync(
-        SubjectId subject,
+        Acting acting,
         Factor kind,
         AuthenticatorId? upgrading,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
+        SubjectId subject = acting.Subject;
 
         WebAuthnCeremony ceremony = (await keys
                 .BeginAsync(
@@ -870,7 +1352,22 @@ internal sealed class CredentialService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<CredentialCeremony>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<CredentialCeremony>(since);
+        }
+
         await ceremonies
             .ReplaceAsync(
                 KeyCeremony.Existing(
@@ -882,7 +1379,12 @@ internal sealed class CredentialService(
                     now + lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<CredentialCeremony>(notCommitted);
+        }
 
         return Result.Success(new CredentialCeremony(
             ceremony.RelyingPartyId,
@@ -922,13 +1424,16 @@ internal sealed class CredentialService(
             shown.DisplayName?.Value ?? string.Empty);
     }
 
-    // What every completed enrolment does: the codes a second step beside a password
-    // brings with it, the prompt for a credential that would survive the device, the
-    // notice on every channel, and the end of an enrolment session.
+    // What every completed enrolment does in the transaction its caller opened: the
+    // codes a second step beside a password brings with it, the record and the event,
+    // and the commit; then the notice on every channel, the end of an enrolment session
+    // that showed no codes and the prompt for a credential that would survive the
+    // device.
     private async ValueTask<Result<EnrolledCredential>> SettledAsync(
         Acting acting,
         AuthenticatorId credential,
         Factor kind,
+        Policy policy,
         string source,
         CancellationToken cancellationToken)
     {
@@ -947,53 +1452,63 @@ internal sealed class CredentialService(
 
             if (failure is not null)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<EnrolledCredential>(failure);
             }
-        }
-
-        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<Policy>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<EnrolledCredential>(failure);
         }
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
             .OfAsync(acting.Subject, cancellationToken)
             .ConfigureAwait(false);
 
+        DateTimeOffset now = time.GetUtcNow();
+
         await audit
-            .RecordedAsync(Enrolled, acting.Subject, credential, time.GetUtcNow(), cancellationToken)
+            .RecordedAsync(Enrolled, acting.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
+
+        // AUTH-STEP-007, chapter 10 section 5b: the authenticator reached active,
+        // which is the fact the event states, in the transaction that makes it so
+        // (CONV-DESIGN-002).
+        if ((await events
+                .PublishAsync(
+                    new CredentialEnrolled(now, Announced + ":" + credential, credential, kind)
+                    {
+                        Subject = acting.Subject,
+                        Actor = acting.Context.Acting,
+                        Effective = acting.Context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(unannounced);
+        }
+
+        // AUTH-RECOV-006 AC5, D-189: an enrolment session whose second step showed
+        // recovery codes stays open until the report of their export completes the
+        // enrolment; any other enrolment ends it here.
+        if (generated is not null && acting.Enrolment is EnrolmentSessionId showing)
+        {
+            await enrolments.CodesShownAsync(showing, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+        }
 
         // AUTH-STEP-007 AC1: every recorded channel hears of it, and the enrolling
         // session is not one of them.
         _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
             .ConfigureAwait(false);
 
-        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
-
-        // AUTH-STEP-007, chapter 10 section 5b: the authenticator reached active,
-        // which is the fact the event states.
-        Result published = await events
-            .PublishAsync(
-                new CredentialEnrolled(
-                    time.GetUtcNow(),
-                    Announced + ":" + credential,
-                    credential,
-                    kind)
-                {
-                    Subject = acting.Subject,
-                    Actor = acting.Subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
-            return Result.Failure<EnrolledCredential>(unpublished);
+            return Result.Failure<EnrolledCredential>(notCommitted);
         }
 
         return Result.Success(new EnrolledCredential(
@@ -1002,11 +1517,21 @@ internal sealed class CredentialService(
             generated));
     }
 
-    // D-148: completing the enrolment ends the enrolment session, and what was set is
-    // used by signing in with it.
+    // D-148, D-166 X3: the enrolment session a completion acts under is held under its
+    // link's lock from the start of the transaction that completes it, so a second
+    // completion at once waits for this one to end it and is refused.
+    private async ValueTask<bool> HeldOpenAsync(Acting acting, CancellationToken cancellationToken) =>
+        acting.Enrolment is not EnrolmentSessionId opened
+        || await enrolments.HoldAsync(opened, cancellationToken).ConfigureAwait(false);
+
+    // D-148: completing the enrolment ends the enrolment session in the transaction
+    // that completes it, and what was set is used by signing in with it.
+    // AUTH-RECOV-006 AC5, D-189: a session whose second step showed recovery codes is
+    // ended by the report of their export and by nothing else it does meanwhile.
     private async ValueTask CompletedAsync(Acting acting, CancellationToken cancellationToken)
     {
-        if (acting.Enrolment is EnrolmentSessionId opened)
+        if (acting.Enrolment is EnrolmentSessionId opened
+            && !await enrolments.ShowedCodesAsync(opened, cancellationToken).ConfigureAwait(false))
         {
             await enrolments.EndAsync(opened, cancellationToken).ConfigureAwait(false);
         }
@@ -1014,6 +1539,7 @@ internal sealed class CredentialService(
 
     private async ValueTask<Result> SetAsync(
         SubjectId subject,
+        AccessContext context,
         [NeverLogged] string password,
         CancellationToken cancellationToken)
     {
@@ -1043,6 +1569,7 @@ internal sealed class CredentialService(
                         presented,
                         words,
                         StepUp.Reachable(HeldFactors.Of(enrolled, password: true).Standing).Level,
+                        context,
                         cancellationToken)
                     .ConfigureAwait(false))
                 .Match(_ => Result.Success(), Result.Failure);
@@ -1115,8 +1642,8 @@ internal sealed class CredentialService(
             // A notice one destination refuses still reaches the rest: the set exists
             // so that no one channel can silence it.
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,
@@ -1143,14 +1670,20 @@ internal sealed class CredentialService(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }
 
+    // The service name is a key the deployment names only where the context source is
+    // on, so one never named is no name for the authenticator app to show.
     private async ValueTask<string> IssuerAsync(CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(Settings.ServiceName, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => string.Empty);
+            .Match(
+                value => value,
+                error => error.Code == ErrorCodes.StartupDeclarationMissing
+                    ? string.Empty
+                    : throw new InvalidOperationException(error.Code.ToString()));
 
     // What the authenticator app shows beside the code: the account's primary
     // identifier, and the first it holds where it has settled no primary.
@@ -1175,5 +1708,6 @@ internal sealed class CredentialService(
     private sealed record Acting(
         SubjectId Subject,
         SessionId? Session,
-        EnrolmentSessionId? Enrolment);
+        EnrolmentSessionId? Enrolment,
+        AccessContext Context);
 }

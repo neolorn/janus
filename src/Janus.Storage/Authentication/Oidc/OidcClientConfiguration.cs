@@ -47,6 +47,7 @@ internal sealed class OidcClientConfiguration : IEntityTypeConfiguration<OidcCli
 
         builder.Property(client => client.Redirect).HasColumnName("redirect");
         builder.Property(client => client.Secret).HasColumnName("secret");
+        builder.Property(client => client.SecretIssuedAt).HasColumnName("secret_issued_at");
         builder.Property(client => client.PreviousSecret).HasColumnName("previous_secret");
         builder.Property(client => client.PreviousSecretUntil).HasColumnName("previous_secret_until");
         builder.Property(client => client.Scopes).HasColumnName("scopes");

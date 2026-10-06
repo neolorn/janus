@@ -37,15 +37,35 @@ internal static class PersonalFieldCipher
     }
 
     /// <summary>
-    /// Wraps a data key under a key-encryption key.
+    /// The value erasure overwrites a wrapped key with, wherever one is held: 32 zero
+    /// bytes, and no marker byte in them. The subject-key table keeps its marker in a
+    /// column of its own beside them; an outbox row's, an invitation's and a mailbox's
+    /// key is these bytes alone (PRIV-RIGHT-005a).
     /// </summary>
-    /// <param name="dataKey">The data key.</param>
-    /// <param name="keyEncryptionKey">The key-encryption key to wrap it under.</param>
+    /// <returns>The erased value.</returns>
+    public static byte[] ErasedKey() => new byte[PersonalDataFormat.DataKeyLength];
+
+    /// <summary>
+    /// Whether a wrapped key is the erased value, which every unwrap refuses before it is
+    /// tried and which a restore and the erasure ledger's replay read as erased.
+    /// </summary>
+    /// <param name="wrapped">The wrapped key as it is stored.</param>
+    /// <returns>Whether it is 32 zero bytes.</returns>
+    public static bool IsErased(ReadOnlySpan<byte> wrapped) =>
+        wrapped.Length == PersonalDataFormat.DataKeyLength
+        && CryptographicOperations.FixedTimeEquals(wrapped, stackalloc byte[PersonalDataFormat.DataKeyLength]);
+
+    /// <summary>
+    /// Wraps a data key under a key-encryption key, or a value that belongs to no subject
+    /// under the deployment's data key.
+    /// </summary>
+    /// <param name="dataKey">The data key or the value.</param>
+    /// <param name="wrappingKey">The key to wrap it under.</param>
     /// <returns>The wrapped key, as it is stored.</returns>
-    public static byte[] Wrap(ReadOnlySpan<byte> dataKey, ReadOnlySpan<byte> keyEncryptionKey)
+    public static byte[] Wrap(ReadOnlySpan<byte> dataKey, ReadOnlySpan<byte> wrappingKey)
     {
         using var aes = Aes.Create();
-        byte[] material = keyEncryptionKey.ToArray();
+        byte[] material = wrappingKey.ToArray();
 
         try
         {
@@ -59,24 +79,63 @@ internal static class PersonalFieldCipher
     }
 
     /// <summary>
+    /// Wraps a data key, or a value that belongs to no subject's key, under the current
+    /// version of the key-encryption key the ring lends.
+    /// </summary>
+    /// <param name="dataKey">The data key.</param>
+    /// <param name="ring">The key ring the key-encryption key is borrowed from.</param>
+    /// <returns>The version it is wrapped under and the wrapped key, as they are stored.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no key-encryption key.</exception>
+    public static (int Version, byte[] Wrapped) WrapUnderCurrent(byte[] dataKey, IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(dataKey);
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowKeyEncryptionKeys(keys => (keys.CurrentVersion, Wrap(dataKey, keys.Current.Span)))
+            .Match(wrapped => wrapped, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// The version of the key-encryption key new keys are wrapped under.
+    /// </summary>
+    /// <param name="ring">The key ring the version is read from.</param>
+    /// <returns>The current version.</returns>
+    /// <exception cref="ArgumentNullException">The ring is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no key-encryption key.</exception>
+    public static int CurrentVersion(IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowKeyEncryptionKeys(keys => keys.CurrentVersion)
+            .Match(version => version, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
     /// Unwraps a subject's data key.
     /// </summary>
     /// <param name="formatMarker">The scheme the stored key is written under.</param>
     /// <param name="keyVersion">The key-encryption key version it is wrapped under.</param>
     /// <param name="wrappedKey">The wrapped key as it is stored.</param>
-    /// <param name="keyEncryptionKeys">The versions the deployment holds.</param>
+    /// <param name="ring">The key ring the version is borrowed from.</param>
     /// <returns>The plaintext data key, to be cleared after use.</returns>
     /// <exception cref="CryptographicException">
-    /// The key has been erased, it names a scheme this version does not read, or it is
-    /// wrapped under a version the deployment no longer holds.
+    /// The key has been erased, or it names a scheme this version does not read.
+    /// </exception>
+    /// <exception cref="CodedFault">
+    /// The key is wrapped under a version the application does not hold, which is a
+    /// broken invariant and no refusal: the fault carries
+    /// <c>model.startup.secretunavailable</c> with the key and the version.
     /// </exception>
     public static byte[] Unwrap(
         byte formatMarker,
         int keyVersion,
-        ReadOnlySpan<byte> wrappedKey,
-        KeyEncryptionKeys keyEncryptionKeys)
+        ReadOnlyMemory<byte> wrappedKey,
+        IKeyRing ring)
     {
-        ArgumentNullException.ThrowIfNull(keyEncryptionKeys);
+        ArgumentNullException.ThrowIfNull(ring);
 
         if (formatMarker == PersonalDataFormat.ErasedMarker)
         {
@@ -88,22 +147,43 @@ internal static class PersonalFieldCipher
             throw new CryptographicException("The subject's key names a scheme this version does not read.");
         }
 
-        if (!keyEncryptionKeys.Versions.TryGetValue(keyVersion, out ReadOnlyMemory<byte> material))
+        // OPS-SEC-003 AC3 (D-183): the erased value is read before the version is asked
+        // for, and a version the ring does not hold is thrown with the ring's own answer.
+        return ring
+            .BorrowKeyEncryptionKey(keyVersion, key => Unwrap(wrappedKey.Span, key.Span))
+            .Match(
+                dataKey => dataKey,
+                unheld => throw new CodedFault(unheld));
+    }
+
+    /// <summary>
+    /// Unwraps a value wrapped under the deployment's data key (PRIV-RIGHT-005a, D-166).
+    /// </summary>
+    /// <param name="wrapped">The wrapped value as it is stored.</param>
+    /// <param name="wrappingKey">The deployment's data key.</param>
+    /// <returns>The plaintext value, to be cleared after use.</returns>
+    /// <exception cref="CryptographicException">
+    /// The value is the erased value, which is refused before the unwrap is tried, or it
+    /// does not unwrap under the key.
+    /// </exception>
+    public static byte[] Unwrap(ReadOnlySpan<byte> wrapped, ReadOnlySpan<byte> wrappingKey)
+    {
+        if (IsErased(wrapped))
         {
-            throw new CryptographicException("The subject's key is wrapped under a retired version.");
+            throw new CryptographicException("The key has been erased.");
         }
 
         using var aes = Aes.Create();
-        byte[] keyEncryptionKey = material.ToArray();
+        byte[] material = wrappingKey.ToArray();
 
         try
         {
-            aes.Key = keyEncryptionKey;
-            return aes.DecryptKeyWrapPadded(wrappedKey);
+            aes.Key = material;
+            return aes.DecryptKeyWrapPadded(wrapped);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(keyEncryptionKey);
+            CryptographicOperations.ZeroMemory(material);
         }
     }
 

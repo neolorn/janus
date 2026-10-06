@@ -30,6 +30,16 @@ internal interface IDeviceStore
     ValueTask<Device?> FindAsync(DeviceId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one browser under a lock on its row, held until the operation's transaction
+    /// ends, so a count decided on it is decided alone (D-166 X3).
+    /// </summary>
+    /// <param name="id">Which browser.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The browser as it stands once the lock is taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Device?> FindForUpdateAsync(DeviceId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Every browser of an account that has not lapsed or been revoked.
     /// </summary>
     /// <param name="subject">Whose browsers.</param>

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Requests;
@@ -24,7 +25,7 @@ namespace Janus.Privacy.Takedowns;
 /// <param name="subscribers">Who the host registered to do its half.</param>
 /// <param name="audit">Where the trigger and the reversal are written down.</param>
 /// <param name="events">Where the suspension and the reversal are announced.</param>
-/// <param name="configuration">Where the grace window is read.</param>
+/// <param name="configuration">Where the grace windows are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -67,11 +68,9 @@ internal sealed class TakedownService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reason);
 
-        if (await RefusedAsync(context, session, StepUpAction.AccountTakedown, cancellationToken)
-                .ConfigureAwait(false)
-            is Error refused)
+        if (await DeniedAsync(context, cancellationToken).ConfigureAwait(false) is Error denied)
         {
-            return Result.Failure<ExecutedTakedown>(refused);
+            return Result.Failure<ExecutedTakedown>(denied);
         }
 
         if (Written(reason) is not string written)
@@ -83,30 +82,59 @@ internal sealed class TakedownService(
             .StandingAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (standing is { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown })
+        if (Untaken(standing) is Error untaken)
         {
-            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.TakedownActive));
-        }
-
-        // An account already in a deletion window of another origin, or already
-        // erased, has nothing left that a takedown stops.
-        if (standing is not { State: AccountState.Active or AccountState.Restricted or AccountState.Suspended })
-        {
-            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.Denied));
+            return Result.Failure<ExecutedTakedown>(untaken);
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        TimeSpan grace = await GraceAsync(cancellationToken).ConfigureAwait(false);
+        DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
         var delivery = Delivery.Of(subject, SubjectEventKind.TakedownExecuted, now);
-        var takedown = new ExecutedTakedown(new TakedownId(delivery.Id.Value), now + grace);
+        var takedown = new ExecutedTakedown(
+            new TakedownId(delivery.Id.Value),
+            windows.ErasureDue(
+                DeletionOrigin.Takedown,
+                now,
+                standing!.State is AccountState.Deleting ? standing.DeletingSince : null));
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if (await ChallengedAsync(context, session, StepUpAction.AccountTakedown, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure<ExecutedTakedown>(challenged);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ExecutedTakedown>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ExecutedTakedown>(since);
+        }
 
         // AUTH-SESS-010 AC2: the suspension and the end of every session are both the
         // library's, so they are one transaction and not two steps.
+        // D-166 X3, X5: refused under the account's lock, the takedown is answered for
+        // the state it found there; the reserved account, which no takedown names, is
+        // refused as OPS-BOOT-002 refuses it.
         if (!await accounts.TakeDownAsync(subject, now, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.Denied));
+            Error untakenThere =
+                Untaken(await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false))
+                ?? Error.From(ErrorCodes.Denied);
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ExecutedTakedown>(untakenThere);
         }
 
         // IDN-LIFE-003a: the hosts' half is a delivery written with the transition, and
@@ -117,29 +145,40 @@ internal sealed class TakedownService(
             .RecordedAsync(
                 Executed,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(takedown, trigger, written),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        // IDN-LIFE-003 and CONV-DESIGN-002: the suspension is announced at every trigger,
+        // whatever state the account held, in the transaction that makes it true; no
+        // deletion is, because the subject is sent nothing that would let them cancel it.
+        if ((await events
+                .PublishAsync(
+                    new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Administrator)
+                    {
+                        Subject = subject,
+                        Actor = context.Acting,
+                        Effective = context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unpublished)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        // IDN-LIFE-003: the suspension is announced at the trigger, and no deletion is,
-        // because the subject is sent nothing that would let them cancel it.
-        Result published = await events
-            .PublishAsync(
-                new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Administrator)
-                {
-                    Subject = subject,
-                    Actor = context.Acting,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+            return Result.Failure<ExecutedTakedown>(unpublished);
+        }
 
-        return published.Match(
-            () => Result.Success(takedown),
-            Result.Failure<ExecutedTakedown>);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ExecutedTakedown>(notCommitted);
+        }
+
+        return Result.Success(takedown);
     }
 
     /// <inheritdoc/>
@@ -150,11 +189,15 @@ internal sealed class TakedownService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await scope
-                .RefusedAsync(context, Permissions.TakedownExecute, cancellationToken)
-                .ConfigureAwait(false) is Error denied)
+        if (await DeniedAsync(context, cancellationToken).ConfigureAwait(false) is Error denied)
         {
             return Result.Failure<TakedownProgress>(denied);
+        }
+
+        if (await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountStanding standing)
+        {
+            return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.AccountNotFound));
         }
 
         if (await outbox
@@ -165,14 +208,25 @@ internal sealed class TakedownService(
             return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.TakedownNotFound));
         }
 
-        TimeSpan grace = await GraceAsync(cancellationToken).ConfigureAwait(false);
         Delivery delivery = progress.Delivery;
+        DateTimeOffset? due = null;
+
+        // IDN-LIFE-003 AC2: the takedown stands while the account is in the window it
+        // began, or erased from it; otherwise it was reversed and no erasure is due.
+        if (Standing(standing, delivery.RaisedAt) is DateTimeOffset since)
+        {
+            DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
+                .ConfigureAwait(false);
+
+            due = windows.ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince);
+        }
 
         return Result.Success(new TakedownProgress(
             new TakedownId(delivery.Id.Value),
             subject,
             delivery.RaisedAt,
-            delivery.RaisedAt + grace,
+            due,
+            due is null,
             delivery.Status,
             delivery.Attempts,
             [
@@ -196,11 +250,9 @@ internal sealed class TakedownService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reason);
 
-        if (await RefusedAsync(context, session, StepUpAction.AccountTakedownReverse, cancellationToken)
-                .ConfigureAwait(false)
-            is Error refused)
+        if (await DeniedAsync(context, cancellationToken).ConfigureAwait(false) is Error denied)
         {
-            return Result.Failure(refused);
+            return Result.Failure(denied);
         }
 
         if (Written(reason) is not string written)
@@ -212,49 +264,112 @@ internal sealed class TakedownService(
             .StandingAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (standing is not { DeletingBy: DeletionOrigin.Takedown })
+        if (standing is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        if (standing is not
+            {
+                State: AccountState.Deleting or AccountState.Deleted,
+                DeletingBy: DeletionOrigin.Takedown,
+                DeletingSince: DateTimeOffset since,
+            })
+        {
+            return Result.Failure(Error.From(ErrorCodes.TakedownNotFound));
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        TimeSpan grace = await GraceAsync(cancellationToken).ConfigureAwait(false);
+        DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
 
         // The window is closed at its end whether or not the sweep has reached the
         // account yet: the erasure is due, and a reversal would race it.
         if (standing.State is AccountState.Deleted
-            || standing.DeletingSince is not DateTimeOffset since
-            || now >= since + grace)
+            || now >= windows.ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince))
         {
             return Result.Failure(Error.From(ErrorCodes.TakedownWindowElapsed));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        if (!await accounts.ReverseTakedownAsync(subject, cancellationToken).ConfigureAwait(false))
+        if (await ChallengedAsync(context, session, StepUpAction.AccountTakedownReverse, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(challenged);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, subject, cancellationToken).ConfigureAwait(false) is Error restricted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(restricted);
+        }
+
+        // IDN-LIFE-003: the window is judged again under the lock, and an erasure that
+        // committed first leaves the window closed.
+        if (!await accounts.ReverseTakedownAsync(subject, now, windows, cancellationToken).ConfigureAwait(false))
+        {
+            ErrorCode unreversed =
+                await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+                    is { DeletingBy: DeletionOrigin.Takedown }
+                    ? ErrorCodes.TakedownWindowElapsed
+                    : ErrorCodes.TakedownNotFound;
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(unreversed));
         }
 
         await audit
-            .RecordedAsync(Reversed, context.Acting, subject, now, Named(written), cancellationToken)
-            .ConfigureAwait(false);
-
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return await events
-            .PublishAsync(
-                new TakedownReversed(now, Key(subject, now))
-                {
-                    Subject = subject,
-                    Actor = context.Acting,
-                },
+            .RecordedAsync(
+                Reversed,
+                context.Acting,
+                context.BreakGlassReason,
+                subject,
+                now,
+                Named(written),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        // CONV-DESIGN-002: the reversal is announced in the transaction that makes it.
+        if ((await events
+                .PublishAsync(
+                    new TakedownReversed(now, Key(subject, now))
+                    {
+                        Subject = subject,
+                        Actor = context.Acting,
+                        Effective = context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unpublished)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unpublished);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
+    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
     private static string? Written(string reason) =>
-        reason.Trim() is { Length: > 0 } written ? written : null;
+        reason.Trim() is { Length: > 0 and <= 1024 } written ? written : null;
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
@@ -280,13 +395,37 @@ internal sealed class TakedownService(
             ["reason"] = JsonSerializer.SerializeToElement(reason),
         };
 
-    // The gate before anything is read, then the session's proof: a caller without the
-    // permission learns nothing of the account, and one with it proves it is them.
-    private async ValueTask<Error?> RefusedAsync(
-        AccessContext context,
-        SessionId session,
-        StepUpAction action,
-        CancellationToken cancellationToken)
+    // IDN-LIFE-003 AC2: the instant the takedown's window began, where the account is
+    // still in it or was erased from it; nothing where it was reversed.
+    private static DateTimeOffset? Standing(AccountStanding standing, DateTimeOffset triggeredAt) =>
+        standing is
+        {
+            State: AccountState.Deleting or AccountState.Deleted,
+            DeletingBy: DeletionOrigin.Takedown,
+            DeletingSince: DateTimeOffset since,
+        }
+        && since >= triggeredAt
+            ? since
+            : null;
+
+    // IDN-LIFE-003: a takedown finds an account in any state but its own and an
+    // erasure; a running deletion is held and its clock kept.
+    private static Error? Untaken(AccountStanding? standing) =>
+        standing switch
+        {
+            null => Error.From(ErrorCodes.AccountNotFound),
+            { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown } =>
+                Error.From(ErrorCodes.TakedownActive),
+            { State: AccountState.Deleted } => StateConflict(standing.State),
+            _ => null,
+        };
+
+    private static Error StateConflict(AccountState state) =>
+        Error.From(ErrorCodes.AccountStateConflict, "state", JsonSerializer.SerializeToElement(state, Spelled));
+
+    // The gate before anything is read: a caller without the permission learns nothing
+    // of the account, and a context in which no person acts is refused as one.
+    private async ValueTask<Error?> DeniedAsync(AccessContext context, CancellationToken cancellationToken)
     {
         if (await scope
                 .RefusedAsync(context, Permissions.TakedownExecute, cancellationToken)
@@ -295,13 +434,34 @@ internal sealed class TakedownService(
             return denied;
         }
 
-        return context.Acting is not SubjectId acting
+        return context.Acting is SubjectId ? null : Error.From(ErrorCodes.Denied);
+    }
+
+    // AUTHZ-GATE-006, D-183: the gate asked again inside the unit of work. Where the
+    // account acted on is the acting one, the operation goes on to lock that row itself,
+    // so it is taken for the change first and the gate judges it under that lock.
+    private async ValueTask<Error?> AskedAgainAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (context.Acting is SubjectId acting && acting == subject)
+        {
+            await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await DeniedAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    // 09 section 8a: the session's proof is judged after every other refusal, so a
+    // request refused on what it says never asks the person to step up.
+    private async ValueTask<Error?> ChallengedAsync(
+        AccessContext context,
+        SessionId session,
+        StepUpAction action,
+        CancellationToken cancellationToken) =>
+        context.Acting is not SubjectId acting
             ? Error.From(ErrorCodes.Denied)
             : (await stepUp.RequireAsync(acting, session, action, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error);
-    }
-
-    private async ValueTask<TimeSpan> GraceAsync(CancellationToken cancellationToken) =>
-        (await configuration.ReadAsync(Settings.TakedownGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.TakedownGrace.Default);
 }

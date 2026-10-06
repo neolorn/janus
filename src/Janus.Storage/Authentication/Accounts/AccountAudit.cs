@@ -28,6 +28,7 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
     public async ValueTask RecordedAsync(
         AuditAction action,
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
@@ -39,6 +40,7 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
                     at,
                     acting,
                     subject,
+                    breakGlassReason,
                     organization: null,
                     Nothing),
                 cancellationToken)
@@ -47,6 +49,7 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
     /// <inheritdoc/>
     public async ValueTask CancelledOnBehalfAsync(
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         PrivacyRequestId? request,
         DateTimeOffset at,
@@ -59,6 +62,7 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
                     at,
                     acting,
                     subject,
+                    breakGlassReason,
                     organization: null,
                     request is PrivacyRequestId against
                         ? new Dictionary<string, JsonElement>(StringComparer.Ordinal)
@@ -73,6 +77,7 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
     public async ValueTask AdministeredAsync(
         AuditAction action,
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
@@ -84,6 +89,7 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
                     at,
                     acting,
                     subject,
+                    breakGlassReason,
                     organization: null,
                     Nothing),
                 cancellationToken)

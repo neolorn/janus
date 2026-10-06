@@ -25,17 +25,28 @@ namespace Janus.Storage.Privacy.Requests;
 internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessions) : IAccountStates
 {
     /// <inheritdoc/>
+    public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        _ = await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<bool> RestrictAsync(
         SubjectId subject,
+        DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+        // CONV-DESIGN-003: each transition here is decided on the row under its lock,
+        // as the reversal of a takedown is, so two at once end as one after the other.
+        Account? account = await accounts.HoldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         switch (account)
         {
+            // AUTH-SESS-010, IDN-ACCT-007: the sessions end in the transaction that
+            // restricts, so what the account signs in with afterwards is a session of the
+            // restricted account.
             case { State: AccountState.Active }:
                 account.Restrict();
+                await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
 
                 break;
 
@@ -62,8 +73,14 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not { State: AccountState.Active or AccountState.Restricted } account)
+        // IDN-LIFE-003: a suspended account begins its deletion only on a request that
+        // arrived out of band, holding the suspension.
+        Account? account = await accounts.HoldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (account is null
+            || !(account.State is AccountState.Active or AccountState.Restricted
+                || (account.State is AccountState.Suspended && origin is DeletionOrigin.OutOfBandRequest)))
         {
             return false;
         }
@@ -91,7 +108,8 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
                 .Select(account => new PendingDeletion(
                     account.Subject,
                     account.DeletingBy!.Value,
-                    account.DeletingSince!.Value)),
+                    account.DeletingSince!.Value,
+                    account.DeletionHeldSince)),
         ];
     }
 
@@ -101,7 +119,12 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         CancellationToken cancellationToken) =>
         await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
             is Account account
-            ? new AccountStanding(account.State, account.DeletingBy, account.DeletingSince)
+            ? new AccountStanding(
+                account.State,
+                account.DeletingBy,
+                account.DeletingSince,
+                account.DeletionHeldSince,
+                account.IsEmergency)
             : null;
 
     /// <inheritdoc/>
@@ -110,12 +133,12 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not
-            {
-                State: AccountState.Active or AccountState.Restricted or AccountState.Suspended,
-                IsEmergency: false,
-            } account)
+        // IDN-LIFE-003: a takedown finds an account in any state but a takedown of its
+        // own and an erasure, and holds the one it found.
+        if (await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { IsEmergency: false } account
+            || account is { State: AccountState.Deleted }
+            or { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown })
         {
             return false;
         }
@@ -131,10 +154,22 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
     /// <inheritdoc/>
     public async ValueTask<bool> ReverseTakedownAsync(
         SubjectId subject,
+        DateTimeOffset now,
+        DeletionWindows windows,
         CancellationToken cancellationToken)
     {
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown } account)
+        ArgumentNullException.ThrowIfNull(windows);
+
+        // IDN-LIFE-003: the window is judged again under the lock on the row, so of a
+        // reversal and the erasure at the window's end only one commits.
+        if (await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+                is not
+                {
+                    State: AccountState.Deleting,
+                    DeletingBy: DeletionOrigin.Takedown,
+                    DeletingSince: DateTimeOffset since,
+                } account
+            || now >= windows.ErasureDue(DeletionOrigin.Takedown, since, account.DeletionHeldSince))
         {
             return false;
         }

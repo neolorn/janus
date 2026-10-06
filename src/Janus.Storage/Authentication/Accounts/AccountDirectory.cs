@@ -48,6 +48,11 @@ internal sealed class AccountDirectory(
         (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))?.State;
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        _ = await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<SuspensionOrigin?> SuspendedByAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.SignIn;
@@ -12,7 +13,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// The sign-ins in progress, over the <c>signin_challenges</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="fingerprintKeys">The version the identifier's hash is computed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-FACT-016, OPS-SEC-003 and CONV-DESIGN-003. The catalogue entries
 /// accepted so far are held under the spellings of chapter 10, so the column and the
@@ -20,7 +21,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// the current version of the fingerprint key, which is the version written beside it,
 /// so the rotation forgets it with the version.
 /// </remarks>
-internal sealed class ChallengeStore(StoreContext context, FingerprintKeys fingerprintKeys) : IChallengeStore
+internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : IChallengeStore
 {
     /// <inheritdoc/>
     public async ValueTask<Challenge?> FindAsync(
@@ -33,17 +34,38 @@ internal sealed class ChallengeStore(StoreContext context, FingerprintKeys finge
             .FindAsync([fingerprint], cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null
-            ? null
-            : Challenge.Existing(
-                record.Handle,
-                record.Subject,
-                record.Email,
-                record.Identifier,
-                record.WebAuthn,
-                record.CreatedAt,
-                record.ExpiresAt,
-                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
+        return Read(record);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Challenge?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A sign-in's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.SignInChallenges.Local.Any(record => CryptographicOperations.FixedTimeEquals(record.Handle, fingerprint));
+
+        ChallengeRecord? held = (await context.SignInChallenges
+                .FromSql($"SELECT * FROM identity.signin_challenges WHERE handle = {fingerprint} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
     }
 
     /// <inheritdoc/>
@@ -59,7 +81,7 @@ internal sealed class ChallengeStore(StoreContext context, FingerprintKeys finge
                     Subject = challenge.Subject,
                     Email = challenge.Email,
                     Identifier = challenge.Identifier,
-                    FingerprintVersion = challenge.Identifier is null ? null : fingerprintKeys.CurrentVersion,
+                    FingerprintVersion = Fingerprint.CurrentVersion(ring),
                     WebAuthn = challenge.WebAuthn,
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,
@@ -103,6 +125,19 @@ internal sealed class ChallengeStore(StoreContext context, FingerprintKeys finge
             .Where(challenge => challenge.ExpiresAt <= now)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    private static Challenge? Read(ChallengeRecord? record) =>
+        record is null
+            ? null
+            : Challenge.Existing(
+                record.Handle,
+                record.Subject,
+                record.Email,
+                record.Identifier,
+                record.WebAuthn,
+                record.CreatedAt,
+                record.ExpiresAt,
+                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
 
     private static string[] Spellings(Challenge challenge) =>
         [.. challenge.Presented.Select(VocabularyConverter<Factor>.Write)];

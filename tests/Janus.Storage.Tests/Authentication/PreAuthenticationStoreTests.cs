@@ -96,7 +96,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private PreAuthenticationStore Store(StoreContext context) => new(context, _deployment.Keys);
+    private PreAuthenticationStore Store(StoreContext context) => new(context, _deployment.DataKey(context));
 
     private async Task CarriedAsync(OpaqueToken secret, SignOnAttempt attempt)
     {

@@ -22,6 +22,15 @@ internal sealed class RaisedAlertRecord
     /// <summary>The <c>condition</c> column.</summary>
     public AlertCondition Condition { get; set; }
 
+    /// <summary>The <c>scope</c> column.</summary>
+    public string? Scope { get; set; }
+
     /// <summary>The <c>details</c> column, a JSON object.</summary>
     public string Details { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The <c>claimed_until</c> column: when the claim of the pass that holds the row
+    /// times out, or nothing where no pass holds it (CONV-DESIGN-003).
+    /// </summary>
+    public DateTimeOffset? ClaimedUntil { get; set; }
 }

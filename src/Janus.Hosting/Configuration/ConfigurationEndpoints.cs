@@ -36,29 +36,46 @@ internal static class ConfigurationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/config/{key}", ReadAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/config/{key}", ChangeAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/config/{key}", ReadAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<ConfigurationKey>("key"))
+            .Produces<ConfiguredSettingView>();
+        _ = SessionRequired.On(endpoints.MapPut("/admin/config/{key}", ChangeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationChangeSuperseded,
+                    ErrorCodes.ConfigurationValueBelowFloor, ErrorCodes.ConfigurationValueAboveCeiling,
+                    ErrorCodes.ConfigurationValueNotAllowed, ErrorCodes.ConfigurationKeyProtected,
+                    ErrorCodes.ConfigurationLastDestination,
+                    ErrorCodes.ConfigurationChangeReasonRequired)
+                .Binding<ConfigurationKey>("key"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
 
     private static async Task<IResult> ReadAsync(
         IConfigurationAdministration administration,
+        AuthorizationDeclaration declaration,
         RequestSession browser,
-        string key,
+        ConfigurationKey key,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(administration);
+        ArgumentNullException.ThrowIfNull(declaration);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (Known(key) is not ConfigurationKey known)
+        if (Known(key, declaration) is not ConfigurationKey known)
         {
             return Answers.Malformed("key");
         }
 
         return Answers.Of(
             await administration
-                .ReadAsync(AccessContext.Of(browser.Required.Subject), known, cancellationToken)
+                .ReadAsync(browser.Asking, known, cancellationToken)
                 .ConfigureAwait(false),
             setting => TypedResults.Json(
                 ConfiguredSettingView.Of(setting),
@@ -70,15 +87,17 @@ internal static class ConfigurationEndpoints
     private static async Task<IResult> ChangeAsync(
         ConfigurationBody body,
         IConfigurationAdministration administration,
+        AuthorizationDeclaration declaration,
         RequestSession browser,
-        string key,
+        ConfigurationKey key,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(administration);
+        ArgumentNullException.ThrowIfNull(declaration);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (Known(key) is not ConfigurationKey known)
+        if (Known(key, declaration) is not ConfigurationKey known)
         {
             return Answers.Malformed("key");
         }
@@ -88,20 +107,27 @@ internal static class ConfigurationEndpoints
             return Answers.Malformed("value");
         }
 
-        // A missing reason is refused with the code chapter 09 section 8 names for it,
-        // naming the key as the service names it, rather than as a malformed request.
-        if (body.Reason is not { Length: > 0 } reason)
+        // A missing or blank reason is refused with the code chapter 09 section 8 names
+        // for it, naming the key as the service names it, rather than as a malformed
+        // request; one past the bound of API-CONV-002 is a request the boundary does not
+        // read.
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Error.From(
-                ErrorCodes.RestrictionReasonRequired,
+                ErrorCodes.ConfigurationChangeReasonRequired,
                 "key",
                 JsonSerializer.SerializeToElement(known.ToString())));
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         return Answers.Of(
             await administration
                 .ChangeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     known,
                     value,
@@ -111,10 +137,13 @@ internal static class ConfigurationEndpoints
             Nothing);
     }
 
-    // The catalogue is what names a key; a name outside it, or outside the key format,
-    // is not a key this interface knows.
-    private static ConfigurationKey? Known(string key) =>
+    // The catalogue and the categories the host declared are what name a key; a
+    // well-formed name outside them is not a key this interface knows.
+    private static ConfigurationKey? Known(ConfigurationKey key, AuthorizationDeclaration declaration) =>
         Settings.All
-            .FirstOrDefault(setting => string.Equals(setting.Key.ToString(), key, StringComparison.Ordinal))?
-            .Key;
+            .Select(setting => setting.Key)
+            .Concat(declaration.RetentionFloors.Keys.Select(Settings.HostCategoryRetention.For))
+            .Where(known => known == key)
+            .Select(known => (ConfigurationKey?)known)
+            .FirstOrDefault();
 }

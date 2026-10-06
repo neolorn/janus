@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
@@ -22,7 +23,7 @@ namespace Janus.Storage.Tests.Authentication;
 /// tokens the protocol server writes through the library's own stores, the signing key
 /// whose private half is wrapped, and the sweep that takes what can no longer be
 /// presented (AUTH-OIDC-001, AUTH-OIDC-002, AUTH-OIDC-003, AUTH-KEY-001, AUTH-KEY-002,
-/// AUTH-KEY-003, OPS-SEC-002).
+/// AUTH-KEY-003, OPS-SEC-001, OPS-SEC-002).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class OidcStoreTests(DatabaseFixture database)
@@ -38,12 +39,13 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
-    /// AUTH-OIDC-001 AC2: the registry holds what the secret hashes to, the column
-    /// holds nothing the secret could be read out of, and what the protocol server is
-    /// handed to compare against is that same fingerprint.
+    /// OPS-SEC-001, AUTH-OIDC-001 AC2: the registry holds a client's secret wrapped under
+    /// the deployment's data key, neither in the clear nor as anything a search over
+    /// the table could reach, and what the protocol server is handed is that same
+    /// wrapped value, which authenticates nothing.
     /// </summary>
     [Fact]
-    public async Task AUTH_OIDC_001_AC2_TheRegistryHoldsWhatTheSecretHashesToAsync()
+    public async Task OPS_SEC_001_NoClientSecretIsHeldInTheClearAsync()
     {
         await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
@@ -53,9 +55,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             "SELECT secret FROM identity.oidc_clients WHERE client_id = @clientId",
             new { clientId = ClientId });
 
-        Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), stored);
-
         await using StoreContext reading = database.Context();
+
+        byte[] deploymentKey = await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(Encoding.UTF8.GetBytes(Secret), stored);
+        Assert.NotEqual(SHA256.HashData(Encoding.UTF8.GetBytes(Secret)), stored);
+        Assert.False(stored.AsSpan().IndexOf(Encoding.UTF8.GetBytes(Secret)) >= 0);
+        Assert.Equal(Encoding.UTF8.GetBytes(Secret), PersonalFieldCipher.Unwrap(stored, deploymentKey));
 
         var applications = new OidcApplicationStore(reading);
         OidcClientRecord? held = await applications.FindByClientIdAsync(
@@ -64,7 +71,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         Assert.NotNull(held);
         Assert.Equal(
-            Convert.ToBase64String(OpaqueToken.Of(Secret).Fingerprint()),
+            Convert.ToBase64String(stored),
             await applications.GetClientSecretAsync(held, TestContext.Current.CancellationToken));
         Assert.Equal(
             ImmutableArray.Create(Destination),
@@ -97,35 +104,49 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// OPS-SEC-002 AC2: a registration with a new secret keeps what the one it replaced
-    /// hashes to until the overlap ends, a change that keeps the secret leaves that
-    /// alone, and the table holds no replaced secret without the instant it ends.
+    /// OPS-SEC-002 AC2, X3: a replacement stands only where the secret is still the one
+    /// read, keeps the one it replaced wrapped until the overlap ends, and a change to
+    /// the client leaves both alone; the table holds no replaced secret without the
+    /// instant it ends.
     /// </summary>
     [Fact]
-    public async Task OPS_SEC_002_AC2_AReplacedSecretIsKeptUntilTheOverlapEndsAsync()
+    public async Task OPS_SEC_002_AReplacementStandsOnlyWhereTheSecretIsTheOneReadAsync()
     {
         const string rotated = "rotated-client";
-        const string replacement = "the-secret-that-replaced-it";
 
+        byte[] replacement = Encoding.UTF8.GetBytes("the-secret-that-replaced-it");
         DateTimeOffset until = Noon + TimeSpan.FromMinutes(15);
 
-        await RecordedAsync(rotated, Secret, DateTimeOffset.MinValue);
-        await RecordedAsync(rotated, replacement, until);
-        await RecordedAsync(rotated, replacement, until + TimeSpan.FromDays(1));
+        await RegisteredAsync(rotated, OidcClientKind.Protocol);
+
+        bool replaced;
+        bool stale;
+
+        await using (StoreContext writing = database.Context())
+        {
+            var clients = new OidcClientStore(writing, _deployment.DataKey(writing));
+
+            replaced = await clients.ReplaceSecretAsync(
+                rotated, Noon, replacement, Noon + TimeSpan.FromDays(90), until, TestContext.Current.CancellationToken);
+            stale = await clients.ReplaceSecretAsync(
+                rotated, Noon, Encoding.UTF8.GetBytes("a-later-secret"), Noon + TimeSpan.FromDays(91), until, TestContext.Current.CancellationToken);
+        }
+
+        await RegisteredAsync(rotated, OidcClientKind.BrowserApplication);
+
+        await using StoreContext reading = database.Context();
+
+        RegisteredSecret held = (await new OidcClientStore(reading, _deployment.DataKey(reading))
+            .SecretAsync(rotated, TestContext.Current.CancellationToken))!;
+
+        Assert.True(replaced);
+        Assert.False(stale);
+        Assert.Equal(replacement, held.Current);
+        Assert.Equal(Noon + TimeSpan.FromDays(90), held.IssuedAt);
+        Assert.Equal(Encoding.UTF8.GetBytes(Secret), held.Previous);
+        Assert.Equal(until, held.PreviousUntil);
 
         await using NpgsqlConnection connection = await database.OpenAsync();
-
-        (byte[] Current, byte[] Previous, DateTimeOffset Until) held = await connection
-            .QuerySingleAsync<(byte[], byte[], DateTimeOffset)>(
-                """
-                SELECT secret, previous_secret, previous_secret_until
-                FROM identity.oidc_clients WHERE client_id = @clientId
-                """,
-                new { clientId = rotated });
-
-        Assert.Equal(OpaqueToken.Of(replacement).Fingerprint(), held.Current);
-        Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), held.Previous);
-        Assert.Equal(until, held.Until);
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
@@ -159,34 +180,36 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// AUTH-KEY-002: the private half of a signing key is at rest under the
-    /// key-encryption key, with the version that wrapped it beside it, and is readable
-    /// again only through the store.
+    /// AUTH-KEY-002, PRIV-RIGHT-005a AC16: the private half of a signing key is at rest
+    /// under the deployment's data key and not under the key-encryption key itself, and
+    /// is readable again only through the store.
     /// </summary>
     [Fact]
-    public async Task AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheKeyEncryptionKeyAsync()
+    public async Task AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync()
     {
         using var created = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         byte[] privateKey = created.ExportPkcs8PrivateKey();
-        var key = SigningKey.Create("the-key", "ES256", created.ExportSubjectPublicKeyInfo(), Noon);
+        var key = SigningKey.First("the-key", "ES256", created.ExportSubjectPublicKeyInfo(), Noon);
 
         await using (StoreContext writing = database.Context())
         {
-            await Keys(writing).AddAsync(key, privateKey, TestContext.Current.CancellationToken);
-            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.True(await Keys(writing).AddAsync(key, privateKey, TestContext.Current.CancellationToken));
         }
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        (byte[] Stored, int Version) held = await connection.QuerySingleAsync<(byte[], int)>(
-            "SELECT private_key, key_version FROM identity.signing_keys WHERE key_id = @keyId",
+        byte[] held = await connection.QuerySingleAsync<byte[]>(
+            "SELECT private_key FROM identity.signing_keys WHERE key_id = @keyId",
             new { keyId = key.KeyId });
 
-        Assert.NotEqual(privateKey, held.Stored);
-        Assert.Equal(_deployment.Keys.CurrentVersion, held.Version);
-
         await using StoreContext reading = database.Context();
+
+        byte[] deploymentKey = await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(privateKey, held);
+        Assert.Equal(privateKey, PersonalFieldCipher.Unwrap(held, deploymentKey));
+        Assert.Throws<CryptographicException>(() => PersonalFieldCipher.Unwrap(held, _deployment.Keys.Current.Span));
 
         Assert.Equal(
             privateKey,
@@ -224,14 +247,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using (StoreContext sweeping = database.Context())
         {
             Assert.True(
-                await new OidcTokenStore(sweeping).PruneAsync(
+                await new OidcTokenStore(sweeping, TimeProvider.System).PruneAsync(
                     Noon + TimeSpan.FromMinutes(5),
                     TestContext.Current.CancellationToken) >= 2);
         }
 
         await using StoreContext reading = database.Context();
 
-        var tokens = new OidcTokenStore(reading);
+        var tokens = new OidcTokenStore(reading, TimeProvider.System);
 
         Assert.Null(await FoundAsync(tokens, gone));
         Assert.Null(await FoundAsync(tokens, spent));
@@ -260,14 +283,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         {
             Assert.Equal(
                 2,
-                await new OidcTokenStore(revoking).RevokeByAuthorizationIdAsync(
+                await new OidcTokenStore(revoking, TimeProvider.System).RevokeByAuthorizationIdAsync(
                     reused.ToString(),
                     TestContext.Current.CancellationToken));
         }
 
         await using StoreContext reading = database.Context();
 
-        var tokens = new OidcTokenStore(reading);
+        var tokens = new OidcTokenStore(reading, TimeProvider.System);
 
         Assert.Equal(OpenIddictConstants.Statuses.Revoked, (await FoundAsync(tokens, first))!.Status);
         Assert.Equal(OpenIddictConstants.Statuses.Revoked, (await FoundAsync(tokens, second))!.Status);
@@ -291,8 +314,8 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using StoreContext first = database.Context();
         await using StoreContext second = database.Context();
 
-        var one = new OidcTokenStore(first);
-        var two = new OidcTokenStore(second);
+        var one = new OidcTokenStore(first, TimeProvider.System);
+        var two = new OidcTokenStore(second, TimeProvider.System);
         OidcTokenRecord held = (await FoundAsync(one, issued))!;
         OidcTokenRecord same = (await FoundAsync(two, issued))!;
 
@@ -325,7 +348,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using (StoreContext writing = database.Context())
         {
-            var tokens = new OidcTokenStore(writing);
+            var tokens = new OidcTokenStore(writing, TimeProvider.System);
             OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
 
             await tokens.SetApplicationIdAsync(token, Browser, TestContext.Current.CancellationToken);
@@ -356,7 +379,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        var read = new OidcTokenStore(reading);
+        var read = new OidcTokenStore(reading, TimeProvider.System);
         OidcTokenRecord held = (await FoundAsync(read, pushed))!;
 
         Assert.Null(await read.GetSubjectAsync(held, TestContext.Current.CancellationToken));
@@ -379,13 +402,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private static async Task<OidcTokenRecord?> FoundAsync(OidcTokenStore tokens, Guid id) =>
         await tokens.FindByIdAsync(id.ToString(), TestContext.Current.CancellationToken);
 
-    private SigningKeyStore Keys(StoreContext context) => new(context, _deployment.Keys);
+    private SigningKeyStore Keys(StoreContext context) =>
+        new(context, new DataConnections(context), _deployment.DataKey(context));
 
     private async Task<Guid> GrantedAsync(SubjectId subject)
     {
         await using StoreContext writing = database.Context();
 
-        var authorizations = new OidcAuthorizationStore(writing);
+        var authorizations = new OidcAuthorizationStore(writing, TimeProvider.System);
         OidcAuthorizationRecord grant = await authorizations.InstantiateAsync(
             TestContext.Current.CancellationToken);
 
@@ -421,7 +445,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     {
         await using StoreContext writing = database.Context();
 
-        var tokens = new OidcTokenStore(writing);
+        var tokens = new OidcTokenStore(writing, TimeProvider.System);
         OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
 
         await tokens.SetApplicationIdAsync(token, ClientId, TestContext.Current.CancellationToken);
@@ -442,14 +466,9 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         return token.Id;
     }
 
-    private Task RegisteredAsync(string clientId, OidcClientKind kind) =>
-        RecordedAsync(clientId, Secret, DateTimeOffset.MinValue, kind);
-
-    private async Task RecordedAsync(
-        string clientId,
-        string secret,
-        DateTimeOffset replacedUntil,
-        OidcClientKind kind = OidcClientKind.Protocol)
+    // Registers the client with the secret drawn at noon, or carries the change to the
+    // one the registry holds, as the client registry does.
+    private async Task RegisteredAsync(string clientId, OidcClientKind kind)
     {
         var client = new OidcClient(
             clientId,
@@ -460,11 +479,17 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new OidcClientStore(writing).RecordAsync(
-            client,
-            OpaqueToken.Of(secret).Fingerprint(),
-            replacedUntil,
-            TestContext.Current.CancellationToken);
+        var clients = new OidcClientStore(writing, _deployment.DataKey(writing));
+
+        if (await clients.FindAsync(clientId, TestContext.Current.CancellationToken) is null)
+        {
+            await clients.AddAsync(client, Encoding.UTF8.GetBytes(Secret), Noon, TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            await clients.RecordAsync(client, TestContext.Current.CancellationToken);
+        }
+
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
@@ -479,11 +504,11 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: true);
+            breakGlassReason: "The operator cannot be reached.");
 
         await using StoreContext writing = database.Context();
 
-        await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
+        await new SessionStore(writing, _deployment.Ring, _deployment.Randomness).AddAsync(
             record,
             OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
             OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),

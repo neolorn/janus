@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -16,6 +17,32 @@ namespace Janus.Identity.Identifiers;
 /// </remarks>
 internal interface IIdentifierStore
 {
+    /// <summary>
+    /// Holds one account's identifiers under a lock until the operation's transaction
+    /// ends, so every read of the set after it is the set as committed when the lock was
+    /// taken and a change decided on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose identifiers.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes the lock on each value, held until the operation's transaction ends, so no
+    /// other transaction takes or reserves a value between the judgement made under
+    /// its lock and the write (CONV-DESIGN-003, REG-SESS-005, REG-IDENT-009). Every
+    /// value lock an operation takes is taken in one call, after its own row locks and
+    /// before any send's counters.
+    /// </summary>
+    /// <param name="values">The values, each with its kind and its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the locks.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken);
+
     /// <summary>
     /// Reads one account's identifiers and the backup settings it has changed.
     /// </summary>
@@ -70,6 +97,38 @@ internal interface IIdentifierStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds the account a value is reserved to by a removal whose undo has not run
+    /// out, read under every version of the fingerprint key in one statement
+    /// (REG-IDENT-006, PRIV-RIGHT-005c).
+    /// </summary>
+    /// <param name="kind">Which kind the value is.</param>
+    /// <param name="canonical">The value in its canonical form.</param>
+    /// <param name="now">The instant the window is judged at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The account it is reserved to, or nothing where it is not reserved.</returns>
+    ValueTask<SubjectId?> FindReservedToAsync(
+        IdentifierKind kind,
+        string canonical,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ends the reservation of a value to an account, which a write of the value to
+    /// that account does: there is nothing left for its undo to restore
+    /// (REG-IDENT-006).
+    /// </summary>
+    /// <param name="subject">The account the value is reserved to.</param>
+    /// <param name="kind">Which kind the value is.</param>
+    /// <param name="canonical">The value in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of ending it.</returns>
+    ValueTask EndReservationAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Finds the removal an undo link answers to.
     /// </summary>
     /// <param name="fingerprint">The fingerprint of the token the link carried.</param>
@@ -80,19 +139,10 @@ internal interface IIdentifierStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Finds the removal of one identifier, which is what an undo reads once the link
-    /// has named it.
-    /// </summary>
-    /// <param name="id">Which identifier's removal.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The removal, or nothing where the identifier was not given up.</returns>
-    ValueTask<IdentifierRemoval?> FindRemovalAsync(
-        IdentifierId id,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Records that an account gave an identifier up, which holds the value out of
-    /// reach for as long as the undo is good for.
+    /// reach for as long as the undo is good for. A removal row of the same kind and
+    /// value whose window ran out before this removal, not yet swept, is replaced; the
+    /// caller holds the value's lock (REG-IDENT-006).
     /// </summary>
     /// <param name="removal">What was given up.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -100,13 +150,13 @@ internal interface IIdentifierStore
     ValueTask RecordRemovalAsync(IdentifierRemoval removal, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Gives a removal record up, which is what an undo does once the identifier is
-    /// back on the account.
+    /// Gives a removal record up, which is what an undo does once its value is back on
+    /// the account. Every other removal of the same identifier stands (REG-IDENT-006).
     /// </summary>
-    /// <param name="id">Which identifier's removal.</param>
+    /// <param name="id">Which removal.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of giving it up.</returns>
-    ValueTask DiscardRemovalAsync(IdentifierId id, CancellationToken cancellationToken);
+    ValueTask DiscardRemovalAsync(IdentifierRemovalId id, CancellationToken cancellationToken);
 
     /// <summary>
     /// Releases every value whose undo window has run out.

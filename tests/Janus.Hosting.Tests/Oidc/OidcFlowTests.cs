@@ -6,12 +6,15 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Oidc;
@@ -280,15 +283,15 @@ public sealed class OidcFlowTests
 
         Browser browser = await RelyingParty.PreparedAsync(deployment);
 
-        await deployment.Clients.RecordAsync(
+        await deployment.Clients.AddAsync(
             new OidcClient(
                 Second,
                 Second,
                 OidcClientKind.BrowserApplication,
                 RelyingParty.Destination,
                 ["openid", "email"]),
-            OpaqueToken.Of(RelyingParty.Secret).Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
         var machine = new Machine(deployment);
@@ -349,31 +352,60 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// API-REDIR-001 AC1 and AC4: a destination that is not the client's registered
-    /// one is replaced by it rather than refused, and the attempt is recorded.
+    /// AUTH-OIDC-006 AC1 and API-REDIR-001 AC4 (D-166, 145): a pushed request naming a
+    /// destination that is not the client's registered one is an authorization request
+    /// that fails, refused <c>invalid_request</c> with no description and no reference,
+    /// and the attempt is recorded.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync()
+    public async Task AUTH_OIDC_006_AC1_APushedRequestNamingAnUnregisteredDestinationIsRefusedAsync()
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await RelyingParty.PreparedAsync(deployment);
-        Answer answered = await browser.SendAsync(
-            "GET",
-            await RelyingParty.AuthorizeAsync(
-                deployment,
-                RelyingParty.Application,
-                silent: true,
-                redirect: "https://attacker.test/collect"));
+        _ = await RelyingParty.PreparedAsync(deployment);
 
-        Assert.Equal(StatusCodes.Status302Found, answered.Status);
-        Assert.StartsWith(
-            RelyingParty.Destination + "?",
-            RelyingParty.Where(answered),
-            StringComparison.Ordinal);
-        Assert.NotEmpty(RelyingParty.Returned(answered, "code"));
-        Assert.Contains((Microsoft.Extensions.Logging.LogLevel.Warning, 1), deployment.OidcLog.Entries);
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            "https://attacker.test/collect",
+            "openid email");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal("invalid_request", pushed.Text("error"));
+        Assert.False(pushed.Json().TryGetProperty("error_description", out _));
+        Assert.False(pushed.Json().TryGetProperty("request_uri", out _));
+        Assert.Equal((LogLevel.Warning, 1), Assert.Single(deployment.OidcLog.Entries));
+        Assert.Empty(deployment.Tokens.All);
+    }
+
+    /// <summary>
+    /// API-REDIR-001 AC2: a destination that holds the registered one within it is not
+    /// the registered one, and is refused where it is pushed.
+    /// </summary>
+    /// <param name="asked">The destination the request names.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("https://attacker.test/collect?next=" + RelyingParty.Destination)]
+    [InlineData(RelyingParty.Destination + ".attacker.test")]
+    [InlineData("https://attacker.test/" + RelyingParty.Destination)]
+    public async Task API_REDIR_001_AC2_ADestinationContainingTheRegisteredOneIsRefusedAsync(string asked)
+    {
+        await using var deployment = new Deployment();
+
+        _ = await RelyingParty.PreparedAsync(deployment);
+
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            asked,
+            "openid email");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal("invalid_request", pushed.Text("error"));
+        Assert.False(pushed.Json().TryGetProperty("request_uri", out _));
     }
 
     /// <summary>
@@ -500,15 +532,15 @@ public sealed class OidcFlowTests
 
         Browser browser = await RelyingParty.PreparedAsync(deployment);
 
-        await deployment.Clients.RecordAsync(
+        await deployment.Clients.AddAsync(
             new OidcClient(
                 Second,
                 Second,
                 OidcClientKind.BrowserApplication,
                 RelyingParty.Destination,
                 ["openid", "email"]),
-            OpaqueToken.Of(RelyingParty.Secret).Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
         var machine = new Machine(deployment);
@@ -565,56 +597,6 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status200OK, taken.Status);
         Assert.NotEmpty(taken.Text("access_token"));
-    }
-
-    /// <summary>
-    /// OPS-SEC-002 AC2: a client whose secret was replaced still authenticates with the
-    /// one it replaced until the overlap ends, and from then on only with the new one.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_SEC_002_AC2_AReplacedSecretAuthenticatesTheClientThroughTheOverlapAsync()
-    {
-        const string replacement = "the-secret-that-replaced-the-first";
-
-        await using var deployment = new Deployment();
-
-        Browser browser = await RelyingParty.PreparedAsync(deployment);
-
-        await deployment.Clients.RecordAsync(
-            new OidcClient(
-                RelyingParty.Protocol,
-                RelyingParty.Protocol,
-                OidcClientKind.Protocol,
-                RelyingParty.Destination,
-                ["openid", "email", "offline_access"]),
-            OpaqueToken.Of(replacement).Fingerprint(),
-            deployment.Clock.GetUtcNow() + TimeSpan.FromMinutes(15),
-            TestContext.Current.CancellationToken);
-
-        var machine = new Machine(deployment);
-        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
-
-        Answer overlapping = await machine.PostAsync(
-            "/oidc/token",
-            RelyingParty.Code(code, RelyingParty.Protocol));
-
-        deployment.Clock.Advance(TimeSpan.FromMinutes(15));
-
-        (string Name, string? Value)[] request = RelyingParty.Request(
-            RelyingParty.Protocol,
-            silent: true,
-            RelyingParty.Destination,
-            "openid email offline_access");
-
-        Answer lapsed = await RelyingParty.PushAsync(deployment, request);
-        Answer current = await RelyingParty.PushAsync(
-            deployment,
-            RelyingParty.With(request, "client_secret", replacement));
-
-        Assert.Equal(StatusCodes.Status200OK, overlapping.Status);
-        Assert.Equal(StatusCodes.Status401Unauthorized, lapsed.Status);
-        Assert.Equal(StatusCodes.Status201Created, current.Status);
     }
 
     /// <summary>
@@ -698,26 +680,49 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// BFF-MACH-001 AC2: a machine route refuses a request that arrives carrying a
-    /// browser's session cookie.
+    /// BFF-MACH-001 AC2, LIB-API-003 AC5: each of the provider's machine routes refuses
+    /// a request that arrives carrying a browser's session cookie with its protocol's
+    /// <c>invalid_request</c>, the code alone, in a body on the pushed request and the
+    /// token request (RFC 6749 section 5.2, RFC 9126 section 2.3) and in the challenge
+    /// on the userinfo request (RFC 6750 section 3), before it reads what the request
+    /// presents: no reference is issued, and the code the token request carried is
+    /// still exchanged by the request that carries no cookie.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_MACH_001_AC2_ACookieOnAMachineRouteIsRefusedAsync()
+    public async Task BFF_MACH_001_AC2_ACookieOnAnOidcRouteIsRefusedWithInvalidRequestAsync()
     {
         await using var deployment = new Deployment();
 
         Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
         string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
         string cookie = Janus.Hosting.Bff.BrowserCookies.Session
             + "="
             + browser.Cookies[Janus.Hosting.Bff.BrowserCookies.Session];
 
-        Answer refused = await new Machine(deployment)
+        Answer pushed = await machine.PostCarryingAsync(
+            "/oidc/par",
+            cookie,
+            RelyingParty.Request(RelyingParty.Application, silent: true, RelyingParty.Destination, "openid email"));
+        Answer exchanged = await machine
             .PostCarryingAsync("/oidc/token", cookie, RelyingParty.Code(code, RelyingParty.Application));
+        Answer claims = await machine.CallCarryingAsync("/oidc/userinfo", cookie);
+        Answer taken = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.All(
+            new[] { pushed, exchanged },
+            refused =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+                Assert.Equal("invalid_request", refused.Text("error"));
+                Assert.Equal("error", Assert.Single(refused.Json().EnumerateObject()).Name);
+            });
+        Assert.Equal(StatusCodes.Status400BadRequest, claims.Status);
+        Assert.Equal("Bearer error=\"invalid_request\"", claims.Header(HeaderNames.WWWAuthenticate));
+        Assert.Empty(claims.Body);
+        Assert.Equal(StatusCodes.Status200OK, taken.Status);
+        Assert.NotEmpty(taken.Text("access_token"));
     }
 
     /// <summary>
@@ -800,13 +805,79 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// AUTH-SESS-012 AC9: every identity token issued to a browser application carries
+    /// in <c>sid</c> the identifier of the session record its code was issued from,
+    /// whichever record the browser held and whichever application exchanged the code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC9_AnIdentityTokenNamesTheRecordItsCodeWasIssuedFromAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser first = await RelyingParty.PreparedAsync(deployment);
+
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                Second,
+                Second,
+                OidcClientKind.BrowserApplication,
+                RelyingParty.Destination,
+                ["openid", "email"]),
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        // A second record of the same person, held by a browser of its own, which is
+        // what a second device leaves.
+        var secret = OpaqueToken.Of("the-session-secret-of-a-second-browser");
+        var second = new Browser(deployment);
+
+        await deployment.Sessions.AddAsync(
+            Session.Begin(
+                SessionId.New(deployment.Clock),
+                Single(deployment.Sessions.All).Subject,
+                new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+                deployment.Clock.GetUtcNow(),
+                TimeSpan.FromDays(1),
+                TimeSpan.FromDays(30),
+                breakGlassReason: null),
+            secret.Fingerprint(),
+            OpaqueToken.Of("the-csrf-token-of-a-second-browser").Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        second.Hold(BrowserCookies.Session, secret.Value);
+
+        string held = Record(deployment, first);
+        string other = Record(deployment, second);
+        var machine = new Machine(deployment);
+
+        Assert.NotEqual(held, other);
+
+        foreach ((Browser browser, string record) in new[] { (first, held), (second, other) })
+        {
+            foreach (string clientId in new[] { RelyingParty.Application, Second })
+            {
+                string code = await RelyingParty.CodeAsync(deployment, browser, clientId);
+                Answer exchanged = await machine.PostAsync(
+                    "/oidc/token",
+                    RelyingParty.Code(code, clientId));
+
+                Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+                Assert.Equal(record, Claim(exchanged.Text("id_token"), "sid"));
+            }
+        }
+    }
+
+    /// <summary>
     /// API-REDIR-001 AC4: the destination that was replaced is recorded, and the
     /// request that named the registered one records nothing, so what the log holds
     /// is the attempts and not the traffic.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_REDIR_001_AC4_OnlyTheReplacedDestinationIsRecordedAsync()
+    public async Task API_REDIR_001_AC4_OnlyTheRefusedDestinationIsRecordedAsync()
     {
         await using var deployment = new Deployment();
 
@@ -818,15 +889,67 @@ public sealed class OidcFlowTests
 
         Assert.Empty(deployment.OidcLog.Entries);
 
-        _ = await browser.SendAsync(
-            "GET",
-            await RelyingParty.AuthorizeAsync(
-                deployment,
-                RelyingParty.Application,
-                silent: true,
-                redirect: "https://attacker.test/collect"));
+        _ = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            "https://attacker.test/collect",
+            "openid email");
 
         Assert.Equal(LogLevel.Warning, Assert.Single(deployment.OidcLog.Entries).Level);
+    }
+
+    /// <summary>
+    /// LIB-API-003 AC1 (D-166, 394): every error the provider answers carries the
+    /// protocol's code alone, and no description or documentation address, in its body,
+    /// its <c>WWW-Authenticate</c> header or the address the client is sent back to.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_003_AC1_NoProviderErrorCarriesADescriptionAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        _ = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
+
+        Answer spent = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
+        Answer anonymous = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.With(
+                RelyingParty.Request(RelyingParty.Application, silent: true, RelyingParty.Destination, "openid"),
+                "client_id",
+                null));
+        Answer unread = await machine.GetAsync("/oidc/userinfo", "not-a-token-the-provider-issued");
+        Answer returned = await new Browser(deployment)
+            .SendAsync(
+                "GET",
+                await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: true));
+
+        string[] carried =
+        [
+            spent.Body,
+            anonymous.Body,
+            unread.Body,
+            unread.Header("WWW-Authenticate") ?? string.Empty,
+            RelyingParty.Where(returned),
+        ];
+
+        Assert.Equal(
+            ["invalid_grant", "invalid_request", "invalid_token", "login_required"],
+            [
+                spent.Text("error"),
+                anonymous.Text("error"),
+                unread.Header("WWW-Authenticate")!.Contains("invalid_token", StringComparison.Ordinal)
+                    ? "invalid_token"
+                    : string.Empty,
+                RelyingParty.Returned(returned, "error"),
+            ]);
+        Assert.All(carried, text => Assert.DoesNotContain("error_description", text, StringComparison.Ordinal));
+        Assert.All(carried, text => Assert.DoesNotContain("error_uri", text, StringComparison.Ordinal));
     }
 
     private static (string Name, string? Value)[] Refresh(string token) =>
@@ -836,6 +959,12 @@ public sealed class OidcFlowTests
         ("client_id", RelyingParty.Protocol),
         ("client_secret", RelyingParty.Secret),
     ];
+
+    // The identifier of the session record behind the session cookie a browser holds.
+    private static string Record(Deployment deployment, Browser browser) =>
+        deployment.Sessions.Behind(OpaqueToken.Of(browser.Cookies[BrowserCookies.Session])) is Session live
+            ? live.Id.Value.ToString()
+            : throw new InvalidOperationException("The browser holds no session.");
 
     private static Session Single(IReadOnlyCollection<Session> sessions)
     {

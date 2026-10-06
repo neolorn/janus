@@ -22,9 +22,11 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     private const string Reason = "The provider's own limits now apply.";
 
     /// <summary>
-    /// OPS-CFG-004 AC2 and OPS-ALERT-001: a protected key the application refuses is
-    /// changed from the server, written down under the command's principal with the
-    /// values, the direction and the reason, and raised as a High condition.
+    /// OPS-CFG-004 AC2, OPS-CFG-005 and OPS-ALERT-001: a protected key the application
+    /// refuses is changed from the server, written down under the command's principal
+    /// with the values, the direction and the reason, and raised as a High condition
+    /// whose <c>AlertRaised</c> event is written with it. No row stood for the key, so
+    /// what it was is its default, the value in force.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -50,8 +52,11 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
         Assert.Equal(0, run.ExitCode);
         Assert.Equal("""{"changed":["abuse.throttle.enabled"]}""", run.Output.Trim());
         Assert.Equal(Settings.AbuseThrottleEnabled.Write(false), await ValueAsync(connection, key));
-        Assert.Equal((null, Settings.AbuseThrottleEnabled.Write(false), true, Reason, "OPS-CFG-004"), recorded);
+        Assert.Equal(
+            (Settings.AbuseThrottleEnabled.Write(true), Settings.AbuseThrottleEnabled.Write(false), true, Reason, "OPS-CFG-004"),
+            recorded);
         Assert.Equal(["protected-setting-changed"], await RaisedAsync(connection, key));
+        Assert.Equal(["protected-setting-changed"], await AnnouncedAsync(connection, key));
     }
 
     /// <summary>
@@ -76,35 +81,26 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
-    /// OPS-CFG-004 and chapter 10 section 4.8: an organization's step-up enforcement is
-    /// switched from the server by its member of the protected family, and a member for
-    /// an organization the deployment does not hold is refused.
+    /// OPS-CFG-004: audit logging, token signature verification and step-up enforcement
+    /// have no switch, so the command refuses each former switch by name as it refuses
+    /// any key that is not protected, and writes nothing.
     /// </summary>
+    /// <param name="key">The former switch, a member of the former family included.</param>
     /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_CFG_004_AnOrganizationsStepUpEnforcementIsSwitchedFromTheServerAsync()
+    [Theory]
+    [InlineData("audit.enabled")]
+    [InlineData("token.signature.verification")]
+    [InlineData("stepup.enforcement.0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a2b")]
+    public async Task OPS_CFG_004_ARetiredSwitchIsRefusedAsync(string key)
     {
+        Invocation run = await ConfiguredAsync("--" + key, "false", "--reason", Reason);
+
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        string organization = await connection.ExecuteScalarAsync<string>(
-            "SELECT id::text FROM identity.organizations WHERE administrative") ?? string.Empty;
-        string key = Settings.OrganizationStepUpEnforcement.For(organization).ToString();
-        string unheld = Settings.OrganizationStepUpEnforcement.For(Guid.NewGuid().ToString()).ToString();
-
-        Invocation run = await ConfiguredAsync("--" + key, "false", "--reason", "An incident on the gate.");
-        Invocation refused = await ConfiguredAsync("--" + unheld, "false", "--reason", "An incident on the gate.");
-
-        Assert.Equal(0, run.ExitCode);
-        Assert.Equal(Settings.OrganizationStepUpEnforcement.Write(false), await ValueAsync(connection, key));
-        Assert.True(await connection.ExecuteScalarAsync<bool>(
-            """
-            SELECT (details->>'loosening')::boolean FROM identity.audit_records
-            WHERE action = 'ops.configuration.changed' AND principal = 'configure' AND details->>'key' = @Key
-            """,
-            new { Key = key }));
-        Assert.Equal(1, refused.ExitCode);
-        Assert.Equal(("config.value.notallowed", unheld, "organization"), Refusal(refused, "key", "field"));
-        Assert.Null(await ValueAsync(connection, unheld));
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(("api.request.malformed", "--" + key), Refusal(run, "member"));
+        Assert.Null(await ValueAsync(connection, key));
     }
 
     /// <summary>
@@ -143,8 +139,8 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal("auth.restriction.reasonrequired", Refusal(run));
-        Assert.Equal("auth.restriction.reasonrequired", Refusal(blank));
+        Assert.Equal("config.change.reasonrequired", Refusal(run));
+        Assert.Equal("config.change.reasonrequired", Refusal(blank));
         Assert.Null(await ValueAsync(connection, key));
         Assert.Empty(await RaisedAsync(connection, key));
     }
@@ -160,6 +156,26 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
         string key = Settings.TokenSigningAlgorithm.Key.ToString();
 
         Invocation run = await ConfiguredAsync("--" + key, "RS256", "--reason", Reason);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal("config.value.notallowed", Refusal(run));
+        Assert.Null(await ValueAsync(connection, key));
+    }
+
+    /// <summary>
+    /// AUTH-KEY-001 AC4: <c>token.signing.algorithm</c> admits ES256 alone, so
+    /// <c>configure</c> refuses another signing algorithm with
+    /// <c>config.value.notallowed</c> and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_KEY_001_AC4_ConfigureRefusesASigningAlgorithmOtherThanES256Async()
+    {
+        string key = Settings.TokenSigningAlgorithm.Key.ToString();
+
+        Invocation run = await ConfiguredAsync("--" + key, "ES384", "--reason", Reason);
 
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
@@ -196,6 +212,73 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
             new { Key = key }));
     }
 
+    /// <summary>
+    /// OPS-CFG-004, AUTH-FACT-010 AC1 and LIB-HOST-001: the checks the host's start runs
+    /// over the relying party run over the written values before the commit, so an
+    /// identifier that no configured origin sits under is refused with the code the
+    /// start gives, and nothing of the change stays.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_004_ARelyingPartyIdentifierNoOriginSharesIsRefusedAsync()
+    {
+        string key = Settings.WebAuthnRelyingPartyId.Key.ToString();
+
+        Invocation run = await ConfiguredAsync("--" + key, "elsewhere.example.org", "--reason", Reason);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal("model.startup.rpid", Refusal(run));
+        Assert.Null(await ValueAsync(connection, key));
+        Assert.Empty(await RaisedAsync(connection, key));
+    }
+
+    /// <summary>
+    /// OPS-CFG-005 (D-166, 319): what a key was is the written form of the value in
+    /// force, and nothing only for a key the deployment names that has no row: the
+    /// first change of the cross-border basis records nothing before it, and the next
+    /// records the value the first put in force.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_AChangeRecordsTheValueInForceAsWhatItWasAsync()
+    {
+        string key = Settings.HostingCrossBorderBasis.Key.ToString();
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        try
+        {
+            Invocation first = await ConfiguredAsync("--" + key, "standard contractual clauses", "--reason", Reason);
+            Invocation second = await ConfiguredAsync("--" + key, "an adequacy decision", "--reason", Reason);
+
+            IReadOnlyList<(string? Before, string After)> recorded = [.. await connection
+                .QueryAsync<(string?, string)>(
+                    """
+                    SELECT details->>'before', details->>'after'
+                    FROM identity.audit_records
+                    WHERE action = 'ops.configuration.changed' AND principal = 'configure'
+                      AND details->>'key' = @Key
+                    ORDER BY occurred_at, id
+                    """,
+                    new { Key = key })];
+
+            Assert.Equal(0, first.ExitCode);
+            Assert.Equal(0, second.ExitCode);
+            Assert.Equal(
+                [(null, "standard contractual clauses"), ("standard contractual clauses", "an adequacy decision")],
+                recorded);
+        }
+        finally
+        {
+            // The key is required once the location is outside Egypt, which another case
+            // of the class relies on finding unnamed.
+            await connection.ExecuteAsync("DELETE FROM identity.settings WHERE key = @Key", new { Key = key });
+        }
+    }
+
     private static async Task<string?> ValueAsync(NpgsqlConnection connection, string key) =>
         await connection.ExecuteScalarAsync<string?>(
             "SELECT value FROM identity.settings WHERE key = @Key",
@@ -204,6 +287,14 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     private static async Task<IReadOnlyList<string>> RaisedAsync(NpgsqlConnection connection, string key) =>
         [.. await connection.QueryAsync<string>(
             "SELECT condition FROM identity.raised_alerts WHERE details->>'key' = @Key",
+            new { Key = key })];
+
+    private static async Task<IReadOnlyList<string>> AnnouncedAsync(NpgsqlConnection connection, string key) =>
+        [.. await connection.QueryAsync<string>(
+            """
+            SELECT payload->>'Condition' FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->'Details'->>'key' = @Key
+            """,
             new { Key = key })];
 
     private static string? Refusal(Invocation run)

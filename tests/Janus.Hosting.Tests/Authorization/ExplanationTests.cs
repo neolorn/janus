@@ -269,6 +269,33 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004 AC1, AUTHZ-GATE-004 AC4: a caller without <c>audit:read</c>
+    /// asking to resolve an identifier is answered with the gate's own refusal, whose
+    /// correlation identifier resolves to the denial the gate recorded for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC1_AResolutionRefusedIsTheGatesRefusalWithItsCorrelationAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+        AuditRecordId asked = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Error refusal = Refusal(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .ResolveAsync(AccessContext.Of(deployed.Account), asked, TestContext.Current.CancellationToken));
+
+        var correlation = new AuditRecordId(refusal.Details["correlation"].GetGuid());
+        AccessExplanation explanation = Explained(await ResolvedOwnAsync(deployed.Account, correlation));
+
+        Assert.Equal(ErrorCodes.Denied, refusal.Code);
+        Assert.NotEqual(asked, correlation);
+        Assert.Equal(1, await RecordedAsync(correlation));
+        Assert.Equal(Permissions.AuditRead, explanation.Permission);
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC4, AUTHZ-SCOPE-001: <c>audit:read</c> held in the organization
     /// the refused record sits in, and not in the administrative one, resolves nothing.
     /// </summary>
@@ -457,29 +484,42 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         AuditRecordId correlation = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
 
         Assert.Equal(
-            new Identified(deployed.Account.Value, deployed.Account.Value),
+            new Identified(deployed.Account.Value, deployed.Account.Value, Principal: null, Reason: null),
             await IdentifiedAsync(correlation));
     }
 
     /// <summary>
-    /// AUTHZ-CONCEAL-004 AC1: a request made under no account is refused with a
-    /// correlation identifier like every other refusal, and the row it resolves to is
-    /// there, naming the permission and naming nobody.
+    /// AUTHZ-CONCEAL-004 AC1 and AC3, IDN-AUD-001 AC1: a refusal of background work is
+    /// recorded as its other actions are, the nil subject under both identities beside
+    /// the principal's name and stated reason, and its identifier resolves to that name
+    /// and reason; a person's refusal resolves to neither.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_CONCEAL_004_AC1_ARefusalUnderNoAccountCarriesAnIdentifierAsync()
+    public async Task AUTHZ_CONCEAL_004_AC1_ARefusalOfBackgroundWorkNamesThePrincipalAndItsReasonAsync()
     {
         Deployed deployed = await DeployAsync(granted: false);
 
-        AuditRecordId correlation = await RefusedAsync(
+        AuditRecordId ofWork = await RefusedAsync(
             AccessContext.Of(SystemPrincipal.ForOrganization(
                 "import", "the nightly import", deployed.Deployment.Organization)),
             deployed.Record,
             HostPermissions.Read);
+        AuditRecordId ofAPerson = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
 
-        Assert.Equal(1, await RecordedAsync(correlation));
-        Assert.Equal(new Identified(null, null), await IdentifiedAsync(correlation));
+        AccessExplanation work = await ResolvedAsync(deployed, ofWork);
+        AccessExplanation person = await ResolvedAsync(deployed, ofAPerson);
+
+        Assert.Equal(
+            new Identified(Guid.Empty, Guid.Empty, "import", "the nightly import"),
+            await IdentifiedAsync(ofWork));
+        Assert.Equal(
+            new ExplainedPrincipal(Acting: null, Effective: null, "import", "the nightly import"),
+            work.Principal);
+        Assert.Equal(HostPermissions.Read, work.Permission);
+        Assert.Equal(
+            new ExplainedPrincipal(deployed.Account, deployed.Account, Name: null, Reason: null),
+            person.Principal);
     }
 
     /// <summary>
@@ -746,6 +786,38 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001 and AUTHZ-DERIVE-007 AC3: the view of who can
+    /// access a record the deployment holds no registration for is refused as the gate
+    /// refuses a caller without <c>grant:read</c> on a registered one: the same code and
+    /// the same details, under an identifier recorded against no organization, which the
+    /// caller resolves as their own refusal with no grant named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_ALookupOfARecordNoRowNamesIsRefusedAsTheGateRefusesAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        Error present = await LookedUpAsync(deployed.Account, deployed.Record);
+        Error absent = await LookedUpAsync(deployed.Account, Reference(Document));
+
+        Assert.Equal(ErrorCodes.Denied, present.Code);
+        Assert.Equal(ErrorCodes.Denied, absent.Code);
+        Assert.Equal(
+            present.Details.Keys.Order(StringComparer.Ordinal),
+            absent.Details.Keys.Order(StringComparer.Ordinal));
+
+        var correlation = new AuditRecordId(absent.Details["correlation"].GetGuid());
+        AccessExplanation explanation = Explained(await ResolvedOwnAsync(deployed.Account, correlation));
+
+        Assert.Equal(1, await RecordedAsync(correlation));
+        Assert.Null(await OrganizationOfAsync(correlation));
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+        Assert.Equal(Permissions.GrantRead, explanation.Permission);
+        Assert.Null(explanation.Grant);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-002 AC3 and AUTHZ-GATE-006: a caller whose account is restricted is
     /// refused a change to a group or a grant as a restriction, whether or not the
     /// deployment holds a row for it.
@@ -815,7 +887,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     // The type a note sits in declares a derivation, so the explanation is asked with
@@ -926,6 +998,16 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
             cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    // The view of who can access a record, as its endpoint asks it.
+    private async Task<Error> LookedUpAsync(SubjectId caller, ResourceReference resource)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .WhoCanAccessAsync(AccessContext.Of(caller), resource, TestContext.Current.CancellationToken))
+            .Match(_ => throw new InvalidOperationException("The view was not refused."), error => error);
+    }
+
     // A group's removal as its endpoint asks it, with the reason its body carries.
     private async Task<Error> GroupRemovedAsync(SubjectId caller, GroupId group)
     {
@@ -958,7 +1040,8 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
         return await connection.QuerySingleAsync<Identified>(new CommandDefinition(
             """
-            SELECT acting_subject AS "Acting", effective_subject AS "Effective"
+            SELECT acting_subject AS "Acting", effective_subject AS "Effective",
+                   principal AS "Principal", principal_reason AS "Reason"
             FROM identity.audit_records
             WHERE id = @id;
             """,
@@ -982,9 +1065,9 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return new AuditRecordId(refusal.Details["correlation"].GetGuid());
     }
 
-    // The two identity columns of one record, read as the row holds them, either
-    // absent where the refusal names nobody.
-    private sealed record Identified(Guid? Acting, Guid? Effective);
+    // Who one record names, read as the row holds it: the two identities, and the
+    // principal and its reason where background work acted.
+    private sealed record Identified(Guid Acting, Guid Effective, string? Principal, string? Reason);
 
     private async Task<Deployed> DeployAsync(bool granted)
     {
@@ -1009,17 +1092,20 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         await deployment.RegisterAsync(note, container, cancellationToken);
 
         RoleName supporting = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
 
         await deployment.GrantAsync(
             GrantSubject.Of(support), supporting, null, false, null, null, cancellationToken);
 
+        // IDN-LIFE-009a, D-166: the support role confers there on a member only.
+        await deployment.MemberAsync(support, administrative, cancellationToken);
         await deployment.GrantAsync(
             GrantSubject.Of(support),
             supporting,
             null,
             false,
             null,
-            await deployment.AdministrativeAsync(cancellationToken),
+            administrative,
             cancellationToken);
 
         GrantId grant = default;

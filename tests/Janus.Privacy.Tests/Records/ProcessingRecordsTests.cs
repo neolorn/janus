@@ -38,6 +38,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     private readonly ComplianceStoreInMemory _compliance = new();
     private readonly RegisterRolesInMemory _roles = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly MailServerInUseInMemory _mail = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly ConsentStoreInMemory _consents = new();
@@ -91,7 +92,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             after.Records,
             record => record.Purpose is "analytics");
 
-        Assert.Equal("contract", added.LawfulBasis);
+        Assert.Equal("Contract", added.LawfulBasis);
         Assert.Equal(["identity"], added.DataCategories);
         Assert.Equal(["customers"], added.SubjectCategories);
         Assert.True(added.NonSensitive);
@@ -163,7 +164,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             StringComparer.Ordinal);
 
         Assert.Equal("the data protection officer", narrowed.DataOwner);
-        Assert.Equal("annual training", narrowed.OrganisationalSecurityMeasures);
+        Assert.Equal("annual training", narrowed.OrganizationalSecurityMeasures);
     }
 
     /// <summary>
@@ -258,6 +259,68 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3 (D-183): for a caller in process the data
+    /// owner and the organizational security measures are held to the bound of free text
+    /// as at the endpoint, refused naming the member, and nothing is recorded.
+    /// </summary>
+    /// <param name="member">The member written outside the bound.</param>
+    /// <param name="character">What it is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("dataOwner", "d", 0)]
+    [InlineData("dataOwner", " ", 3)]
+    [InlineData("dataOwner", "d", 1025)]
+    [InlineData("organizationalSecurityMeasures", "d", 0)]
+    [InlineData("organizationalSecurityMeasures", " ", 3)]
+    [InlineData("organizationalSecurityMeasures", "d", 1025)]
+    public async Task API_CONV_002_AStatementOutsideTheBoundIsMalformedAsync(
+        string member,
+        string character,
+        int length)
+    {
+        string written = string.Concat(Enumerable.Repeat(character, length));
+
+        Result refused = await Records(Declaration.Declared().Build()).DeclareAsync(
+            AccessContext.Of(Mona),
+            member == "dataOwner"
+                ? new ComplianceRecord(written, "annual training", [])
+                : new ComplianceRecord("the operations lead", written, []),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refused.Match(() => default, error => error.Code));
+        Assert.Equal(member, refused.Match(() => null, error => error.Details["member"].GetString()));
+        Assert.Null(_compliance.Held.DataOwner);
+    }
+
+    /// <summary>
+    /// API-CONV-002, 09 section 8a (D-183): a statement within the bound is recorded
+    /// trimmed, and one omitted is cleared.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AStatementIsRecordedTrimmedAndAnOmittedOneIsClearedAsync()
+    {
+        ProcessingRecordsService records = Records(Declaration.Declared().Build());
+
+        _ = await records.DeclareAsync(
+            AccessContext.Of(Mona),
+            new ComplianceRecord("  the operations lead ", " " + new string('d', 1024) + " ", ["LIA-1"]),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("the operations lead", _compliance.Held.DataOwner);
+        Assert.Equal(new string('d', 1024), _compliance.Held.OrganizationalSecurityMeasures);
+
+        _ = await records.DeclareAsync(
+            AccessContext.Of(Mona),
+            new ComplianceRecord(DataOwner: null, "annual training", []),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(_compliance.Held.DataOwner);
+        Assert.Equal("annual training", _compliance.Held.OrganizationalSecurityMeasures);
+    }
+
+    /// <summary>
     /// PRIV-ROPA-001 AC2: the three fields a person supplies are reported missing
     /// while they are missing, and carried once they are supplied.
     /// </summary>
@@ -273,7 +336,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         Assert.Equal(
             [
                 RegisterFinding.DataOwnerMissing,
-                RegisterFinding.OrganisationalMeasuresMissing,
+                RegisterFinding.OrganizationalMeasuresMissing,
                 RegisterFinding.AssessmentLinksMissing,
             ],
             missing.Flags
@@ -291,7 +354,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal("the operations lead", supplied.DataOwner);
-        Assert.Equal("annual access review", supplied.OrganisationalSecurityMeasures);
+        Assert.Equal("annual access review", supplied.OrganizationalSecurityMeasures);
         Assert.Equal(["LIA-1"], supplied.AssessmentLinks);
         Assert.DoesNotContain(supplied.Flags, flag => flag.Subject.Length is 0);
     }
@@ -420,7 +483,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync()
     {
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
+        _mail.Server = new MailServerInMemory();
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
@@ -450,15 +513,17 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             ProviderRegister.Default.Select(row => row.Name));
 
     /// <summary>
-    /// PRIV-ROPA-002: a deployment that calls neither a mail server nor the online
-    /// screening service reports neither of them, so the register states what is true
-    /// of that deployment and not of a shipped list.
+    /// PRIV-ROPA-002 and D-166 (270): a deployment that calls neither a mail server nor
+    /// the online screening service reports neither of them, so the register states what
+    /// is true of that deployment and not of a shipped list; the address of a mail
+    /// transport the library does not ship makes no mail server row.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task PRIV_ROPA_002_AnUncalledProviderIsNotInTheRegisterAsync()
     {
         _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
@@ -477,7 +542,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_ROPA_002_AC2_AnEditedRowStandsInPlaceOfTheShippedDefaultAsync()
     {
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
+        _mail.Server = new MailServerInMemory();
 
         AuthorizationDeclaration declared = Declaration.Declared()
             .Recipient(new RecipientDeclaration(
@@ -607,11 +672,12 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         AuthorizationDeclaration declared = Declaration.Declared()
             .LawfulBasis(new LawfulBasisDeclaration(
                 "legal-obligation",
+                "Legal obligation",
                 IsConsent: false,
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
                 IsObjectable: false))
-            .Resource<Declaration.Statement>("invoice", invoice => invoice
+            .Resource<Declaration.Statement>("statement", statement => statement
                 .BelongsToOrganization()
                 .Purpose("performance", "contract", data: ["identity", "statement"], subjects: ["customers"])
                 .Purpose(books, "legal-obligation", data: ["statement"], subjects: ["customers"])
@@ -626,7 +692,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         ProcessingRegister after = Generated(await Records(declared)
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("legal-obligation", Row(after, books).LawfulBasis);
+        Assert.Equal("Legal obligation", Row(after, books).LawfulBasis);
         Assert.Equal(["statement P1826D"], Row(before, books).Retention);
         Assert.Equal(Row(before, books).Retention, Row(after, books).Retention);
         Assert.NotEmpty(_events.Of<ConsentChanged>());
@@ -744,8 +810,8 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
 
     /// <summary>
     /// PRIV-BASIS-001 AC2: the lawful basis column is the label the deployment
-    /// declared, so a deployment whose list reads differently emits its own words and
-    /// the library contributes none.
+    /// declared, never the key, so a deployment whose list reads differently emits its
+    /// own words and the library contributes none.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -754,12 +820,12 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("contract", Row(register, "performance").LawfulBasis);
-        Assert.Equal("agreement", Row(register, "marketing").LawfulBasis);
+        Assert.Equal("Contract", Row(register, "performance").LawfulBasis);
+        Assert.Equal("Agreement", Row(register, "marketing").LawfulBasis);
 
         AuthorizationDeclaration elsewhere = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("art-6-1-b", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("art-6-1-b", "Performance of a contract", false, false, false, false))
             .Resource<Declaration.Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()
                 .Purpose("marketing", "art-6-1-b", data: ["identity"], subjects: ["customers"]))
@@ -768,7 +834,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         ProcessingRegister other = Generated(await Records(elsewhere)
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("art-6-1-b", Row(other, "marketing").LawfulBasis);
+        Assert.Equal("Performance of a contract", Row(other, "marketing").LawfulBasis);
     }
 
     /// <summary>
@@ -943,6 +1009,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             _roles,
             new CategoryRetention(declaration, _configuration),
             _configuration,
+            _mail,
             _work,
             _clock);
 }

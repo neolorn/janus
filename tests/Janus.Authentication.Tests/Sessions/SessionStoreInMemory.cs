@@ -120,6 +120,25 @@ internal sealed class SessionStoreInMemory : ISessionStore
         ]);
 
     /// <inheritdoc/>
+    public ValueTask<int> DowngradeAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Session[] standing =
+        [
+            .. _sessions.Values.Where(session => session.Subject == subject && session.EndedAt is null),
+        ];
+
+        foreach (Session session in standing)
+        {
+            session.Downgrade(at);
+        }
+
+        return ValueTask.FromResult(standing.Length);
+    }
+
+    /// <inheritdoc/>
     public ValueTask EndSpineAsync(
         SessionId spine,
         DateTimeOffset at,

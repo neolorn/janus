@@ -40,13 +40,41 @@ internal static class RecoveryEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/recovery");
 
-        _ = group.MapPost("/begin", BeginAsync);
-        _ = group.MapPost("/complete", CompleteAsync);
-        _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync));
-        _ = group.MapPost("/report-loss/{id:guid}/cancel", CancelLossAsync);
+        _ = group.MapPost("/begin", BeginAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/complete", CompleteAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.CredentialNotFound, ErrorCodes.LossReportNotPermitted,
+                    ErrorCodes.LossReportPending))
+            .Produces<LossReportedView>(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.LossReportNotPermitted,
+                    ErrorCodes.LossReportPending)
+                .Binding<AuthenticatorId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync));
-        _ = endpoints.MapPost("/enrol/begin", EnrolAsync);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
+                    ErrorCodes.RecoverySelfApproval, ErrorCodes.SmsBalanceFloor, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded))
+            .Produces<ApprovedRecoveryView>();
+        _ = endpoints.MapPost("/enrol/begin", EnrolAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid))
+            .Produces<EnrolmentSessionView>();
 
         return endpoints;
     }
@@ -146,7 +174,7 @@ internal static class RecoveryEndpoints
     // AUTH-RECOV-007, D-141: a session of the account cancels, and so does the link
     // every notice carried, which is what somebody locked out is holding.
     private static async Task<IResult> CancelLossAsync(
-        Guid id,
+        AuthenticatorId id,
         CancelLossRequest request,
         IRecovery recovery,
         RequestSession browser,
@@ -160,7 +188,7 @@ internal static class RecoveryEndpoints
             await recovery
                 .CancelLossAsync(
                     browser.Context,
-                    new AuthenticatorId(id),
+                    id,
                     request.Token,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -189,13 +217,20 @@ internal static class RecoveryEndpoints
         }
 
         // AUTH-RECOV-002: chapter 10 names the refusal of an approval without a
-        // written reason, so an absent one is answered by it rather than as malformed.
-        if (request.Reason is not { Length: > 0 } reason)
+        // written reason, so an absent or blank one is answered by it rather than as
+        // malformed; free text past 1024 characters after trimming is malformed
+        // (API-CONV-002, X4).
+        if (request.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Error.From(ErrorCodes.RecoveryReasonRequired));
         }
 
-        if (request.ChannelUsed is not { Length: > 0 } channel)
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        if (request.ChannelUsed?.Trim() is not { Length: > 0 and <= 1024 } channel)
         {
             return Answers.Malformed("channelUsed");
         }
@@ -274,7 +309,7 @@ internal static class RecoveryEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

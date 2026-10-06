@@ -46,6 +46,9 @@ internal static class BreakGlassCode
 
         var drawn = new StringBuilder(Printed + Groups - 1);
         Span<int> values = stackalloc int[GroupSize - 1];
+        Span<byte> bytes = stackalloc byte[DataSymbols];
+
+        randomness.GetBytes(bytes);
 
         for (int group = 0; group < Groups; group++)
         {
@@ -56,12 +59,17 @@ internal static class BreakGlassCode
 
             for (int symbol = 0; symbol < values.Length; symbol++)
             {
-                values[symbol] = RandomNumberGenerator.GetInt32(Alphabet.Length);
+                // The alphabet is 32 symbols, so the five low bits of a byte choose one
+                // uniformly.
+                values[symbol] = bytes[(group * values.Length) + symbol] & (Alphabet.Length - 1);
                 drawn.Append(Alphabet[values[symbol]]);
             }
 
             drawn.Append(Alphabet[Check(values)]);
         }
+
+        CryptographicOperations.ZeroMemory(bytes);
+        values.Clear();
 
         return drawn.ToString();
     }

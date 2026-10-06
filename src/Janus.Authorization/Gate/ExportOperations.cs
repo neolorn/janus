@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Model;
@@ -17,6 +16,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="ledger">When each actor's recent exports were admitted.</param>
 /// <param name="audit">Where each admitted export is recorded.</param>
 /// <param name="configuration">Where the step-up flag, the limit and the auditing flag are read.</param>
+/// <param name="work">The one transaction an admission is counted and recorded in.</param>
 /// <param name="time">The clock the window is read against.</param>
 /// <remarks>
 /// Implements OPS-ALERT-006 and D-045. An export is a permission the host declares
@@ -31,11 +31,25 @@ internal sealed class ExportOperations(
     IBulkExportLedger ledger,
     IAccessAudit audit,
     IConfigurationStore configuration,
+    IUnitOfWork work,
     TimeProvider time)
 {
     // D-045: the limit counts the exports of the last hour, rolling, so it cannot be
     // spent twice across a boundary a clock reset would put in the middle of one sitting.
     private static readonly TimeSpan Window = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Forgets the exports no limit counts again: every actor's admitted before the
+    /// window of the last hour.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were forgotten.</returns>
+    /// <remarks>
+    /// Implements OPS-OBS-003 and IDN-PRIN-003 AC4 (D-166, 329): an actor that exports
+    /// once leaves nothing behind past the hour, whether or not it exports again.
+    /// </remarks>
+    public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
+        ledger.SweepAsync(time.GetUtcNow() - Window, cancellationToken);
 
     /// <summary>
     /// The step-up gate an export asks for while <c>exfiltration.export.stepuprequired</c>
@@ -51,11 +65,10 @@ internal sealed class ExportOperations(
             return null;
         }
 
-        // An unreadable flag does not lift the gate: its default, on, stands.
         bool required = (await configuration
                 .ReadAsync(Settings.ExfiltrationExportStepUpRequired, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationExportStepUpRequired.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // D-160: a gate no policy states values for costs what the dearest gate of the
         // person's policy costs, so an export is never cheaper than any named action.
@@ -98,7 +111,24 @@ internal sealed class ExportOperations(
         int limit = (await configuration
                 .ReadAsync(Settings.ExfiltrationExportRateLimit, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationExportRateLimit.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        // OPS-CFG-004: the flag is protected, so what turns the record off is a redeploy
+        // and never the person about to export.
+        bool auditing = (await configuration
+                .ReadAsync(Settings.ExfiltrationExportAuditing, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the hour is counted with the actor's exports held, so exports at
+        // the same moment are each counted against the ones admitted before them.
+        await ledger.HoldAsync(context.Acting, principal, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<DateTimeOffset> taken = await ledger
             .SinceAsync(context.Acting, principal, now - Window, cancellationToken)
@@ -110,22 +140,14 @@ internal sealed class ExportOperations(
         {
             DateTimeOffset retryAt = limit <= 0 ? now + Window : taken[^limit] + Window;
 
-            return Result.Failure(Error.From(
-                ErrorCodes.Throttled,
-                "retryAt",
-                JsonSerializer.SerializeToElement(retryAt)));
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.Throttled(retryAt));
         }
 
         await ledger
             .RecordAsync(context.Acting, principal, now, now - Window, cancellationToken)
             .ConfigureAwait(false);
-
-        // OPS-CFG-004: the flag is protected, so what turns the record off is a redeploy
-        // and never the person about to export. An unreadable flag records.
-        bool auditing = (await configuration
-                .ReadAsync(Settings.ExfiltrationExportAuditing, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationExportAuditing.Default);
 
         if (auditing)
         {
@@ -135,6 +157,7 @@ internal sealed class ExportOperations(
                         AuditRecordId.New(time),
                         context.Acting,
                         context.Effective,
+                        context.BreakGlassReason,
                         context.Principal,
                         organization,
                         permission,
@@ -145,6 +168,6 @@ internal sealed class ExportOperations(
                 .ConfigureAwait(false);
         }
 
-        return Result.Success();
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 }

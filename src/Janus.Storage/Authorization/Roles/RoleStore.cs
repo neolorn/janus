@@ -42,6 +42,26 @@ internal sealed class RoleStore(StoreContext context) : IRoleStore
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Role?> FindForUpdateAsync(RoleName name, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A role's row is held only inside the operation's transaction.");
+        }
+
+        // The permissions are read after the lock and never from the context's cache,
+        // so what is decided on is the role as committed when the lock was taken.
+        return (await context.Roles
+                .FromSql($"SELECT * FROM identity.roles WHERE name = {name.ToString()} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Count is 0
+            ? null
+            : await FindAsync(name, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Role>> AllAsync(CancellationToken cancellationToken)
     {
         List<RoleRecord> roles = await context.Roles

@@ -127,7 +127,7 @@ public sealed class PasswordScreeningTests
 
         Assert.Equal(AlertCondition.Degradation, raised.Condition);
         Assert.Equal(
-            Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback"),
+            Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback", named: null),
             Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(Noon, raised.RaisedAt);
         Assert.Equal("rangeApi", raised.Details["configured"].GetString());

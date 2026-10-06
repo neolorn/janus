@@ -5,19 +5,20 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Hosting;
 
 /// <summary>
-/// Maps the two tables a permission filter reads into the host's own context, so that
-/// a filtered listing is one query against the host's own database.
+/// Maps the three contract tables a permission filter reads into the host's own
+/// context, so that a filtered listing is one query against the host's own database.
 /// </summary>
 /// <remarks>
-/// Implements AUTHZ-GATE-002, LIB-HOST-002 and CONV-LAYOUT-002. The library owns both
-/// tables and every migration over them; the host only reads them, which is why they
+/// Implements AUTHZ-GATE-002, LIB-HOST-002 and CONV-LAYOUT-002. The library owns all
+/// three and every migration over them; the host only reads them, which is why they
 /// are mapped as views and take part in no migration of the host's.
 /// </remarks>
 public static class AuthorizationTables
 {
     /// <summary>
-    /// Maps <see cref="AncestryEntry"/> and <see cref="EffectiveGrant"/> onto
-    /// <c>identity.ancestry</c> and <c>identity.effective_grants</c>.
+    /// Maps <see cref="AncestryEntry"/>, <see cref="EffectiveGrant"/> and
+    /// <see cref="ConsentedResource"/> onto <c>identity.ancestry</c>,
+    /// <c>identity.effective_grants</c> and <c>identity.consented_resources</c>.
     /// </summary>
     /// <param name="builder">The host's model.</param>
     /// <returns>The same model, for chaining.</returns>
@@ -55,6 +56,17 @@ public static class AuthorizationTables
             grant.Property(row => row.Organization).HasColumnName("organization");
             grant.Property(row => row.ExpiresAt).HasColumnName("expires_at");
             grant.Property(row => row.RevokedAt).HasColumnName("revoked_at");
+        });
+
+        builder.Entity<ConsentedResource>(consented =>
+        {
+            consented.ToView("consented_resources", "identity");
+            consented.HasKey(row => new { row.ResourceType, row.ResourceId, row.Purpose });
+            consented.Property(row => row.ResourceType).HasColumnName("resource_type");
+            consented.Property(row => row.ResourceId).HasColumnName("resource_id");
+            consented.Property(row => row.Purpose).HasColumnName("purpose");
+            consented.Property(row => row.Document).HasColumnName("document");
+            consented.Property(row => row.Kind).HasColumnName("kind");
         });
 
         return builder;

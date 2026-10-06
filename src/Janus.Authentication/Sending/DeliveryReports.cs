@@ -39,13 +39,17 @@ internal sealed class DeliveryReports(
     /// <exception cref="ArgumentNullException">The source is absent.</exception>
     public async ValueTask<Result> ReportAsync(
         string source,
-        string? reference,
+        [NeverLogged] string? reference,
         bool delivered,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         // Answered before any lookup, so a flood costs the deployment nothing beyond
         // the count it was already keeping (INT-GEN-003).
@@ -78,13 +82,22 @@ internal sealed class DeliveryReports(
             ? ledger.HoldsAsync(reference, cancellationToken)
             : ledger.ReleaseAsync(reference, cancellationToken);
 
-    // The counts are kept whenever the callback was answered, a rejection included;
-    // a failure of anything else leaves the transaction to roll back.
+    // CONV-DESIGN-003, INT-GEN-003: a report that was answered commits what it wrote,
+    // and a rejected one its kept writes, the admission's count, the rejection's count
+    // and the raise past the threshold; any other failure rolls back.
     private async ValueTask<Result> KeptAsync(Result outcome, CancellationToken cancellationToken)
     {
-        if (outcome.Match(() => true, error => error.Code == ErrorCodes.CallbackRejected))
+        if (!outcome.Match(() => true, error => error.Code == ErrorCodes.CallbackRejected))
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return outcome;
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
         }
 
         return outcome;

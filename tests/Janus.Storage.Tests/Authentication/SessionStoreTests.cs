@@ -1,15 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -86,7 +92,9 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Assert.Equal(SessionType.Auth, read.Type);
         Assert.Equal(AssuranceLevel.Aal2, read.Attained);
         Assert.True(read.PhishingResistant);
-        Assert.Equal(Noon, read.PhishingResistantAt);
+        Assert.Equal(
+            (Noon, (DateTimeOffset?)Noon, (DateTimeOffset?)Noon, null, (DateTimeOffset?)Noon),
+            (read.DelegatedAt, read.Aal1At, read.Aal2At, read.Aal3At, read.PhishingResistantAt));
         Assert.Equal(Noon, read.CreatedAt);
         Assert.Equal(Noon + TimeSpan.FromDays(1), read.IdleExpiry);
         Assert.Equal(Noon + TimeSpan.FromDays(30), read.AbsoluteExpiry);
@@ -95,6 +103,67 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Assert.Equal(new SessionLocation("Cairo", "EG"), read.Origin.Location);
         Assert.Null(read.EndedAt);
         Assert.False(read.SatisfiesEveryGate);
+        Assert.Null(read.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: the session the break-glass credential opens keeps the reason
+    /// given at its use, and what derives from it keeps the same, read back from the
+    /// durable store.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheSessionKeepsTheReasonGivenAtItsUseAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var record = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            subject,
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            Noon,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromHours(1),
+            breakGlassReason: "The operator cannot be reached.");
+        Session derived = Derived(record, SessionType.PerApp);
+
+        await WrittenAsync(record, derived);
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+        Session readDerived = Assert.IsType<Session>(
+            await Store(reading).FindAsync(derived.Id, TestContext.Current.CancellationToken));
+
+        Assert.True(read.SatisfiesEveryGate);
+        Assert.Equal("The operator cannot be reached.", read.BreakGlassReason);
+        Assert.Equal("The operator cannot be reached.", readDerived.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// REG-SESS-008 (D-166, 145): the session a registration's terms step established
+    /// keeps the client the registration captured, read back from the durable store, and
+    /// what derives from it keeps none.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_008_TheSessionKeepsTheClientTheRegistrationCapturedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject);
+
+        record.Capture("web");
+
+        Session derived = Derived(record, SessionType.PerApp);
+
+        await WrittenAsync(record, derived);
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+        Session readDerived = Assert.IsType<Session>(
+            await Store(reading).FindAsync(derived.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal("web", read.Client);
+        Assert.Null(readDerived.Client);
     }
 
     /// <summary>
@@ -413,6 +482,130 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-SESS-001 AC3: a bare password presented under a session that reached
+    /// <c>aal2</c> earlier is carried onto the row as the instant of <c>aal1</c> alone;
+    /// the instants of <c>aal2</c> and of phishing resistance read back as they were
+    /// reached, and the level the session holds is still the highest it has reached.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_001_AC3_ABarePasswordIsCarriedOntoTheRowAsTheInstantOfAal1AloneAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject, phishingResistant: true);
+        DateTimeOffset later = Noon + TimeSpan.FromHours(1);
+
+        await WrittenAsync(record);
+
+        await using (StoreContext changing = database.Context())
+        {
+            Session held = Assert.IsType<Session>(
+                await Store(changing).FindAsync(record.Id, TestContext.Current.CancellationToken));
+
+            held.Present(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false), later);
+
+            await Store(changing).RecordAsync(held, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (later, (DateTimeOffset?)later, (DateTimeOffset?)Noon, null, (DateTimeOffset?)Noon),
+            (read.DelegatedAt, read.Aal1At, read.Aal2At, read.Aal3At, read.PhishingResistantAt));
+        Assert.Equal((AssuranceLevel.Aal2, true), (read.Attained, read.PhishingResistant));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-001 (D-191): a session recorded while the row kept one level and one
+    /// instant is carried over with that instant as the instant of each level up to the
+    /// one it holds, and of no level above it; the instant it last reached phishing
+    /// resistance stands as the row kept it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_001_ASessionRecordedBeforeIsCarriedOverWithItsInstantAtEachLevelItHoldsAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("session_levels");
+        string carrying;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            carrying = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(KeepTheInstantASessionLastReachedEachLevel), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, carrying) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        var values = new
+        {
+            subject = Subjects.New().Value,
+            social = Guid.CreateVersion7(),
+            single = Guid.CreateVersion7(),
+            strong = Guid.CreateVersion7(),
+            first = new byte[] { 1 },
+            second = new byte[] { 2 },
+            third = new byte[] { 3 },
+            place = Array.Empty<byte>(),
+            at = Noon,
+            later = Noon.AddHours(1),
+            expiry = Noon.AddDays(1),
+        };
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@subject, 'active', @at);
+            INSERT INTO identity.sessions
+                (id, spine, type, subject, secret_fingerprint, created_at, last_seen_at,
+                 attained, attained_at, phishing_resistant, phishing_resistant_at,
+                 origin_browser, origin_os, origin_place, last_seen_browser, last_seen_os, last_seen_place,
+                 idle_expiry, absolute_expiry, satisfies_every_gate)
+            VALUES
+                (@social, @social, 'auth', @subject, @first, @at, @at,
+                 'delegated', @at, FALSE, NULL, '', '', @place, '', '', @place, @expiry, @expiry, FALSE),
+                (@single, @single, 'auth', @subject, @second, @at, @at,
+                 'aal1', @later, FALSE, NULL, '', '', @place, '', '', @place, @expiry, @expiry, FALSE),
+                (@strong, @strong, 'auth', @subject, @third, @at, @at,
+                 'aal2', @later, TRUE, @at, '', '', @place, '', '', @place, @expiry, @expiry, FALSE);
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(carrying, TestContext.Current.CancellationToken);
+        }
+
+        DateTimeOffset later = values.later;
+
+        Assert.Equal((Noon, null, null, null, null), await CarriedAsync(values.social));
+        Assert.Equal((later, later, null, null, null), await CarriedAsync(values.single));
+        Assert.Equal((later, later, later, null, Noon), await CarriedAsync(values.strong));
+
+        async Task<(DateTimeOffset, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?)> CarriedAsync(Guid id)
+        {
+            (DateTime Lowest, DateTime? Aal1, DateTime? Aal2, DateTime? Aal3, DateTime? Resistant) row =
+                await connection.QuerySingleAsync<(DateTime, DateTime?, DateTime?, DateTime?, DateTime?)>(
+                    "SELECT delegated_at, aal1_at, aal2_at, aal3_at, phishing_resistant_at FROM identity.sessions WHERE id = @id",
+                    new { id });
+
+            return (Read(row.Lowest), Instant(row.Aal1), Instant(row.Aal2), Instant(row.Aal3), Instant(row.Resistant));
+        }
+
+        static DateTimeOffset Read(DateTime instant) => new(DateTime.SpecifyKind(instant, DateTimeKind.Utc));
+
+        static DateTimeOffset? Instant(DateTime? instant) => instant is DateTime read ? Read(read) : null;
+    }
+
+    /// <summary>
     /// Ending an account's sessions leaves another account's standing, which is what
     /// makes a suspension an operation on one person and not on the deployment.
     /// </summary>
@@ -443,6 +636,54 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             other,
             Noon + TimeSpan.FromHours(2),
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-009 AC5, AC6, AUTH-SESS-001: a downgrade is written on every session of
+    /// the account that has not ended, as the instant it was made, and on no other
+    /// account's; what each session attained reads back as it was reached, and an ended
+    /// session is left alone.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_009_AC5_ADowngradeIsWrittenOnEveryStandingSessionOfTheAccountAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        Session first = Record(subject);
+        Session second = Record(subject);
+        Session ended = Record(subject);
+        Session elsewhere = Record(other);
+        DateTimeOffset tightened = Noon + TimeSpan.FromMinutes(1);
+
+        ended.End(Noon);
+
+        await WrittenAsync(first, second, ended);
+        await WrittenAsync(elsewhere);
+
+        int downgraded;
+
+        await using (StoreContext writing = database.Context())
+        {
+            downgraded = await Store(writing).DowngradeAsync(
+                subject,
+                tightened,
+                TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Session? held = await Store(reading).FindAsync(first.Id, TestContext.Current.CancellationToken);
+        Session? another = await Store(reading).FindAsync(second.Id, TestContext.Current.CancellationToken);
+        Session? left = await Store(reading).FindAsync(ended.Id, TestContext.Current.CancellationToken);
+        Session? untouched = await Store(reading).FindAsync(elsewhere.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, downgraded);
+        Assert.Equal(
+            [tightened, tightened, null, null],
+            new[] { held?.DowngradedAt, another?.DowngradedAt, left?.DowngradedAt, untouched?.DowngradedAt });
+        Assert.Equal(
+            (first.Attained, first.DelegatedAt, first.Aal1At, first.Aal2At, first.Aal3At, first.PhishingResistantAt),
+            (held?.Attained, held?.DelegatedAt, held?.Aal1At, held?.Aal2At, held?.Aal3At, held?.PhishingResistantAt));
+        Assert.False(held?.Counts(first.DelegatedAt));
     }
 
     /// <summary>
@@ -507,7 +748,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             Noon,
             inactivity ?? TimeSpan.FromDays(1),
             absolute ?? TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
     private static Session Derived(Session record, SessionType type) => record.Derive(
         SessionId.New(TimeProvider.System),
@@ -533,5 +774,5 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     private SessionStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 }

@@ -20,6 +20,9 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "unit")]
 public sealed class ReadVolumeTests : IAsyncDisposable
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("read-volume-baseline", "OPS-ALERT-005", SystemOperation.Monitoring));
+
     // Noon in Cairo on Thursday 24 September.
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 9, 0, 0, TimeSpan.Zero);
 
@@ -70,7 +73,7 @@ public sealed class ReadVolumeTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.ReadVolumeAnomaly, raised.Condition);
         Assert.Equal(
-            Alerts.Key(AlertCondition.ReadVolumeAnomaly, clerk.ToString()),
+            Alerts.Key(AlertCondition.ReadVolumeAnomaly, scope: null, clerk.ToString()),
             Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(
             ["actor", "dailyMean", "records"],
@@ -273,6 +276,25 @@ public sealed class ReadVolumeTests : IAsyncDisposable
     }
 
     // The person read the same count on each of the thirty days before today.
+    /// <summary>
+    /// CONV-DESIGN-002, OPS-ALERT-005: an anomaly whose row cannot be written is what
+    /// the count is answered with, so no caller is told a raise happened that did not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnAnomalyThatCannotBeWrittenIsTheAnswerAsync()
+    {
+        var clerk = SubjectId.New(_randomness);
+        await ReadDailyAsync(clerk, 100);
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Volume.ReturnedAsync(AccessContext.Of(clerk), 600, TestContext.Current.CancellationToken))
+                .Match(() => (ErrorCode?)null, error => error.Code));
+    }
+
     private async Task ReadDailyAsync(SubjectId actor, long records)
     {
         for (int day = 1; day <= 30; day++)
@@ -288,6 +310,6 @@ public sealed class ReadVolumeTests : IAsyncDisposable
             .Match(() => (Error?)null, error => error));
 
     private async Task<int> RebaselinedAsync() =>
-        (await Volume.RebaselineAsync(TestContext.Current.CancellationToken))
+        (await Volume.RebaselineAsync(Watcher, TestContext.Current.CancellationToken))
         .Match(value => value, error => throw new XunitException(error.Code.ToString()));
 }

@@ -12,12 +12,15 @@ namespace Janus.Identity.Identifiers;
 /// nobody from the moment it is recorded here, so presenting it at a recovery path
 /// behaves as an unknown identifier. What the record keeps is enough to put it back
 /// unchanged, and the value stays out of another account's reach until the window
-/// elapses, so the undo cannot be beaten to it.
+/// elapses, so the undo cannot be beaten to it. A removal is keyed by an identifier of
+/// its own and names the identifier it came from, so an identifier replaced twice
+/// within the window stands behind two removals, each undone apart (D-189).
 /// </remarks>
 internal sealed class IdentifierRemoval
 {
     private IdentifierRemoval(
-        IdentifierId id,
+        IdentifierRemovalId id,
+        IdentifierId origin,
         SubjectId subject,
         IdentifierKind kind,
         string entered,
@@ -30,6 +33,7 @@ internal sealed class IdentifierRemoval
         byte[] undo)
     {
         Id = id;
+        Origin = origin;
         Subject = subject;
         Kind = kind;
         Entered = entered;
@@ -43,9 +47,14 @@ internal sealed class IdentifierRemoval
     }
 
     /// <summary>
-    /// The identifier it was, which the restored one is again.
+    /// What this removal answers to, which is its own and no identifier's.
     /// </summary>
-    public IdentifierId Id { get; }
+    public IdentifierRemovalId Id { get; }
+
+    /// <summary>
+    /// The identifier the value came from, which the restored one is again.
+    /// </summary>
+    public IdentifierId Origin { get; }
 
     /// <summary>
     /// Whose it was.
@@ -124,6 +133,7 @@ internal sealed class IdentifierRemoval
         }
 
         return new IdentifierRemoval(
+            IdentifierRemovalId.Of(at),
             identifier.Id,
             identifier.Subject,
             identifier.Kind,
@@ -141,7 +151,8 @@ internal sealed class IdentifierRemoval
     /// The removal as it already stands. This is the store's translation of a stored
     /// row and no removal the account made.
     /// </summary>
-    /// <param name="id">The identifier it was.</param>
+    /// <param name="id">What the removal answers to.</param>
+    /// <param name="origin">The identifier the value came from.</param>
     /// <param name="subject">Whose it was.</param>
     /// <param name="kind">Which of the three kinds it is.</param>
     /// <param name="entered">The form the person entered.</param>
@@ -155,7 +166,8 @@ internal sealed class IdentifierRemoval
     /// <returns>The removal.</returns>
     /// <exception cref="ArgumentNullException">A form or the fingerprint is absent.</exception>
     public static IdentifierRemoval Existing(
-        IdentifierId id,
+        IdentifierRemovalId id,
+        IdentifierId origin,
         SubjectId subject,
         IdentifierKind kind,
         string entered,
@@ -173,6 +185,7 @@ internal sealed class IdentifierRemoval
 
         return new IdentifierRemoval(
             id,
+            origin,
             subject,
             kind,
             entered,
@@ -200,7 +213,7 @@ internal sealed class IdentifierRemoval
     /// <returns>The identifier.</returns>
     public Identifier Restored() =>
         Identifier.Existing(
-            Id,
+            Origin,
             Subject,
             Kind,
             Entered,

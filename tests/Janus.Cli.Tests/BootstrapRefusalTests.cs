@@ -104,6 +104,41 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
+    /// AUTH-FACT-010 AC1 and OPS-BOOT-001: the relying party is settled from the named
+    /// origins by the rule the start applies, before the database is reached, so origins
+    /// that share no registrable domain, and an origin that is not an absolute origin,
+    /// are each refused with the start's <c>model.startup.rpid</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_010_AC1_BootstrapRefusesAnIdentifierNoOriginSharesAsync()
+    {
+        string key = Settings.WebAuthnOrigins.Key.ToString();
+
+        Invocation apart = await Invocation.PipedAsync(
+            [
+                .. Invocation.Bootstrap(Settings.WebAuthnOrigins.Key),
+                "--" + key,
+                Settings.WebAuthnOrigins.Write(["https://accounts.example.test", "https://accounts.example.org"]),
+            ],
+            Invocation.Keys(Nowhere));
+        Invocation relative = await Invocation.PipedAsync(
+            [
+                .. Invocation.Bootstrap(Settings.WebAuthnOrigins.Key),
+                "--" + key,
+                Settings.WebAuthnOrigins.Write(["accounts.example.test"]),
+            ],
+            Invocation.Keys(Nowhere));
+
+        foreach (Invocation run in (Invocation[])[apart, relative])
+        {
+            Assert.Equal(1, run.ExitCode);
+            Assert.Empty(run.Output);
+            Assert.Equal(ErrorCodes.StartupRelyingPartyId.ToString(), Code(run));
+        }
+    }
+
+    /// <summary>
     /// OPS-BOOT-001: bootstrap takes the values that name the deployment and nothing
     /// else; every other key keeps its safe default until the application changes it.
     /// </summary>
@@ -159,8 +194,24 @@ public sealed class BootstrapRefusalTests
 
         Assert.Equal(1, run.ExitCode);
         Assert.Empty(run.Output);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
-        Assert.Equal("input", Detail(run, "member"));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "key"));
+    }
+
+    /// <summary>
+    /// OPS-SEC-001: a document that does not read as one is refused as a terminal is,
+    /// naming the input rather than a key, before anything is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_TheCommandRefusesADocumentThatDoesNotReadAsync()
+    {
+        Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), JsonValue.Create("keys"));
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "key"));
     }
 
     /// <summary>
@@ -180,8 +231,8 @@ public sealed class BootstrapRefusalTests
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
-        Assert.Equal(member, Detail(run, "member"));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal(member, Detail(run, "key"));
     }
 
     /// <summary>
@@ -206,7 +257,7 @@ public sealed class BootstrapRefusalTests
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
     }
 
     /// <summary>
@@ -231,8 +282,8 @@ public sealed class BootstrapRefusalTests
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
-        Assert.Equal("fingerprintKeys", Detail(run, "member"));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal("fingerprintKeys", Detail(run, "key"));
     }
 
     /// <summary>

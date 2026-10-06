@@ -66,7 +66,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 delivered: false,
                 TestContext.Current.CancellationToken)));
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -80,7 +80,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
         await ReportedAsync(reference.Value, delivered: true);
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
         Assert.Empty(_events.Of<AlertRaised>());
     }
 
@@ -93,13 +93,13 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     {
         SendReference reference = await SentAsync();
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
 
         await ReportedAsync(reference.Value, delivered: false);
 
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 delivered: false,
                 TestContext.Current.CancellationToken)));
 
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 delivered,
                 TestContext.Current.CancellationToken)));
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -162,8 +162,8 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         await ReportedAsync(reference.Value, delivered: true);
 
         Assert.Equal(announced, _events.Published.Count);
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
     }
 
     /// <summary>
@@ -186,8 +186,34 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(announced, _events.Published.Count);
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
+    }
+
+    /// <summary>
+    /// INT-GEN-003, CONV-DESIGN-003: a callback from the source counted while this one
+    /// waited for the source's callbacks is counted, so this one is over the limit.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_003_ACallbackCountedMeanwhileIsCountedAsync()
+    {
+        _configuration.Set(Settings.IntegrationCallbackRateLimit, 1);
+        SendReference reference = await SentAsync();
+
+        _callbacks.Holding = source =>
+        {
+            _callbacks.Holding = null;
+            _ = _callbacks.ReceivedAsync(source, Noon, TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken).AsTask();
+        };
+
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                reference.Value,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -254,6 +280,58 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.CallbackVerificationFailed, raised.Condition);
         Assert.Equal(AlertSeverity.Normal, raised.Severity);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, INT-GEN-003: a rejected report commits its admission count,
+    /// its rejection's count and the raise past the threshold together, and nothing else.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARejectedReportCommitsItsCountsAndItsRaiseAsync()
+    {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+        SendReference reference = await SentAsync();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                SendReference.Draw(_randomness).Value,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(2, _callbacks.Counted.Count);
+        Assert.Single(_callbacks.Counted, callback => callback.Rejected);
+        Assert.Single(_events.Of<AlertRaised>());
+        Assert.True(await _ledger.HoldsAsync(SendReferences.Of(reference.Value), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, INT-GEN-003: a report that fails for any cause but its
+    /// rejection, here the raise that cannot be written, rolls back and leaves no unit
+    /// of work open.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AReportWhoseRaiseIsNotWrittenRollsBackAsync()
+    {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                reference: null,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -326,8 +404,8 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         await _ledger.RecordAsync(
             SendReferences.Of(reference),
             [
-                new SendCount(new RestrictionKey("sms.destination", Phone.Value), TimeSpan.FromHours(24)),
-                new SendCount(new RestrictionKey("sms.source", "198.51.100.7"), TimeSpan.FromHours(24)),
+                new SendCount(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), TimeSpan.FromHours(24)),
+                new SendCount(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7"), TimeSpan.FromHours(24)),
             ],
             [],
             _clock.GetUtcNow(),

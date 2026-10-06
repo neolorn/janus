@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Privacy.SubjectKeys;
 
@@ -11,12 +14,12 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// Subject keys, over the <c>subject_keys</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness a data key is drawn from.</param>
 /// <remarks>Implements PRIV-RIGHT-005a, OPS-SEC-003 and CONV-DESIGN-003.</remarks>
 internal sealed class SubjectKeyStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : ISubjectKeyStore
 {
     /// <inheritdoc/>
@@ -24,14 +27,24 @@ internal sealed class SubjectKeyStore(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        SubjectKeyRecord? record = await FindAsync(subject, cancellationToken).ConfigureAwait(false);
+        SubjectKeyRecord? record = await FindAsync(SubjectKeyId.Of(subject), cancellationToken).ConfigureAwait(false);
 
         return record is null ? null : SubjectKey.Existing(
-            record.Subject,
+            record.Id,
             record.FormatMarker,
             record.KeyVersion,
             record.WrappedKey);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlySet<int>> WrappingVersionsAsync(CancellationToken cancellationToken) =>
+        (await context.SubjectKeys
+            .Where(key => key.FormatMarker != PersonalDataFormat.ErasedMarker)
+            .Select(key => key.KeyVersion)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false))
+        .ToHashSet();
 
     /// <inheritdoc/>
     public async ValueTask AddAsync(SubjectKey key, CancellationToken cancellationToken)
@@ -42,7 +55,7 @@ internal sealed class SubjectKeyStore(
             .AddAsync(
                 new SubjectKeyRecord
                 {
-                    Subject = key.Subject,
+                    Id = key.Id,
                     FormatMarker = key.FormatMarker,
                     KeyVersion = key.KeyVersion,
                     WrappedKey = key.WrappedKey.ToArray(),
@@ -58,12 +71,9 @@ internal sealed class SubjectKeyStore(
 
         try
         {
-            await AddAsync(
-                    SubjectKey.Wrapped(
-                        subject,
-                        keyEncryptionKeys.CurrentVersion,
-                        PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span)),
-                    cancellationToken)
+            (int version, byte[] wrapped) = PersonalFieldCipher.WrapUnderCurrent(dataKey, ring);
+
+            await AddAsync(SubjectKey.Wrapped(SubjectKeyId.Of(subject), version, wrapped), cancellationToken)
                 .ConfigureAwait(false);
         }
         finally
@@ -77,7 +87,7 @@ internal sealed class SubjectKeyStore(
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        SubjectKeyRecord record = await FindAsync(key.Subject, cancellationToken).ConfigureAwait(false)
+        SubjectKeyRecord record = await FindAsync(key.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key row to carry the wrapping.");
 
         record.FormatMarker = key.FormatMarker;
@@ -86,7 +96,7 @@ internal sealed class SubjectKeyStore(
     }
 
     private async ValueTask<SubjectKeyRecord?> FindAsync(
-        SubjectId subject,
+        SubjectKeyId id,
         CancellationToken cancellationToken) =>
-        await context.SubjectKeys.FindAsync([subject], cancellationToken).ConfigureAwait(false);
+        await context.SubjectKeys.FindAsync([id], cancellationToken).ConfigureAwait(false);
 }

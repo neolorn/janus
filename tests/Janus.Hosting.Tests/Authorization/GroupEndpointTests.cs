@@ -149,6 +149,29 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GROUP-001, CONV-DESIGN-003: a nesting made while the change waited for the
+    /// organization's groups is judged with the rest, so the change that would close a
+    /// cycle through it is refused and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_ANestingMadeMeanwhileIsJudgedForACycleAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId department = Id(await CreatedAsync(administrator, "Department"));
+        GroupId team = Id(await CreatedAsync(administrator, "Team"));
+
+        _deployment.Groups.Holding = held =>
+            _ = _deployment.Groups.AddMemberAsync(team, GrantSubject.Of(department), CancellationToken.None).AsTask();
+
+        Answer around = await AddedAsync(administrator, department, GrantSubject.Of(team));
+
+        Assert.Equal(StatusCodes.Status409Conflict, around.Status);
+        Assert.Equal(ErrorCodes.GroupCycle.ToString(), around.Text("code"));
+        Assert.Empty(await _deployment.Groups.MembersAsync(department, CancellationToken.None));
+    }
+
+    /// <summary>
     /// AUTHZ-SCOPE-001 and AUTHZ-CONCEAL-005: <c>group:manage</c> is asked in the
     /// organization the group belongs to, so holding it in another organization reads
     /// and changes nothing here.
@@ -233,6 +256,29 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// 09 section 8, AUTHZ-SCOPE-001, CONV-DESIGN-003: a group removed while a change
+    /// waited for the organization's groups names no row, so the change is refused as
+    /// one naming no group is, and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AGroupRemovedMeanwhileIsRefusedAsOneNoRowNamesAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        int changes = _deployment.GroupChanges.Changes.Count;
+
+        _deployment.Groups.Holding = held =>
+        {
+            _deployment.Groups.Holding = null;
+            _ = _deployment.Groups.RemoveAsync(tellers, CancellationToken.None).AsTask();
+        };
+
+        Denied(await AddedAsync(administrator, tellers, User));
+        Assert.Equal(changes, _deployment.GroupChanges.Changes.Count);
+    }
+
+    /// <summary>
     /// AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3: a group that holds a member, belongs to
     /// a group, or was ever given a grant is not removed, and one nothing names is.
     /// </summary>
@@ -270,6 +316,46 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal(empty, change.Group);
         Assert.Equal("No longer used.", change.Reason);
         Assert.Equal(actor, change.Actor);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC3, CONV-DESIGN-003: a grant given to a group while its removal
+    /// waited for the organization's groups is found by the removal, so the group stays.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC3_AGroupGivenAGrantMeanwhileIsNotRemovedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId readers = Id(await CreatedAsync(administrator, "Readers"));
+
+        _deployment.Groups.Holding = held => _ = GivenAsync(readers, Reader, Branch);
+
+        Answer refused = await RemovedAsync(administrator, readers);
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.GroupInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Groups.FindAsync(readers, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// OPS-CFG-007 AC1, CONV-DESIGN-003: a group that came to hold system administration
+    /// while the change waited for the organization's groups is judged as it now stands,
+    /// so a member is not added by an administrator without it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_007_AC1_AGroupThatCameToAdministerMeanwhileGainsNoMemberAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GroupManage);
+        GroupId operators = Id(await CreatedAsync(administrator, "Operators", Administration));
+
+        _deployment.Groups.Holding = held => _ = GivenAsync(operators, SystemAdministrator, Administration);
+
+        Answer refused = await AddedAsync(administrator, operators, User);
+
+        Denied(refused);
+        Assert.Empty(await _deployment.Groups.MembersAsync(operators, CancellationToken.None));
     }
 
     /// <summary>
@@ -338,7 +424,8 @@ public sealed class GroupEndpointTests : IAsyncLifetime
 
     /// <summary>
     /// AUTHZ-GROUP-001: adding a member already held, or taking out one that is not,
-    /// changes nothing and records nothing.
+    /// changes nothing and records nothing, and each ends its unit of work by rolling it
+    /// back.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -359,6 +446,94 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
         Assert.Equal(2, _deployment.GroupChanges.Changes.Count);
         Assert.Equal([User], await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(2, _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a member added that the group already holds, and one taken
+    /// out that it does not hold, are each answered as done having written nothing, so
+    /// each rolls its unit of work back and records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AMemberChangeThatWritesNothingIsRolledBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+
+        _ = await AddedAsync(administrator, tellers, User);
+
+        int rolledBack = _deployment.Work.RolledBack;
+        int recorded = _deployment.GroupChanges.Changes.Count;
+
+        Answer again = await AddedAsync(administrator, tellers, User);
+
+        Assert.Equal(StatusCodes.Status204NoContent, again.Status);
+        Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+
+        Answer absent = await MemberRemovedAsync(
+            administrator,
+            tellers,
+            GrantSubject.Of(new SubjectId(Guid.NewGuid())));
+
+        Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
+        Assert.Equal(rolledBack + 2, _deployment.Work.RolledBack);
+        Assert.Equal(recorded, _deployment.GroupChanges.Changes.Count);
+        Assert.False(_deployment.Work.Open);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a removal and a change of members refused after the unit of
+    /// work began, with the organization's groups held or for want of the step-up, each
+    /// roll it back, so no unit of work is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId department = Id(await CreatedAsync(administrator, "Department"));
+        GroupId team = Id(await CreatedAsync(administrator, "Team"));
+        GroupId empty = Id(await CreatedAsync(administrator, "Empty"));
+
+        _ = await AddedAsync(administrator, department, GrantSubject.Of(team));
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer holding = await RemovedAsync(administrator, department);
+
+        Assert.Equal(ErrorCodes.GroupInUse.ToString(), holding.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        Answer around = await AddedAsync(administrator, team, GrantSubject.Of(department));
+
+        Assert.Equal(ErrorCodes.GroupCycle.ToString(), around.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+
+        _deployment.Groups.Holding = held =>
+        {
+            _deployment.Groups.Holding = null;
+            _ = _deployment.Groups.RemoveAsync(empty, CancellationToken.None).AsTask();
+        };
+
+        Denied(await RemovedAsync(administrator, empty));
+        Assert.Equal((false, 0, rolledBack + 3), Ended());
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer removed = await MemberRemovedAsync(administrator, department, GrantSubject.Of(team));
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), removed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 4), Ended());
+
+        // Whether a unit of work is open, how many were left neither committed nor rolled
+        // back, and how many were rolled back.
+        (bool Open, int Unended, int RolledBack) Ended() =>
+            (
+                _deployment.Work.Open,
+                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+                _deployment.Work.RolledBack);
     }
 
     /// <summary>
@@ -385,8 +560,8 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-GROUP-001 and API-CONV-002: a change names an organization, a name and a
-    /// reason of 1 to 1024 characters, and a member group of the same organization;
+    /// AUTHZ-GROUP-001 and API-CONV-002: a change names an organization, a name, a
+    /// reason of 1 to 1024 characters and a member of a type the vocabulary holds;
     /// anything else is a malformed request naming the field. A group the deployment
     /// holds no row for is refused rather than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
@@ -396,13 +571,11 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
-        Group foreign = await HeldAsync(Administration, "Operators");
 
         Answer unscoped = await administrator.SendAsync("GET", "/admin/groups");
         Answer unnamed = await CreatedAsync(administrator, " ");
         Answer overlong = await CreatedAsync(administrator, new string('n', 1025));
         Answer unreasoned = await CreatedAsync(administrator, "Auditors", reason: " ");
-        Answer crossing = await AddedAsync(administrator, tellers, GrantSubject.Of(foreign.Id));
         Answer untyped = await administrator.SendAsync(
             "POST",
             "/admin/groups/" + tellers + "/members",
@@ -414,10 +587,39 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal("name", Member(unnamed));
         Assert.Equal("name", Member(overlong));
         Assert.Equal("reason", Member(unreasoned));
-        Assert.Equal("subjectId", Member(crossing));
         Assert.Equal("subjectType", Member(untyped));
         Assert.Equal("reason", Member(silent));
         Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-001, D-166: a member group that does not exist, or that belongs to
+    /// another organization, is a body read and understood that names nothing the group
+    /// can hold, refused naming <c>subjectId</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AMemberGroupTheGroupCannotHoldIsInvalidAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        Group foreign = await HeldAsync(Administration, "Operators");
+
+        Answer crossing = await AddedAsync(administrator, tellers, GrantSubject.Of(foreign.Id));
+        Answer missing = await AddedAsync(administrator, tellers, GrantSubject.Of(new GroupId(Guid.NewGuid())));
+
+        Assert.All(
+            new[] { crossing, missing },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+                Assert.Equal(ErrorCodes.RequestInvalid.ToString(), answer.Text("code"));
+                Assert.Equal("subjectId", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+        Assert.DoesNotContain(
+            _deployment.GroupChanges.Changes,
+            change => change.Action == AuditActions.GroupMemberAdded);
     }
 
     /// <summary>
@@ -461,6 +663,83 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal("reason", Member(unleft));
         Assert.NotNull(await _deployment.Groups.FindAsync(tellers.Id, CancellationToken.None));
         Assert.Empty(await _deployment.Groups.MembersAsync(tellers.Id, CancellationToken.None));
+        Assert.Empty(_deployment.GroupChanges.Changes);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a name or a reason past 1024 characters
+    /// after trimming is malformed before the service is reached, so a caller without
+    /// the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await AuthorisedAsync(Branch);
+        string overlong = " " + new string('r', 1025) + " ";
+        var group = new GroupId(Guid.NewGuid());
+
+        Answer named = await CreatedAsync(caller, overlong);
+        Answer created = await CreatedAsync(caller, "Auditors", reason: overlong);
+        Answer removed = await caller.SendAsync("DELETE", "/admin/groups/" + group, ("reason", overlong));
+        Answer added = await AddedAsync(caller, group, User, reason: overlong);
+        Answer left = await caller.SendAsync(
+            "DELETE",
+            "/admin/groups/" + group + "/members",
+            ("subjectType", "user"),
+            ("subjectId", Holder),
+            ("reason", overlong));
+
+        Assert.Equal("name", Member(named));
+        Assert.Equal("reason", Member(created));
+        Assert.Equal("reason", Member(removed));
+        Assert.Equal("reason", Member(added));
+        Assert.Equal("reason", Member(left));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step and before the
+    /// first write refuses each change of a group inside its unit of work, which rolls
+    /// back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachGroupChangeAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        Group standing = await HeldAsync(Branch, "Standing");
+
+        await _deployment.Groups.AddMemberAsync(standing.Id, User, CancellationToken.None);
+
+        Group empty = await HeldAsync(Branch, "Empty");
+
+        foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
+        {
+            () => CreatedAsync(administrator, "Tellers"),
+            () => RemovedAsync(administrator, empty.Id),
+            () => AddedAsync(administrator, empty.Id, User),
+            () => MemberRemovedAsync(administrator, standing.Id, User),
+        })
+        {
+            int rolledBack = _deployment.Work.RolledBack;
+
+            _deployment.Gate.Admitted = _ => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+
+            Answer refused = await change();
+
+            _deployment.Gate.Lift(actor);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+            Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+            Assert.False(_deployment.Work.Open);
+        }
+
+        Assert.Equal(
+            new[] { empty.Id.Value, standing.Id.Value }.Order(),
+            (await _deployment.Groups.InAsync(Branch, CancellationToken.None)).Select(group => group.Id.Value).Order());
+        Assert.Equal([User], await _deployment.Groups.MembersAsync(standing.Id, CancellationToken.None));
+        Assert.Empty(await _deployment.Groups.MembersAsync(empty.Id, CancellationToken.None));
         Assert.Empty(_deployment.GroupChanges.Changes);
     }
 

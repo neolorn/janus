@@ -63,7 +63,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {link}"));
             }
         }
     }
@@ -94,6 +94,29 @@ public sealed class ThrottlingTests : IAsyncDisposable
             ("value", Flow.Password));
 
         AssertThrottled(throttled);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC13: two addresses of one IPv6 /64 are one source, so the delay
+    /// one earns holds the other, whatever identifier it asks for; an address of
+    /// another /64 is not held, and an IPv4-mapped address shares its IPv4 address's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_001_TwoAddressesOfOneIpv6SubnetShareTheSourceDelayAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await FailedAsync(Unheld, IPAddress.Parse("2001:db8:1:1::5"));
+        _ = await FailedAsync("somebody@example.test", Attacker);
+
+        Answer neighbour = await ArrivedAsync(IPAddress.Parse("2001:db8:1:1:ffff::6"), "/auth/link", "other@example.test");
+        Answer another = await ArrivedAsync(IPAddress.Parse("2001:db8:1:2::5"), "/auth/link", "third@example.test");
+        Answer mapped = await ArrivedAsync(Attacker.MapToIPv6(), "/auth/link", "fourth@example.test");
+
+        AssertThrottled(neighbour);
+        Assert.Equal(StatusCodes.Status202Accepted, another.Status);
+        AssertThrottled(mapped);
     }
 
     /// <summary>
@@ -286,6 +309,48 @@ public sealed class ThrottlingTests : IAsyncDisposable
         AssertAlike(held, unheld);
         Assert.Equal(0, sent);
         Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC7, AUTH-ABUSE-004: an ask of a sign-in link, an email code or a
+    /// recovery is answered before any transport is called, whether or not an account
+    /// holds the address: no mail is handed over while either request runs, both are
+    /// answered 202 alike, and the messages go once the publisher's pass carries them.
+    /// With a transport that refuses everything, both asks are still answered alike.
+    /// </summary>
+    /// <param name="path">The ask.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/auth/link")]
+    [InlineData("/auth/email-otp")]
+    [InlineData("/recovery/begin")]
+    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheTransportIsCalledAsync(string path)
+    {
+        await RegisteredAsync();
+
+        int handed = 0;
+
+        _deployment.Mail.Handed = () => handed++;
+        _deployment.WorkerCarries = false;
+
+        (Answer held, Answer unheld, int sent) = await AskedAsync(path);
+
+        Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        AssertAlike(held, unheld);
+        Assert.Equal(0, handed);
+        Assert.Equal(0, sent);
+
+        Assert.Equal(2, await _deployment.CarrySendsAsync());
+        Assert.Equal(2, handed);
+
+        _deployment.Mail.Accepts = false;
+        _deployment.Clock.Advance(TimeSpan.FromHours(2));
+
+        (Answer refusedHeld, Answer refusedUnheld, _) = await AskedAsync(path);
+
+        Assert.Equal(StatusCodes.Status202Accepted, refusedHeld.Status);
+        AssertAlike(refusedHeld, refusedUnheld);
+        Assert.Equal(0, await _deployment.CarrySendsAsync());
     }
 
     /// <summary>

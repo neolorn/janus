@@ -22,8 +22,12 @@ public sealed class SendingValidationTests
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly MessageTemplatesInMemory _templates = new();
+    private readonly MailTransportInMemory _mailTransport = new();
+    private readonly SmsTransportInMemory _smsTransport = new();
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
+
+    private MessagePlaceholders _places = new([], [], Landing.Origins);
 
     /// <summary>
     /// A deployment answering in two languages.
@@ -32,7 +36,7 @@ public sealed class SendingValidationTests
         _configuration.Set(Settings.NotificationLanguages, Languages);
 
     private SendingValidation Validation =>
-        new(_configuration, _templates, _suppliers);
+        new(_configuration, _templates, _suppliers, _places, _mailTransport, _smsTransport);
 
     /// <summary>
     /// AUTH-ABUSE-005 AC3 and INT-SMS-003 AC1: a text message over its language's
@@ -102,10 +106,10 @@ public sealed class SendingValidationTests
     [Fact]
     public async Task INT_SMS_003_AC1_ATemplateIsMeasuredWithItsPlacesAtTheirWidestAsync()
     {
-        string written = new string('a', 151) + "{token}";
+        string written = new string('a', 148) + "{raisedAt}";
 
         Assert.False(MessageBudget.Exceeds(written));
-        Assert.True(MessageBudget.Exceeds(MessagePlaceholders.Widest(written)));
+        Assert.True(MessageBudget.Exceeds(_places.Widest(written)));
 
         _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, written));
 
@@ -117,21 +121,146 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
-    /// INT-SMS-003 AC1: a place the library does not fill is left as it stands, here
-    /// as at a send, so a template naming one is measured as it is written.
+    /// LIB-HOST-001, API-LAND-001: no link is measured without the origins it lands on,
+    /// so a deployment that declared none is refused here, as the declaration check
+    /// would name it.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_003_AC1_APlaceTheLibraryDoesNotFillIsMeasuredAsWrittenAsync()
+    public async Task LIB_HOST_001_NoLinkIsMeasuredWithoutTheLandingOriginsAsync()
     {
-        string written = new string('a', 148) + "{whatever}";
+        Error refusal = (await new SendingValidation(
+                    _configuration,
+                    _templates,
+                    _suppliers,
+                    places: null,
+                    _mailTransport,
+                    _smsTransport)
+                .ValidateAsync(TestContext.Current.CancellationToken))
+            .Match(() => throw new Xunit.Sdk.XunitException("Startup was not refused."), error => error);
 
-        Assert.DoesNotContain("whatever", MessagePlaceholders.Widths.Keys, StringComparer.Ordinal);
-        Assert.False(MessageBudget.Exceeds(written));
-        Assert.Equal(written, MessagePlaceholders.Widest(written));
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refusal.Code);
+        Assert.Equal("landingOrigins.authentication", refusal.Details["key"].GetString());
+    }
 
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, written));
+    /// <summary>
+    /// INT-SMS-003, D-166: a text that carries a link is budgeted at two segments of its
+    /// alphabet, 306 units of the default alphabet and 134 outside it, with the link at
+    /// its composed width; a text that does not carry one keeps its one segment.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ATextCarryingALinkIsBudgetedAtTwoSegmentsAsync()
+    {
+        int link = _places.Widths["link"];
+
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 306 - link) + "{link}"));
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "ar",
+            new MessageTemplate(null, new string('م', 134 - link) + "{link}"));
 
         await PassedAsync();
+
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 307 - link) + "{link}"));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
+        Assert.Equal("signin-link.sms.en", refusal.Details["key"].GetString());
+        Assert.Equal(306, refusal.Details["allowed"].GetInt32());
+
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 306 - link) + "{link}"));
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "ar",
+            new MessageTemplate(null, new string('م', 135 - link) + "{link}"));
+
+        refusal = await RefusedAsync();
+
+        Assert.Equal("signin-link.sms.ar", refusal.Details["key"].GetString());
+        Assert.Equal(134, refusal.Details["allowed"].GetInt32());
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3: <c>outstanding</c> is measured at the joined width of the
+    /// registered required subscribers' names, as the alert carries them, so a text
+    /// that fits with short names and not with longer ones is refused only for the
+    /// deployment that registered the longer.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_AC1_TheSubscribersAreMeasuredAtTheirJoinedWidthAsync()
+    {
+        string written = new string('a', 140) + "{outstanding}";
+        string[] longer = [new('x', 10), new('y', 10)];
+
+        _templates.Set(MessageKind.Alert, SendKind.Sms, "en", new MessageTemplate(null, written));
+        _places = new MessagePlaceholders(["a", "b"], [], Landing.Origins);
+
+        Assert.Equal("[\"a\",\"b\"]".Length, _places.Widths["outstanding"]);
+
+        await PassedAsync();
+
+        _places = new MessagePlaceholders(longer, [], Landing.Origins);
+
+        Assert.Equal(("[\"" + longer[0] + "\",\"" + longer[1] + "\"]").Length, _places.Widths["outstanding"]);
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
+        Assert.Equal("alert.sms.en", refusal.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// INT-SMS-003: the places are a closed set, so a text-message template naming one
+    /// the library does not fill has no width to be measured at and stops startup,
+    /// naming the message and the place.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ATemplateNamingAPlaceWithNoWidthStopsStartupAsync()
+    {
+        Assert.DoesNotContain("offsetSeconds", _places.Widths.Keys, StringComparer.Ordinal);
+
+        _templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, "{code}, valid for {offsetSeconds} seconds"));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refusal.Code);
+        Assert.Equal("secondstep-code", refusal.Details["declaration"].GetString());
+        Assert.Equal("offsetSeconds", refusal.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// INT-SMS-003: the retired <c>token</c> place is one with no width, so a
+    /// text-message template still naming it stops startup rather than sending a bare
+    /// token.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ATemplateNamingTheRetiredTokenPlaceStopsStartupAsync()
+    {
+        _templates.Set(MessageKind.SignInLink, SendKind.Sms, "ar", new MessageTemplate(null, "{token}"));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refusal.Code);
+        Assert.Equal("signin-link", refusal.Details["declaration"].GetString());
+        Assert.Equal("token", refusal.Details["field"].GetString());
     }
 
     /// <summary>
@@ -213,6 +342,26 @@ public sealed class SendingValidationTests
         Error refusal = await PlaintextAsync(key);
 
         Assert.Equal(key, refusal.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// INT-GEN-001 AC1 and AC2: the mail server adapter's endpoint named over plain HTTP
+    /// stops the deployment, and the failure names its key; over TLS it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_GEN_001_AC1_APlaintextMailServerEndpointStopsStartupAsync()
+    {
+        _configuration.Set(Settings.IntegrationMailServerEndpoint, "http://mailserver.example.test");
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+        Assert.Equal("integration.mailserver.endpoint", refusal.Details["key"].GetString());
+
+        _configuration.Set(Settings.IntegrationMailServerEndpoint, "https://mailserver.example.test");
+
+        await PassedAsync();
     }
 
     /// <summary>

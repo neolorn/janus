@@ -7,9 +7,15 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Oidc;
+using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -28,6 +34,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private const string AlexandriaAddress = "203.0.113.20";
     private const string AswanAddress = "203.0.113.60";
     private const string LondonAddress = "2001:db8::7";
+    private const string BreakGlassReason = "The operator cannot be reached.";
 
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
@@ -47,6 +54,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly LocationResolverInMemory _locations = new();
     private readonly EventsInMemory _alerts = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly PasswordStoreInMemory _passwords = new();
+    private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
@@ -59,8 +68,18 @@ public sealed class SessionServiceTests : IAsyncDisposable
             new PolicyResolution(_memberships, _configuration, _raises),
             _configuration,
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGuard(
+                _sessions,
+                _authenticators,
+                _passwords,
+                new PolicyResolution(_memberships, _configuration, _raises),
+                new IdentifierDirectoryInMemory(),
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
+                _clock),
+            _accounts,
             _locations,
             new ConcurrentSessions(_sessions, _configuration, _alerts),
+            new OidcClientStoreInMemory(),
             _work,
             _clock,
             _randomness);
@@ -116,7 +135,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         await BegunAsync(subject, [Factor.Password]);
 
-        (SessionId _, SubjectId who, IReadOnlyCollection<Factor> presented) =
+        (SessionId _, SubjectId who, IReadOnlyCollection<Factor> presented, string? _) =
             Assert.Single(_audit.Records);
         Assert.Equal(subject, who);
         Assert.Equal([Factor.Password], presented);
@@ -148,6 +167,28 @@ public sealed class SessionServiceTests : IAsyncDisposable
             (AuditActions.CredentialRestored, subject, held.Id),
             Assert.Single(_credentials.Records));
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a, CONV-DESIGN-003 AC6: a held credential invalidated by another
+    /// transaction after the sign-in read it is judged again under its lock and stays
+    /// invalidated, and no restoration is recorded.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AHoldEndedSinceTheReadIsNotRestoredAsync()
+    {
+        SubjectId subject = Subject();
+        Assert.True(CredentialLabel.TryParse("Linked", out CredentialLabel label));
+        var held = Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, label, Noon);
+
+        held.Hold();
+        _authenticators.Hold(held);
+        _authenticators.Locking = credential => credential.Invalidate();
+
+        _ = await BegunAsync(subject, [Factor.Password]);
+
+        Assert.Equal(AuthenticatorState.Invalidated, held.State);
+        Assert.Empty(_credentials.Records);
     }
 
     /// <summary>
@@ -218,6 +259,69 @@ public sealed class SessionServiceTests : IAsyncDisposable
         Assert.Equal(spine.Attained, derived.Attained);
         Assert.Equal(spine.PhishingResistant, derived.PhishingResistant);
         Assert.Equal(spine.AbsoluteExpiry, derived.AbsoluteExpiry);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC8: a per-app session established an hour after its record last
+    /// reached <c>aal2</c> passes no <c>aal2</c> gate whose maximum age is thirty
+    /// minutes; one established after its record was downgraded passes no gate on proof
+    /// reached before that downgrade; and establishing either changes no instant of its
+    /// record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC8_ADerivedSessionTakesItsRecordsInstantsAndLastDowngradeAsync()
+    {
+        var gate = new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(30));
+        var held = new HeldFactors(
+            new[] { Factor.Passkey }.ToFrozenSet(),
+            new[] { Factor.Passkey }.ToFrozenSet(),
+            null);
+
+        IssuedSession aged = await BegunAsync(Subject(), [Factor.Passkey]);
+
+        _clock.Advance(TimeSpan.FromMinutes(59));
+
+        IssuedSession lowered = await BegunAsync(Subject(), [Factor.Passkey]);
+        Session agedRecord = _sessions.Behind(aged.Secret)!;
+        Session loweredRecord = _sessions.Behind(lowered.Secret)!;
+
+        loweredRecord.Downgrade(_clock.GetUtcNow() + TimeSpan.FromSeconds(30));
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        DateTimeOffset?[] agedBefore = Instants(agedRecord);
+        DateTimeOffset?[] loweredBefore = Instants(loweredRecord);
+
+        Session late = _sessions.Behind(Value(await Service.DeriveAsync(
+            aged.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken)).Secret)!;
+        Session after = _sessions.Behind(Value(await Service.DeriveAsync(
+            lowered.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken)).Secret)!;
+
+        StepUpChallenge onLate = StepUp.On(late, gate, held, _clock.GetUtcNow());
+        StepUpChallenge onAfter = StepUp.On(after, gate, held, _clock.GetUtcNow());
+
+        Assert.Equal((StepUpOutcome.Present, false), (onLate.Outcome, onLate.Downgraded));
+        Assert.Equal((StepUpOutcome.Present, true), (onAfter.Outcome, onAfter.Downgraded));
+        Assert.Equal(agedBefore, Instants(late));
+        Assert.Equal(loweredBefore, Instants(after));
+        Assert.Equal(agedBefore, Instants(agedRecord));
+        Assert.Equal(loweredBefore, Instants(loweredRecord));
+
+        static DateTimeOffset?[] Instants(Session session) =>
+        [
+            session.DelegatedAt,
+            session.Aal1At,
+            session.Aal2At,
+            session.Aal3At,
+            session.PhishingResistantAt,
+            session.DowngradedAt,
+        ];
     }
 
     /// <summary>
@@ -437,6 +541,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession issued = Value(await Service.BeginExemptAsync(
             subject,
             [Factor.BreakGlass],
+            BreakGlassReason,
             Somewhere,
             TestContext.Current.CancellationToken));
 
@@ -445,6 +550,63 @@ public sealed class SessionServiceTests : IAsyncDisposable
         Assert.Equal(AssuranceLevel.Aal1, session.Attained);
         Assert.True(session.SatisfiesEveryGate);
         Assert.Equal([Factor.BreakGlass], Assert.Single(_audit.Records).Presented);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: the session the credential opens keeps the reason given at its
+    /// use, and the record of its opening carries it; a session opened any other way
+    /// keeps none.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheBreakGlassSessionKeepsTheReasonAsync()
+    {
+        SubjectId subject = Staff();
+
+        IssuedSession opened = Value(await Service.BeginExemptAsync(
+            subject,
+            [Factor.BreakGlass],
+            BreakGlassReason,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        IssuedSession ordinary = await BegunAsync(Subject(), [Factor.Password]);
+
+        Assert.Equal(BreakGlassReason, _sessions.Behind(opened.Secret)!.BreakGlassReason);
+        Assert.Null(_sessions.Behind(ordinary.Secret)!.BreakGlassReason);
+        Assert.Equal(
+            [BreakGlassReason, null],
+            _audit.Records.Select(record => record.BreakGlassReason));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC2: a break-glass session idle past its inactivity window, inside
+    /// its lifetime, asks for a full sign-in, which only the sealed credential gives;
+    /// the one factor that restores a staff session never restores it.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AnIdleBreakGlassSessionAsksForAFullSignInAsync()
+    {
+        SubjectId subject = Staff();
+
+        IssuedSession issued = Value(await Service.BeginExemptAsync(
+            subject,
+            [Factor.BreakGlass],
+            BreakGlassReason,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        Session session = _sessions.Behind(issued.Secret)!;
+
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        Assert.True(_clock.GetUtcNow() >= session.IdleExpiry);
+        Assert.True(_clock.GetUtcNow() < session.AbsoluteExpiry);
+        Assert.Equal("full", await AskedAsync(issued.Secret));
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refusal(await Service.RestoreAsync(
+                issued.Secret,
+                [Factor.Passkey],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -641,7 +803,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.ConcurrentSessionsImplausible, raised.Condition);
         Assert.Equal(
-            Alerts.Key(AlertCondition.ConcurrentSessionsImplausible, subject.ToString()),
+            Alerts.Key(AlertCondition.ConcurrentSessionsImplausible, scope: null, subject.ToString()),
             Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(
             ["other", "session", "subject"],
@@ -742,6 +904,34 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-007: a place is compared when its country is known, so a session placed
+    /// in one country with no city raises against a session in another, and two sessions
+    /// in one country, one of them without a city, raise nothing.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_APlaceWithACountryAndNoCityIsComparedByItsCountryAsync()
+    {
+        SubjectId subject = Subject();
+        SubjectId other = Subject();
+        Placed();
+        _locations.Holds("203.0.113.71", new SessionLocation(City: null, "EG"));
+        _locations.Holds("203.0.113.72", new SessionLocation(City: null, "GB"));
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, "203.0.113.71");
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+
+        _ = await BegunFromAsync(other, CairoAddress);
+        _ = await BegunFromAsync(other, "203.0.113.72");
+
+        AlertRaised raised = Assert.Single(_alerts.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.ConcurrentSessionsImplausible, raised.Condition);
+        Assert.Equal(other.ToString(), raised.Details["subject"].GetString());
+    }
+
+    /// <summary>
     /// INT-GEN-006 and CONV-DESIGN-005 AC1: a resolver that could not report what it
     /// had to report fails the sign-in, because the degradation it exists to raise is
     /// the deployment's only sight of an absent database.
@@ -780,20 +970,36 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-013: a session of another account is not the caller's to end.
+    /// CONV-DESIGN-002 AC3, AUTH-SESS-013, D-166: a session of another account is not the
+    /// caller's to end, and is answered as one that does not exist, with the same code
+    /// and no details, and it goes on.
     /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task EndAsync_ASessionOfAnotherAccount_IsRefusedAsync()
+    public async Task CONV_DESIGN_002_AC3_AnotherAccountsSessionIsAnsweredAsNoneAsync()
     {
         IssuedSession theirs = await BegunAsync(Subject(), [Factor.Password]);
 
-        Result ended = await Service.EndAsync(
+        Error another = Failure(await Service.EndAsync(
             AccessContext.Of(Subject()),
             theirs.Id,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
+        Error unknown = Failure(await Service.EndAsync(
+            AccessContext.Of(Subject()),
+            new SessionId(Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
 
-        Assert.Equal(ErrorCodes.Denied, Refusal(ended));
+        Assert.All(
+            new[] { another, unknown },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.ResourceNotFound, refusal.Code);
+                Assert.Empty(refusal.Details);
+            });
         Assert.Null(await RefusalAsync(theirs.Secret));
+
+        static Error Failure(Result result) =>
+            result.Match(() => throw new Xunit.Sdk.XunitException("The end was not refused."), error => error);
     }
 
     /// <summary>
@@ -834,6 +1040,44 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-001, chapter 09 <c>GET /auth/session</c> (D-191): a session says the
+    /// highest level it has reached and the instant it last reached <c>aal2</c> or
+    /// above, which a bare password presented since leaves as it was, and nothing where
+    /// it never reached it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_001_ASessionSaysTheHighestLevelItReachedAndWhenItLastReachedAal2Async()
+    {
+        SubjectId single = Subject();
+        SubjectId strong = Subject();
+        IssuedSession weak = await BegunAsync(single, [Factor.Password]);
+        IssuedSession held = await BegunAsync(strong, [Factor.Password, Factor.Totp]);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        IssuedSession presented = Value(await Service.PresentAsync(
+            _sessions.Behind(held.Secret)!,
+            [Factor.Password],
+            TestContext.Current.CancellationToken));
+        SessionDetail never = Value(await Service.ReadAsync(
+            AccessContext.Of(single),
+            weak.Id,
+            TestContext.Current.CancellationToken));
+        SessionDetail earlier = Value(await Service.ReadAsync(
+            AccessContext.Of(strong),
+            presented.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (AssuranceLevel.Aal1, false, null),
+            (never.AssuranceLevel, never.PhishingResistant, never.LastStrongAuthAt));
+        Assert.Equal(
+            (AssuranceLevel.Aal2, false, Noon),
+            (earlier.AssuranceLevel, earlier.PhishingResistant, earlier.LastStrongAuthAt));
+    }
+
+    /// <summary>
     /// AUTH-SESS-011 AC1: revoking one account's sessions leaves every other session
     /// intact.
     /// </summary>
@@ -849,15 +1093,56 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         _administrative.Organization = organization;
         _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _accounts.Stands(leaving, AccountState.Active);
 
         Result revoked = await Service.RevokeAccountAsync(
             AccessContext.Of(administrator),
+            (await AdministeringAsync(administrator)).Id,
             leaving,
             TestContext.Current.CancellationToken);
 
         Assert.Null(Refusal(revoked));
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(theirs.Secret));
         Assert.Null(await RefusalAsync(others.Secret));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-011 (D-166): ending another person's sessions is the
+    /// <c>account:sessionsrevoke</c> step-up action, judged after every other refusal: a
+    /// subject no account bears is not found before any proof is asked, and a session
+    /// whose proof is not recent ends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_011_RevokingOneAccountAsksForStepUpAsync()
+    {
+        SubjectId leaving = Subject();
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        IssuedSession theirs = await BegunAsync(leaving, [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _accounts.Stands(leaving, AccountState.Active);
+
+        IssuedSession mine = await AdministeringAsync(administrator);
+
+        _clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refusal(await Service.RevokeAccountAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                Subject(),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refusal(await Service.RevokeAccountAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                leaving,
+                TestContext.Current.CancellationToken)));
+        Assert.Null((await _sessions.FindAsync(theirs.Id, TestContext.Current.CancellationToken))?.EndedAt);
     }
 
     /// <summary>
@@ -872,8 +1157,11 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         _administrative.Organization = OrganizationId.New(_clock);
 
+        SubjectId stranger = Subject();
+
         Result revoked = await Service.RevokeAccountAsync(
-            AccessContext.Of(Subject()),
+            AccessContext.Of(stranger),
+            (await AdministeringAsync(stranger)).Id,
             leaving,
             TestContext.Current.CancellationToken);
 
@@ -897,11 +1185,40 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Result revoked = await Service.RevokeEveryAsync(
             AccessContext.Of(administrator),
+            (await AdministeringAsync(administrator)).Id,
             TestContext.Current.CancellationToken);
 
         Assert.Null(Refusal(revoked));
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(first.Secret));
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(second.Secret));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-009 (D-166): ending every session is the <c>session:revokeall</c>
+    /// step-up action, so a session whose proof is not recent ends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_009_TheExplicitRevocationAsksForStepUpAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        IssuedSession other = await BegunAsync(Subject(), [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevoke);
+
+        IssuedSession mine = await AdministeringAsync(administrator);
+
+        _clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refusal(await Service.RevokeEveryAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                TestContext.Current.CancellationToken)));
+        Assert.Null((await _sessions.FindAsync(other.Id, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.Null((await _sessions.FindAsync(mine.Id, TestContext.Current.CancellationToken))?.EndedAt);
     }
 
     /// <summary>
@@ -957,6 +1274,35 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-013, CONV-DESIGN-003: an account suspended while its session waited to
+    /// begin begins none, and the answer is the sign-in's for an account that may not
+    /// sign in.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_AnAccountSuspendedMeanwhileBeginsNoSessionAsync()
+    {
+        SubjectId subject = Subject();
+
+        _accounts.Stands(subject, AccountState.Active);
+        _accounts.Holding = held =>
+        {
+            _accounts.Holding = null;
+            _accounts.Stands(held, AccountState.Suspended);
+        };
+
+        Result<IssuedSession> begun = await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refusal(begun));
+        Assert.Empty(_sessions.All);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003: an operation opens one transaction and commits it once.
     /// </summary>
     [Fact]
@@ -966,6 +1312,119 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Assert.Equal(1, _work.Opened);
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a session whose condition could not be raised begins
+    /// nothing, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ABeginningWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<IssuedSession> begun = await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(begun));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a use whose condition could not be raised is refused, and
+    /// its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AUseWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession first = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<Session> resolved = await Service.ResolveAsync(
+            first.Secret,
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(resolved));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a restoration whose condition could not be raised is
+    /// refused, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARestorationWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Staff();
+        Placed();
+
+        IssuedSession lapsed = Value(await Service.BeginAsync(
+            subject,
+            [Factor.Passkey],
+            From(LondonAddress),
+            TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        _ = Value(await Service.BeginAsync(
+            subject,
+            [Factor.Passkey],
+            From(CairoAddress),
+            TestContext.Current.CancellationToken));
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<IssuedSession> restored = await Service.RestoreAsync(
+            lapsed.Secret,
+            [Factor.Passkey],
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(restored));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a derived session whose condition could not be raised is
+    /// refused, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADerivationWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession record = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<IssuedSession> derived = await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(derived));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     /// <summary>
@@ -993,7 +1452,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
                 shipped.Gates,
                 shipped.CredentialRedundancy,
                 shipped.SelfServiceRecovery,
-                shipped.EmailDomains));
+                shipped.EmailDomains,
+                shipped.Photos));
 
         Assert.Null(Refusal(await Service.BeginAsync(
             Subject(),
@@ -1238,6 +1698,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             null,
             null,
             null,
+            null,
             null);
 
     private static TValue Value<TValue>(Result<TValue> result) =>
@@ -1262,7 +1723,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             organization.ToString(),
-            new PolicyOverride(null, factors.ToFrozenSet(), null, null, null, null));
+            new PolicyOverride(null, factors.ToFrozenSet(), null, null, null, null, null));
 
     private SubjectId Staff(params Factor[] factors)
     {
@@ -1276,6 +1737,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             new PolicyOverride(
                 AssuranceLevel.Aal2,
                 factors.Length == 0 ? null : factors.ToFrozenSet(),
+                null,
                 null,
                 null,
                 null,
@@ -1308,6 +1770,16 @@ public sealed class SessionServiceTests : IAsyncDisposable
             [Factor.Password],
             From(address),
             TestContext.Current.CancellationToken));
+    }
+
+    // The administrator's own session, begun with a password the account holds, which
+    // proves the step-up for as long as it is recent.
+    private async ValueTask<IssuedSession> AdministeringAsync(SubjectId administrator)
+    {
+        _passwords.Hold(administrator, _clock.GetUtcNow());
+        _accounts.Stands(administrator, AccountState.Active);
+
+        return await BegunAsync(administrator, [Factor.Password]);
     }
 
     private async ValueTask<IssuedSession> BegunAsync(SubjectId subject, Factor[] presented)

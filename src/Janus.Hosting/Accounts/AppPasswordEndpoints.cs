@@ -36,9 +36,22 @@ internal static class AppPasswordEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/account/mail/apppasswords");
 
-        _ = SessionRequired.On(group.MapGet("/", ListAsync));
-        _ = SessionRequired.On(group.MapPost("/", CreateAsync));
-        _ = SessionRequired.On(group.MapDelete("/{id}", RevokeAsync));
+        _ = SessionRequired.On(group.MapGet("/", ListAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.MailboxNotFound))
+            .Produces<IReadOnlyList<AppPasswordView>>();
+        _ = SessionRequired.On(group.MapPost("/", CreateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.MailboxNotFound, ErrorCodes.CredentialLabelInvalid))
+            .Produces<IssuedAppPasswordView>();
+        _ = SessionRequired.On(group.MapDelete("/{id}", RevokeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.MailboxNotFound,
+                    ErrorCodes.CredentialNotFound)
+                .Binding<AppPasswordId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -53,7 +66,7 @@ internal static class AppPasswordEndpoints
 
         return Answers.Of(
             await passwords
-                .ListAsync(AccessContext.Of(browser.Required.Subject), browser.Required.Id, cancellationToken)
+                .ListAsync(browser.Asking, browser.Required.Id, cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<AppPasswordView>>(
                 [.. held.Select(AppPasswordView.Of)],
@@ -83,7 +96,7 @@ internal static class AppPasswordEndpoints
             : Answers.Of(
                 await passwords
                     .CreateAsync(
-                        AccessContext.Of(browser.Required.Subject),
+                        browser.Asking,
                         browser.Required.Id,
                         label,
                         request.ExpiresAt,
@@ -91,14 +104,14 @@ internal static class AppPasswordEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 issued => TypedResults.Json(
-                    new IssuedAppPasswordView(issued.Id, issued.Secret),
+                    new IssuedAppPasswordView(issued.Id.ToString(), issued.Secret),
                     AccountJson.Default.IssuedAppPasswordView,
                     contentType: null,
                     StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> RevokeAsync(
-        string id,
+        AppPasswordId id,
         IAppPasswords passwords,
         RequestSession browser,
         HttpContext context,
@@ -111,7 +124,7 @@ internal static class AppPasswordEndpoints
         return Answers.Of(
             await passwords
                 .RevokeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     id,
                     RequestOrigin.Source(context.Request),

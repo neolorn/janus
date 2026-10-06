@@ -77,10 +77,7 @@ internal sealed class ExportService(
         if (await SpentAsync(subject, now, cancellationToken).ConfigureAwait(false)
             is DateTimeOffset retryAt)
         {
-            return Result.Failure<SubjectExport>(Error.From(
-                ErrorCodes.Throttled,
-                "retryAt",
-                JsonSerializer.SerializeToElement(retryAt)));
+            return Result.Failure<SubjectExport>(Error.Throttled(retryAt));
         }
 
         var export = new SubjectExport(
@@ -88,7 +85,24 @@ internal sealed class ExportService(
             now,
             await SectionsAsync(subject, cancellationToken).ConfigureAwait(false));
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SubjectExport>(notBegun);
+        }
+
+        // D-166 X3: the window is counted again with the subject's exports held, so
+        // exports at the same moment are each counted against the ones before them.
+        await ledger.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await SpentAsync(subject, now, cancellationToken).ConfigureAwait(false)
+            is DateTimeOffset spentUntil)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<SubjectExport>(Error.Throttled(spentUntil));
+        }
+
         await ledger.RecordAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         // PRIV-RIGHT-005b: the host holds the half the library cannot produce, and is
@@ -100,9 +114,14 @@ internal sealed class ExportService(
             .ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(Assembled, subject, subject, now, Named(export), cancellationToken)
+            .RecordedAsync(Assembled, subject, context.BreakGlassReason, subject, now, Named(export), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SubjectExport>(notCommitted);
+        }
 
         return Result.Success(export);
     }
@@ -127,9 +146,10 @@ internal sealed class ExportService(
 
     private static Dictionary<string, string> Held(ConsentRecord record)
     {
-        var values = new Dictionary<string, string>(capacity: 6, StringComparer.Ordinal)
+        var values = new Dictionary<string, string>(capacity: 7, StringComparer.Ordinal)
         {
             ["purpose"] = record.Purpose,
+            ["document"] = record.Document,
             ["noticeVersion"] = record.NoticeVersion,
             ["mechanism"] = record.Mechanism.ToString(),
             ["grantedAt"] = Moment(record.GrantedAt),
@@ -150,9 +170,10 @@ internal sealed class ExportService(
 
     private static Dictionary<string, string> Standing(ObjectionRecord record)
     {
-        var values = new Dictionary<string, string>(capacity: 5, StringComparer.Ordinal)
+        var values = new Dictionary<string, string>(capacity: 6, StringComparer.Ordinal)
         {
             ["purpose"] = record.Purpose,
+            ["document"] = record.Document,
             ["noticeVersion"] = record.NoticeVersion,
             ["mechanism"] = record.Mechanism.ToString(),
             ["recordedAt"] = Moment(record.RecordedAt),
@@ -197,7 +218,7 @@ internal sealed class ExportService(
     {
         int limit = (await configuration
                 .ReadAsync(Settings.PrivacyExportRateLimit, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.PrivacyExportRateLimit.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // A deployment that set the limit to nothing has closed the door, and the
         // answer is still a refusal with a time on it rather than an index fault.

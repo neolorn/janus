@@ -10,6 +10,7 @@ using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace Janus.Storage.Authentication.Mailboxes;
 
@@ -17,8 +18,8 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// The mailboxes the library provisions, over the <c>mailboxes</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
-/// <param name="fingerprintKeys">The versions the address's fingerprint is computed under.</param>
+/// <param name="deployment">The deployment's data key, which a reserved row's own key is wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the keys and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, PRIV-RIGHT-005a and
@@ -26,47 +27,49 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// the account's state and its memberships of the administrative organization, so the
 /// state owed is never a copy that could lag. The address is the holder's personal
 /// field, under the holder's key, so erasing the holder leaves it unreadable where it
-/// is; while nobody holds the mailbox it is under a key of the row's own. A row whose
+/// is; while nobody holds the mailbox it is under a key of the row's own, wrapped under
+/// the deployment's data key. A row whose
 /// holder was erased is not read at all. An address is found under each version of the
-/// fingerprint key held (OPS-SEC-003).
+/// fingerprint key held (OPS-SEC-003), and only on the row that stands for it: a
+/// mailbox replaced or released keeps its fingerprint, so a push at its address can
+/// wait for its removal, but is found by its identifier alone (D-178). Once the server
+/// confirms the removal of a reservation nobody took, its key is overwritten and its
+/// fingerprint neutralised, and the row stays with nothing left of the address
+/// (PRIV-RIGHT-005a). A push is carried under a claim: one conditional update marks the
+/// row claimed until an instant, and what the pass made of the push is written by one
+/// update conditional on that instant, so two passes over the same mailboxes make each
+/// push once (CONV-DESIGN-003).
 /// </remarks>
 internal sealed class MailboxStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    DeploymentDataKeyStore deployment,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IMailboxStore
 {
+    /// <summary>
+    /// Where a mailbox's address is stored: bound to its holder while one holds it, and
+    /// to the mailbox itself while nobody does (PRIV-RIGHT-005a, D-173).
+    /// </summary>
+    /// <param name="mailbox">The mailbox's identifier.</param>
+    /// <param name="holder">Who holds it, if anyone.</param>
+    /// <returns>The location.</returns>
+    public static PersonalFieldLocation Located(MailboxId mailbox, SubjectId? holder) =>
+        new(
+            holder ?? new SubjectId(mailbox.Value),
+            MailboxConfiguration.Table,
+            MailboxConfiguration.CanonicalColumn);
+
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken)
     {
-        var rows = await Readable()
-            .Where(mailbox => mailbox.ReleasedAt == null || mailbox.Pushed != MailboxState.Removed)
-            .OrderBy(mailbox => mailbox.ReservedAt)
-            .Select(mailbox => new
-            {
-                Row = mailbox,
-                Stands = mailbox.Holder != null
-                    && context.Accounts.Any(account =>
-                        account.Subject == mailbox.Holder && account.State == AccountState.Active)
-                    && context.Memberships.Any(membership =>
-                        membership.Subject == mailbox.Holder
-                        && membership.EndedAt == null
-                        && context.Organizations.Any(organization =>
-                            organization.Id == membership.Organization && organization.IsAdministrative)),
-            })
+        List<Standing> rows = await Standings(Readable().OrderBy(mailbox => mailbox.ReservedAt))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var standing = new List<MailboxStanding>(rows.Count);
+        IReadOnlyList<Mailbox> mailboxes = await ReadAsync([.. rows.Select(row => row.Row)], cancellationToken)
+            .ConfigureAwait(false);
 
-        foreach (var row in rows)
-        {
-            standing.Add(new MailboxStanding(
-                await ReadAsync(row.Row, cancellationToken).ConfigureAwait(false),
-                row.Stands));
-        }
-
-        return standing;
+        return [.. mailboxes.Zip(rows, (mailbox, row) => new MailboxStanding(mailbox, row.Stands))];
     }
 
     /// <inheritdoc/>
@@ -75,7 +78,9 @@ internal sealed class MailboxStore(
         foreach (byte[] fingerprint in Candidates(address))
         {
             MailboxRecord? record = await Readable()
-                .FirstOrDefaultAsync(mailbox => mailbox.Fingerprint == fingerprint, cancellationToken)
+                .FirstOrDefaultAsync(
+                    mailbox => mailbox.Fingerprint == fingerprint && mailbox.RemovalOwedAt == null,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             if (record is not null)
@@ -120,7 +125,7 @@ internal sealed class MailboxStore(
         {
             Id = mailbox.Id.Value,
             Fingerprint = Fingerprinted(mailbox.Address),
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             ReservedAt = mailbox.ReservedAt,
         };
@@ -142,8 +147,110 @@ internal sealed class MailboxStore(
         await CarryAsync(mailbox, record, cancellationToken).ConfigureAwait(false);
     }
 
-    private static PersonalFieldLocation Located(SubjectId? holder) =>
-        new(holder ?? default, MailboxConfiguration.Table, MailboxConfiguration.CanonicalColumn);
+    /// <inheritdoc/>
+    public async ValueTask<DateTimeOffset?> ClaimAsync(
+        MailboxId mailbox,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.Mailboxes
+            .Where(row => row.Id == mailbox.Value && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return claimed == 1 ? until : null;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<MailboxStanding?> StandingAsync(MailboxId mailbox, CancellationToken cancellationToken)
+    {
+        // The context may track the row as an earlier read of the pass left it, so the
+        // row is read past it: what is decided on is what the database holds now.
+        Standing? row = await Standings(Readable().AsNoTracking().Where(held => held.Id == mailbox.Value))
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return row is null
+            ? null
+            : new MailboxStanding(await ReadAsync(row.Row, cancellationToken).ConfigureAwait(false), row.Stands);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> AttemptAsync(
+        Mailbox mailbox,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        return await context.Mailboxes
+            .Where(row => row.Id == mailbox.Id.Value && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(row => Pushing(row, mailbox), cancellationToken)
+            .ConfigureAwait(false) == 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> RecordAsync(
+        Mailbox mailbox,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        return await context.Mailboxes
+            .Where(row => row.Id == mailbox.Id.Value && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(
+                row =>
+                {
+                    Pushing(row, mailbox);
+
+                    row.SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null);
+
+                    // PRIV-RIGHT-005a AC19, D-178: nothing about a person outlives an
+                    // invitation that led nowhere, so the address of a released
+                    // reservation goes with its removal.
+                    if (IsForgotten(mailbox))
+                    {
+                        row.SetProperty(one => one.WrappedKey, PersonalFieldCipher.ErasedKey());
+                        row.SetProperty(one => one.Fingerprint, Janus.Storage.Fingerprint.Neutralised());
+                    }
+                },
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReleaseAsync(
+        MailboxId mailbox,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken) =>
+        await context.Mailboxes
+            .Where(row => row.Id == mailbox.Value && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
+
+    // What a pass writes of a mailbox: its outstanding push and how far that push has
+    // got. Who holds the mailbox and what it is owed are the operations' to write, and
+    // a pass that read them earlier never writes them back.
+    private static void Pushing(UpdateSettersBuilder<MailboxRecord> row, Mailbox mailbox) =>
+        row.SetProperty(one => one.Pushed, mailbox.Pushed)
+            .SetProperty(one => one.Pending, mailbox.Pending)
+            .SetProperty(one => one.PendingKey, mailbox.PendingKey)
+            .SetProperty(one => one.Attempts, mailbox.Attempts)
+            .SetProperty(one => one.NextAttemptAt, mailbox.NextAttemptAt)
+            .SetProperty(one => one.FailedAt, mailbox.FailedAt)
+            .SetProperty(one => one.Attempted, mailbox.Attempted);
+
+    // A reservation nobody took, released, whose removal the server has confirmed.
+    private static bool IsForgotten(Mailbox mailbox) =>
+        mailbox is { IsReleased: true, Pushed: MailboxState.Removed, Pending: null };
 
     // The address is written again whenever it passes from one key to another: to the
     // holder's when a membership attaches, to a fresh key of the row's own when a
@@ -158,62 +265,106 @@ internal sealed class MailboxStore(
             byte[] dataKey = mailbox.Holder is SubjectId holder
                 ? await HolderKeyAsync(holder, cancellationToken).ConfigureAwait(false)
                 : PersonalFieldCipher.NewDataKey(randomness);
+            byte[] deploymentKey = mailbox.Holder is null
+                ? await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false)
+                : [];
 
             try
             {
-                record.KeyVersion = mailbox.Holder is null ? keyEncryptionKeys.CurrentVersion : null;
                 record.WrappedKey = mailbox.Holder is null
-                    ? PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span)
+                    ? PersonalFieldCipher.Wrap(dataKey, deploymentKey)
                     : null;
                 record.EncryptedCanonical = PersonalFieldCipher.Encrypt(
                     dataKey,
-                    Located(mailbox.Holder),
+                    Located(mailbox.Id, mailbox.Holder),
                     Encoding.UTF8.GetBytes(mailbox.Address.Value),
                     randomness);
             }
             finally
             {
                 CryptographicOperations.ZeroMemory(dataKey);
+                CryptographicOperations.ZeroMemory(deploymentKey);
             }
         }
 
         record.Holder = mailbox.Holder;
         record.RetiredAt = mailbox.RetiredAt;
-        record.ReleasedAt = mailbox.ReleasedAt;
+        record.RemovalOwedAt = mailbox.RemovalOwedAt;
         record.Pushed = mailbox.Pushed;
         record.Pending = mailbox.Pending;
         record.PendingKey = mailbox.PendingKey;
         record.Attempts = mailbox.Attempts;
         record.NextAttemptAt = mailbox.NextAttemptAt;
         record.FailedAt = mailbox.FailedAt;
+        record.Attempted = mailbox.Attempted;
+
+        // PRIV-RIGHT-005a AC19, D-178: nothing about a person outlives an invitation that
+        // led nowhere, so the address of a released reservation goes with its removal.
+        if (IsForgotten(mailbox))
+        {
+            record.WrappedKey = PersonalFieldCipher.ErasedKey();
+            record.Fingerprint = Janus.Storage.Fingerprint.Neutralised();
+        }
     }
 
-    private async ValueTask<Mailbox> ReadAsync(MailboxRecord record, CancellationToken cancellationToken)
+    private async ValueTask<Mailbox> ReadAsync(MailboxRecord record, CancellationToken cancellationToken) =>
+        (await ReadAsync([record], cancellationToken).ConfigureAwait(false))[0];
+
+    // PRIV-RIGHT-005a: the deployment's data key is unwrapped once for every row the
+    // read returns, and only where one of them is reserved for nobody.
+    private async ValueTask<IReadOnlyList<Mailbox>> ReadAsync(
+        IReadOnlyList<MailboxRecord> records,
+        CancellationToken cancellationToken)
+    {
+        byte[] deploymentKey = records.Any(record => record.Holder is null)
+            ? await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false)
+            : [];
+
+        try
+        {
+            var mailboxes = new List<Mailbox>(records.Count);
+
+            foreach (MailboxRecord record in records)
+            {
+                mailboxes.Add(await ReadAsync(record, deploymentKey, cancellationToken).ConfigureAwait(false));
+            }
+
+            return mailboxes;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
+    }
+
+    private async ValueTask<Mailbox> ReadAsync(
+        MailboxRecord record,
+        byte[] deploymentKey,
+        CancellationToken cancellationToken)
     {
         byte[] dataKey = record.Holder is SubjectId holder
             ? await HolderKeyAsync(holder, cancellationToken).ConfigureAwait(false)
             : PersonalFieldCipher.Unwrap(
-                PersonalDataFormat.Marker,
-                record.KeyVersion ?? throw new InvalidOperationException("The mailbox has no key."),
                 record.WrappedKey ?? throw new InvalidOperationException("The mailbox has no key."),
-                keyEncryptionKeys);
+                deploymentKey);
 
         try
         {
             return Mailbox.Existing(
                 new MailboxId(record.Id),
                 Address(Encoding.UTF8.GetString(
-                    PersonalFieldCipher.Decrypt(dataKey, Located(record.Holder), record.EncryptedCanonical))),
+                    PersonalFieldCipher.Decrypt(dataKey, Located(new MailboxId(record.Id), record.Holder), record.EncryptedCanonical))),
                 record.ReservedAt,
                 record.Holder,
                 record.RetiredAt,
-                record.ReleasedAt,
+                record.RemovalOwedAt,
                 record.Pushed,
                 record.Pending,
                 record.PendingKey,
                 record.Attempts,
                 record.NextAttemptAt,
-                record.FailedAt);
+                record.FailedAt,
+                record.Attempted);
         }
         finally
         {
@@ -224,19 +375,39 @@ internal sealed class MailboxStore(
     private async ValueTask<byte[]> HolderKeyAsync(SubjectId holder, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([holder], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(holder)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The holder has no key to read the mailbox under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
-    // A row whose holder was erased has nothing left that reads its address.
+    // IDN-ACCT-007, INT-MAIL-006a: whether each row's holder stands, read in the query
+    // that reads the row. A restriction the person asked for does not cut them off from
+    // their mail, so a restricted holder stands.
+    private IQueryable<Standing> Standings(IQueryable<MailboxRecord> rows) =>
+        rows.Select(mailbox => new Standing(
+            mailbox,
+            mailbox.Holder != null
+                && context.Accounts.Any(account =>
+                    account.Subject == mailbox.Holder
+                    && (account.State == AccountState.Active || account.State == AccountState.Restricted))
+                && context.Memberships.Any(membership =>
+                    membership.Subject == mailbox.Holder
+                    && membership.EndedAt == null
+                    && context.Organizations.Any(organization =>
+                        organization.Id == membership.Organization && organization.IsAdministrative))));
+
+    // A row whose holder was erased has nothing left that reads its address, and one
+    // whose removal the server confirmed is a mailbox no more; a released reservation's
+    // is forgotten then too.
     private IQueryable<MailboxRecord> Readable() =>
         context.Mailboxes
+            .Where(mailbox => mailbox.RemovalOwedAt == null || mailbox.Pushed != MailboxState.Removed)
             .Where(mailbox => mailbox.Holder == null
                 || context.SubjectKeys.Any(key =>
-                    key.Subject == mailbox.Holder && key.FormatMarker == PersonalDataFormat.Marker));
+                    key.Id == EF.Property<SubjectKeyId?>(mailbox, nameof(MailboxRecord.Holder))
+                    && key.FormatMarker == PersonalDataFormat.Marker));
 
     // What the row holds was canonical when it was written, so a form that no longer
     // parses is a defect rather than a mailbox to read.
@@ -246,8 +417,10 @@ internal sealed class MailboxStore(
             : throw new InvalidOperationException("The mailbox's address is not an address.");
 
     private byte[] Fingerprinted(EmailAddress address) =>
-        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), fingerprintKeys);
+        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), ring);
 
     private IReadOnlyList<byte[]> Candidates(EmailAddress address) =>
-        Janus.Storage.Fingerprint.Candidates(Encoding.UTF8.GetBytes(address.Value), fingerprintKeys);
+        Janus.Storage.Fingerprint.Candidates(Encoding.UTF8.GetBytes(address.Value), ring);
+
+    private sealed record Standing(MailboxRecord Row, bool Stands);
 }

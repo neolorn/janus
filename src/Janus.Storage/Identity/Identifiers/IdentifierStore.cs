@@ -8,8 +8,10 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Janus.Storage.Identity.Identifiers;
 
@@ -18,23 +20,53 @@ namespace Janus.Storage.Identity.Identifiers;
 /// <c>identifier_backup_settings</c> tables.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
-/// <param name="fingerprintKeys">The versions the searchable fingerprints are computed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-ACCT-004, REG-IDENT-002, PRIV-RIGHT-005a, PRIV-RIGHT-005c and
 /// CONV-DESIGN-003. The subject's data key is unwrapped once for an operation, however
 /// many fields it touches, and cleared before the operation returns (PRIV-RIGHT-005a
 /// AC12). A fingerprint is written under the current version of the fingerprint key and
-/// looked up under each version held, so one a rotation has not yet reached is still
-/// found (OPS-SEC-003).
+/// looked up under every version held in one statement, so one a rotation has not yet
+/// reached is still found and a row the rotation rewrites meanwhile is seen once
+/// (OPS-SEC-003, PRIV-RIGHT-005c). Whether a value is held or reserved is judged under
+/// the value's lock, which every operation that writes it takes first (REG-SESS-005).
 /// </remarks>
 internal sealed class IdentifierStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IIdentifierStore
 {
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        // The account's row stands for its set: every change to the set takes it
+        // first, so two changes to one account's identifiers run one after the other.
+        _ = await AccountStore.HeldAsync(context, subject, cancellationToken).ConfigureAwait(false);
+
+        List<object> read =
+        [
+            .. context.Identifiers.Local.Where(held => held.Subject == subject),
+            .. context.BackupSettings.Local.Where(settled => settled.Subject == subject),
+            .. context.IdentifierRemovals.Local.Where(removal => removal.Subject == subject),
+        ];
+
+        // A row the context already tracks was read before the lock, so it is read
+        // again; one another transaction removed meanwhile leaves the context.
+        foreach (EntityEntry entry in read.Select(context.Entry).Where(entry => entry.State is EntityState.Unchanged))
+        {
+            await entry.ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken) =>
+        ValueLock.TakeAsync(context, ValueLock.Keys(values, ring), cancellationToken);
+
     /// <inheritdoc/>
     public async ValueTask<IdentifierSet> FindBySubjectAsync(
         SubjectId subject,
@@ -154,25 +186,72 @@ internal sealed class IdentifierStore(
         IdentifierKind kind,
         string canonical,
         DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        await FindReservedToAsync(kind, canonical, now, cancellationToken).ConfigureAwait(false) is not null;
+
+    /// <inheritdoc/>
+    public async ValueTask<SubjectId?> FindReservedToAsync(
+        IdentifierKind kind,
+        string canonical,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        foreach (byte[] fingerprint in Candidates(canonical))
+        byte[][] candidates = Candidates(canonical);
+
+        List<SubjectId> reserved = await context.IdentifierRemovals
+            .Where(removal =>
+                removal.Kind == kind
+                && candidates.Contains(removal.Fingerprint)
+                && removal.ExpiresAt > now)
+            .Select(removal => removal.Subject)
+            .Take(1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return reserved.Count is 0 ? null : reserved[0];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask EndReservationAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        byte[][] candidates = Candidates(canonical);
+
+        List<IdentifierRemovalId> ended = await context.IdentifierRemovals
+            .Where(removal =>
+                removal.Subject == subject
+                && removal.Kind == kind
+                && candidates.Contains(removal.Fingerprint))
+            .Select(removal => removal.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (ended.Count is 0)
         {
-            if (await context.IdentifierRemovals
-                    .Where(removal =>
-                        removal.Kind == kind
-                        && removal.Fingerprint == fingerprint
-                        && removal.ExpiresAt > now)
-                    .AnyAsync(cancellationToken)
-                    .ConfigureAwait(false))
-            {
-                return true;
-            }
+            return;
         }
 
-        return false;
+        // The write that ends a reservation may record a removal of the same identifier
+        // in the same unit of work (a replace back to the value replaced), so the row
+        // leaves the database now and the context keeps no copy of it.
+        foreach (IdentifierRemovalRecord tracked in context.IdentifierRemovals.Local
+            .Where(removal => ended.Contains(removal.Id))
+            .ToList())
+        {
+            context.Entry(tracked).State = EntityState.Detached;
+        }
+
+        _ = await context.IdentifierRemovals
+            .Where(removal => ended.Contains(removal.Id))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -191,23 +270,25 @@ internal sealed class IdentifierStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IdentifierRemoval?> FindRemovalAsync(
-        IdentifierId id,
-        CancellationToken cancellationToken)
-    {
-        IdentifierRemovalRecord? row = await context.IdentifierRemovals
-            .FindAsync([id], cancellationToken)
-            .ConfigureAwait(false);
-
-        return row is null ? null : await ReadAsync(row, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
     public async ValueTask RecordRemovalAsync(
         IdentifierRemoval removal,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(removal);
+
+        // REG-IDENT-006 (D-188): a row of the same kind and value whose window ran out
+        // before this removal, and that the sweep has not taken, reserves nothing and
+        // would still meet the unique index, so the removal replaces it. The caller
+        // holds the value's lock, so no row of the value is written meanwhile.
+        byte[][] candidates = Candidates(removal.Canonical);
+
+        _ = await context.IdentifierRemovals
+            .Where(lapsed =>
+                lapsed.Kind == removal.Kind
+                && candidates.Contains(lapsed.Fingerprint)
+                && lapsed.ExpiresAt <= removal.RemovedAt)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         byte[] dataKey = await DataKeyAsync(removal.Subject, cancellationToken).ConfigureAwait(false);
 
@@ -218,10 +299,11 @@ internal sealed class IdentifierStore(
                     new IdentifierRemovalRecord
                     {
                         Id = removal.Id,
+                        Origin = removal.Origin,
                         Subject = removal.Subject,
                         Kind = removal.Kind,
                         Fingerprint = Fingerprinted(removal.Canonical),
-                        FingerprintVersion = fingerprintKeys.CurrentVersion,
+                        FingerprintVersion = Fingerprint.CurrentVersion(ring),
                         Entered = Given(
                             removal.Subject,
                             IdentifierRemovalConfiguration.EnteredColumn,
@@ -249,7 +331,7 @@ internal sealed class IdentifierStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask DiscardRemovalAsync(IdentifierId id, CancellationToken cancellationToken)
+    public async ValueTask DiscardRemovalAsync(IdentifierRemovalId id, CancellationToken cancellationToken)
     {
         IdentifierRemovalRecord? row = await context.IdentifierRemovals
             .FindAsync([id], cancellationToken)
@@ -278,18 +360,12 @@ internal sealed class IdentifierStore(
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        foreach (byte[] fingerprint in Candidates(canonical))
-        {
-            if (await context.UsernameHolds
-                    .Where(hold => hold.Fingerprint == fingerprint && hold.ReleasesAt > now)
-                    .AnyAsync(cancellationToken)
-                    .ConfigureAwait(false))
-            {
-                return true;
-            }
-        }
+        byte[][] candidates = Candidates(canonical);
 
-        return false;
+        return await context.UsernameHolds
+            .Where(hold => candidates.Contains(hold.Fingerprint) && hold.ReleasesAt > now)
+            .AnyAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static BackupSetting Settled(BackupSettingRecord row) =>
@@ -335,10 +411,10 @@ internal sealed class IdentifierStore(
             stored));
 
     private byte[] Fingerprinted(string canonical) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), fingerprintKeys);
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), ring);
 
-    private IReadOnlyList<byte[]> Candidates(string canonical) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(canonical), fingerprintKeys);
+    private byte[][] Candidates(string canonical) =>
+        [.. Fingerprint.Candidates(Encoding.UTF8.GetBytes(canonical), ring)];
 
     private byte[] Written(SubjectId subject, string column, string value, ReadOnlySpan<byte> dataKey) =>
         PersonalFieldCipher.Encrypt(
@@ -361,7 +437,7 @@ internal sealed class IdentifierStore(
             Subject = identifier.Subject,
             Kind = identifier.Kind,
             Fingerprint = Fingerprinted(identifier.Canonical),
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             Entered = Written(
                 identifier.Subject,
@@ -416,32 +492,25 @@ internal sealed class IdentifierStore(
                 identifier.Canonical,
                 dataKey);
             row.Fingerprint = Fingerprinted(identifier.Canonical);
-            row.FingerprintVersion = fingerprintKeys.CurrentVersion;
+            row.FingerprintVersion = Fingerprint.CurrentVersion(ring);
             row.CanonicalisationVersion = CanonicalForm.UnicodeVersion;
         }
     }
 
     // The row an identifier is held by, under whichever version of the fingerprint key
-    // its fingerprint stands.
+    // its fingerprint stands, read in one statement (PRIV-RIGHT-005c).
     private async ValueTask<IdentifierRecord?> FingerprintedAsync(
         IdentifierKind kind,
         string canonical,
         CancellationToken cancellationToken)
     {
-        foreach (byte[] fingerprint in Candidates(canonical))
-        {
-            IdentifierRecord? row = await context.Identifiers
-                .Where(held => held.Kind == kind && held.Fingerprint == fingerprint)
-                .FirstOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false);
+        byte[][] candidates = Candidates(canonical);
 
-            if (row is not null)
-            {
-                return row;
-            }
-        }
-
-        return null;
+        return await context.Identifiers
+            .Where(held => held.Kind == kind && candidates.Contains(held.Fingerprint))
+            .OrderBy(held => held.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<List<IdentifierRecord>> HeldAsync(
@@ -472,6 +541,7 @@ internal sealed class IdentifierStore(
         {
             return IdentifierRemoval.Existing(
                 row.Id,
+                row.Origin,
                 row.Subject,
                 row.Kind,
                 Given(dataKey, row, IdentifierRemovalConfiguration.EnteredColumn, row.Entered),
@@ -492,11 +562,11 @@ internal sealed class IdentifierStore(
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its identifiers under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
     private async Task RecordBackupsAsync(IdentifierSet set, CancellationToken cancellationToken)

@@ -86,7 +86,7 @@ internal static class OtherDomain
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("route", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
             .Permission("journey:read")
             .Relationship<Vehicle>(
                 "keeper",

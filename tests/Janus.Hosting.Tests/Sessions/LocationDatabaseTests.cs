@@ -20,6 +20,9 @@ namespace Janus.Hosting.Tests.Sessions;
 [Trait("kind", "unit")]
 public sealed class LocationDatabaseTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("location-database", "INT-GEN-006", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly string Listed = string.Join(
@@ -143,6 +146,45 @@ public sealed class LocationDatabaseTests
     }
 
     /// <summary>
+    /// INT-GEN-006 AC2: the first read a process makes, where an address is resolved, is
+    /// a refresh, and one that fails, the file not opened or refused whole, surfaces as
+    /// a degradation under <c>location.database.refresh</c> at that read, before the
+    /// absence it leaves. The next resolution reads nothing, the read being the job's
+    /// from then on, and raises the absence alone.
+    /// </summary>
+    /// <param name="opened">Whether the file opened and was refused whole, or did not open.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task INT_GEN_006_AC2_TheFirstReadAProcessMakesThatFailsSurfacesAsADegradationAsync(bool opened)
+    {
+        if (opened)
+        {
+            _source.Text = Listed + "\n192.0.2.255\t192.0.2.0\tEG\t\t\t";
+        }
+        else
+        {
+            _source.Refusal = Error.From(ErrorCodes.RequestMalformed);
+        }
+
+        Assert.Null(await ResolvedAsync(Database, "198.51.100.7"));
+
+        Assert.Equal(1, _source.Opened);
+        Assert.Equal(
+            ["location.database.refresh", "location.database.absent"],
+            _events.Of<AlertRaised>().Select(raised => raised.Scope));
+        Degraded("location.database.refresh", _events.Of<AlertRaised>()[0]);
+
+        Assert.Null(await ResolvedAsync(Database, "198.51.100.7"));
+
+        Assert.Equal(1, _source.Opened);
+        Assert.Equal(
+            ["location.database.refresh", "location.database.absent", "location.database.absent"],
+            _events.Of<AlertRaised>().Select(raised => raised.Scope));
+    }
+
+    /// <summary>
     /// INT-GEN-006 AC2: the refresh runs from the job with nobody asking, and what it
     /// reads replaces the copy held.
     /// </summary>
@@ -199,8 +241,8 @@ public sealed class LocationDatabaseTests
 
         Assert.Null(await ResolvedAsync(Database, "198.51.100.7"));
         Assert.Equal(
-            [Alerts.Key(AlertCondition.Degradation, "location.database.refresh"), Alerts.Key(AlertCondition.Degradation, "location.database.absent")],
-            _events.Of<AlertRaised>().Select(raised => Alerts.Deduplication(raised.IdempotencyKey)));
+            ["location.database.refresh", "location.database.absent"],
+            _events.Of<AlertRaised>().Select(raised => raised.Scope));
     }
 
     /// <summary>
@@ -225,7 +267,8 @@ public sealed class LocationDatabaseTests
     private static void Degraded(string scope, AlertRaised raised)
     {
         Assert.Equal(AlertCondition.Degradation, raised.Condition);
-        Assert.Equal(Alerts.Key(AlertCondition.Degradation, scope), Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal(scope, raised.Scope);
+        Assert.Equal(Alerts.Key(AlertCondition.Degradation, scope, named: null), Alerts.Deduplication(raised.IdempotencyKey));
     }
 
     private static async Task<ResolvedLocation?> ResolvedAsync(LocationDatabase database, string address) =>
@@ -234,7 +277,7 @@ public sealed class LocationDatabaseTests
             error => throw new Xunit.Sdk.XunitException($"The resolve was refused: {error.Code}."));
 
     private async Task RefreshedAsync() =>
-        (await Database.RefreshAsync(TestContext.Current.CancellationToken)).Switch(
+        (await Database.RefreshAsync(Watcher, TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The refresh was refused: {error.Code}."));
 }

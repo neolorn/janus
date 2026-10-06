@@ -24,7 +24,7 @@ namespace Janus.Hosting.Privacy;
 /// </remarks>
 internal sealed class SubjectNotices(
     IIdentifierDirectory identifiers,
-    INotificationHandler sending,
+    IGovernedSend sending,
     IConfigurationStore configuration) : ISubjectNotices
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =
@@ -34,7 +34,7 @@ internal sealed class SubjectNotices(
     public async ValueTask<int> TellAsync(
         SubjectId subject,
         MessageKind message,
-        string source,
+        string? source,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers channels = await identifiers.HeldAsync(subject, cancellationToken)
@@ -51,8 +51,8 @@ internal sealed class SubjectNotices(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,
@@ -93,7 +93,7 @@ internal sealed class SubjectNotices(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }

@@ -56,6 +56,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, granted.Status);
         Assert.Equal(Marketing, held.GetProperty("purpose").GetString());
+        Assert.Equal("privacy-notice", held.GetProperty("document").GetString());
         Assert.Equal("1", held.GetProperty("noticeVersion").GetString());
         Assert.Equal("dashboard", held.GetProperty("mechanism").GetString());
         Assert.NotEqual(default, held.GetProperty("grantedAt").GetDateTimeOffset());
@@ -148,6 +149,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, objected.Status);
         Assert.Equal(Security, standing.GetProperty("purpose").GetString());
+        Assert.Equal("privacy-notice", standing.GetProperty("document").GetString());
         Assert.Equal("1", standing.GetProperty("noticeVersion").GetString());
         Assert.Equal(JsonValueKind.Null, standing.GetProperty("withdrawnAt").ValueKind);
 
@@ -195,7 +197,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(
             "reconsent",
-            Single(await browser.SendAsync("GET", "/privacy/consents"))
+            Latest(await browser.SendAsync("GET", "/privacy/consents"))
                 .GetProperty("mechanism").GetString());
     }
 
@@ -218,7 +220,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(
             "dashboard",
-            Single(await browser.SendAsync("GET", "/privacy/consents"))
+            Latest(await browser.SendAsync("GET", "/privacy/consents"))
                 .GetProperty("mechanism").GetString());
     }
 
@@ -241,18 +243,21 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     private async Task EndedAsync(string purpose, bool withdrawn)
     {
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
-        ConsentRecord held = (await _deployment.Consents
-                .ConsentsAsync(subject, TestContext.Current.CancellationToken))
-            .Single(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
 
-        await _deployment.Consents.RecordAsync(
+        Assert.True(await _deployment.Consents.SupersedeAsync(
             subject,
-            held with
-            {
-                SupersededAt = Noon.AddDays(1),
-                WithdrawnAt = withdrawn ? Noon.AddHours(1) : null,
-            },
-            TestContext.Current.CancellationToken);
+            purpose,
+            Noon.AddDays(1),
+            TestContext.Current.CancellationToken));
+
+        if (withdrawn)
+        {
+            Assert.True(await _deployment.Consents.WithdrawConsentAsync(
+                subject,
+                purpose,
+                Noon.AddHours(1),
+                TestContext.Current.CancellationToken));
+        }
     }
 
     private static JsonElement Single(Answer answered)
@@ -260,5 +265,18 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, answered.Status);
 
         return answered.Json().EnumerateArray().Single();
+    }
+
+    // PRIV-CONS-001: every record is answered, the earlier ones as they were, so the
+    // grant just made is the last of them.
+    private static JsonElement Latest(Answer answered)
+    {
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+
+        JsonElement[] records = [.. answered.Json().EnumerateArray()];
+
+        Assert.Equal(2, records.Length);
+
+        return records[^1];
     }
 }

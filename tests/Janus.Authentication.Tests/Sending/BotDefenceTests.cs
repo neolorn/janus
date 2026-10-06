@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -76,24 +77,26 @@ public sealed class BotDefenceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-008 AC2 and AC3: more registration sessions from one source in an
-    /// hour than the deployment admits presents one too.
+    /// AUTH-ABUSE-008 AC2 and AC3: the session a request would create is counted with
+    /// those already created from its source in the hour, so with the default of three
+    /// the fourth is shown the challenge, and a session older than the hour counts for
+    /// nothing.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_008_AC3_RepeatedAttemptsFromOneSourcePresentAChallengeAsync()
+    public async Task AUTH_ABUSE_008_AC3_TheSessionTheRequestWouldCreateCountsTowardRepeatedAttemptsAsync()
     {
-        _configuration.Set(Settings.AbuseBotDefenceRepeatedAttempts, 2);
         _verifier = new ChallengeVerifier((_, _) => ValueTask.FromResult(false));
-
-        _sources.Given(Ordinary, Noon - TimeSpan.FromMinutes(90), Noon - TimeSpan.FromMinutes(80));
-
-        await PassedAsync(Ordinary);
 
         _sources.Given(
             Ordinary,
-            Noon - TimeSpan.FromMinutes(30),
+            Noon - TimeSpan.FromMinutes(90),
             Noon - TimeSpan.FromMinutes(20),
             Noon - TimeSpan.FromMinutes(10));
+
+        await PassedAsync(Ordinary);
+        Assert.Empty(_audit.Records);
+
+        _sources.Given(Ordinary, Noon - TimeSpan.FromMinutes(5));
 
         Assert.Equal(ErrorCodes.ChallengeRequired, Refusal(await CheckedAsync(Ordinary, null)));
         Assert.Equal(
@@ -132,9 +135,51 @@ public sealed class BotDefenceTests : IAsyncDisposable
         await PassedAsync(Datacenter, "solved");
     }
 
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC5: a signal that fires is recorded whether or not a verifier is
+    /// declared. With one declared the record is committed, alone, before the verifier
+    /// is asked, no transaction is open while it is asked, and the record stands where
+    /// the verifier requires a challenge, fails or does not answer.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC5_TheSignalIsCommittedBeforeTheVerifierIsAskedAndStandsAsync()
+    {
+        await PassedAsync(Datacenter);
+
+        Assert.Equal((1, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
+
+        var asked = new List<(int Recorded, int Committed, bool Open)>();
+        bool answers = true;
+
+        _verifier = new ChallengeVerifier((_, cancellationToken) =>
+        {
+            asked.Add((_audit.Records.Count, _work.OutermostCommitted, _work.Open));
+
+            return answers
+                ? ValueTask.FromResult(false)
+                : ValueTask.FromException<bool>(new OperationCanceledException(cancellationToken));
+        });
+
+        Assert.Equal(ErrorCodes.ChallengeRequired, Refusal(await CheckedAsync(Datacenter, null)));
+        Assert.Equal(ErrorCodes.ChallengeRequired, Refusal(await CheckedAsync(Datacenter, "guessed")));
+
+        answers = false;
+
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await CheckedAsync(Datacenter, "unanswered"));
+
+        Assert.Equal([(3, 3, false), (4, 4, false)], asked);
+        Assert.Equal(
+            [false, true, true, true],
+            _audit.Records.Select(recorded => recorded.Challenged));
+        Assert.Equal((4, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
+    }
     /// <summary>
     /// A signal the deployment stopped counting fires for nobody, which is how the
-    /// closed set is turned off (chapter 10 section 4.5).
+    /// closed set is turned off (chapter 10 section 4.5), and the ranges are not asked
+    /// while <c>datacenterRange</c> is out of the set, so nothing is raised about a
+    /// file the deployment does not use (AUTH-ABUSE-008).
     /// </summary>
     [Fact]
     public async Task CheckAsync_ASignalTheDeploymentDoesNotCount_FiresForNobodyAsync()
@@ -148,6 +193,59 @@ public sealed class BotDefenceTests : IAsyncDisposable
         await PassedAsync(Datacenter);
 
         Assert.Empty(_audit.Records);
+        Assert.Empty(_ranges.Asked);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008: the ranges are matched against the whole address the request
+    /// arrived on, never the source its sessions are counted under (AUTH-ABUSE-001),
+    /// and the signal is recorded under that source.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_008_TheRangesAreMatchedAgainstTheWholeAddressAsync()
+    {
+        const string whole = "2001:db8:1:2::9";
+        const string counted = "2001:db8:1:2::/64";
+
+        _ranges.Inside.Add(whole);
+
+        Result checkedWhole = await Defence.CheckAsync(
+            whole,
+            counted,
+            token: null,
+            TestContext.Current.CancellationToken);
+
+        checkedWhole.Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The check was refused: {error.Code}."));
+        Assert.Equal([whole], _ranges.Asked);
+        Assert.Equal(
+            (BotDefenceSignal.DatacenterRange, counted, false),
+            Assert.Single(_audit.Records));
+    }
+
+    /// <summary>
+    /// OPS-OBS-002: where the degradation of the range file cannot be raised the check
+    /// is refused with what refused the raise, before anything is recorded or the
+    /// verifier asked, so the signal is never silently skipped.
+    /// </summary>
+    [Fact]
+    public async Task CheckAsync_ADegradationThatCannotBeRaised_RefusesTheCheckAsync()
+    {
+        int asked = 0;
+
+        _verifier = new ChallengeVerifier((_, _) =>
+        {
+            asked++;
+
+            return ValueTask.FromResult(true);
+        });
+        _ranges.Refusal = Error.From(ErrorCodes.RequestMalformed);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, Refusal(await CheckedAsync(Ordinary, "solved")));
+        Assert.Equal(0, asked);
+        Assert.Empty(_audit.Records);
+        Assert.Equal((0, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
     }
 
     private static ErrorCode Refusal(Result result) =>
@@ -156,7 +254,7 @@ public sealed class BotDefenceTests : IAsyncDisposable
             error => error.Code);
 
     private async Task<Result> CheckedAsync(string source, string? token) =>
-        await Defence.CheckAsync(source, token, TestContext.Current.CancellationToken);
+        await Defence.CheckAsync(source, source, token, TestContext.Current.CancellationToken);
 
     private async Task PassedAsync(string source, string? token = null) =>
         (await CheckedAsync(source, token)).Switch(

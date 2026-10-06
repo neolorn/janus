@@ -14,37 +14,26 @@ namespace Janus.Cli;
 /// standard input.
 /// </summary>
 /// <remarks>
-/// Implements OPS-SEC-001, INF-HOST-003 and LIB-EXT-001, as entries 307 and 340 of the
-/// decisions pending review settle them. The operator pipes the document from the
+/// Implements OPS-SEC-001, INF-HOST-003 and LIB-EXT-001, as entry 307 of the decisions
+/// pending review and D-166 (340) settle them. The operator pipes the document from the
 /// secrets manager's own client, so no key is an argument the process list shows, a
 /// file left on disk or a variable in the environment. Standard input that is a terminal is
 /// refused before anything is read, so no key is typed or pasted where a screen or a
 /// history keeps it. The document is read as bytes and every key is decoded straight
-/// from them into arrays the command's <see cref="HeldKeys"/> clears when it ends, so
-/// nothing but the connection passes through a string. The secret of a client being
-/// registered travels the same way, for the command that registers it.
+/// from them into arrays cleared once the command's key ring holds its own copies, so
+/// nothing but the connection passes through a string; the ring is filled once, at the
+/// command's start, and cleared when the command ends (CONV-CODE-007).
 /// </remarks>
 [NeverLogged]
 internal sealed class KeyDocument
 {
-    /// <summary>
-    /// The member the secret of the client a command registers is read from.
-    /// </summary>
-    public const string ClientSecretMember = "clientSecret";
-
     // A connection and a handful of keys; anything longer is not the document.
     private const int Longest = 64 * 1024;
 
-    private KeyDocument(
-        string connection,
-        KeyEncryptionKeys keyEncryptionKeys,
-        FingerprintKeys fingerprintKeys,
-        ReadOnlyMemory<byte>? clientSecret)
+    private KeyDocument(string connection, IKeyRing ring)
     {
         Connection = connection;
-        KeyEncryptionKeys = keyEncryptionKeys;
-        FingerprintKeys = fingerprintKeys;
-        ClientSecret = clientSecret;
+        Ring = ring;
     }
 
     /// <summary>
@@ -53,32 +42,21 @@ internal sealed class KeyDocument
     public string Connection { get; }
 
     /// <summary>
-    /// The key-encryption key and the versions retained beside it.
+    /// The key ring the document's keys were read into: the key-encryption key and the
+    /// fingerprint key, each with the versions retained beside it.
     /// </summary>
-    public KeyEncryptionKeys KeyEncryptionKeys { get; }
-
-    /// <summary>
-    /// The key the searchable fingerprints are computed under and the versions retained
-    /// beside it.
-    /// </summary>
-    public FingerprintKeys FingerprintKeys { get; }
-
-    /// <summary>
-    /// The secret of the client a command registers, as its UTF-8 bytes, where the
-    /// document carries one.
-    /// </summary>
-    public ReadOnlyMemory<byte>? ClientSecret { get; }
+    public IKeyRing Ring { get; }
 
     /// <summary>
     /// Reads the document from standard input.
     /// </summary>
     /// <param name="terminal">Where it is read from.</param>
-    /// <param name="held">What clears every key read when the command ends.</param>
+    /// <param name="held">The key ring the keys are read into, and what clears every key read.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
-    /// The document, or the failure naming what was missing: the keys where standard
-    /// input is a terminal or holds none that can be used, the member where the
-    /// document is not one.
+    /// The document, or the failure naming what was missing: <c>input</c> where standard
+    /// input is a terminal or the document itself does not read, the key where it holds
+    /// none that can be used, the member where one it carries is not of its form.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static async ValueTask<Result<KeyDocument>> ReadAsync(
@@ -105,7 +83,7 @@ internal sealed class KeyDocument
                 {
                     if (read.Length >= Longest)
                     {
-                        return Result.Failure<KeyDocument>(Malformed("input"));
+                        return Result.Failure<KeyDocument>(Unavailable("input"));
                     }
 
                     byte[] grown = new byte[read.Length * 2];
@@ -131,6 +109,7 @@ internal sealed class KeyDocument
         finally
         {
             CryptographicOperations.ZeroMemory(read);
+            held.Release();
         }
     }
 
@@ -144,7 +123,7 @@ internal sealed class KeyDocument
         }
         catch (JsonException)
         {
-            return Result.Failure<KeyDocument>(Malformed("input"));
+            return Result.Failure<KeyDocument>(Unavailable("input"));
         }
 
         using (document)
@@ -153,7 +132,7 @@ internal sealed class KeyDocument
 
             if (root.ValueKind is not JsonValueKind.Object)
             {
-                return Result.Failure<KeyDocument>(Malformed("input"));
+                return Result.Failure<KeyDocument>(Unavailable("input"));
             }
 
             if (!root.TryGetProperty("connection", out JsonElement connection)
@@ -175,24 +154,11 @@ internal sealed class KeyDocument
                 return Result.Failure<KeyDocument>(Unavailable("fingerprintKeys"));
             }
 
-            ReadOnlyMemory<byte>? clientSecret = null;
+            held.Ring.HoldKeyEncryptionKeys(new KeyEncryptionKeys(keyVersion, keyMaterial));
+            held.Ring.HoldFingerprintKeys(new FingerprintKeys(fingerprintVersion, fingerprintMaterial));
+            held.Ring.Fill();
 
-            if (root.TryGetProperty(ClientSecretMember, out JsonElement secret))
-            {
-                if (secret.ValueKind is not JsonValueKind.String
-                    || !secret.TryGetBytesFromBase64(out byte[]? decoded))
-                {
-                    return Result.Failure<KeyDocument>(Malformed(ClientSecretMember));
-                }
-
-                clientSecret = held.Hold(decoded);
-            }
-
-            return Result.Success(new KeyDocument(
-                connection.GetString()!,
-                new KeyEncryptionKeys(keyVersion, keyMaterial),
-                new FingerprintKeys(fingerprintVersion, fingerprintMaterial),
-                clientSecret));
+            return Result.Success(new KeyDocument(connection.GetString()!, held.Ring));
         }
     }
 
@@ -234,8 +200,8 @@ internal sealed class KeyDocument
         return material.ContainsKey(currentVersion) ? (currentVersion, material) : null;
     }
 
-    private static Error Unavailable(string member) =>
-        Error.From(ErrorCodes.StartupKeyUnavailable, "member", JsonSerializer.SerializeToElement(member));
+    private static Error Unavailable(string key) =>
+        Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement(key));
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));

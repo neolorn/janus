@@ -1,12 +1,15 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
+using Janus.Privacy.Requests;
 using Janus.Privacy.Takedowns;
+using Janus.Privacy.Tests.Erasures;
 using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Janus.Privacy.Tests.Requests;
@@ -44,9 +47,9 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     private readonly SubscriberInMemory _records = new("records", required: true);
     private readonly SubscriberInMemory _newsletter = new("newsletter", required: false);
     private readonly PrivacyAuditInMemory _audit = new();
-    private readonly EventsInMemory _events = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
 
     /// <summary>
@@ -55,6 +58,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     /// </summary>
     public TakedownServiceTests()
     {
+        _events = new EventsInMemory { Work = _work };
         _accounts.Hold(Ahmed, AccountState.Active);
         _accounts.Hold(Mona, AccountState.Active);
         _administrative.Organization = Company;
@@ -193,6 +197,40 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 AC2, IDN-LIFE-003a: a takedown whose retries were spent and which an
+    /// operator completed by hand, under <c>privacyrequest:manage</c>, reads
+    /// <c>complete</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC2_ATakedownCompletedByHandReadsCompleteAsync()
+    {
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+
+        Assert.Single(_outbox.Deliveries).Fail();
+        _gate.Grant(Mona, Company, Permissions.PrivacyRequestManage);
+
+        var erasures = new ErasureService(
+            new AdministrativeScope(_gate, _administrative),
+            _stepUp,
+            _outbox,
+            new ErasureStoreInMemory(),
+            [_records, _newsletter],
+            ledger: null,
+            _audit,
+            _work,
+            _clock);
+
+        Held(await erasures.CompleteAsync(
+            AccessContext.Of(Mona),
+            Browser,
+            new ErasureId(takedown.Id.Value),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErasureStatus.Complete, Held(await ReadAsync(Mona)).Status);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC6: the suspension is announced at the trigger with the
     /// administrator as its origin, and no deletion is, because the subject is sent
     /// nothing that would let them cancel it.
@@ -247,23 +285,177 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003: an account already in a deletion window of another origin, or
-    /// already erased, is not taken down.
+    /// IDN-LIFE-003 (D-166): an account already in its own deletion, begun by itself or
+    /// by an out-of-band request, is taken down, holding that deletion; the erasure falls
+    /// due at the earlier of its own window's end and the takedown's, and the reversal
+    /// returns the account to its deletion and its clock.
+    /// </summary>
+    /// <param name="origin">What began the deletion the takedown found.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(DeletionOrigin.Self)]
+    [InlineData(DeletionOrigin.OutOfBandRequest)]
+    public async Task IDN_LIFE_003_ARunningDeletionIsTakenDownAsync(DeletionOrigin origin)
+    {
+        DateTimeOffset began = Noon - Settings.AccountDeletionGrace.Default + TimeSpan.FromDays(1);
+
+        _accounts.Deletes(Ahmed, origin, began);
+
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+
+        Assert.Equal(began + Settings.AccountDeletionGrace.Default, takedown.ErasureDue);
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
+        Assert.Equal(DeletionOrigin.Takedown, _accounts.Deleting);
+        Assert.Equal(Noon, _accounts.SessionsEndedAt(Ahmed));
+        Assert.Single(_events.Of<AccountSuspended>());
+        Assert.Equal(takedown.ErasureDue, Held(await ReadAsync(Mona)).ErasureDue);
+
+        Held(await ReversedAsync());
+
+        AccountStanding standing = Assert.IsType<AccountStanding>(
+            await _accounts.StandingAsync(Ahmed, TestContext.Current.CancellationToken));
+
+        Assert.Equal((AccountState.Deleting, origin, began), (standing.State, standing.DeletingBy, standing.DeletingSince));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003: an account already erased has nothing a takedown stops, which is a
+    /// conflict with its state, and the refusal writes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003_AnAccountAlreadyLeavingIsNotTakenDownAsync()
+    public async Task IDN_LIFE_003_AnErasedAccountIsNotTakenDownAsync()
     {
-        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - TimeSpan.FromDays(1));
-
-        Assert.Equal(ErrorCodes.Denied, Refused(await ExecutedAsync()).Code);
-
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - Settings.AccountDeletionGrace.Default);
         _accounts.Erases(Ahmed);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await ExecutedAsync()).Code);
+        Error refused = Refused(await ExecutedAsync());
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, refused.Code);
+        Assert.Equal("deleted", refused.Details["state"].GetString());
         Assert.Empty(_outbox.Deliveries);
         Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Of<AccountSuspended>());
         Assert.Null(_accounts.SessionsEndedAt(Ahmed));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, CONV-DESIGN-003 AC6: a state another transaction committed while
+    /// the trigger waited for the account's row is the one it answers for, as it would
+    /// have been found before, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AStateCommittedMeanwhileIsTheOneAnsweredAsync()
+    {
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Erases(subject);
+        };
+
+        Error erased = Refused(await ExecutedAsync());
+
+        _accounts.Hold(Ahmed, AccountState.Active);
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Deletes(subject, DeletionOrigin.Takedown, Noon);
+        };
+
+        Error taken = Refused(await ExecutedAsync());
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, erased.Code);
+        Assert.Equal("deleted", erased.Details["state"].GetString());
+        Assert.Equal(ErrorCodes.TakedownActive, taken.Code);
+        Assert.Empty(_outbox.Deliveries);
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(2, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a reversal refused under the account's lock, because an
+    /// erasure committed while it waited for the row, rolls its unit of work back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AReversalRefusedUnderTheLockRollsBackAsync()
+    {
+        _ = Held(await ExecutedAsync());
+        _work.Reset();
+
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Erases(subject);
+        };
+
+        Assert.Equal(ErrorCodes.TakedownWindowElapsed, Refused(await ReversedAsync()).Code);
+        Assert.Empty(_events.Of<TakedownReversed>());
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, 09 section 8a: the trigger, the reading and the reversal each
+    /// answer a subject no account bears as not found, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ASubjectWithNoAccountIsNotFoundAsync()
+    {
+        var nobody = new SubjectId(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+        CancellationToken cancellation = TestContext.Current.CancellationToken;
+
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ExecuteAsync(
+                AccessContext.Of(Mona),
+                Browser,
+                nobody,
+                TakedownTrigger.CustomerReport,
+                "a parent wrote in",
+                cancellation)).Code);
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ReadAsync(AccessContext.Of(Mona), nobody, cancellation)).Code);
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ReverseAsync(
+                AccessContext.Of(Mona),
+                Browser,
+                nobody,
+                "an adult, misjudged",
+                cancellation)).Code);
+        Assert.Empty(_outbox.Deliveries);
+        Assert.Empty(_audit.Entries);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC2: a takedown that was reversed reads as reversed, with no erasure
+    /// due, and not as one still running.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC2_AReversedTakedownReadsAsReversedAsync()
+    {
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+
+        TakedownProgress standing = Held(await ReadAsync(Mona));
+
+        Held(await ReversedAsync());
+
+        TakedownProgress reversed = Held(await ReadAsync(Mona));
+
+        Assert.False(standing.Reversed);
+        Assert.Equal(takedown.ErasureDue, standing.ErasureDue);
+        Assert.True(reversed.Reversed);
+        Assert.Null(reversed.ErasureDue);
+        Assert.Equal(takedown.Id, reversed.Id);
+        Assert.Equal(Noon, reversed.TriggeredAt);
     }
 
     /// <summary>
@@ -376,17 +568,17 @@ public sealed class TakedownServiceTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-003: only a takedown is reversed, so an account in its own deletion
-    /// window, or not leaving at all, is refused.
+    /// window, or not leaving at all, holds no takedown to reverse.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task IDN_LIFE_003_OnlyATakedownIsReversedAsync()
     {
-        Assert.Equal(ErrorCodes.Denied, Refused(await ReversedAsync()).Code);
+        Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReversedAsync()).Code);
 
         _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await ReversedAsync()).Code);
+        Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReversedAsync()).Code);
         Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
     }
 
@@ -408,6 +600,59 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 (D-166): a reason is free text of 1 to 1024 characters after
+    /// trimming, so a trigger or a reversal whose reason runs past that is malformed,
+    /// naming it, and changes nothing, while 1024 characters inside spaces are taken.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReasonPastTheLimitIsMalformedAsync()
+    {
+        string longest = new('r', 1024);
+        string past = new('r', 1025);
+
+        Error trigger = Refused(await ExecutedAsync(reason: past));
+
+        Assert.Equal((ErrorCodes.RequestMalformed, "reason"), (trigger.Code, trigger.Details["member"].GetString()));
+        Assert.Equal(AccountState.Active, _accounts.Of(Ahmed));
+
+        _ = Held(await ExecutedAsync(reason: $"  {longest}  "));
+
+        Error reversal = Refused(await ReversedAsync(reason: past));
+
+        Assert.Equal((ErrorCodes.RequestMalformed, "reason"), (reversal.Code, reversal.Details["member"].GetString()));
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
+    }
+
+    /// <summary>
+    /// 09 section 8a (D-166): the session's proof is judged after every other refusal,
+    /// so a request refused on its reason, on its subject or on the takedown it names is
+    /// answered with that refusal and never asks the caller to step up.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_TheStepUpIsJudgedAfterEveryOtherRefusalAsync()
+    {
+        var nobody = new SubjectId(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+
+        _stepUp.Closed = Error.From(ErrorCodes.StepUpRequired);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await ExecutedAsync(reason: " ")).Code);
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await ReversedAsync(reason: " ")).Code);
+        Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReversedAsync()).Code);
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ExecuteAsync(
+                AccessContext.Of(Mona),
+                Browser,
+                nobody,
+                TakedownTrigger.CustomerReport,
+                "a parent wrote in",
+                TestContext.Current.CancellationToken)).Code);
+        Assert.Empty(_stepUp.Asked);
+    }
+
+    /// <summary>
     /// 09 section 8a: an account that was never taken down has no progress to read.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -416,20 +661,143 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReadAsync(Mona)).Code);
 
     /// <summary>
-    /// CONV-DESIGN-002: the announcement follows the commit, so a consumer that will
-    /// not take it is answered to the caller and the takedown stands.
+    /// IDN-LIFE-003 AC4, CONV-DESIGN-002: <c>AccountSuspended</c> is written in the
+    /// trigger's transaction, before it commits, and never after.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003_AnUnannouncedTriggerStillStandsAsync()
+    public async Task IDN_LIFE_003_AC4_TheSuspensionIsWrittenInTheTriggerTransactionAsync()
+    {
+        _ = Held(await ExecutedAsync());
+
+        Assert.IsType<AccountSuspended>(Assert.Single(_events.PublishedInTransaction));
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002: a trigger whose announcement is refused fails with that refusal
+    /// and commits nothing, so the takedown and its delivery roll back with it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ARefusedAnnouncementLeavesNothingAsync()
     {
         _events.Refusal = Error.From(ErrorCodes.SystemFault);
 
         Assert.Equal(ErrorCodes.SystemFault, Refused(await ExecutedAsync()).Code);
-        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
-        Assert.Equal(1, _work.Committed);
-        Assert.Single(_outbox.Deliveries);
+        Assert.Equal((1, 0), (_work.Opened, _work.Committed));
+        Assert.Equal((false, 1), (_work.Open, _work.RolledBack));
+        Assert.Empty(_events.Published);
     }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC5, CONV-DESIGN-002: <c>TakedownReversed</c> is written in the
+    /// reversal's transaction, before it commits, and never after.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC5_TheReversalIsWrittenInItsTransactionAsync()
+    {
+        _ = Held(await ExecutedAsync());
+        _work.Reset();
+
+        Held(await ReversedAsync());
+
+        Assert.IsType<TakedownReversed>(_events.PublishedInTransaction[^1]);
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002: a reversal whose announcement is refused fails with that refusal
+    /// and commits nothing, so the account stays taken down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ARefusedReversalAnnouncementLeavesNothingAsync()
+    {
+        _ = Held(await ExecutedAsync());
+        _work.Reset();
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await ReversedAsync()).Code);
+        Assert.Equal((1, 0), (_work.Opened, _work.Committed));
+        Assert.Equal((false, 1), (_work.Open, _work.RolledBack));
+        Assert.Empty(_events.Of<TakedownReversed>());
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC4 (D-166): <c>AccountSuspended</c> announces that access stopped,
+    /// so a trigger on an account already suspended, or already in its own deletion,
+    /// writes one as a trigger on an active account does.
+    /// </summary>
+    /// <param name="state">Where the account stood.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(AccountState.Suspended)]
+    [InlineData(AccountState.Deleting)]
+    public async Task IDN_LIFE_003_AC4_EveryTriggerAnnouncesTheSuspensionAsync(AccountState state)
+    {
+        if (state is AccountState.Deleting)
+        {
+            _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - TimeSpan.FromDays(1));
+        }
+        else
+        {
+            _accounts.Hold(Ahmed, state);
+        }
+
+        _ = Held(await ExecutedAsync());
+
+        Assert.Equal(Ahmed, Assert.Single(_events.Of<AccountSuspended>()).Subject);
+        Assert.Single(_events.PublishedInTransaction);
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a takedown's suspension is announced with the acting and the
+    /// effective identity of the context that executed it, each as the context gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ATakedownsSuspensionCarriesBothIdentitiesOfItsContextAsync()
+    {
+        AccessContext context = OnBehalf();
+
+        _ = Held(await Takedowns.ExecuteAsync(
+            context,
+            Browser,
+            Ahmed,
+            TakedownTrigger.CustomerReport,
+            "a parent wrote in",
+            TestContext.Current.CancellationToken));
+
+        AccountSuspended suspended = Assert.Single(_events.Of<AccountSuspended>());
+
+        Assert.Equal((context.Acting, context.Effective), (suspended.Actor, suspended.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a takedown's reversal is announced with the acting and the
+    /// effective identity of the context that reversed it, each as the context gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AReversalCarriesBothIdentitiesOfItsContextAsync()
+    {
+        AccessContext context = OnBehalf();
+
+        _ = Held(await ExecutedAsync());
+        Held(await Takedowns.ReverseAsync(
+            context,
+            Browser,
+            Ahmed,
+            "an adult, misjudged",
+            TestContext.Current.CancellationToken));
+
+        TakedownReversed reversed = Assert.Single(_events.Of<TakedownReversed>());
+
+        Assert.Equal((context.Acting, context.Effective), (reversed.Actor, reversed.Effective));
+    }
+
 
     private static TValue Held<TValue>(Result<TValue> outcome) =>
         outcome.Match(
@@ -450,6 +818,19 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         outcome.Match(
             () => throw new InvalidOperationException("The operation succeeded."),
             error => error);
+
+    // A context whose acting identity is not its effective one, which is the seam
+    // AUTHZ-IMP-001 keeps and no current path produces: the session and its proof are
+    // the acting identity's, and the grant is the effective one's.
+    private AccessContext OnBehalf()
+    {
+        var onBehalf = new SubjectId(Guid.Parse("55555555-5555-4555-8555-555555555555"));
+
+        _accounts.Hold(onBehalf, AccountState.Active);
+        _gate.Grant(onBehalf, Company, Permissions.TakedownExecute);
+
+        return AccessContext.Of(Mona, onBehalf);
+    }
 
     private ValueTask<Result<ExecutedTakedown>> ExecutedAsync(
         SubjectId? by = null,

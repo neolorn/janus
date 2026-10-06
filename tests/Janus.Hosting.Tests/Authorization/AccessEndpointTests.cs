@@ -54,6 +54,48 @@ public sealed class AccessEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-007 AC1, 09 section 8: the view reports a stored grant and a derived
+    /// one distinctly: each names its kind, the stored one carries its identifier and
+    /// the derived one carries none, and each names the container it reaches the record
+    /// through.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_007_AC1_ADerivedGrantIsAnsweredWithNoIdentifierAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var record = new ResourceReference(ResourceType.Parse("document"), ResourceId.Parse("quarterly"));
+        var container = new ResourceReference(ResourceType.Parse("workspace"), ResourceId.Parse("finance"));
+        var stored = GrantId.New(TimeProvider.System);
+        var reviewing = Guid.NewGuid();
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.GrantRead);
+        _deployment.Gate.Register(
+            Company,
+            new ResourceAccess(
+                record,
+                [
+                    new ExplainedGrant(stored, GrantKind.Stored, SubjectType.User, Guid.NewGuid(), RoleName.Parse("reader"), Deny: false, InheritedFrom: null),
+                    new ExplainedGrant(Id: null, GrantKind.Derived, SubjectType.User, reviewing, RoleName.Parse("reviewer"), Deny: false, container),
+                ],
+                Partial: false,
+                Unevaluated: []));
+
+        Answer answered = await browser.SendAsync("GET", "/admin/access?resourceType=document&resourceId=quarterly");
+
+        JsonElement[] grants = [.. answered.Json().GetProperty("grants").EnumerateArray()];
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Equal(("stored", stored.Value), (grants[0].GetProperty("kind").GetString(), grants[0].GetProperty("id").GetGuid()));
+        Assert.Equal(JsonValueKind.Null, grants[0].GetProperty("inheritedFrom").ValueKind);
+        Assert.Equal("derived", grants[1].GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, grants[1].GetProperty("id").ValueKind);
+        Assert.Equal(reviewing, grants[1].GetProperty("subjectId").GetGuid());
+        Assert.Equal("reviewer", grants[1].GetProperty("role").GetString());
+        Assert.Equal("finance", grants[1].GetProperty("inheritedFrom").GetProperty("resourceId").GetString());
+    }
+
+    /// <summary>
     /// 09 section 8: a record not named by a type and an identifier is refused as
     /// malformed, naming the member that is missing.
     /// </summary>
@@ -71,6 +113,27 @@ public sealed class AccessEndpointTests : IAsyncDisposable
         Assert.Equal("resourceType", untyped.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(StatusCodes.Status400BadRequest, unnamed.Status);
         Assert.Equal("resourceId", unnamed.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-007 AC3, 09 section 8: a record of a declared type the deployment
+    /// holds no registration for reads as the gate's refusal, 403 <c>authz.denied</c>,
+    /// even to a caller holding <c>grant:read</c>, and never as a malformed request.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_007_AnUnregisteredRecordReadsAsARefusalAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.GrantRead);
+
+        Answer refused = await browser.SendAsync(
+            "GET",
+            $"/admin/access?resourceType=document&resourceId={Guid.NewGuid()}");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
     }
 
     /// <summary>

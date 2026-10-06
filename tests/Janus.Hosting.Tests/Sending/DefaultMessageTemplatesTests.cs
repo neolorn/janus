@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -25,6 +27,23 @@ public sealed class DefaultMessageTemplatesTests
     private const string Connection = "Host=nowhere;Database=identity";
 
     private static readonly DefaultMessageTemplates Shipped = new();
+
+    private static readonly MessagePlaceholders Measured = new([], [], Landing.Origins);
+
+    // The link kind each message that carries a link lands under (API-LAND-001).
+    private static readonly Dictionary<MessageKind, LinkKind> Linked = new()
+    {
+        [MessageKind.SignInLink] = LinkKind.SignIn,
+        [MessageKind.VerificationLink] = LinkKind.Registration,
+        [MessageKind.EnrolmentLink] = LinkKind.Enrolment,
+        [MessageKind.RecoveryLink] = LinkKind.Recovery,
+        [MessageKind.InvitationLink] = LinkKind.Invitation,
+        [MessageKind.IdentifierChangeConfirm] = LinkKind.IdentifierConfirm,
+        [MessageKind.IdentifierRemoved] = LinkKind.Undo,
+        [MessageKind.DeletionNotice] = LinkKind.DeletionCancel,
+        [MessageKind.DeactivationNotice] = LinkKind.Reactivation,
+        [MessageKind.CredentialSuspended] = LinkKind.LossReport,
+    };
 
     /// <summary>
     /// LIB-EXT-001: every message the library sends has words on every channel it goes
@@ -52,15 +71,90 @@ public sealed class DefaultMessageTemplatesTests
             });
 
     /// <summary>
-    /// AUTH-ABUSE-005: every shipped text message fits one message with every place it
-    /// names at its widest, in the alphabet it is written in, so a shipped default
-    /// never costs a second message.
+    /// AUTH-ABUSE-005, INT-SMS-003: every shipped text message fits its budget with every
+    /// place it names at its widest, in the alphabet it is written in: one message, or
+    /// two when it carries a link, so a shipped default never costs more.
     /// </summary>
     [Fact]
-    public void AUTH_ABUSE_005_EveryShippedTextMessageFitsOneMessageAtItsWidest() =>
+    public void AUTH_ABUSE_005_EveryShippedTextMessageFitsItsBudgetAtItsWidest() =>
         Assert.All(
             Every().Where(held => held.Kind is SendKind.Sms),
-            held => Assert.False(MessageBudget.Exceeds(MessagePlaceholders.Widest(Found(held).Text))));
+            held =>
+            {
+                string text = Found(held).Text;
+
+                Assert.False(MessageBudget.Exceeds(Measured.Widest(text), MessagePlaceholders.CarriesLink(text)));
+            });
+
+    /// <summary>
+    /// API-LAND-001 AC4, INT-SMS-003: every shipped text of a message that carries a
+    /// link renders the whole address on its application's declared origin, and does so
+    /// within its budget, so no default sends a bare token.
+    /// </summary>
+    [Fact]
+    public void API_LAND_001_AC4_EveryShippedLinkRendersAnAbsoluteAddressOfItsApplication() =>
+        Assert.All(
+            Every().Where(held => Linked.ContainsKey(held.Message)),
+            held =>
+            {
+                string text = Found(held).Text;
+                string link = Landing.Links.Of(Linked[held.Message], new string('t', OpaqueToken.Width));
+                string rendered = MessageRendering.Fill(text, new Dictionary<string, string>(StringComparer.Ordinal) { ["link"] = link });
+                string origin = LandingLinks.LandsOnAuthentication(Linked[held.Message])
+                    ? Landing.Origins.Authentication
+                    : Landing.Origins.Account;
+
+                Assert.Contains(link, rendered, StringComparison.Ordinal);
+                Assert.StartsWith(origin + "/link#", link, StringComparison.Ordinal);
+                Assert.True(Uri.IsWellFormedUriString(link, UriKind.Absolute));
+
+                if (held.Kind is SendKind.Sms)
+                {
+                    Assert.False(MessageBudget.Exceeds(Measured.Widest(text), linked: true));
+                }
+            });
+
+    /// <summary>
+    /// REG-SESS-003 (D-166, message kinds (1)): the message of a registration, and of an
+    /// identifier being added or replaced, is worded with its code and its link on every
+    /// channel in every language carried.
+    /// </summary>
+    [Fact]
+    public void REG_SESS_003_AVerificationLinkRendersItsCodeAndItsLink()
+    {
+        string link = Landing.Links.Of(LinkKind.Registration, new string('t', OpaqueToken.Width));
+        var values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "418273", ["link"] = link };
+        var held = Every().Where(one => one.Message is MessageKind.VerificationLink).ToList();
+
+        Assert.NotEmpty(held);
+        Assert.All(
+            held,
+            one =>
+            {
+                string rendered = MessageRendering.Fill(Found(one).Text, values);
+
+                Assert.Contains("418273", rendered, StringComparison.Ordinal);
+                Assert.Contains(link, rendered, StringComparison.Ordinal);
+            });
+    }
+
+    /// <summary>
+    /// API-LAND-001 AC4: the place a bare token went in is retired, so no shipped
+    /// template names it, and every shipped text that names a link belongs to a message
+    /// that sends one.
+    /// </summary>
+    [Fact]
+    public void API_LAND_001_AC4_NoShippedTemplateNamesTheRetiredTokenPlace() =>
+        Assert.All(
+            Every(),
+            held =>
+            {
+                MessageTemplate template = Found(held);
+                string written = (template.Subject ?? string.Empty) + " " + template.Text;
+
+                Assert.DoesNotContain("{token}", written, StringComparison.Ordinal);
+                Assert.Equal(Linked.ContainsKey(held.Message), MessagePlaceholders.CarriesLink(template.Text));
+            });
 
     /// <summary>
     /// CONV-CONTENT-001: a shipped text leaves a place only for a value the library
@@ -76,7 +170,7 @@ public sealed class DefaultMessageTemplatesTests
 
                 Assert.All(
                     Places((template.Subject ?? string.Empty) + " " + template.Text),
-                    place => Assert.Contains(place, MessagePlaceholders.Widths.Keys));
+                    place => Assert.Contains(place, Measured.Widths.Keys));
             });
 
     /// <summary>
@@ -172,7 +266,10 @@ public sealed class DefaultMessageTemplatesTests
         return await new SendingValidation(
                 configuration,
                 Shipped,
-                RestrictionKeySuppliers.None)
+                RestrictionKeySuppliers.None,
+                Measured,
+                new MailTransportInMemory(),
+                new SmsTransportInMemory())
             .ValidateAsync(TestContext.Current.CancellationToken);
     }
 
@@ -210,14 +307,7 @@ public sealed class DefaultMessageTemplatesTests
 
     private static IMessageTemplates Registered(IServiceCollection services) =>
         services
-            .AddJanus(
-                Connection,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new byte[16],
-                Encoding.UTF8.GetBytes(Connection),
-                HostFixture.Declaration(),
-                ApplicationKind.Public)
+            .AddJanus(Connection, HostFixture.Declaration(), ApplicationKind.Public)
             .BuildServiceProvider()
             .GetRequiredService<IMessageTemplates>();
 

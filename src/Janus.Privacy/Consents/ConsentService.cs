@@ -93,30 +93,133 @@ internal sealed class ConsentService(
             return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
         }
 
-        DateTimeOffset now = time.GetUtcNow();
-        var granted = new ConsentRecord(
-            purpose,
-            version,
-            mechanism,
-            kind,
-            now,
-            WithdrawnAt: null,
-            SupersededAt: null);
+        string document = declared.Document ?? Notice;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await consents.RecordAsync(subject, granted, cancellationToken).ConfigureAwait(false);
-        await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
-            .ConfigureAwait(false);
+        // PRIV-CONS-001 AC6: a live record the purpose admits is the consent this grant
+        // asks for, so the answer is the grant's and nothing is written, announced or
+        // recorded.
+        if (Standing(await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+            is { Live: true } admitted
+            && Admits(admitted, document, kind))
+        {
+            return Result.Success();
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        Result<bool> begun = await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if (begun.Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-188: the registration calls this joined, the endpoint as the outermost.
+        bool outermost = begun.Match(level => level, _ => false);
+
+        await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        bool ended = false;
+        bool added = false;
+
+        // PRIV-CONS-001 AC6: the grant is decided on the record as its transaction reads
+        // it, and added only where no live record stands; where one was written
+        // meanwhile the addition is not made, and the grant is decided again on that
+        // record.
+        while (!added)
+        {
+            ConsentRecord? standing = Standing(
+                await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false),
+                purpose);
+
+            if (standing is { Live: true })
+            {
+                if (Admits(standing, document, kind))
+                {
+                    break;
+                }
+
+                // A live record the purpose no longer admits is ended by the grant that
+                // replaces it, in that grant's transaction.
+                ended |= await consents
+                    .SupersedeAsync(subject, purpose, now, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            // PRIV-CONS-001, PRIV-CONS-007: a grant from the subject's own pages over a
+            // consent that was ended, and the subject never took back, is the answer to
+            // being asked again, whoever calls the contract.
+            if (mechanism is ConsentMechanism.Dashboard
+                && (ended || standing is { SupersededAt: not null, WithdrawnAt: null }))
+            {
+                mechanism = ConsentMechanism.Reconsent;
+            }
+
+            added = await consents
+                .AddAsync(
+                    subject,
+                    new ConsentRecord(
+                        purpose,
+                        document,
+                        version,
+                        mechanism,
+                        kind,
+                        now,
+                        WithdrawnAt: null,
+                        SupersededAt: null),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (ended
+            && await AnnouncedAsync(subject, purpose, ConsentChange.Superseded, now, cancellationToken)
+                .ConfigureAwait(false) is Error unended)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unended);
+        }
+
+        if (!added)
+        {
+            // CONV-DESIGN-003: a record written meanwhile is the consent this asks for. A
+            // success that wrote nothing rolls back only where this level is the
+            // outermost; one that joined another operation's commits, so the whole is not
+            // marked, and so does one that ended a record.
+            if (outermost && !ended)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Success();
+            }
+
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Granted,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(purpose, version, mechanism, kind),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -146,34 +249,61 @@ internal sealed class ConsentService(
             .ConsentsAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (Of(held, purpose) is not ConsentRecord consent)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        if (consent.WithdrawnAt is not null)
+        // PRIV-CONS-008 AC5: a consent the subject does not hold is withdrawn already,
+        // so the answer is the withdrawal's and nothing is written, announced or
+        // recorded.
+        if (Standing(held, purpose) is not { WithdrawnAt: null })
         {
             return Result.Success();
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await consents
-            .RecordAsync(subject, consent with { WithdrawnAt = now }, cancellationToken)
-            .ConfigureAwait(false);
-        await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
-            .ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the consent is read again with the subject's records held, and the
+        // record that stands is stamped only where it has not been taken back, so a
+        // withdrawal at the same moment is announced and recorded once.
+        await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Standing(await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+                is not { WithdrawnAt: null } consent
+            || !await consents.WithdrawConsentAsync(subject, purpose, now, cancellationToken).ConfigureAwait(false))
+        {
+            // CONV-DESIGN-003: taken back meanwhile, so nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
+
+        if (await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Withdrawn,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(purpose, consent.NoticeVersion, consent.Mechanism, consent.Kind),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -215,23 +345,65 @@ internal sealed class ConsentService(
                 JsonSerializer.SerializeToElement(purpose)));
         }
 
+        // PRIV-RIGHT-001a AC6: an objection is recorded against the privacy notice, so
+        // before any version of it is published there is nothing for it to stand against.
         if (await VersionAsync(document: null, cancellationToken).ConfigureAwait(false)
             is not string version)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
+        }
+
+        // PRIV-RIGHT-001a AC6: an objection that stands is the one this asks for, so the
+        // answer is the objection's and nothing is written, announced or recorded.
+        if (Standing(await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+            is not null)
+        {
+            return Result.Success();
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        var objection = new ObjectionRecord(purpose, version, mechanism, now, WithdrawnAt: null);
+        var objection = new ObjectionRecord(purpose, Notice, version, mechanism, now, WithdrawnAt: null);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await consents.RecordAsync(subject, objection, cancellationToken).ConfigureAwait(false);
-        await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
-            .ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // It is added only where none stands, so one recorded meanwhile leaves this one
+        // unwritten and is the objection this asks for.
+        if (!await consents.AddAsync(subject, objection, cancellationToken).ConfigureAwait(false))
+        {
+            // CONV-DESIGN-003: nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
+
+        if (await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         await audit
-            .RecordedAsync(Objected, context.Acting, subject, now, Named(purpose, version, mechanism), cancellationToken)
+            .RecordedAsync(
+                Objected,
+                context.Acting,
+                context.BreakGlassReason,
+                subject,
+                now,
+                Named(purpose, version, mechanism),
+                cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -250,47 +422,89 @@ internal sealed class ConsentService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (processing.Find(purpose) is not { Basis.IsObjectable: true })
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.PurposeNotObjectable,
+                "purpose",
+                JsonSerializer.SerializeToElement(purpose)));
+        }
+
         IReadOnlyList<ObjectionRecord> held = await consents
             .ObjectionsAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (Of(held, purpose) is not ObjectionRecord objection)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        if (objection.WithdrawnAt is not null)
+        // PRIV-RIGHT-001a AC6: an objection the subject has not made is withdrawn
+        // already, so the answer is the withdrawal's and nothing is written.
+        if (Standing(held, purpose) is null)
         {
             return Result.Success();
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await consents
-            .RecordAsync(subject, objection with { WithdrawnAt = now }, cancellationToken)
-            .ConfigureAwait(false);
-        await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)
-            .ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: read again with the subject's records held, as for a consent.
+        await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Standing(await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+                is not ObjectionRecord objection
+            || !await consents.WithdrawObjectionAsync(subject, purpose, now, cancellationToken).ConfigureAwait(false))
+        {
+            // CONV-DESIGN-003: taken back meanwhile, so nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
+
+        if (await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Resumed,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(purpose, objection.NoticeVersion, objection.Mechanism),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
 
-    private static ConsentRecord? Of(IReadOnlyList<ConsentRecord> held, string purpose) =>
-        held.LastOrDefault(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+    // The record that stands for a purpose among the records a subject holds, oldest
+    // first: the live one, or the latest where none is live.
+    private static ConsentRecord? Standing(IReadOnlyList<ConsentRecord> held, string purpose) =>
+        held.LastOrDefault(record => record.Live && string.Equals(record.Purpose, purpose, StringComparison.Ordinal))
+        ?? held.LastOrDefault(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
 
-    private static ObjectionRecord? Of(IReadOnlyList<ObjectionRecord> held, string purpose) =>
-        held.LastOrDefault(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+    private static ObjectionRecord? Standing(IReadOnlyList<ObjectionRecord> held, string purpose) =>
+        held.LastOrDefault(record =>
+            record.Standing && string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+
+    // PRIV-CONS-001, AUTHZ-GATE-002: a purpose admits a record given against the document
+    // it now names, written where it requires the written path, as the gate reads one.
+    private static bool Admits(ConsentRecord record, string document, ConsentKind required) =>
+        string.Equals(record.Document, document, StringComparison.Ordinal)
+        && (required is ConsentKind.Ordinary || record.Kind is ConsentKind.Written);
 
     private static string Key(SubjectId subject, string purpose, string change, DateTimeOffset at) =>
         subject.ToString()
@@ -331,37 +545,39 @@ internal sealed class ConsentService(
         (await documents.CurrentAsync(document ?? Notice, cancellationToken).ConfigureAwait(false))
         ?.Version;
 
-    private async ValueTask AnnouncedAsync(
+    private async ValueTask<Error?> AnnouncedAsync(
         SubjectId subject,
         string purpose,
         ConsentChange change,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await events
-            .PublishAsync(
-                new ConsentChanged(at, Key(subject, purpose, change.ToString(), at), purpose, change)
-                {
-                    Subject = subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        (await events
+                .PublishAsync(
+                    new ConsentChanged(at, Key(subject, purpose, change.ToString(), at), purpose, change)
+                    {
+                        Subject = subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
 
-    private async ValueTask ObjectedAsync(
+    private async ValueTask<Error?> ObjectedAsync(
         SubjectId subject,
         string purpose,
         bool objecting,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await events
-            .PublishAsync(
-                new ObjectionChanged(
-                    at,
-                    Key(subject, purpose, objecting ? "objecting" : "resumed", at),
-                    purpose,
-                    objecting)
-                {
-                    Subject = subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        (await events
+                .PublishAsync(
+                    new ObjectionChanged(
+                        at,
+                        Key(subject, purpose, objecting ? "objecting" : "resumed", at),
+                        purpose,
+                        objecting)
+                    {
+                        Subject = subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
 }

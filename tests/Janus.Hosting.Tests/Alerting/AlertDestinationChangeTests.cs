@@ -16,7 +16,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
-using Janus.Hosting.Sending;
+using Janus.Hosting.Tests.Sending;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Alerting;
@@ -53,6 +53,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendOutboxInMemory _outbox = new();
     private readonly AlertLedgerInMemory _alerts = new();
     private readonly AlertLogInMemory _log = new();
     private readonly MessageTemplatesInMemory _templates = new();
@@ -61,7 +62,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationAuditInMemory _changes = new();
     private readonly UnitOfWorkInMemory _work = new();
-    private readonly EventsInMemory _events = new();
+    private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly AccessGateInMemory _gate = new();
@@ -73,6 +74,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     /// </summary>
     public AlertDestinationChangeTests()
     {
+        _events = new EventsInMemory { Work = _work };
         _configuration.Set(Settings.NotificationLanguages, OneLanguage);
         _configuration.Set(Settings.AlertingEmailDestinations, ThreeAddresses);
         _configuration.Set(Settings.AlertingSmsDestinations, TwoNumbers);
@@ -84,12 +86,19 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
+        _gate.GrantEveryone(administrative, Permissions.ConfigurationManage);
     }
 
-    private AlertDestinationChange Change =>
+    private AlertDestinationChange Change => Announcing(_events);
+
+    // The change, announcing itself through the events given, so a test may stand in for
+    // an event row that cannot be written without refusing the sends before it.
+    private AlertDestinationChange Announcing(IEvents announced) =>
         new(
+            new AdministrativeScope(_gate, _administrative),
             _configuration,
             new ConfigurationAdministration(
+                _configuration,
                 _configuration,
                 _changes,
                 new AdministrativeScope(_gate, _administrative),
@@ -100,25 +109,23 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 _clock),
             new AlertRouter(
                 _configuration,
-                new SendingService(
+                new SendingPath(
                     _configuration,
                     _ledger,
-                    new SendOutboxInMemory(),
+                    _outbox,
                     _templates,
                     _mail,
                     _sms,
-                    RestrictionKeySuppliers.None,
-                    Considered.Nothing(_work, _clock),
-                    new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
+                    _balances,
                     _work,
                     _events,
-                    _events,
                     _clock,
-                    _randomness),
+                    _randomness).Send,
                 _alerts,
                 _work,
                 _log),
-            _events,
+            announced,
+            _work,
             _clock);
 
     /// <inheritdoc/>
@@ -217,6 +224,76 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-004a AC7: a change whose value in force moved after its previous
+    /// destinations were told is refused as superseded under the row's lock. It writes
+    /// nothing and raises no <c>alert-destination-changed</c>, so the destinations the
+    /// other change put in force are not replaced without having been told.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC7_AChangeOvertakenAfterItsNoticeIsRefusedAsSupersededAsync()
+    {
+        string[] winner = ["winner@example.test"];
+
+        _configuration.Holding = held =>
+        {
+            if (held == Settings.AlertingEmailDestinations.Key)
+            {
+                _configuration.Holding = null;
+                _configuration.Set(Settings.AlertingEmailDestinations, winner);
+            }
+        };
+
+        Error refusal = await RefusedAsync(SendKind.Email, Elsewhere);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeSuperseded, refusal.Code);
+        Assert.Equal("config.change.superseded", refusal.Code.ToString());
+        Assert.Equal("alerting.email.destinations", refusal.Details["key"].GetString());
+        Assert.Equal(winner, await DestinationsAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published.OfType<AlertRaised>());
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-004a AC8 and AUTHZ-GATE-006: a change whose account was restricted after
+    /// its previous destinations were told is refused <c>authz.restricted</c> when the
+    /// gate is asked again inside its unit of work. It writes nothing and raises no
+    /// <c>alert-destination-changed</c>, and the notice already given stands.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC8_AChangeRefusedAtTheSecondAskWritesNothingAndItsNoticeStandsAsync()
+    {
+        var actor = SubjectId.New(_randomness);
+
+        bool held = false;
+
+        _mail.Handed = () => _gate.Restrict(actor);
+        _configuration.Holding = _ => held = true;
+
+        Result refused = await Change.ChangeAsync(
+            SendKind.Email,
+            Elsewhere,
+            "an incident",
+            Satisfied,
+            AccessContext.Of(actor),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Restricted, refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal(
+            ThreeAddresses.Order(StringComparer.Ordinal),
+            _mail.Taken.Select(mail => mail.Destination.Value).Order(StringComparer.Ordinal));
+        Assert.Equal(ThreeAddresses, await DestinationsAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published.OfType<AlertRaised>());
+        Assert.False(held);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+    }
+
+    /// <summary>
     /// Changing the numbers tells the numbers being replaced, on their own channel
     /// (OPS-ALERT-004a).
     /// </summary>
@@ -290,12 +367,76 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     {
         Error refusal = await RefusedAsync(SendKind.Email, Elsewhere, reason: null);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, refusal.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refusal.Code);
         Assert.Equal("alerting.email.destinations", refusal.Details["key"].GetString());
         Assert.Equal(ThreeAddresses, await DestinationsAsync(Settings.AlertingEmailDestinations));
         Assert.Empty(_changes.Written);
         Assert.Empty(_mail.Taken);
         Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002, OPS-ALERT-004a: the change and the event that announces it are
+    /// written in one transaction, so neither commits without the other.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_TheChangeAndItsEventCommitTogetherAsync()
+    {
+        await ChangedAsync(SendKind.Email, Elsewhere);
+
+        AlertRaised raised = Assert.Single(_events.PublishedInTransaction.OfType<AlertRaised>());
+
+        Assert.Equal(AlertCondition.AlertDestinationChanged, raised.Condition);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a change whose event row cannot be written is refused after
+    /// its unit of work began, and rolls it back, so the change that joined it commits
+    /// nothing either.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeThatCannotBeAnnouncedRollsBackAsync()
+    {
+        var refusing = new EventsInMemory { Refusal = Error.From(ErrorCodes.SystemFault) };
+
+        Result refused = await Announcing(refusing).ChangeAsync(
+            SendKind.Email,
+            Elsewhere,
+            "an incident",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: the alert a destination change raises carries the acting and
+    /// the effective identity of the context that changed it, each as the context gives
+    /// it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ADestinationChangeCarriesBothIdentitiesOfItsContextAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+
+        (await Change.ChangeAsync(
+            SendKind.Email,
+            Elsewhere,
+            "an incident",
+            Satisfied,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The change was refused: {error.Code}."));
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal((context.Acting, context.Effective), (raised.Actor, raised.Effective));
     }
 
     private async Task<IReadOnlyList<string>> DestinationsAsync(TextListSetting setting) =>
@@ -309,7 +450,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
             replacement,
             "an incident",
             Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The change was refused: {error.Code}."));
@@ -324,7 +465,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
             replacement,
             reason,
             challenge ?? Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken)).Match(
             () => throw new Xunit.Sdk.XunitException("The change was not refused."),
             error => error);

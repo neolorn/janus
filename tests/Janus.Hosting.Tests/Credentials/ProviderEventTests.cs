@@ -8,12 +8,14 @@ using System.Threading.Tasks;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Credentials;
@@ -88,8 +90,8 @@ public sealed class ProviderEventTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-012a AC1: an event the provider's published keys do not verify changes
-    /// nothing, is refused as every rejected callback is, and is audited as rejected
-    /// against the account whose linked identity it names.
+    /// nothing, is refused as RFC 8935 refuses a key that does not verify, and is
+    /// audited as rejected against the account whose linked identity it names.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -105,13 +107,352 @@ public sealed class ProviderEventTests : IAsyncDisposable
                 "evt-1",
                 GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, answered.Status);
-        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), answered.Text("code"));
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.Equal("invalid_key", answered.Text("err"));
         Assert.Equal(live, Live(subject).Count);
         Assert.Equal(AuthenticatorState.Active, Held(linked).State);
         Assert.Equal(
             (AuditActions.ProviderEventRejected, linked.Id, Risc + "sessions-revoked", ProviderEventOutcome.Unsigned),
             Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC3, 09 section 10: on the Apple route an event the provider's
+    /// published keys do not verify is refused as every rejected callback is, 422 with
+    /// no interval, changes nothing and is audited as rejected.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC3_TheAppleRouteRefusesAnUnsignedEventAsARejectedCallbackAsync()
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Apple, AppleSubject);
+        int live = Live(subject).Count;
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Forged(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answered.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), answered.Text("code"));
+        Assert.Null(answered.Header(HeaderNames.RetryAfter));
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        Assert.Equal(
+            (AuditActions.ProviderEventRejected, linked.Id, "consent-revoked", ProviderEventOutcome.Unsigned),
+            Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC8, 09 section 10: on the Google route each failure is answered
+    /// 400 in the shape RFC 8935 section 2.3 fixes, with the <c>err</c> of the first
+    /// failure in the fixed order (a token that cannot be read or carries no
+    /// <c>jti</c>, the key, the issuer, the audience, a passed <c>exp</c>), the same
+    /// code as <c>description</c> and <c>Content-Language: en</c>, and changes nothing.
+    /// </summary>
+    /// <param name="failure">What is wrong with the token.</param>
+    /// <param name="err">The code the failure is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("unreadable", "invalid_request")]
+    [InlineData("eventless", "invalid_request")]
+    [InlineData("unidentified", "invalid_request")]
+    [InlineData("unidentified and forged", "invalid_request")]
+    [InlineData("unpublished key", "invalid_key")]
+    [InlineData("forged", "invalid_key")]
+    [InlineData("unpublished key, another issuer", "invalid_key")]
+    [InlineData("another issuer", "invalid_issuer")]
+    [InlineData("another issuer, another audience", "invalid_issuer")]
+    [InlineData("another audience", "invalid_audience")]
+    [InlineData("another audience, expired", "invalid_audience")]
+    [InlineData("expired", "invalid_request")]
+    public async Task IDN_LIFE_012a_AC8_EachFailureOnTheGoogleRouteIsAnsweredWithItsErrAsync(string failure, string err)
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        int live = Live(subject).Count;
+        JsonElement compromised = GoogleEvent(Risc + "sessions-revoked", GoogleSubject);
+        long lapsed = _deployment.Clock.GetUtcNow().AddHours(-1).ToUnixTimeSeconds();
+        SocialProvidersInMemory google = _deployment.SocialProviders;
+
+        string token = failure switch
+        {
+            "unreadable" => "not.a-token",
+            "eventless" => google.Signed(Factor.Google, "evt-1", "no event"),
+            "unidentified" => google.Departing(Factor.Google, null, compromised),
+            "unidentified and forged" => google.Forged(Factor.Google, string.Empty, compromised),
+            "unpublished key" => google.Departing(Factor.Google, "evt-1", compromised, keyId: "google-key-0"),
+            "forged" => google.Forged(Factor.Google, "evt-1", compromised),
+            "unpublished key, another issuer" => google.Departing(
+                Factor.Google,
+                "evt-1",
+                compromised,
+                issuer: "https://accounts.elsewhere.test/",
+                keyId: "google-key-0"),
+            "another issuer" => google.Departing(
+                Factor.Google,
+                "evt-1",
+                compromised,
+                issuer: "https://accounts.elsewhere.test/"),
+            "another issuer, another audience" => google.Departing(
+                Factor.Google,
+                "evt-1",
+                compromised,
+                issuer: "https://accounts.elsewhere.test/",
+                audience: "another-client.apps.google.test"),
+            "another audience" => google.Departing(
+                Factor.Google,
+                "evt-1",
+                compromised,
+                audience: "another-client.apps.google.test"),
+            "another audience, expired" => google.Departing(
+                Factor.Google,
+                "evt-1",
+                compromised,
+                audience: "another-client.apps.google.test",
+                expires: lapsed),
+            _ => google.Departing(Factor.Google, "evt-1", compromised, expires: lapsed),
+        };
+
+        Answer answered = await DeliveredAsync(Google, token);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.Equal("application/json", answered.Header(HeaderNames.ContentType));
+        Assert.Equal("en", answered.Header(HeaderNames.ContentLanguage));
+        Assert.Equal(err, answered.Text("err"));
+        Assert.Equal(err, answered.Text("description"));
+        Assert.Equal(2, answered.Json().EnumerateObject().Count());
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        Assert.DoesNotContain(
+            _deployment.CredentialAudit.ProviderEvents,
+            recorded => recorded.Action == AuditActions.ProviderEventTaken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC8, 09 section 10: an event stating a lifetime that has not
+    /// passed is carried, as one stating none is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC8_AnEventWhoseLifetimeHasNotPassedIsCarriedAsync()
+    {
+        (SubjectId subject, _) = await LinkedAsync(Factor.Google, GoogleSubject);
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Departing(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject),
+                expires: _deployment.Clock.GetUtcNow().AddHours(1).ToUnixTimeSeconds()));
+
+        Assert.Equal(StatusCodes.Status202Accepted, answered.Status);
+        Assert.Empty(Live(subject));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC9, 09 section 10: on the Google route a token whose <c>nbf</c> is
+    /// later than now is answered 400 <c>invalid_request</c>, by a second as by an hour
+    /// since the instant gets no leeway, after the audience and the <c>exp</c> are
+    /// judged, and changes nothing.
+    /// </summary>
+    /// <param name="ahead">How far after now the token says it holds from, in seconds.</param>
+    /// <param name="departure">What else is wrong with the token.</param>
+    /// <param name="err">The code the failure is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(1, "nothing", "invalid_request")]
+    [InlineData(3600, "nothing", "invalid_request")]
+    [InlineData(3600, "expired", "invalid_request")]
+    [InlineData(3600, "another audience", "invalid_audience")]
+    public async Task IDN_LIFE_012a_AC9_AnEventNotYetValidOnTheGoogleRouteIsAnsweredInvalidRequestAsync(
+        int ahead,
+        string departure,
+        string err)
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        int live = Live(subject).Count;
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Departing(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject),
+                audience: departure is "another audience" ? "another-client.apps.google.test" : null,
+                expires: departure is "expired" ? now.AddHours(-1).ToUnixTimeSeconds() : null,
+                notBefore: now.AddSeconds(ahead).ToUnixTimeSeconds()));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.Equal("application/json", answered.Header(HeaderNames.ContentType));
+        Assert.Equal("en", answered.Header(HeaderNames.ContentLanguage));
+        Assert.Equal(err, answered.Text("err"));
+        Assert.Equal(err, answered.Text("description"));
+        Assert.Equal(2, answered.Json().EnumerateObject().Count());
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        Assert.DoesNotContain(
+            _deployment.CredentialAudit.ProviderEvents,
+            recorded => recorded.Action == AuditActions.ProviderEventTaken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC9, 09 section 10: an event whose <c>nbf</c> is now or earlier is
+    /// carried, and so is one carrying no <c>nbf</c>, which is not refused for it.
+    /// </summary>
+    /// <param name="behind">
+    /// How far before now the token says it holds from, in seconds, or nothing for a
+    /// token carrying no <c>nbf</c>.
+    /// </param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3600)]
+    public async Task IDN_LIFE_012a_AC9_AnEventValidNowOrStatingNoNbfIsCarriedAsync(int? behind)
+    {
+        (SubjectId subject, _) = await LinkedAsync(Factor.Google, GoogleSubject);
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Departing(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject),
+                notBefore: behind is int seconds ? now.AddSeconds(-seconds).ToUnixTimeSeconds() : null));
+
+        Assert.Equal(StatusCodes.Status202Accepted, answered.Status);
+        Assert.Empty(Live(subject));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC8, 09 section 10: an event on the Google route of a deployment
+    /// that declared no such provider is answered <c>invalid_issuer</c>, and one that
+    /// cannot be read is answered <c>invalid_request</c> before the provider is looked
+    /// for.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC8_AnEventOfAProviderNotDeclaredIsAnsweredInvalidIssuerAsync()
+    {
+        await using var undeclared = new Deployment(providers: []);
+
+        Prepared(undeclared);
+
+        Answer unknown = await new Machine(undeclared).DeliverAsync(
+            Google,
+            Delivered,
+            undeclared.SocialProviders.Signed(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+        Answer unreadable = await new Machine(undeclared).DeliverAsync(Google, Delivered, "not.a-token");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, unknown.Status);
+        Assert.Equal("en", unknown.Header(HeaderNames.ContentLanguage));
+        Assert.Equal("invalid_issuer", unknown.Text("err"));
+        Assert.Equal("invalid_issuer", unknown.Text("description"));
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal("invalid_request", unreadable.Text("err"));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC7: an event carrying no <c>jti</c> changes nothing and is
+    /// refused as unreadable on both routes, before anything is claimed or looked up:
+    /// <c>invalid_request</c> on the Google route, a rejected callback on the Apple
+    /// route.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC7_AnEventCarryingNoJtiChangesNothingAndIsRefusedAsync()
+    {
+        (SubjectId subject, Authenticator google) = await LinkedAsync(Factor.Google, GoogleSubject);
+        Authenticator apple = await LinkAsync(subject, Factor.Apple, AppleSubject);
+        int live = Live(subject).Count;
+
+        Answer pushed = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Departing(
+                Factor.Google,
+                null,
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+        Answer posted = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Departing(
+                Factor.Apple,
+                null,
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal("invalid_request", pushed.Text("err"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, posted.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), posted.Text("code"));
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(google).State);
+        Assert.Equal(AuthenticatorState.Active, Held(apple).State);
+        Assert.Empty(_deployment.CredentialAudit.ProviderEvents);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC8, 09 section 10: on either route a provider document the
+    /// library cannot read refuses nothing. The delivery is answered 500
+    /// <c>system.fault</c>, its unit of work is rolled back so nothing is claimed,
+    /// recorded or changed, and the same event delivered again once the document reads
+    /// is carried.
+    /// </summary>
+    /// <param name="path">The route the event arrives on.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(Google)]
+    [InlineData(Apple)]
+    public async Task IDN_LIFE_012a_AC8_AProviderDocumentThatCannotBeReadIsAFaultAndClaimsNothingAsync(string path)
+    {
+        bool google = path == Google;
+        (SubjectId subject, Authenticator linked) = google
+            ? await LinkedAsync(Factor.Google, GoogleSubject)
+            : await LinkedAsync(Factor.Apple, AppleSubject);
+        int live = Live(subject).Count;
+        string body = google
+            ? _deployment.SocialProviders.Signed(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject))
+            : Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject)));
+        int committed = _deployment.Work.Committed;
+        int rolledBack = _deployment.Work.RolledBack;
+
+        _deployment.SocialProviders.Reachable = false;
+
+        Answer faulted = await DeliveredAsync(path, body);
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, faulted.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), faulted.Text("code"));
+        Assert.Empty(faulted.Json().GetProperty("details").EnumerateObject());
+        Assert.Null(faulted.Header(HeaderNames.RetryAfter));
+        Assert.Equal(committed, _deployment.Work.Committed);
+        Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        Assert.Empty(_deployment.CredentialAudit.ProviderEvents);
+        Assert.Contains(
+            _deployment.Logs.Lines,
+            line => line.Contains("providers/" + (google ? "google" : "apple") + " could not be read", StringComparison.Ordinal));
+
+        _deployment.SocialProviders.Reachable = true;
+
+        Answer carried = await DeliveredAsync(path, body);
+
+        Assert.Equal(google ? StatusCodes.Status202Accepted : StatusCodes.Status200OK, carried.Status);
+        Assert.Equal(AuditActions.ProviderEventTaken, Assert.Single(_deployment.CredentialAudit.ProviderEvents).Action);
     }
 
     /// <summary>
@@ -244,6 +585,201 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC18, IDN-LIFE-012a AC2: the notice of a suspension a provider
+    /// event brings, refused by a restriction, fails nothing. The event is answered as
+    /// it would have been, and the suspension, its announcement and the event's record
+    /// are committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnEventWhoseNoticeIsRefusedIsTakenAndCommittedAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "only-apple@example.test");
+
+        Authenticator linked = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _deployment.Configuration.Set(
+            Settings.Restrictions,
+            [
+                .. Settings.Restrictions.Default,
+                new Restriction(
+                    "every.notice",
+                    RestrictionKeyKind.Global,
+                    null,
+                    RestrictionPurpose.Notification,
+                    [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+            ]);
+
+        _deployment.SendLedger.Given(
+            new RestrictionKey("every.notice", RestrictionKeyKind.Global, "every.notice"),
+            _deployment.Clock.GetUtcNow());
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(rolledBack, _deployment.Work.RolledBack);
+        Assert.Empty(_deployment.Mail.Taken);
+        Assert.Equal(AccountState.Suspended, await StateAsync(subject));
+        _ = Assert.Single(_deployment.Events.Of<AccountSuspended>());
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, linked.Id, "consent-revoked", ProviderEventOutcome.AccountSuspended),
+            Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an event whose change of state cannot be announced is
+    /// answered with that failure, and its unit of work is rolled back before it is
+    /// answered, so nothing of the event is committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnEventThatCannotBeAnnouncedRollsBackAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "only-apple@example.test");
+
+        _ = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _deployment.Events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        int committed = _deployment.Work.Committed;
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Status);
+        Assert.Empty(_deployment.CredentialAudit.ProviderEvents);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(committed, _deployment.Work.Committed);
+        Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, IDN-LIFE-012a: a rejected provider event commits its
+    /// rejection's record with its counts, in one unit of work, and nothing else.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARejectedProviderEventCommitsItsRecordAndItsCountsAsync()
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        int live = Live(subject).Count;
+        int committed = _deployment.Work.OutermostCommitted;
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Forged(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(committed + 1, _deployment.Work.OutermostCommitted);
+        Assert.Equal(rolledBack, _deployment.Work.RolledBack);
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        _ = Assert.Single(_deployment.CredentialAudit.ProviderEvents);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC2, IDN-LIFE-013, CONV-DESIGN-003 AC6: a deletion begun while the
+    /// withdrawal waited for the account's row is found under the lock, so the account
+    /// is left to its deletion and no suspension is made or announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC2_ADeletionBegunMeanwhileIsLeftToItAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "only-apple-deleting@example.test");
+
+        Authenticator linked = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _deployment.Accounts.Holding = held => _deployment.Accounts.Stands(held, AccountState.Deleting);
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Equal(AccountState.Deleting, await StateAsync(subject));
+        Assert.Empty(_deployment.Events.Of<AccountSuspended>());
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, linked.Id, "consent-revoked", ProviderEventOutcome.Recorded),
+            Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC2 (D-166, 286): where the account's other way in is a credential a
+    /// provider's event holds, nothing usable may begin a sign-in without the withdrawn
+    /// identity, so the credential stays and the account is suspended instead.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC2_AWithdrawnIdentityWhoseOtherWayInIsHeldSuspendsTheAccountAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "apple-and-google@example.test");
+
+        Authenticator google = await LinkAsync(subject, Factor.Google, GoogleSubject);
+        Authenticator apple = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _ = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Signed(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "account-disabled", GoogleSubject)));
+
+        Assert.True(Held(google).IsHeldByProvider);
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-2",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Contains(_deployment.Authenticators.All, held => held.Id == apple.Id);
+        Assert.Equal(AccountState.Suspended, await StateAsync(subject));
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, apple.Id, "consent-revoked", ProviderEventOutcome.AccountSuspended),
+            _deployment.CredentialAudit.ProviderEvents[^1]);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a: the address Apple stopped forwarding to drops to unverified.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -303,8 +839,10 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-012a AC3 and BFF-MACH-001 AC2: the endpoint is on the machine profile,
-    /// so a delivery carrying a browser's session cookie is refused and changes nothing.
+    /// IDN-LIFE-012a AC3, BFF-MACH-001 AC2 and chapter 09 section 10: the endpoint is
+    /// on the machine profile, so a delivery carrying a browser's session cookie is
+    /// refused as every rejected callback is, 422 with no interval and on the route of
+    /// a provider that follows RFC 8935 too, and changes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -322,7 +860,9 @@ public sealed class ProviderEventTests : IAsyncDisposable
                 GoogleEvent(Risc + "sessions-revoked", GoogleSubject)),
             BrowserCookies.Session + "=stale");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), refused.Text("code"));
+        Assert.Null(refused.Header(HeaderNames.RetryAfter));
         Assert.Equal(live, Live(subject).Count);
         Assert.Equal(AuthenticatorState.Active, Held(linked).State);
     }
@@ -361,39 +901,29 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-012a: an event of a provider the deployment declared nothing for, and
-    /// one whose provider's keys cannot be read, verify against nothing and are refused.
+    /// IDN-LIFE-012a AC3, 09 section 10: on the Apple route an event of a provider the
+    /// deployment declared nothing for verifies against nothing and is refused as a
+    /// callback refused for anything but its rate is: 422 with no interval.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_012a_AnEventNothingDeclaredOrReadableVerifiesIsRefusedAsync()
+    public async Task IDN_LIFE_012a_AC3_AnEventOfAProviderNotDeclaredIsRefusedOnTheAppleRouteAsync()
     {
         await using var undeclared = new Deployment(providers: []);
 
         Prepared(undeclared);
 
         Answer unknown = await new Machine(undeclared).DeliverAsync(
-            Google,
-            Delivered,
-            undeclared.SocialProviders.Signed(
-                Factor.Google,
+            Apple,
+            "application/json",
+            Wrapped(undeclared.SocialProviders.Signed(
+                Factor.Apple,
                 "evt-1",
-                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+                AppleEvent("consent-revoked", AppleSubject))));
 
-        _deployment.SocialProviders.Reachable = false;
-
-        Answer unreadable = await DeliveredAsync(
-            Google,
-            _deployment.SocialProviders.Signed(
-                Factor.Google,
-                "evt-1",
-                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
-
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unknown.Status);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unreadable.Status);
-        Assert.Contains(
-            _deployment.Logs.Lines,
-            line => line.Contains("providers/google could not be read", StringComparison.Ordinal));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unknown.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), unknown.Text("code"));
+        Assert.Null(unknown.Header(HeaderNames.RetryAfter));
     }
 
     // A deployment that can send the notice a removed credential or a suspended account

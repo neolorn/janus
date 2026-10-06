@@ -106,6 +106,24 @@ public sealed class ApiConventionTests
     }
 
     /// <summary>
+    /// API-CONV-002 AC4 (D-179): the member the reader stopped at is named as the request
+    /// writes it, with no <c>$</c> root and no list index, for each shape a body takes.
+    /// </summary>
+    [Fact]
+    public void API_CONV_002_AC4_AnUnreadableMemberIsNamedAsTheRequestWritesIt()
+    {
+        Assert.Equal("name", Stopped<Dictionary<string, int>>("""{"name":"five"}"""));
+        Assert.Equal(
+            "inner.count",
+            Stopped<Dictionary<string, Dictionary<string, int>>>("""{"inner":{"count":"many"}}"""));
+        Assert.Equal(
+            "items",
+            Stopped<Dictionary<string, List<Dictionary<string, int>>>>("""{"items":[{"id":"one"}]}"""));
+        Assert.Equal("items", Stopped<Dictionary<string, List<int>>>("""{"items":["one"]}"""));
+        Assert.Equal("id", Stopped<List<Dictionary<string, int>>>("""[{"id":"one"}]"""));
+    }
+
+    /// <summary>
     /// BFF-ERR-001 AC1: no body the pipeline or an endpoint writes carries a sentence
     /// for a person to read, whichever of them refused the request.
     /// </summary>
@@ -412,6 +430,34 @@ public sealed class ApiConventionTests
         }
     }
 
+    /// <summary>
+    /// API-LAND-001 AC4: no endpoint takes a link token in a path or a query, so a
+    /// token reaches the library only in the body of a press and loading an address
+    /// that carries one, as a mail scanner does, changes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_LAND_001_AC4_NoEndpointTakesALinkTokenInAPathOrQueryAsync()
+    {
+        await using var deployment = new Deployment();
+
+        foreach (RouteEndpoint route in deployment.Endpoints.OfType<RouteEndpoint>())
+        {
+            Assert.DoesNotContain(route.RoutePattern.Parameters, parameter => Carries(parameter.Name));
+
+            if (route.Metadata.GetMetadata<MethodInfo>() is { } handler)
+            {
+                Assert.DoesNotContain(
+                    handler.GetParameters(),
+                    parameter => parameter.ParameterType == typeof(string) && Carries(parameter.Name ?? string.Empty));
+            }
+        }
+    }
+
+    // Whether a route or handler parameter is named for a link token.
+    private static bool Carries(string named) =>
+        named.Contains("token", StringComparison.OrdinalIgnoreCase);
+
     // Whether a field or a route parameter names an account rather than a record of
     // one kind or another.
     private static bool Names(string named) =>
@@ -422,4 +468,13 @@ public sealed class ApiConventionTests
         typeof(IdentityEndpoints).Assembly
             .GetTypes()
             .Where(request => request.Name.EndsWith("Request", StringComparison.Ordinal));
+
+    // The member the shared reader names for a body that does not read as the type.
+    private static string? Stopped<TBody>(string body)
+    {
+        JsonException unreadable = Assert.Throws<JsonException>(
+            () => JsonSerializer.Deserialize<TBody>(body, JsonSerializerOptions.Web));
+
+        return MalformedRequest.Member(unreadable.Path ?? string.Empty);
+    }
 }

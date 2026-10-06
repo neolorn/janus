@@ -31,7 +31,7 @@ internal sealed class RestrictionGrant(IAccountStates accounts, IOutboxStore out
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (!await accounts.RestrictAsync(subject, cancellationToken).ConfigureAwait(false))
+        if (!await accounts.RestrictAsync(subject, at, cancellationToken).ConfigureAwait(false))
         {
             return false;
         }

@@ -87,6 +87,15 @@ internal sealed class Authenticator
     public bool IsUsable => State is AuthenticatorState.Active && Confirmed;
 
     /// <summary>
+    /// Whether a loss report, or a removal that would lower the account's reachable
+    /// assurance, suspended it: suspended with the instant at which it is invalidated.
+    /// Presented anyway, it is judged as an active one would be and refused as
+    /// suspended only where what it presented verifies (AUTH-RECOV-007).
+    /// </summary>
+    public bool IsAwaitingInvalidation =>
+        State is AuthenticatorState.Suspended && InvalidatesAt is not null && Confirmed;
+
+    /// <summary>
     /// A code generator, enrolled but not yet confirmed: one valid code has to be
     /// presented before it becomes usable (AUTH-FACT-007).
     /// </summary>
@@ -244,7 +253,7 @@ internal sealed class Authenticator
 
     /// <summary>
     /// The signature counter the authenticator reported, which is recorded so that one
-    /// moving backwards is caught.
+    /// that does not advance is caught.
     /// </summary>
     /// <param name="counter">What the authenticator reported.</param>
     /// <exception cref="InvalidOperationException">The credential holds no key.</exception>

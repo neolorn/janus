@@ -14,6 +14,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -72,18 +73,25 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
+    private readonly PhoneSignalAuditInMemory _considered = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A deployment that can send.
     /// </summary>
     public RecoveryServiceTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
+        _approvals.Work = _work;
+        _recorded.Work = _work;
+        _links.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
@@ -93,6 +101,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     {
         await _work.DisposeAsync();
         _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a number the carrier reports a recent
+    /// change of SIM or of network for is sent no recovery link; the ask is answered
+    /// as every ask is, in the same bytes for a number no account holds, and each ask
+    /// records its one consideration.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeSendsNoRecoveryLinkByTextAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk));
+
+        Result held = await Service.BeginAsync(Number, Language, Source, TestContext.Current.CancellationToken);
+        Result nobodys = await Service.BeginAsync(
+            "+441632960099",
+            Language,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(held));
+        Assert.True(Succeeded(nobodys));
+        Assert.Empty(_notifications.Texts);
+        Assert.Equal(
+            [(Factor.PhoneLink, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject), (Factor.PhoneLink, PhoneSignal.Risk, null)],
+            _considered.Records);
     }
 
     /// <summary>
@@ -122,6 +159,33 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(
             AuthenticatorState.Active,
             (await _authenticators.FindAsync(passkey, TestContext.Current.CancellationToken))!.State);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007 AC4: the password recovery set is announced as an enrolment of the
+    /// catalogue entry <c>password</c> with no credential identifier, naming the account
+    /// and nobody as its actor, since the link names nobody.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_ARecoveredPasswordIsAnnouncedAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Null(announced.Credential);
+        Assert.Equal(FactorCatalogue.Password, announced.Kind);
+        Assert.Equal(subject, announced.Subject);
+        Assert.Null(announced.Actor);
     }
 
     /// <summary>
@@ -246,6 +310,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account signs in, so it recovers its
+    /// password as an active one does and stays restricted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountRecoversItsPasswordAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        _accounts.Stands(subject, AccountState.Restricted);
+
+        Assert.True(Succeeded(await Service.BeginAsync(
+            Address,
+            Language,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        Assert.NotNull(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            AccountState.Restricted,
+            await _accounts.StateAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-004 AC1: an account whose policy closes self-service recovery is
     /// offered no email or text route, and the caller cannot tell that from an
     /// identifier no account holds.
@@ -260,7 +353,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             Support.ToString(),
-            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null, null));
 
         Assert.True(Succeeded(await Service.BeginAsync(
             Address,
@@ -290,6 +383,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken)));
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.RecoveryTokenInvalid,
             Refused(await Service.CompleteAsync(
@@ -297,6 +392,12 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 Secret,
                 Source,
                 TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the link was read in
+        // with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
 
         _notifications.Sent.Clear();
         _clock.Advance(TimeSpan.FromMinutes(5));
@@ -335,6 +436,40 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(Reason, _recorded.Written[^1].Reason);
         Assert.Equal(subject, _recorded.Written[^1].Subject);
         Assert.Equal(approver, _recorded.Written[^1].Approver);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: an in-process approval is held to the
+    /// bound the endpoint holds it to, and each refusal of its free text, and of a
+    /// channel the account does not hold, comes before the step-up (D-178), so a session
+    /// whose proof is no longer recent is answered for them, and nothing is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_AnApprovalsFreeTextIsHeldToItsBoundAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _clock.Advance(TimeSpan.FromMinutes(16));
+
+        Assert.Equal(
+            ErrorCodes.RecoveryReasonRequired,
+            Refused(await Approving(approver, session, subject, "   ")));
+        Assert.Equal(
+            ErrorCodes.RequestMalformed,
+            Refused(await Approving(approver, session, subject, new string('r', 1025))));
+        Assert.Equal(
+            ErrorCodes.RequestMalformed,
+            Refused(await Approving(approver, session, subject, Reason, "  ")));
+        Assert.Equal(
+            ErrorCodes.RecoveryChannelNotOnAccount,
+            Refused(await Approving(approver, session, subject, Reason, Elsewhere)));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refused(await Approving(approver, session, subject, " " + new string('r', 1024) + " ")));
+        Assert.Empty(_recorded.Written);
+        Assert.Empty(_approvals.All);
     }
 
     /// <summary>
@@ -447,11 +582,18 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _ = await Approving(second, another, subject, Reason);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
+        _work.Reset();
 
         Result<ApprovedRecovery> capped = await Approving(second, another, subject, Reason);
 
         Assert.Equal(ErrorCodes.Throttled, Refused(capped));
         Assert.Equal(latest.AddDays(1), Lifts(capped));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the approvals were
+        // counted in with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -483,8 +625,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         Assert.Equal(AlertSeverity.High, clustering.Severity);
         Assert.Equal(
-            Alerts.Key(AlertCondition.RecoveryClustering, subject.ToString()),
+            Alerts.Key(AlertCondition.RecoveryClustering, scope: null, subject.ToString()),
             Alerts.Deduplication(clustering.IdempotencyKey));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 and OPS-ALERT-001: the alert an approval reaches is written in
+    /// the transaction that records the approval, so an alert row that cannot be
+    /// written fails the approval before anything of it commits, and no link goes out.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnApprovalWhoseAlertCannotBeWrittenCommitsNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _configuration.Set(Settings.AlertingRecoveryAccountThreshold, 1);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_notifications.Mail);
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the approval was
+        // written in with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -571,11 +740,19 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         string recovery = Sent();
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.EnrolmentTokenInvalid,
             Refused(await Service.BeginEnrolmentAsync(
                 recovery,
                 TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the link was read in
+        // with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
 
         _notifications.Sent.Clear();
         _clock.Advance(TimeSpan.FromMinutes(5));
@@ -675,6 +852,24 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-002 AC4, AUTH-ABUSE-004: the enrolment link an approver asks for is
+    /// sent under the purpose a sign-in link is, never as a notice.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_002_AC4_TheEnrolmentLinkIsSentUnderSignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _ = await Approving(approver, session, subject, Reason);
+
+        OutboundMessage link = Assert.Single(_notifications.Sent, sent => sent.Message is MessageKind.EnrolmentLink);
+
+        Assert.Equal(RestrictionPurpose.SignIn, link.Purpose);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002a AC2: an approval an interface could find nothing wrong with,
     /// carrying a live session that passed the gate, a recorded channel and a written
     /// reason, is still refused because the approver is the subject.
@@ -713,6 +908,32 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC4, CONV-DESIGN-003: an address told while this ask waited for its
+    /// notices is told already, so this ask tells it nothing more.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_AnAddressToldMeanwhileIsToldOnceAsync()
+    {
+        _ = await AccountAsync();
+
+        _notices.Holding = destination =>
+        {
+            _notices.Holding = null;
+            _ = _notices.MarkAsync(destination, _clock.GetUtcNow(), TimeSpan.FromHours(24), TestContext.Current.CancellationToken).AsTask();
+        };
+
+        Assert.True(Succeeded(await Service.BeginAsync(
+            Elsewhere,
+            Language,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_notifications.Mail);
+        Assert.Single(_notices.Told);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because the
     /// policy closes the route or because the window has already told an address no
     /// account holds, counts against the sending restrictions as the link would have,
@@ -728,7 +949,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             Support.ToString(),
-            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null, null));
 
         Assert.True(Succeeded(await AskedAsync(Address)));
         Assert.True(Succeeded(await AskedAsync(Elsewhere)));
@@ -738,7 +959,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             [Address, Elsewhere],
             _restrictions.Drawn.Select(drawn => drawn.Destination.Canonical));
         Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.RecoveryLink, drawn.Message));
-        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.Notification, drawn.Purpose));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.SignIn, drawn.Purpose));
         Assert.Equal(MessageKind.NoAccount, Assert.Single(_notifications.Mail).Message);
 
         var refusal = Error.From(ErrorCodes.RestrictionExceeded);
@@ -749,6 +970,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         Assert.Same(refusal, held.Match(() => (Error?)null, error => error));
         Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-006 AC4: a recovery asked for at a number whose link the gateway
+    /// floor refuses is answered as it would have been, for the number's holder and
+    /// for a number no account holds alike, and leaves no link behind it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC4_ARecoveryTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
+        _notifications.Refusal = floor;
+        _restrictions.Refusal = floor;
+
+        int committed = _work.Committed;
+
+        Result held = await AskedAsync(Number);
+        Result nobodys = await AskedAsync("+441632960099");
+
+        Assert.True(Succeeded(held));
+        Assert.True(Succeeded(nobodys));
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_links.Held);
+        Assert.NotEqual(default, subject);
+        Assert.False(_work.Open);
+        Assert.Equal(committed, _work.Committed);
     }
 
     private RecoveryService Service =>
@@ -763,9 +1013,10 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Passwords,
             Policies,
             Sessions,
-            new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
+            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
             new AdministrativeScope(_gate, _administrative),
             _notifications,
+            Landing.Links,
             new NonExistenceNotice(
                 _configuration,
                 _notifications,
@@ -774,6 +1025,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 _work,
                 _events,
                 _clock),
+            Signals,
             Throttle,
             _events,
             _configuration,
@@ -784,12 +1036,14 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private LossReports Losses =>
         new(
             _reports,
+            _accounts,
             _authenticators,
             _passwords,
             _sets,
             _identifiers,
             Policies,
             _notifications,
+            Landing.Links,
             _credentials,
             _events,
             _configuration,
@@ -798,6 +1052,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _randomness);
 
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
+
+    private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
 
     private SessionService Sessions =>
         new(
@@ -808,8 +1064,11 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Policies,
             _configuration,
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
+            _accounts,
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
+            new OidcClientStoreInMemory(),
             _work,
             _clock,
             _randomness);
@@ -822,6 +1081,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _passwords,
             new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
+            _events,
             _configuration,
             _work,
             _clock);
@@ -833,6 +1093,131 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
     private static string Named(int which) => "person" + which.ToString(
         System.Globalization.CultureInfo.InvariantCulture) + "@example.test";
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the approver committed after the gate step
+    /// and before the first write refuses the approval inside its unit of work, which
+    /// rolls back: no approval is recorded and nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAnApprovalAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _notifications.Sent.Clear();
+        _work.Reset();
+        _gate.Admitted = admitted => _work.Meanwhile = () => _gate.Restrict(admitted);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_approvals.All);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4: the approval, its record and the link's send are one unit of
+    /// work, so the second ask stands before all three: an approval refused there leaves
+    /// neither the approval nor its link's send, and no second unit of work is begun.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_AnApprovalRefusedAtTheSecondAskLeavesNeitherItNorItsLinksSendAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _notifications.Sent.Clear();
+        _work.Reset();
+        _gate.Admitted = admitted => _work.Meanwhile = () => _gate.Restrict(admitted);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_approvals.All);
+        Assert.Empty(_recorded.Written);
+        Assert.Equal(0, _links.Count);
+        Assert.Empty(_notifications.Sent);
+
+        _gate.Lift(approver);
+        _work.Reset();
+
+        Assert.NotNull(Value(await Approving(approver, session, subject, Reason))!.EnrolmentLinkExpiresAt);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(_clock.GetUtcNow(), Assert.Single(_approvals.All).SpentAt);
+        Assert.Single(_recorded.Written);
+        Assert.Equal(1, _links.Count);
+        Assert.Single(_notifications.Carried, sent => sent.Message is MessageKind.EnrolmentLink);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 AC7: an approval whose link's send a sending restriction refuses
+    /// is refused with <c>auth.restriction.exceeded</c>, and one whose text message the
+    /// gateway floor refuses with <c>integration.sms.balancefloor</c>; each leaves no
+    /// approval, no record of it, no link and no send, its unit of work rolled back.
+    /// </summary>
+    /// <param name="refusal">The code the send is refused with.</param>
+    /// <param name="texted">Whether the link goes to the account's number.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("auth.restriction.exceeded", false)]
+    [InlineData("auth.restriction.exceeded", true)]
+    [InlineData("integration.sms.balancefloor", true)]
+    public async Task AUTH_RECOV_002_AC7_AnApprovalWhoseLinkIsRefusedLeavesNoApprovalAsync(string refusal, bool texted)
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+        var code = ErrorCode.Parse(refusal);
+
+        _notifications.Sent.Clear();
+        _notifications.Refusal = Error.From(code);
+        _notifications.RefusedChannel = texted ? SendKind.Sms : SendKind.Email;
+        _work.Reset();
+
+        Assert.Equal(code, Refused(await Approving(approver, session, subject, Reason, texted ? Number : Address)));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_approvals.All);
+        Assert.Empty(_recorded.Written);
+        Assert.Equal(0, _links.Count);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002: where two approvers are required, the first approval stands and
+    /// sends nothing; the second spends both in the unit of work that sends the link,
+    /// and a link the restrictions refuse leaves the first standing and the second
+    /// unwritten.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheApprovalThatCompletesTheCountSpendsEveryOneWithItsLinkAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId first, SessionId opened) = await ApproverAsync();
+        (SubjectId second, SessionId another) = await ApproverAsync();
+
+        _configuration.Set(Settings.RecoveryApproversRequired, 2);
+
+        _ = await Approving(first, opened, subject, Reason);
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refused(await Approving(second, another, subject, Reason)));
+        Assert.Null(Assert.Single(_approvals.All).SpentAt);
+
+        _notifications.Refusal = null;
+
+        Assert.NotNull(Value(await Approving(second, another, subject, Reason))!.EnrolmentLinkExpiresAt);
+        Assert.Equal(2, _approvals.All.Count);
+        Assert.All(_approvals.All, approval => Assert.Equal(_clock.GetUtcNow(), approval.SpentAt));
+    }
 
     private ValueTask<Result<ApprovedRecovery>> Approving(
         SubjectId approver,
@@ -850,9 +1235,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     // The token the last message carried, which is what a person would open.
-    private string Sent() => _notifications.Mail[^1].Values["token"];
+    private string Sent() => _notifications.Mail[^1].Token();
 
-    private string Texted() => _notifications.Texts[^1].Values["token"];
+    private string Texted() => _notifications.Texts[^1].Token();
 
     private AuthenticatorId Enrolled(SubjectId subject, Factor factor)
     {
@@ -916,6 +1301,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 presented,
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken);
         }
 

@@ -1,5 +1,6 @@
 using System;
 using Janus.Core;
+using Janus.Identity.Identifiers;
 
 namespace Janus.Storage.Identity.Identifiers;
 
@@ -14,10 +15,17 @@ namespace Janus.Storage.Identity.Identifiers;
 internal sealed class IdentifierRemovalRecord
 {
     /// <summary>
-    /// The <c>identifier_id</c> column, which is this table's key and the identifier
-    /// the restored one is again.
+    /// The <c>removal_id</c> column, which is this table's key: the removal's own
+    /// identifier.
     /// </summary>
-    public IdentifierId Id { get; set; }
+    public IdentifierRemovalId Id { get; set; }
+
+    /// <summary>
+    /// The <c>identifier_id</c> column: the identifier the value came from, which the
+    /// restored one is again. One identifier replaced twice within the window stands
+    /// behind two rows.
+    /// </summary>
+    public IdentifierId Origin { get; set; }
 
     /// <summary>
     /// The subject column, which both encrypted columns name as their subject.

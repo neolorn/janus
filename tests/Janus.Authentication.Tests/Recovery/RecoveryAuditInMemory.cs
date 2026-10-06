@@ -25,7 +25,14 @@ internal sealed class RecoveryAuditInMemory : IRecoveryAudit
         SubjectId Subject,
         string Reason,
         IdentifierKind Channel,
-        DateTimeOffset At);
+        DateTimeOffset At)
+    {
+        /// <summary>
+        /// The reason given at the use of the break-glass credential, where the change
+        /// was made in the session it opened, or nothing.
+        /// </summary>
+        public string? BreakGlassReason { get; init; }
+    }
 
     private readonly List<Entry> _written = [];
 
@@ -34,16 +41,26 @@ internal sealed class RecoveryAuditInMemory : IRecoveryAudit
     /// </summary>
     public IReadOnlyList<Entry> Written => _written;
 
+    /// <summary>
+    /// The unit of work the operations under test run in. Where a test names it, a
+    /// record written inside one that rolls back is forgotten, as the trail forgets it.
+    /// </summary>
+    public UnitOfWorkInMemory? Work { get; set; }
+
     /// <inheritdoc/>
     public ValueTask ApprovedAsync(
         SubjectId approver,
+        string? breakGlassReason,
         SubjectId subject,
         string reason,
         IdentifierKind channel,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _written.Add(new Entry(approver, subject, reason, channel, at));
+        int stood = _written.Count;
+
+        Work?.Undoing(() => _written.RemoveRange(stood, _written.Count - stood));
+        _written.Add(new Entry(approver, subject, reason, channel, at) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }

@@ -22,10 +22,6 @@ internal static class AccountAdministrationEndpoints
 {
     private static readonly IResult Nothing = TypedResults.NoContent();
 
-    // Chapter 09 section 8a: an account that shows no photo, and one whose policy shows
-    // none, answer alike.
-    private static readonly IResult NoPhoto = TypedResults.NotFound();
-
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
     private const string StoredPhoto = "image/jpeg";
 
@@ -39,13 +35,43 @@ internal static class AccountAdministrationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject:guid}");
+        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject}");
 
-        _ = SessionRequired.On(group.MapPost("/suspend", SuspendAsync));
-        _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync));
-        _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync));
-        _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync));
-        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync));
+        _ = SessionRequired.On(group.MapPost("/suspend", SuspendAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict,
+                    ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.PhotoNotFound, ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<byte[]>(StatusCodes.Status200OK, StoredPhoto);
 
         return endpoints;
     }
@@ -53,7 +79,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> SuspendAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -62,9 +88,9 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .SuspendAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -73,7 +99,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> ReactivateAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -82,9 +108,9 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .ReactivateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -93,7 +119,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> LiftRestrictionAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -102,8 +128,9 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .LiftRestrictionAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new SubjectId(subject),
+                    browser.Asking,
+                    browser.Required.Id,
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -112,7 +139,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> CancelDeletionAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -121,8 +148,9 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .CancelDeletionAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new SubjectId(subject),
+                    browser.Asking,
+                    browser.Required.Id,
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -132,7 +160,7 @@ internal static class AccountAdministrationEndpoints
         IAccounts accounts,
         RequestSession browser,
         HttpContext context,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -146,12 +174,10 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .ReadPhotoAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new SubjectId(subject),
+                    browser.Asking,
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
-            image => image.IsEmpty
-                ? NoPhoto
-                : TypedResults.Bytes(image, StoredPhoto));
+            image => TypedResults.Bytes(image, StoredPhoto));
     }
 }

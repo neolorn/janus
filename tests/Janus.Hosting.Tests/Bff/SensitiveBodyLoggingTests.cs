@@ -151,14 +151,7 @@ public sealed class SensitiveBodyLoggingTests : IDisposable
             });
         }
 
-        _ = builder.Services.AddJanus(
-            "Host=unused",
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            Encoding.UTF8.GetBytes("the secret this application presents"),
-            Encoding.UTF8.GetBytes("Host=unused"),
-            HostFixture.Declaration(),
-            ApplicationKind.Public);
+        _ = builder.Services.AddJanus("Host=unused", HostFixture.Declaration(), ApplicationKind.Public);
 
         // The transport every host registers, which the delivery report reads the
         // gateway's parameters through.

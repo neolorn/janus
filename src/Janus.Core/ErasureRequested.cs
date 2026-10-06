@@ -5,7 +5,9 @@ namespace Janus.Core;
 /// <summary>
 /// A subject was erased. The library's own work has committed: the account is
 /// <c>deleted</c>, the wrapped key is overwritten and the fingerprints are
-/// neutralised. What remains is the host redacting what it holds in its own tables.
+/// neutralised. What remains is the host clearing what the destroyed key does not
+/// reach: the copies it derived from the subject's fields and what it passed to its own
+/// processors.
 /// </summary>
 /// <param name="RaisedAt">When the erasure transaction committed.</param>
 /// <param name="IdempotencyKey">The key a handler recognises a repeat by.</param>

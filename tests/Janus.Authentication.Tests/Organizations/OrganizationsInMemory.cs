@@ -56,6 +56,22 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(_held.GetValueOrDefault(organization));
 
+    /// <summary>
+    /// What another transaction committed on an organization while this one waited for
+    /// its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<OrganizationId>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<OrganizationStanding?> HoldAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(organization);
+
+        return FindAsync(organization, cancellationToken);
+    }
+
     /// <inheritdoc/>
     public ValueTask CreateAsync(
         OrganizationId organization,

@@ -18,6 +18,14 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
 {
     private const int DocumentVersionLength = 64;
 
+    // Chapter 10 section 5.12b: a takedown holds the deletion it found, which is never
+    // its own.
+    private static readonly string[] HeldDeletions =
+    [
+        VocabularyConverter<DeletionOrigin>.Write(DeletionOrigin.OutOfBandRequest),
+        VocabularyConverter<DeletionOrigin>.Write(DeletionOrigin.Self),
+    ];
+
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<AccountRecord> builder)
     {
@@ -48,6 +56,28 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             table.HasCheckConstraint(
                 "ck_accounts_deleting",
                 "(deleting_by IS NULL) = (deleting_since IS NULL)");
+
+            // IDN-LIFE-003 and chapter 10 section 5.12b: a suspension is held only by a
+            // deletion a takedown or an out-of-band request began, and a deletion only
+            // by a takedown, which holds it with the instant it began.
+            table.HasCheckConstraint(
+                "ck_accounts_suspension_held",
+                "suspension_held IS NULL OR "
+                    + Vocabulary.Admits<SuspensionOrigin>("suspension_held"));
+            table.HasCheckConstraint(
+                "ck_accounts_suspension_held_state",
+                "suspension_held IS NULL OR "
+                    + "(state = 'deleting' AND deleting_by IN ('takedown', 'oob-request'))");
+            table.HasCheckConstraint(
+                "ck_accounts_deletion_held",
+                "deletion_held IS NULL OR "
+                    + Vocabulary.Admits("deletion_held", HeldDeletions));
+            table.HasCheckConstraint(
+                "ck_accounts_deletion_held_state",
+                "deletion_held IS NULL OR (state = 'deleting' AND deleting_by = 'takedown')");
+            table.HasCheckConstraint(
+                "ck_accounts_deletion_held_since",
+                "(deletion_held IS NULL) = (deletion_held_since IS NULL)");
             table.HasCheckConstraint(
                 "ck_accounts_age_group",
                 "age_group IS NULL OR " + Vocabulary.Admits<AgeGroup>("age_group"));
@@ -67,6 +97,10 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             table.HasCheckConstraint(
                 "ck_accounts_documents",
                 "(terms_version IS NULL) = (notice_version IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_accounts_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(account => account.Subject).HasName("pk_accounts");
@@ -85,6 +119,10 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             .HasColumnName("suspended_by")
             .HasConversion(new VocabularyConverter<SuspensionOrigin>());
 
+        builder.Property(account => account.SuspensionHeld)
+            .HasColumnName("suspension_held")
+            .HasConversion(new VocabularyConverter<SuspensionOrigin>());
+
         builder.Property(account => account.RestrictionHeld)
             .HasColumnName("restriction_held");
 
@@ -97,6 +135,12 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             .HasConversion(new VocabularyConverter<DeletionOrigin>());
 
         builder.Property(account => account.DeletingSince).HasColumnName("deleting_since");
+
+        builder.Property(account => account.DeletionHeld)
+            .HasColumnName("deletion_held")
+            .HasConversion(new VocabularyConverter<DeletionOrigin>());
+
+        builder.Property(account => account.DeletionHeldSince).HasColumnName("deletion_held_since");
 
         builder.Property(account => account.AdultAffirmed).HasColumnName("adult_affirmed");
 

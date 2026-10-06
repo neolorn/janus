@@ -42,9 +42,29 @@ internal sealed class SmsBalance(
     /// Reads the balance, keeps it, and raises the alert where the last hour drained
     /// abnormally or the floor comes within a day at the current rate.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the poll.</param>
     /// <returns>What was read, or the failure where the gateway did not answer.</returns>
-    public async ValueTask<Result<decimal>> PollAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result<decimal>> PollAsync(AccessContext context, CancellationToken cancellationToken)
+    {
+        _ = Monitoring(context);
+
+        return await PolledAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
+
+    // INT-SMS-004: the poll alone asks the gateway, before its unit of work begins, and
+    // no poll succeeds without a balance read.
+    private async ValueTask<Result<decimal>> PolledAsync(CancellationToken cancellationToken)
     {
         Error? failure = null;
 
@@ -78,7 +98,11 @@ internal sealed class SmsBalance(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<decimal>(notBegun);
+        }
 
         await readings
             .RecordAsync(new BalanceReading(now, balance), Baseline + interval, cancellationToken)
@@ -101,21 +125,32 @@ internal sealed class SmsBalance(
 
             if (published.Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<decimal>(unpublished);
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<decimal>(notCommitted);
+        }
 
         return Result.Success(balance);
     }
 
     /// <summary>
-    /// Whether ordinary sends are stopped, which they are once the account reaches
-    /// the floor. Alert-class sends do not ask (OPS-ALERT-003).
+    /// Whether ordinary sends are stopped, which they are once the latest balance a
+    /// poll recorded stands at the floor. Alert-class sends do not ask (OPS-ALERT-003).
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>Whether the hard stop is in force.</returns>
+    /// <remarks>
+    /// AUTH-ABUSE-006, INT-SMS-004: a send is judged inside the transaction that
+    /// undertakes it, so the gateway is never asked here, however old the reading, and
+    /// until a first balance is recorded the floor refuses nothing.
+    /// </remarks>
     public async ValueTask<Result<bool>> BelowFloorAsync(CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -125,35 +160,14 @@ internal sealed class SmsBalance(
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<decimal>(error, ref failure));
 
-        TimeSpan interval = (await configuration
-                .ReadAsync(Settings.AbuseSmsPollInterval, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
-
         if (failure is not null)
         {
             return Result.Failure<bool>(failure);
         }
 
-        DateTimeOffset now = time.GetUtcNow();
+        BalanceReading? latest = await readings.LatestAsync(cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyList<BalanceReading> inside = await readings
-            .SinceAsync(now - interval, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (inside.Count == 0)
-        {
-            // Nothing read inside the poll interval says nothing about the account, so
-            // the gateway is asked rather than guessed at.
-            decimal polled = (await PollAsync(cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Held<decimal>(error, ref failure));
-
-            return failure is not null
-                ? Result.Failure<bool>(failure)
-                : Result.Success(polled <= floor);
-        }
-
-        return Result.Success(inside[^1].Balance <= floor);
+        return Result.Success(latest is not null && latest.Balance <= floor);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

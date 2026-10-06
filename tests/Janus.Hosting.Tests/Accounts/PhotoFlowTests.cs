@@ -51,7 +51,11 @@ public sealed class PhotoFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status404NotFound, withoutPolicy.Status);
         Assert.Equal(StatusCodes.Status404NotFound, withoutPhoto.Status);
-        Assert.Equal(withoutPolicy.Body, withoutPhoto.Body);
+        Assert.Equal(ErrorCodes.PhotoNotFound.ToString(), withoutPhoto.Text("code"));
+        Assert.Equal(withoutPolicy.Text("code"), withoutPhoto.Text("code"));
+        Assert.Equal(
+            withoutPolicy.Json().GetProperty("details").GetRawText(),
+            withoutPhoto.Json().GetProperty("details").GetRawText());
     }
 
     /// <summary>
@@ -176,14 +180,35 @@ public sealed class PhotoFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status404NotFound, read.Status);
     }
 
-    // IDN-ATTR-002: photos are an organization's to show, so the browser's account is
-    // placed in one whose key says it shows them.
-    private void ShowsPhotos()
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the setting and the removing of a photo, and
+    /// the photo stays as it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAPhotoChangeAsync()
     {
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
-        var organization = OrganizationId.New(_deployment.Clock);
+        Browser browser = await Flow.SignedInAsync(_deployment);
 
-        _deployment.Memberships.Place(subject, organization);
-        _deployment.Configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+        ShowsPhotos();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("PUT", Path, Upload, contentType: Png));
+
+        Assert.Equal(StatusCodes.Status404NotFound, (await browser.SendAsync("GET", Path)).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("PUT", Path, Upload, contentType: Png)).Status);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => browser.SendAsync("DELETE", Path));
+
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", Path)).Status);
     }
+
+    // IDN-ATTR-002: photos are the policy's to show, and the browser's account belongs
+    // to no organization, so the system policy is the one that shows them.
+    private void ShowsPhotos() =>
+        _deployment.Configuration.Set(Settings.PolicyDefault, Policies.SystemDefault with { Photos = true });
 }

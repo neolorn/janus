@@ -44,7 +44,9 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
             Loosening: true,
             "a support window",
             actor,
-            DateTimeOffset.UtcNow);
+            BreakGlassReason: null,
+            DateTimeOffset.UtcNow,
+            Principal: null);
 
         await RecordedAsync(written);
 
@@ -56,6 +58,7 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
         Assert.True(read.Loosening);
         Assert.Equal("a support window", read.Reason);
         Assert.Equal(actor, read.Actor);
+        Assert.Null(read.Principal);
     }
 
     /// <summary>
@@ -97,15 +100,59 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
         Assert.Equal(other, read.Actor);
     }
 
+    /// <summary>
+    /// OPS-CFG-005 AC2 (D-166, 319): a change a system principal made carries the
+    /// principal's name and reads back by it, and a person's change is not among them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_AC2_TheRecordsAreQueryableByPrincipalAsync()
+    {
+        SubjectId person = await _deployment.AccountAsync(DateTimeOffset.UtcNow);
+        string after = Catalogue.HostingLocation.Write(HostingLocation.Inside);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Audit(writing).ChangedAsync(
+                Catalogue.HostingLocation.Key,
+                before: null,
+                after,
+                loosening: false,
+                "the provider moved the region",
+                ProtectedConfiguration.Principal,
+                DateTimeOffset.UtcNow,
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await RecordedAsync(Changed(Catalogue.PrivacyExportRateLimit.Key, "3", "2", person));
+
+        ConfigurationChange read = Assert.Single(await OfPrincipalAsync(ProtectedConfiguration.Principal.Name));
+
+        Assert.Equal(Catalogue.HostingLocation.Key, read.Key);
+        Assert.Equal(after, read.After);
+        Assert.Equal(ProtectedConfiguration.Principal.Name, read.Principal);
+        Assert.Null(Assert.Single(await OfActorAsync(person)).Principal);
+    }
+
     private static ConfigurationChange Changed(
         ConfigurationKey key,
         string before,
         string after,
         SubjectId actor) =>
-        new(key, before, after, Loosening: true, "a support window", actor, DateTimeOffset.UtcNow);
+        new(
+            key,
+            before,
+            after,
+            Loosening: true,
+            "a support window",
+            actor,
+            BreakGlassReason: null,
+            DateTimeOffset.UtcNow,
+            Principal: null);
 
     private ConfigurationAudit Audit(StoreContext context) =>
-        new(context, new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);
+        new(context, new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness), TimeProvider.System);
 
     private async Task RecordedAsync(ConfigurationChange change)
     {
@@ -127,5 +174,12 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
         await using StoreContext reading = database.Context();
 
         return await Audit(reading).OfActorAsync(actor, TestContext.Current.CancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ConfigurationChange>> OfPrincipalAsync(string principal)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await Audit(reading).OfPrincipalAsync(principal, TestContext.Current.CancellationToken);
     }
 }

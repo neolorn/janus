@@ -59,7 +59,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -71,6 +71,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     /// </summary>
     public AccountServiceTests()
     {
+        _notifications.Work = _work;
         _person = SubjectId.New(_randomness);
         _directory.Stands(_person, AccountState.Active);
         _passwords.Hold(_person, Noon);
@@ -81,10 +82,12 @@ public sealed class AccountServiceTests : IAsyncDisposable
         new(
             new AccountLifecycle(
                 _directory,
+                _restriction,
                 _identifiers,
                 _links,
                 _sessions,
                 _notifications,
+                Landing.Links,
                 _audit,
                 Gate,
                 _events,
@@ -110,7 +113,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private ProfilePhotos Photos => new(
         _directory,
         _restriction,
-        _memberships,
+        new PolicyResolution(_memberships, _configuration, new PolicyRaiseStoreInMemory()),
         _configuration,
         _audit,
         _work,
@@ -122,6 +125,8 @@ public sealed class AccountServiceTests : IAsyncDisposable
         _authenticators,
         _passwords,
         new PolicyResolution(_memberships, _configuration, _raises),
+        _identifiers,
+        new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
         _clock);
 
     private AccessContext Acting => AccessContext.Of(_person);
@@ -331,6 +336,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
         await ChosenAsync(Chosen);
 
         _clock.Advance(TimeSpan.FromDays(1));
+        _work.Reset();
 
         Error refused = Failure(await Service.EditProfileAsync(
             Acting,
@@ -339,11 +345,36 @@ public sealed class AccountServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.UsernameCoolingOff, refused.Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(
             Noon + Settings.IdentifiersUsernameChangeCoolOff.Default,
             refused.Details["retryAt"].Deserialize<DateTimeOffset>());
 
         Assert.Equal(Chosen, await UsernameAsync());
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a preference the directory refuses after the unit of work
+    /// began rolls it back, so nothing of the edit is committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APreferenceRefusedAfterTheWorkBeganIsRolledBackAsync()
+    {
+        var declared = new Dictionary<string, string>(StringComparer.Ordinal) { ["undeclared"] = "1" };
+
+        Result refused = await Service.SetPreferencesAsync(
+            Acting,
+            language: null,
+            timeZone: null,
+            declared,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.PreferenceUndeclared, Failure(refused).Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -369,6 +400,155 @@ public sealed class AccountServiceTests : IAsyncDisposable
         await ChosenAsync(Taken);
 
         Assert.Equal(Taken, await UsernameAsync());
+    }
+
+    /// <summary>
+    /// REG-IDENT-009 AC5: two choices of one free username made at once are judged one
+    /// after the other under the name's lock, so the second finds the name on the
+    /// first's account and is answered as taken.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_009_AC5_ANameChosenWhileTheChoiceWaitedForItsLockIsAnsweredTakenAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        var other = SubjectId.New(_randomness);
+
+        _identifiers.Locking = values =>
+        {
+            _identifiers.Locking = null;
+            _ = _identifiers.Verified(other, IdentifierKind.Username, Chosen);
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal([(IdentifierKind.Username, Chosen)], _identifiers.Locked);
+        Assert.Null(await UsernameAsync());
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// REG-IDENT-009 AC5: a choice of a username made while that username's erasure
+    /// commits is judged under the name's lock once the erasure has written its hold,
+    /// and is answered as taken.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_009_AC5_ANameHeldWhileTheChoiceWaitedForItsLockIsAnsweredTakenAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+
+        _identifiers.Locking = values =>
+        {
+            _identifiers.Locking = null;
+            _identifiers.Holds(Chosen, Noon + Settings.RetentionConsent.Default);
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+        Assert.Null(await UsernameAsync());
+    }
+
+    /// <summary>
+    /// REG-IDENT-009, D-178: a username taken, or a change inside the cooling-off
+    /// window, is told before the step-up is asked, so a session whose proof is no
+    /// longer recent hears the refusal the change meets, and a change none refuses is
+    /// the <c>username:change</c> step-up action.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_009_TheStepUpIsJudgedAfterEveryOtherRefusalAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _identifiers.Holds(Taken, Noon + Settings.RetentionConsent.Default);
+
+        SessionId stale = Stepped();
+
+        _clock.Advance(TimeSpan.FromMinutes(16));
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                stale,
+                new ProfileEdit(Username: Taken),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                stale,
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+
+        await ChosenAsync(Chosen);
+
+        stale = Stepped();
+        _clock.Advance(TimeSpan.FromMinutes(16));
+
+        Assert.Equal(
+            ErrorCodes.UsernameCoolingOff,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                stale,
+                new ProfileEdit(Username: "merlin"),
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the choice of a username and of a preferred
+    /// second step, each inside its unit of work, which rolls back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAUsernameAndAPreferredStepAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _directory.Holds(_person, Profile("Kestrel", null, null));
+
+        Authenticator key = SecondStepKey("The key", Noon);
+
+        _authenticators.Hold(key);
+
+        foreach (Func<ValueTask<Result>> change in new Func<ValueTask<Result>>[]
+        {
+            () => Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken),
+            () => Service.PreferSecondStepAsync(Acting, key.Id, TestContext.Current.CancellationToken),
+        })
+        {
+            int rolledBack = _work.RolledBack;
+
+            _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+
+            ErrorCode refused = Refused(await change());
+
+            _restriction.Lift(_person);
+
+            Assert.Equal(ErrorCodes.Restricted, refused);
+            Assert.Equal(rolledBack + 1, _work.RolledBack);
+            Assert.False(_work.Open);
+        }
+
+        Assert.Null(await UsernameAsync());
+        Assert.False(key.IsPreferred);
     }
 
     private static HeldProfile Profile(string? displayName, string? legalName, DateOnly? dateOfBirth)
@@ -457,7 +637,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
             _clock.GetUtcNow(),
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         _sessions.AddAsync(session, Drawn(), Drawn(), TestContext.Current.CancellationToken)
             .AsTask()
@@ -499,28 +679,71 @@ public sealed class AccountServiceTests : IAsyncDisposable
     /// <summary>
     /// IDN-ATTR-008 AC2: the preference names a second step the account holds, so a
     /// credential of another account, and one that is no second step, are refused
-    /// alike.
+    /// alike as a body referring to what cannot be acted on, naming <c>method</c>, and
+    /// the preference stands as it was.
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_008_AC2_AMethodTheAccountDoesNotHoldIsRefusedAsync()
     {
+        Authenticator marked = SecondStepKey("The marked one", Noon);
         Authenticator passkey = Passkey();
 
+        _authenticators.Hold(marked);
+        _authenticators.Hold(passkey);
+
+        Error unheld = Failure(await Service.PreferSecondStepAsync(
+            Acting,
+            AuthenticatorId.New(_clock),
+            TestContext.Current.CancellationToken));
+        Error notASecondStep = Failure(await Service.PreferSecondStepAsync(
+            Acting,
+            passkey.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.RequestInvalid, unheld.Code);
+        Assert.Equal("method", unheld.Details["member"].GetString());
+        Assert.Equal(ErrorCodes.RequestInvalid, notASecondStep.Code);
+        Assert.Equal("method", notASecondStep.Details["member"].GetString());
+        Assert.Equal(marked.Id, await PreferredAsync());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-001 AC5: a label is held once per kind per account without regard to
+    /// case, as the database's index holds it; a credential keeps its own label in other
+    /// capitals, and a credential of another kind may carry the same one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_001_AC5_ALabelHeldInOtherCapitalsIsRefusedAsync()
+    {
+        Authenticator older = SecondStepKey("The old one", Noon);
+        Authenticator newer = SecondStepKey("The new one", Noon.AddDays(1));
+        Authenticator passkey = Passkey();
+
+        _authenticators.Hold(older);
+        _authenticators.Hold(newer);
         _authenticators.Hold(passkey);
 
         Assert.Equal(
-            ErrorCodes.CredentialNotFound,
-            Refused(await Service.PreferSecondStepAsync(
+            ErrorCodes.CredentialLabelInvalid,
+            Refused(await Service.LabelCredentialAsync(
                 Acting,
-                AuthenticatorId.New(_clock),
+                newer.Id,
+                "THE OLD ONE",
                 TestContext.Current.CancellationToken)));
 
-        Assert.Equal(
-            ErrorCodes.CredentialNotFound,
-            Refused(await Service.PreferSecondStepAsync(
-                Acting,
-                passkey.Id,
-                TestContext.Current.CancellationToken)));
+        Accepted(await Service.LabelCredentialAsync(
+            Acting,
+            older.Id,
+            "the OLD one",
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.LabelCredentialAsync(
+            Acting,
+            newer.Id,
+            "this LAPTOP",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Labelled("the OLD one"), older.Label);
+        Assert.Equal(Labelled("this LAPTOP"), newer.Label);
     }
 
     /// <summary>

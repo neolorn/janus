@@ -1,4 +1,4 @@
-using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 
 namespace Janus.Storage.Privacy.SubjectKeys;
 
@@ -12,9 +12,10 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 internal sealed class SubjectKeyRecord
 {
     /// <summary>
-    /// The subject column, which is this table's key.
+    /// The <c>subject</c> column, which is this table's key: the row of a subject's key,
+    /// or of the deployment's (D-174).
     /// </summary>
-    public SubjectId Subject { get; set; }
+    public SubjectKeyId Id { get; set; }
 
     /// <summary>
     /// The <c>format_marker</c> column.

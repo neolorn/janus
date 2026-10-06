@@ -5,7 +5,9 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -24,8 +26,11 @@ namespace Janus.Authentication.Sessions;
 /// <param name="policies">Where the principal's policy is resolved.</param>
 /// <param name="configuration">Where the lifetimes are read from.</param>
 /// <param name="scope">Whether the caller may end sessions that are not their own.</param>
+/// <param name="stepUp">What ending sessions that are not the caller's asks of the caller's own session.</param>
+/// <param name="directory">Whether the account whose sessions an administrator ends exists.</param>
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
+/// <param name="clients">Where the client a registration captured is read, for the return it answers.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
@@ -43,8 +48,11 @@ internal sealed class SessionService(
     PolicyResolution policies,
     IConfigurationStore configuration,
     AdministrativeScope scope,
+    StepUpGuard stepUp,
+    IAccountDirectory directory,
     ILocationResolver locations,
     ConcurrentSessions concurrent,
+    IOidcClientStore clients,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -67,7 +75,29 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.Held, cancellationToken);
+        BeginAsync(subject, presented, origin, Admission.Held, breakGlassReason: null, client: null, cancellationToken);
+
+    /// <summary>
+    /// Begins the session a registration's terms step signs the person in on, which
+    /// keeps the client the registration captured (REG-SESS-008, API-REDIR-002).
+    /// </summary>
+    /// <param name="subject">Who registered.</param>
+    /// <param name="presented">What they presented.</param>
+    /// <param name="origin">Where from.</param>
+    /// <param name="client">The client the registration captured, or nothing where none was.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The session and its secret, or the failure <see cref="BeginAsync(SubjectId, IReadOnlyCollection{Factor}, SessionOrigin, CancellationToken)"/>
+    /// answers.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask<Result<IssuedSession>> BeginRegisteredAsync(
+        SubjectId subject,
+        IReadOnlyCollection<Factor> presented,
+        SessionOrigin origin,
+        string? client,
+        CancellationToken cancellationToken) =>
+        BeginAsync(subject, presented, origin, Admission.Held, breakGlassReason: null, client, cancellationToken);
 
     /// <summary>
     /// Begins a session that passes every gate and the stated floor for its lifetime,
@@ -79,6 +109,10 @@ internal sealed class SessionService(
     /// </summary>
     /// <param name="subject">Who signed in.</param>
     /// <param name="presented">What they presented.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the credential's use, which the session keeps and every
+    /// record it writes carries (OPS-BOOT-002).
+    /// </param>
     /// <param name="origin">Where from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The session and its secret.</returns>
@@ -86,9 +120,14 @@ internal sealed class SessionService(
     public ValueTask<Result<IssuedSession>> BeginExemptAsync(
         SubjectId subject,
         IReadOnlyCollection<Factor> presented,
+        string breakGlassReason,
         SessionOrigin origin,
-        CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.Exempt, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(breakGlassReason);
+
+        return BeginAsync(subject, presented, origin, Admission.Exempt, breakGlassReason, client: null, cancellationToken);
+    }
 
     /// <summary>
     /// Begins a session for an account inside the run-up a raised requirement carries,
@@ -110,7 +149,14 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.WithinTheRunUp, cancellationToken);
+        BeginAsync(
+            subject,
+            presented,
+            origin,
+            Admission.WithinTheRunUp,
+            breakGlassReason: null,
+            client: null,
+            cancellationToken);
 
     /// <summary>
     /// The session a presented secret belongs to, refreshed by the use that resolved
@@ -184,7 +230,11 @@ internal sealed class SessionService(
         SessionOrigin before = session.LastSeen;
         DateTimeOffset usedBefore = session.LastSeenAt;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<Session>(notBegun);
+        }
 
         session.Touch(used, now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
@@ -201,10 +251,16 @@ internal sealed class SessionService(
         if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<Session>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<Session>(notCommitted);
+        }
 
         return Result.Success(session);
     }
@@ -235,7 +291,11 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
 
         // A combination that proves nothing here, a second factor with no first
         // factor of ours beside it or an email factor, moves nothing and is still
@@ -249,9 +309,15 @@ internal sealed class SessionService(
         await sessions
             .ReplaceSecretAsync(session.Id, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
-        await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
+        await audit
+            .PresentedAsync(session.Id, session.Subject, session.BreakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
     }
@@ -333,7 +399,11 @@ internal sealed class SessionService(
         SessionOrigin before = session.LastSeen;
         DateTimeOffset usedBefore = session.LastSeenAt;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
 
         session.Present(proved, now);
         session.Touch(located.Match(one => one, _ => origin), now, inactivity);
@@ -345,16 +415,23 @@ internal sealed class SessionService(
                 restoredToken.Fingerprint(),
                 cancellationToken)
             .ConfigureAwait(false);
-        await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
+        await audit
+            .PresentedAsync(session.Id, session.Subject, session.BreakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
 
         if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, restored, restoredToken));
     }
@@ -376,11 +453,21 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         await sessions
             .ReplaceSecretAsync(session.Id, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
     }
@@ -450,7 +537,12 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         await sessions
             .AddAsync(derived, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
@@ -458,10 +550,16 @@ internal sealed class SessionService(
         if (await UnwatchedAsync(derived, before: null, usedBefore: null, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(derived.Id, secret, token));
     }
@@ -488,12 +586,19 @@ internal sealed class SessionService(
             return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
         }
 
+        // REG-SESS-008, API-REDIR-002: the return is read from the client the session
+        // kept, never from a request.
+        OidcClient? captured = live.Client is string named
+            ? await clients.FindAsync(named, cancellationToken).ConfigureAwait(false)
+            : null;
+
         return Result.Success(new SessionDetail(
             live.Subject,
             live.Attained,
             live.PhishingResistant,
-            live.AttainedAt,
-            live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry));
+            live.Aal2At,
+            live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry,
+            captured is null ? null : RedirectValidation.Landing(captured)));
     }
 
     /// <inheritdoc/>
@@ -542,17 +647,28 @@ internal sealed class SessionService(
 
         Session? ending = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
 
-        // A session that is not the caller's is answered as one that does not exist:
-        // the identifier of somebody else's session tells the caller nothing.
+        // CONV-DESIGN-002 AC3, D-166: a session that is not the caller's is answered as
+        // one that does not exist, so the identifier of somebody else's session tells
+        // the caller nothing.
         if (ending is null || ending.Subject != subject)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.ResourceNotFound));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await sessions.EndSpineAsync(ending.Spine, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -572,35 +688,124 @@ internal sealed class SessionService(
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeAccountAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        Error? refused = await scope
-            .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+                .ConfigureAwait(false) is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        // 09 section 8a: ending another person's sessions is stepped up, judged after
+        // every other refusal.
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.AccountSessionsRevoke, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        return refused is not null
-            ? Result.Failure(refused)
-            : await EndAccountAsync(subject, cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeEveryAsync(
         AccessContext context,
+        SessionId session,
         CancellationToken cancellationToken)
     {
-        Error? refused = await scope
-            .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
-            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(context);
 
-        if (refused is not null)
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
+                .ConfigureAwait(false) is Error refused)
         {
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        // 09 section 8a: ending every session is stepped up, judged after every other
+        // refusal.
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.SessionRevokeAll, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         await sessions.EndEveryAsync(time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -616,10 +821,20 @@ internal sealed class SessionService(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -703,7 +918,7 @@ internal sealed class SessionService(
         DurationSetting setting,
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => setting.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
     // INT-GEN-006: the address is the session's own and the city is what the local
     // database makes of it, so nothing outside the library writes a place into one.
@@ -737,6 +952,8 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         Admission admission,
+        string? breakGlassReason,
+        string? client,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(presented);
@@ -792,25 +1009,59 @@ internal sealed class SessionService(
             now,
             inactivity,
             absolute,
-            satisfiesEveryGate);
+            breakGlassReason);
+
+        if (client is not null)
+        {
+            session.Capture(client);
+        }
+
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
+        // D-166 X3: the account is held while its session begins, so a transition that
+        // ends its sessions either ends this one too or is seen here, and no session
+        // begun from a sign-in outlives it. The answer is the sign-in's own for an
+        // account that may not sign in.
+        if (admission is not Admission.Exempt)
+        {
+            await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+            if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+                is AccountState.Suspended or AccountState.Deleting or AccountState.Deleted)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRejected));
+            }
+        }
+
         await sessions
             .AddAsync(session, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
-        await audit.PresentedAsync(session.Id, subject, presented, now, cancellationToken)
+        await audit.PresentedAsync(session.Id, subject, breakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await RestoreAsync(subject, presented, now, cancellationToken).ConfigureAwait(false);
 
         if (await UnwatchedAsync(session, before: null, usedBefore: null, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
     }
@@ -827,9 +1078,18 @@ internal sealed class SessionService(
             .OfAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (Authenticator held in enrolled.Where(credential =>
-                     credential.IsHeldByProvider && !presented.Contains(credential.Factor)))
+        foreach (Authenticator candidate in enrolled
+                     .Where(credential => credential.IsHeldByProvider && !presented.Contains(credential.Factor))
+                     .ToList())
         {
+            // D-166 X3: the hold is judged again on the row under its lock, so a credential
+            // invalidated or restored since the read is not made usable again here.
+            if (await authenticators.FindForUpdateAsync(candidate.Id, cancellationToken).ConfigureAwait(false)
+                is not { IsHeldByProvider: true } held)
+            {
+                continue;
+            }
+
             held.Restore();
 
             await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);

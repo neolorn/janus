@@ -45,9 +45,19 @@ public sealed class OidcServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
+    private readonly SigningProcess _signing;
+
+    /// <summary>
+    /// Starts the credential source the service reads the key set from.
+    /// </summary>
+    public OidcServiceTests() => _signing = new SigningProcess(_keys, _configuration, _clock);
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync() => await _work.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await _signing.DisposeAsync();
+        await _work.DisposeAsync();
+    }
 
     /// <summary>
     /// AUTH-SESS-012 AC2, BFF-SESS-006 AC1: a record that answers mints for the
@@ -204,12 +214,54 @@ public sealed class OidcServiceTests : IAsyncDisposable
     {
         SubjectId subject = await AccountAsync();
 
-        OidcClaims held = Value(await Service.ClaimsAsync(subject, "openid", Cancellation))!;
-        OidcClaims withEmail = Value(await Service.ClaimsAsync(subject, "openid email", Cancellation))!;
+        OidcClaims held = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid", Cancellation))!;
+        OidcClaims withEmail = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid email", Cancellation))!;
 
         Assert.Null(held.Email);
         Assert.Equal(Address, withEmail.Email);
         Assert.True(withEmail.EmailVerified);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account signs on to the mail server as an
+    /// active one does, so its claims are answered, while a suspended account's are not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsClaimsAreAnsweredAsync()
+    {
+        SubjectId restricted = await AccountAsync();
+        SubjectId suspended = await AccountAsync();
+
+        _accounts.Stands(restricted, AccountState.Restricted);
+        _accounts.Stands(suspended, AccountState.Suspended);
+
+        Assert.Equal(Address, Value(await Service.ClaimsAsync(AccessContext.Of(restricted), "openid email", Cancellation))!.Email);
+        Assert.Equal(ErrorCodes.Denied, Refused(await Service.ClaimsAsync(AccessContext.Of(suspended), "openid email", Cancellation)));
+    }
+
+    /// <summary>
+    /// LIB-API-005 (D-166, 160): a caller in process reads the claims of the identity its
+    /// context carries and no other account's, and a context naming no person reads
+    /// nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_005_ClaimsAnswerOnlyTheEffectiveSubjectAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+
+        OidcClaims own = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid", Cancellation))!;
+        OidcClaims effective = Value(await Service.ClaimsAsync(AccessContext.Of(other, subject), "openid", Cancellation))!;
+        ErrorCode principal = Refused(await Service.ClaimsAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment("claims-reader", "LIB-API-005", SystemOperation.Configuration)),
+            "openid",
+            Cancellation));
+
+        Assert.Equal(subject, own.Subject);
+        Assert.Equal(subject, effective.Subject);
+        Assert.Equal(ErrorCodes.Denied, principal);
     }
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -221,10 +273,8 @@ public sealed class OidcServiceTests : IAsyncDisposable
         where TValue : class =>
         result.Match<TValue?>(value => value, _ => null);
 
-    private SigningKeys Keys => new(_keys, _configuration, _work, _clock);
-
     private OidcService Service => new(
-        Keys,
+        _signing.Source,
         _sessions,
         _identifiers,
         _accounts,
@@ -264,7 +314,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
                 _clock.GetUtcNow(),
                 inactivity,
                 absolute,
-                satisfiesEveryGate: true),
+                breakGlassReason: "The operator cannot be reached."),
             [1],
             [2],
             Cancellation);

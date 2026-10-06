@@ -9,18 +9,26 @@ namespace Janus.Authentication.Mailboxes;
 /// the state it is owed.
 /// </summary>
 /// <remarks>
-/// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007 and REG-MAIL-003. One row per
-/// address, for good: a retired address reserved again for a later invitation is the
-/// same mailbox. The row is the retried outbox of its own pushes. The state it is owed
-/// is never stored: it follows from whether the reservation was given up, and from
-/// whether the holder is an active account with a current membership, so a suspension
-/// committed anywhere is what the next pass pushes, and the last state owed is the one
-/// the server ends in. Nothing here removes a mailbox anyone has held. A retired
-/// mailbox keeps its last holder until it is reserved again, so an erasure of that
-/// holder reaches the address it held.
+/// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, REG-MAIL-001 and REG-MAIL-003.
+/// One row stands for an address at a time: a retired address reserved again for a
+/// later invitation under <c>transfer</c> is the same mailbox, while a mailbox replaced,
+/// or a reservation nobody took and whose invitation was revoked, is owed its removal
+/// from the instant its row records and no longer stands for its address, so a new one
+/// may (D-178). The row is the retried outbox of its own pushes. The state it is owed is
+/// never stored: it follows from that instant, and from whether the holder is an active
+/// account with a current membership, so a suspension committed anywhere is what the
+/// next pass pushes, and the last state owed is the one the server ends in. Nothing
+/// here removes a mailbox anyone has held but a replacement. A retired mailbox keeps its
+/// last holder until it is reserved again, so an erasure of that holder reaches the
+/// address it held. A push marked failed is begun again under the same key a day after
+/// it was last marked failed, for as long as its state is owed (D-177).
 /// </remarks>
 internal sealed class Mailbox
 {
+    // INT-MAIL-007, D-177: how long a push marked failed waits before a fresh run of
+    // the retry schedule begins for it.
+    private static readonly TimeSpan Resumed = TimeSpan.FromDays(1);
+
     private Mailbox(MailboxId id, EmailAddress address, DateTimeOffset reservedAt)
     {
         Id = id;
@@ -56,15 +64,34 @@ internal sealed class Mailbox
     public DateTimeOffset? RetiredAt { get; private set; }
 
     /// <summary>
-    /// When the reservation was given up, where it was before anyone held it.
+    /// The instant from which the mailbox is owed its removal, where it was replaced or
+    /// its reservation released: from then it no longer stands for its address.
     /// </summary>
-    public DateTimeOffset? ReleasedAt { get; private set; }
+    public DateTimeOffset? RemovalOwedAt { get; private set; }
+
+    /// <summary>
+    /// Whether it is the mailbox that stands for its address: neither replaced nor
+    /// released.
+    /// </summary>
+    public bool StandsForAddress => RemovalOwedAt is null;
+
+    /// <summary>
+    /// Whether someone has held it and nobody holds it now, so the mail in it is a
+    /// former holder's and it passes to nobody without an administrator's choice.
+    /// </summary>
+    public bool WasHeld => RetiredAt is not null && StandsForAddress;
 
     /// <summary>
     /// Whether giving up its reservation removes it: nobody holds it and nobody ever
     /// has, so no mail anyone received is in it.
     /// </summary>
-    public bool IsRemovable => Holder is null && RetiredAt is null && ReleasedAt is null;
+    public bool IsRemovable => Holder is null && RetiredAt is null && StandsForAddress;
+
+    /// <summary>
+    /// Whether it is a reservation nobody ever took that was released, whose address
+    /// is forgotten once the server confirms its removal (PRIV-RIGHT-005a).
+    /// </summary>
+    public bool IsReleased => Holder is null && RetiredAt is null && !StandsForAddress;
 
     /// <summary>
     /// The state the server last confirmed, where it has confirmed one.
@@ -92,9 +119,21 @@ internal sealed class Mailbox
     public DateTimeOffset? NextAttemptAt { get; private set; }
 
     /// <summary>
-    /// When the outstanding push spent its budget, where it has.
+    /// When the outstanding push was last marked failed, where it was.
     /// </summary>
     public DateTimeOffset? FailedAt { get; private set; }
+
+    /// <summary>
+    /// Whether any push of the mailbox was ever attempted, so the server may hold
+    /// something of it.
+    /// </summary>
+    public bool Attempted { get; private set; }
+
+    /// <summary>
+    /// Whether the push outstanding is a removal of a mailbox no push of which was ever
+    /// attempted, which the server holds nothing of and which is confirmed unsent.
+    /// </summary>
+    public bool IsUnsent => Pending is MailboxState.Removed && !Attempted;
 
     /// <summary>
     /// A mailbox reserved for an address, disabled until a membership attaches.
@@ -114,13 +153,14 @@ internal sealed class Mailbox
     /// <param name="reservedAt">When it was reserved.</param>
     /// <param name="holder">Whose it is or was, where anyone's.</param>
     /// <param name="retiredAt">When a holder's membership last ended, where one has.</param>
-    /// <param name="releasedAt">When the reservation was given up, where it was.</param>
+    /// <param name="removalOwedAt">The instant from which it is owed its removal, where it is.</param>
     /// <param name="pushed">The state last confirmed, where one was.</param>
     /// <param name="pending">The state being pushed, where one is.</param>
     /// <param name="pendingKey">What that push is recognised by.</param>
     /// <param name="attempts">How many attempts it has had.</param>
     /// <param name="nextAttemptAt">When it is next attempted.</param>
-    /// <param name="failedAt">When it spent its budget.</param>
+    /// <param name="failedAt">When it was last marked failed.</param>
+    /// <param name="attempted">Whether any push of it was ever attempted.</param>
     /// <returns>The mailbox.</returns>
     public static Mailbox Existing(
         MailboxId id,
@@ -128,24 +168,26 @@ internal sealed class Mailbox
         DateTimeOffset reservedAt,
         SubjectId? holder,
         DateTimeOffset? retiredAt,
-        DateTimeOffset? releasedAt,
+        DateTimeOffset? removalOwedAt,
         MailboxState? pushed,
         MailboxState? pending,
         Guid? pendingKey,
         int attempts,
         DateTimeOffset? nextAttemptAt,
-        DateTimeOffset? failedAt) =>
+        DateTimeOffset? failedAt,
+        bool attempted) =>
         new(id, address, reservedAt)
         {
             Holder = holder,
             RetiredAt = retiredAt,
-            ReleasedAt = releasedAt,
+            RemovalOwedAt = removalOwedAt,
             Pushed = pushed,
             Pending = pending,
             PendingKey = pendingKey,
             Attempts = attempts,
             NextAttemptAt = nextAttemptAt,
             FailedAt = failedAt,
+            Attempted = attempted,
         };
 
     /// <summary>
@@ -154,20 +196,20 @@ internal sealed class Mailbox
     public bool IsHeld => Holder is not null && RetiredAt is null;
 
     /// <summary>
-    /// Reserves the address again for a later invitation. A mailbox whose reservation
-    /// was given up is owed its creation again; a retired one stays disabled and is
-    /// no longer its last holder's.
+    /// Reserves the address again for a later invitation. A retired mailbox stays
+    /// disabled and is no longer its last holder's.
     /// </summary>
-    /// <exception cref="InvalidOperationException">An account holds it.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// An account holds it, or it no longer stands for its address.
+    /// </exception>
     public void Reserve()
     {
-        if (IsHeld)
+        if (IsHeld || !StandsForAddress)
         {
-            throw new InvalidOperationException("An account holds the mailbox.");
+            throw new InvalidOperationException("The mailbox is not one to reserve again.");
         }
 
         Holder = null;
-        ReleasedAt = null;
     }
 
     /// <summary>
@@ -180,7 +222,7 @@ internal sealed class Mailbox
     /// </exception>
     public void Hold(SubjectId holder)
     {
-        if (Holder is not null || ReleasedAt is not null)
+        if (Holder is not null || !StandsForAddress)
         {
             throw new InvalidOperationException("The mailbox is not reserved for anyone to take.");
         }
@@ -206,7 +248,8 @@ internal sealed class Mailbox
     }
 
     /// <summary>
-    /// Gives up a reservation nobody ever took, which removes the mailbox.
+    /// Gives up a reservation nobody ever took, which owes the mailbox its removal
+    /// (REG-MAIL-001, D-178).
     /// </summary>
     /// <param name="at">When.</param>
     /// <exception cref="InvalidOperationException">The mailbox is not removable.</exception>
@@ -217,7 +260,26 @@ internal sealed class Mailbox
             throw new InvalidOperationException("The mailbox is not a reservation to give up.");
         }
 
-        ReleasedAt = at;
+        RemovalOwedAt = at;
+    }
+
+    /// <summary>
+    /// Replaces a mailbox someone has held, under <c>replace</c>: it is owed its removal
+    /// whatever its holder's state, and a new mailbox stands for the address in its place
+    /// (REG-MAIL-003, D-178).
+    /// </summary>
+    /// <param name="at">When.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Nobody has held it, someone holds it now, or it was already replaced or released.
+    /// </exception>
+    public void Replace(DateTimeOffset at)
+    {
+        if (!WasHeld || IsHeld)
+        {
+            throw new InvalidOperationException("The mailbox is not a former holder's to replace.");
+        }
+
+        RemovalOwedAt = at;
     }
 
     /// <summary>
@@ -229,7 +291,7 @@ internal sealed class Mailbox
     /// </param>
     /// <returns>The state.</returns>
     public MailboxState Owed(bool stands) =>
-        ReleasedAt is not null ? MailboxState.Removed
+        RemovalOwedAt is not null ? MailboxState.Removed
         : IsHeld && stands ? MailboxState.Enabled
         : MailboxState.Disabled;
 
@@ -241,17 +303,49 @@ internal sealed class Mailbox
     public bool IsSettled(bool stands) => Pending is null && Pushed == Owed(stands);
 
     /// <summary>
+    /// Whether a pass has anything to do for the mailbox: a push to begin under a key
+    /// of its own, or an attempt that is due. It changes nothing, so a pass asks it of
+    /// a row it read without a claim.
+    /// </summary>
+    /// <param name="stands">Whether its holder stands.</param>
+    /// <param name="now">The instant of the pass.</param>
+    /// <param name="waits">
+    /// Whether an attempt, though due, waits for a removal at the mailbox's address.
+    /// </param>
+    /// <returns>Whether there is something to claim the row for.</returns>
+    public bool Awaits(bool stands, DateTimeOffset now, bool waits)
+    {
+        MailboxState owed = Owed(stands);
+
+        if (Pending is null && Pushed == owed)
+        {
+            return false;
+        }
+
+        if (Pending != owed || PendingKey is null)
+        {
+            return true;
+        }
+
+        return !waits
+            && (FailedAt is DateTimeOffset failed
+                ? failed + Resumed <= now
+                : NextAttemptAt is null || NextAttemptAt <= now);
+    }
+
+    /// <summary>
     /// The push the mailbox is owed now. A change of the state owed begins a push of
     /// its own under a new key and a fresh budget; the same state keeps its key. An
     /// outstanding push may have reached the server though its answer did not, so a
     /// return to the state last confirmed while one is outstanding is pushed again
-    /// under a key of its own, never assumed.
+    /// under a key of its own, never assumed. A push marked failed is begun again under
+    /// its key, with a fresh budget, a day after it was last marked failed.
     /// </summary>
     /// <param name="stands">Whether its holder stands.</param>
     /// <param name="now">The instant of the pass.</param>
     /// <returns>
     /// The push, or nothing where the server already holds the state, the next attempt
-    /// is not yet due, or the budget is spent.
+    /// is not yet due, or the push was marked failed less than a day ago.
     /// </returns>
     public MailboxPush? Due(bool stands, DateTimeOffset now)
     {
@@ -271,8 +365,15 @@ internal sealed class Mailbox
             FailedAt = null;
         }
 
+        if (FailedAt is DateTimeOffset failed && failed + Resumed <= now)
+        {
+            Attempts = 0;
+            NextAttemptAt = null;
+            FailedAt = null;
+        }
+
         return FailedAt is null && (NextAttemptAt is null || NextAttemptAt <= now)
-            ? new MailboxPush(PendingKey.Value, Address.Value, owed)
+            ? new MailboxPush(Id, PendingKey.Value, Address, owed)
             : null;
     }
 
@@ -288,8 +389,41 @@ internal sealed class Mailbox
     }
 
     /// <summary>
-    /// Counts a failed attempt and schedules the next, the delay growing by the factor
-    /// per attempt with full jitter, until the budget is spent.
+    /// Counts an attempt of the outstanding push, as it is about to be made, and marks
+    /// the mailbox as one the server may hold something of.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No push is outstanding.</exception>
+    public void Attempting()
+    {
+        if (Pending is null)
+        {
+            throw new InvalidOperationException("No push is outstanding.");
+        }
+
+        Attempts++;
+        Attempted = true;
+    }
+
+    /// <summary>
+    /// Marks the outstanding push failed at this attempt, as a conflict retrying cannot
+    /// resolve does (D-177).
+    /// </summary>
+    /// <param name="at">When the attempt was made.</param>
+    /// <exception cref="InvalidOperationException">No push is outstanding.</exception>
+    public void Failed(DateTimeOffset at)
+    {
+        if (Pending is null)
+        {
+            throw new InvalidOperationException("No push is outstanding.");
+        }
+
+        NextAttemptAt = null;
+        FailedAt = at;
+    }
+
+    /// <summary>
+    /// Schedules the next attempt after a failed one, the delay growing by the factor
+    /// per attempt with full jitter, until the attempts counted spend the budget.
     /// </summary>
     /// <param name="at">When the attempt was made.</param>
     /// <param name="initial">The first retry delay.</param>
@@ -298,12 +432,16 @@ internal sealed class Mailbox
     /// <param name="jitter">A fraction of the computed delay, in [0, 1].</param>
     /// <returns>Whether this attempt spent the budget.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The jitter is outside its range.</exception>
+    /// <exception cref="InvalidOperationException">No attempt was counted.</exception>
     public bool Refused(DateTimeOffset at, TimeSpan initial, decimal factor, int maximum, double jitter)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(jitter);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(jitter, 1);
 
-        Attempts++;
+        if (Attempts is 0)
+        {
+            throw new InvalidOperationException("No attempt of the push was counted.");
+        }
 
         if (Attempts >= maximum)
         {

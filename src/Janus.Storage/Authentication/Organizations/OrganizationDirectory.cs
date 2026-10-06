@@ -28,9 +28,14 @@ internal sealed class OrganizationDirectory(StoreContext context, IOrganizationS
     public async ValueTask<OrganizationStanding?> FindAsync(
         OrganizationId organization,
         CancellationToken cancellationToken) =>
-        await organizations.FindAsync(organization, cancellationToken).ConfigureAwait(false) is Organization found
-            ? new OrganizationStanding(found.Id, found.Name, found.IsAdministrative, found.DeletionRequestedAt, found.ErasedAt)
-            : null;
+        Standing(await organizations.FindAsync(organization, cancellationToken).ConfigureAwait(false));
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<OrganizationStanding?> HoldAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        Standing(await organizations.FindForUpdateAsync(organization, cancellationToken).ConfigureAwait(false));
 
     /// <inheritdoc/>
     public async ValueTask CreateAsync(
@@ -80,6 +85,11 @@ internal sealed class OrganizationDirectory(StoreContext context, IOrganizationS
             .Distinct()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    private static OrganizationStanding? Standing(Organization? found) =>
+        found is null
+            ? null
+            : new OrganizationStanding(found.Id, found.Name, found.IsAdministrative, found.DeletionRequestedAt, found.ErasedAt);
 
     private async ValueTask<Organization> ExistingAsync(
         OrganizationId organization,

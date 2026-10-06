@@ -38,6 +38,17 @@ internal interface IGroupStore
     ValueTask<OrganizationId?> ScopeOfAsync(GroupId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds the groups of one organization, their members and the closure, against
+    /// every other change of them until the operation's transaction ends, so a change is
+    /// decided on the nesting as committed (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="organization">Whose groups.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding them.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new group.
     /// </summary>
     /// <param name="group">The group to create.</param>
@@ -98,6 +109,15 @@ internal interface IGroupStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The groups it belongs to.</returns>
     ValueTask<IReadOnlyList<GroupId>> GroupsOfAsync(GrantSubject subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every group whose membership names an account directly, which is what the
+    /// account's export carries (PRIV-RIGHT-003, REG-ACCT-001).
+    /// </summary>
+    /// <param name="member">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The groups, by name.</returns>
+    ValueTask<IReadOnlyList<Group>> HoldingAsync(SubjectId member, CancellationToken cancellationToken);
 
     /// <summary>
     /// Whether a group already reaches a subject, at any depth, which is what makes

@@ -6,6 +6,6 @@ namespace Janus.Authentication.Factors;
 /// The related-origins document: the origins a browser admits under one relying party
 /// identifier, and nothing else.
 /// </summary>
-/// <param name="Origins">The origins, exactly as configured.</param>
+/// <param name="Origins">The configured related origins, each in its serialization.</param>
 /// <remarks>Implements AUTH-FACT-012.</remarks>
 internal sealed record RelatedOrigins(IReadOnlyList<string> Origins);

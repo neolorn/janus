@@ -20,4 +20,16 @@ internal sealed record PrivacyAuditEntry(
     SubjectId? Subject,
     DateTimeOffset At,
     IReadOnlyDictionary<string, JsonElement> Details,
-    SystemPrincipal? Principal = null);
+    SystemPrincipal? Principal = null)
+{
+    /// <summary>
+    /// The reason given at the use of the break-glass credential, where the change was
+    /// made in the session it opened, or nothing.
+    /// </summary>
+    public string? BreakGlassReason { get; init; }
+
+    /// <summary>
+    /// The organization the entry is filed under, where it names one.
+    /// </summary>
+    public OrganizationId? Organization { get; init; }
+}

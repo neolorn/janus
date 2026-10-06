@@ -59,7 +59,7 @@ public sealed class HandlerCoverageTests
     {
         AuthorizationDeclaration ordinary = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("agreement", "Agreement", true, true, false, false))
             .Permission("mailing:read")
             .Resource<Declaration.Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()

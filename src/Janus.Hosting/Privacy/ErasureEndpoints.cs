@@ -35,9 +35,22 @@ internal static class ErasureEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/admin/erasures");
 
-        _ = SessionRequired.On(group.MapGet("/", ListAsync));
-        _ = SessionRequired.On(group.MapGet("/{id:guid}", ReadAsync));
-        _ = SessionRequired.On(group.MapPost("/{id:guid}/complete", CompleteAsync));
+        _ = SessionRequired.On(group.MapGet("/", ListAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<IReadOnlyList<ErasureProgressView>>();
+        _ = SessionRequired.On(group.MapGet("/{id}", ReadAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.ErasureNotFound)
+                .Binding<ErasureId>("id"))
+            .Produces<ErasureProgressView>();
+        _ = SessionRequired.On(group.MapPost("/{id}/complete", CompleteAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.ErasureNotFound, ErrorCodes.ErasureNotFailed)
+                .Binding<ErasureId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -52,7 +65,7 @@ internal static class ErasureEndpoints
 
         return Answers.Of(
             await erasures
-                .ListAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .ListAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             outstanding => TypedResults.Json<IReadOnlyList<ErasureProgressView>>(
                 [.. outstanding.Select(ErasureProgressView.Of)],
@@ -64,7 +77,7 @@ internal static class ErasureEndpoints
     private static async Task<IResult> ReadAsync(
         IErasures erasures,
         RequestSession browser,
-        Guid id,
+        ErasureId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(erasures);
@@ -73,8 +86,8 @@ internal static class ErasureEndpoints
         return Answers.Of(
             await erasures
                 .ReadAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new ErasureId(id),
+                    browser.Asking,
+                    id,
                     cancellationToken)
                 .ConfigureAwait(false),
             progress => TypedResults.Json(
@@ -87,7 +100,7 @@ internal static class ErasureEndpoints
     private static async Task<IResult> CompleteAsync(
         IErasures erasures,
         RequestSession browser,
-        Guid id,
+        ErasureId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(erasures);
@@ -96,9 +109,9 @@ internal static class ErasureEndpoints
         return Answers.Of(
             await erasures
                 .CompleteAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new ErasureId(id),
+                    id,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

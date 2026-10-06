@@ -31,6 +31,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Privacy.Bases;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
@@ -165,6 +166,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<ComplianceRow> ComplianceRecords => Set<ComplianceRow>();
 
     /// <summary>
+    /// The lawful bases the host declared.
+    /// </summary>
+    public DbSet<LawfulBasisRow> LawfulBases => Set<LawfulBasisRow>();
+
+    /// <summary>
     /// The published versions of the deployment's legal documents.
     /// </summary>
     public DbSet<DocumentVersionRecord> LegalDocumentVersions => Set<DocumentVersionRecord>();
@@ -266,9 +272,14 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<DeviceRecord> Devices => Set<DeviceRecord>();
 
     /// <summary>
-    /// What each restriction key has had counted against it.
+    /// What each destination has had counted against it.
     /// </summary>
     public DbSet<SendCounterRecord> SendCounters => Set<SendCounterRecord>();
+
+    /// <summary>
+    /// What each account, source, global and host key has had counted against it.
+    /// </summary>
+    public DbSet<SendKeyCounterRecord> SendKeyCounters => Set<SendKeyCounterRecord>();
 
     /// <summary>
     /// The credit support has added to a restriction key.
@@ -546,6 +557,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration<RecoveryCodeRecord>(new RecoveryCodeConfiguration());
         modelBuilder.ApplyConfiguration(new DeviceConfiguration());
         modelBuilder.ApplyConfiguration(new SendCounterConfiguration());
+        modelBuilder.ApplyConfiguration(new SendKeyCounterConfiguration());
         modelBuilder.ApplyConfiguration(new SendGrantConfiguration());
         modelBuilder.ApplyConfiguration(new SendConfiguration());
         modelBuilder.ApplyConfiguration(new ThrottleConfiguration());
@@ -592,6 +604,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
         modelBuilder.ApplyConfiguration(new ExportConfiguration());
         modelBuilder.ApplyConfiguration(new ComplianceConfiguration());
+        modelBuilder.ApplyConfiguration(new LawfulBasisConfiguration());
         modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());
         modelBuilder.ApplyConfiguration(new KeyRotationConfiguration());
         modelBuilder.ApplyConfiguration(new LicenceConfiguration());

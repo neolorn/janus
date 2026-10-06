@@ -21,7 +21,9 @@ internal sealed class RecoveryCodeConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("recovery_code_sets");
+        builder.ToTable("recovery_code_sets", table => table.HasCheckConstraint(
+            "ck_recovery_code_sets_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(set => set.Subject).HasName("pk_recovery_code_sets");
 
@@ -46,7 +48,9 @@ internal sealed class RecoveryCodeConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("recovery_codes");
+        builder.ToTable("recovery_codes", table => table.HasCheckConstraint(
+            "ck_recovery_codes_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(code => new { code.Subject, code.Ordinal }).HasName("pk_recovery_codes");
 

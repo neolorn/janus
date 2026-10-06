@@ -20,6 +20,17 @@ internal interface IRoleStore
     ValueTask<Role?> FindAsync(RoleName name, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one role under a lock on its row held until the operation's transaction
+    /// ends, so a definition, a removal or a grant decided on what it allows cannot race
+    /// another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="name">Which role.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The role as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Role?> FindForUpdateAsync(RoleName name, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads every role, which is what startup checks against the declared
     /// permissions.
     /// </summary>

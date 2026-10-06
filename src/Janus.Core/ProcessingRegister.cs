@@ -17,7 +17,7 @@ namespace Janus.Core;
 /// sends to a recipient that is.
 /// </param>
 /// <param name="DataOwner">Who owns the data, as a person stated it.</param>
-/// <param name="OrganisationalSecurityMeasures">The measures that are not the software's.</param>
+/// <param name="OrganizationalSecurityMeasures">The measures that are not the software's.</param>
 /// <param name="AssessmentLinks">The assessments, as a person stated them.</param>
 /// <param name="Records">One row a purpose, in the order a reader expects.</param>
 /// <param name="Recipients">Everyone the data reaches.</param>
@@ -31,7 +31,7 @@ public sealed record ProcessingRegister(
     HostingLocation HostingLocation,
     string? CrossBorderBasis,
     string? DataOwner,
-    string? OrganisationalSecurityMeasures,
+    string? OrganizationalSecurityMeasures,
     IReadOnlyList<string> AssessmentLinks,
     IReadOnlyList<ProcessingRecord> Records,
     IReadOnlyList<RecipientRecord> Recipients,

@@ -1,6 +1,25 @@
 Janus
 
-This package contains data derived from the Unicode Character Database, version
-17.0.0, copyright 1991-2026 Unicode, Inc., distributed under the Unicode License
-v3. The files are vendored under tools/Janus.UnicodeTables/ucd/ together with the
-licence text, and the tables generated from them are in src/Janus.Core/Unicode/.
+This package contains data derived from the Unicode Character Database and from the
+IDNA mapping table of UTS #46, version 17.0.0, copyright 1991-2026 Unicode, Inc.,
+distributed under the Unicode License v3. The files are vendored under
+tools/Janus.UnicodeTables/ucd/ together with the licence text and the conformance test
+file of UTS #46, and the tables generated from them are in src/Janus.Core/Unicode/.
+
+This package contains the offline leaked-password list: the 100,000 most prevalent
+SHA-1 hashes of Pwned Passwords, from Have I Been Pwned (https://haveibeenpwned.com),
+drawn on 2026-09-26 over the range API. The list is in
+src/Janus.Hosting/Passwords/leaked-passwords.txt, and tools/leaked-passwords/draw.py
+draws it.
+
+This package contains the English word list of the dictionary password source: the
+3esl list of the 12dicts package, version 6.0.2, compiled by Alan Beale, who releases
+the 12dicts lists to the public domain and asks that their use be acknowledged
+(http://wordlist.aspell.net/12dicts/). The list is in
+src/Janus.Hosting/Passwords/3esl.txt, and the build keeps its single lower-case words
+of four letters or more.
+
+This package contains the Public Suffix List, version 2026-09-24_13-26-36_UTC, from
+https://publicsuffix.org/list/public_suffix_list.dat, downloaded on 2026-09-29. It is
+subject to the Mozilla Public License 2.0 (https://mozilla.org/MPL/2.0/) and is carried
+unmodified, with its header, in src/Janus.Authentication/Factors/public_suffix_list.dat.

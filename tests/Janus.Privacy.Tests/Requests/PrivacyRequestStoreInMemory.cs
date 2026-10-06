@@ -28,6 +28,42 @@ internal sealed class PrivacyRequestStoreInMemory : IPrivacyRequestStore
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a
+    /// subject's requests of a type, so a test may queue one under a check about to be
+    /// made.
+    /// </summary>
+    public Action? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId subject, PrivacyRequestType type, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke();
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a
+    /// request's row, so a test may decide it under a decision already made.
+    /// </summary>
+    public Action<QueuedRequest>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<QueuedRequest?> FindForUpdateAsync(
+        PrivacyRequestId request,
+        CancellationToken cancellationToken)
+    {
+        QueuedRequest? held = _queue.Find(one => one.Id == request);
+
+        if (held is not null)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return ValueTask.FromResult(held);
+    }
+
     /// <inheritdoc/>
     public ValueTask<QueuedRequest?> FindAsync(
         PrivacyRequestId request,

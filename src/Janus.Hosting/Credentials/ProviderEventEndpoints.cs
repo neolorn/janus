@@ -1,5 +1,7 @@
 using System;
+using System.Threading;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -31,11 +33,22 @@ internal static class ProviderEventEndpoints
 
         foreach ((string route, Factor provider) in ProviderRoutes.Named)
         {
-            _ = endpoints.MapPost(
-                Prefix + route,
-                context => context.RequestServices
-                    .GetRequiredService<ProviderEventIntake>()
-                    .TakeAsync(context, provider, context.RequestAborted));
+            RouteHandlerBuilder taken = endpoints.MapPost(
+                    Prefix + route,
+                    (ProviderEventIntake intake, HttpContext context, CancellationToken cancellationToken) =>
+                        intake.TakeAsync(context, provider, cancellationToken))
+                .Declares(EndpointDeclaration.Answering(
+                    ErrorCodes.CallbackInProgress,
+                    ErrorCodes.CallbackRejected,
+                    ErrorCodes.SystemFault))
+                .Produces(ProviderEventIntake.Taken(provider));
+
+            // RFC 8935 section 2.4: a provider that pushes its events is refused in the
+            // standard's own shape.
+            if (ProviderEventIntake.Pushes(provider))
+            {
+                _ = taken.Produces<SecurityEventError>(StatusCodes.Status400BadRequest);
+            }
         }
 
         return endpoints;

@@ -234,5 +234,5 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     ]);
 
     private PreferenceStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 }

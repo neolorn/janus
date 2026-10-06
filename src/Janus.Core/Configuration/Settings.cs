@@ -29,13 +29,19 @@ public static class Settings
             RestrictionKeyKind.Destination,
             HostKeyName: null,
             RestrictionPurpose.Any,
-            [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+            [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+        },
         new(
             "sms.source",
             RestrictionKeyKind.Source,
             HostKeyName: null,
             RestrictionPurpose.Any,
-            [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
+            [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+        },
         new(
             "email.destination",
             RestrictionKeyKind.Destination,
@@ -44,7 +50,10 @@ public static class Settings
             [
                 new Bucket(5, TimeSpan.FromHours(1), BucketWindow.Sliding),
                 new Bucket(1, TimeSpan.FromSeconds(60), BucketWindow.Fixed),
-            ]),
+            ])
+        {
+            Channel = RestrictionChannel.Email,
+        },
         new(
             "notification.destination",
             RestrictionKeyKind.Destination,
@@ -298,6 +307,13 @@ public static class Settings
         new("abuse.source.ratelimit", SettingScope.Runtime, 300, loosening: SettingDirection.Increase);
 
     /// <summary>
+    /// Requests admitted a minute from the /48 that encloses an IPv6 source, whichever
+    /// of its subnets they come from.
+    /// </summary>
+    public static IntegerSetting AbuseSourceSiteLimit { get; } =
+        new("abuse.source.sitelimit", SettingScope.Runtime, 3000, loosening: SettingDirection.Increase);
+
+    /// <summary>
     /// Registration sessions from one source in an hour above which the repeated
     /// attempts signal fires.
     /// </summary>
@@ -319,9 +335,23 @@ public static class Settings
     public static TextSetting IntegrationSmsEndpoint { get; } =
         new("integration.sms.endpoint", SettingScope.Protected, string.Empty);
 
+    /// <summary>
+    /// Where the library's mail-server adapter reaches the mail server. Empty while the
+    /// deployment uses a mail server integration of its own (INT-MAIL-001, LIB-EXT-001).
+    /// </summary>
+    public static TextSetting IntegrationMailServerEndpoint { get; } =
+        new("integration.mailserver.endpoint", SettingScope.Protected, string.Empty);
+
     /// <summary>Callbacks accepted from one source a minute, before any lookup.</summary>
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
         new("integration.callback.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
+
+    /// <summary>
+    /// How long an unsettled claim on a host callback's event stands before a delivery
+    /// of the event takes it over.
+    /// </summary>
+    public static DurationSetting IntegrationCallbackClaimTimeout { get; } =
+        new("integration.callback.claimtimeout", SettingScope.Runtime, "PT5M", floor: "PT1M");
 
     /// <summary>The named restriction set governing every send.</summary>
     public static RestrictionSetSetting Restrictions { get; } =
@@ -337,6 +367,20 @@ public static class Settings
     /// </summary>
     public static IntegerSetting CodeVerificationAttempts { get; } =
         new("code.verification.attempts", SettingScope.Runtime, 5, ceiling: 10);
+
+    /// <summary>
+    /// How long an authentication code that is sent lives: the <c>emailCode</c> sign-in
+    /// code and the <c>phoneCode</c> second-step code.
+    /// </summary>
+    public static DurationSetting CodeSigninLifetime { get; } =
+        new("code.signin.lifetime", SettingScope.Runtime, "PT10M", ceiling: "PT30M");
+
+    /// <summary>
+    /// Wrong tries after which an authentication code is invalidated and a correct one
+    /// refused.
+    /// </summary>
+    public static IntegerSetting CodeSigninAttempts { get; } =
+        new("code.signin.attempts", SettingScope.Runtime, 5, ceiling: 10);
 
     /// <summary>How long a sign-in link lives.</summary>
     public static DurationSetting LinkMagicLifetime { get; } =
@@ -389,6 +433,17 @@ public static class Settings
             Enum.GetValues<BotDefenceSignal>().ToFrozenSet(),
             FrozenSet<BotDefenceSignal>.Empty,
             loosening: SettingDirection.Decrease);
+
+    /// <summary>How often the datacenter range file is refreshed.</summary>
+    public static DurationSetting AbuseBotDefenceRangesRefresh { get; } =
+        new("abuse.botdefence.ranges.refresh", SettingScope.Runtime, "P1D");
+
+    /// <summary>
+    /// The age beyond which the datacenter range file is stale, the datacenter range
+    /// signal does not fire and a degradation is raised.
+    /// </summary>
+    public static DurationSetting AbuseBotDefenceRangesMaxAge { get; } =
+        new("abuse.botdefence.ranges.maxage", SettingScope.Runtime, "P30D");
 
     /// <summary>Whether an unusual read volume per actor raises an alert.</summary>
     public static FlagSetting ExfiltrationReadVolumeAlerting { get; } =
@@ -643,9 +698,12 @@ public static class Settings
             floor: "PT1H",
             loosening: SettingDirection.Increase);
 
-    /// <summary>The outbox publisher's cadence.</summary>
+    /// <summary>
+    /// The cadence of the outbox publisher and of the passes it paces, the carrying of
+    /// raised alerts among them, so its ceiling bounds how long an alert can wait.
+    /// </summary>
     public static DurationSetting OutboxPollInterval { get; } =
-        new("outbox.poll.interval", SettingScope.Runtime, "PT5S");
+        new("outbox.poll.interval", SettingScope.Runtime, "PT5S", ceiling: "PT1M");
 
     /// <summary>The first retry delay, to which full jitter is applied.</summary>
     public static DurationSetting OutboxRetryInitial { get; } =
@@ -658,6 +716,14 @@ public static class Settings
     /// <summary>Attempts before a delivery is failed and its exhaustion alerted.</summary>
     public static IntegerSetting OutboxRetryMaxAttempts { get; } =
         new("outbox.retry.maxattempts", SettingScope.Runtime, 10, floor: 1);
+
+    /// <summary>
+    /// How long a claim stands on a row that a delivery job or a send's immediate
+    /// attempt carries. An attempt still running then is abandoned as failed, and the
+    /// next pass may take the row (CONV-DESIGN-003).
+    /// </summary>
+    public static DurationSetting OutboxClaimTimeout { get; } =
+        new("outbox.claim.timeout", SettingScope.Runtime, "PT2M", floor: "PT30S", ceiling: "PT10M");
 
     /// <summary>
     /// The interval of the one sweep, and so the longest a deadline waits past its
@@ -775,9 +841,12 @@ public static class Settings
     public static DurationSetting BackupRestoreTestObjective { get; } =
         new("backup.restoretest.objective", SettingScope.Runtime, "PT8H", ceiling: "PT8H");
 
-    /// <summary>How often the restore test runs.</summary>
+    /// <summary>
+    /// How often the restore test runs: a count of days, so the interval never exceeds
+    /// the shortest calendar quarter, where months would be held at 31 days each.
+    /// </summary>
     public static DurationSetting BackupRestoreTestInterval { get; } =
-        new("backup.restoretest.interval", SettingScope.Runtime, "P3M", ceiling: "P3M");
+        new("backup.restoretest.interval", SettingScope.Runtime, "P90D", ceiling: "P90D");
 
     /// <summary>
     /// The canary subject the restore test decrypts a field of and resolves the
@@ -813,14 +882,6 @@ public static class Settings
     /// </summary>
     public static TextSetting LegalGoverningLanguage { get; } =
         new("legal.governinglanguage", SettingScope.Protected);
-
-    /// <summary>Whether the audit log is written.</summary>
-    public static FlagSetting AuditEnabled { get; } =
-        new("audit.enabled", SettingScope.Protected, true);
-
-    /// <summary>Whether a token's signature is verified.</summary>
-    public static FlagSetting TokenSignatureVerification { get; } =
-        new("token.signature.verification", SettingScope.Protected, true);
 
     /// <summary>
     /// How long an access token lives, which for a relying party that validates
@@ -871,26 +932,12 @@ public static class Settings
         new("policy", SettingScope.Runtime, SettingForms.Override, PolicyOverride.None);
 
     /// <summary>
-    /// Whether an organization's accounts show a profile photo: one key per
-    /// organization, off until the organization is given one.
-    /// </summary>
-    public static SettingFamily<bool> OrganizationPhoto { get; } =
-        new("photo.enabled", SettingScope.Runtime, SettingForms.Flag, false);
-
-    /// <summary>
     /// How long a host-declared category of data is kept: one key per declared
     /// category, whose floor the host declares. Startup fails for a declared category
-    /// without one.
+    /// without one. Shortening loosens.
     /// </summary>
     public static SettingFamily<TimeSpan> HostCategoryRetention { get; } =
-        new("retention", SettingScope.Runtime, SettingForms.Duration);
-
-    /// <summary>
-    /// Whether step-up is enforced for an organization: one key per organization, and
-    /// the protected kill switch rather than a field of the policy object.
-    /// </summary>
-    public static SettingFamily<bool> OrganizationStepUpEnforcement { get; } =
-        new("stepup.enforcement", SettingScope.Protected, SettingForms.Flag, true);
+        new("retention", SettingScope.Runtime, SettingForms.Duration, SettingDirection.Decrease);
 
     /// <summary>
     /// The (memory, iterations) pairs the Argon2id floor admits. A deployment is at or
@@ -954,13 +1001,18 @@ public static class Settings
         AbuseThrottleDecay,
         AbuseNonexistentWindow,
         AbuseSourceRateLimit,
+        AbuseSourceSiteLimit,
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
+        IntegrationCallbackClaimTimeout,
         IntegrationMailEndpoint,
         IntegrationSmsEndpoint,
+        IntegrationMailServerEndpoint,
         Restrictions,
         CodeVerificationLifetime,
         CodeVerificationAttempts,
+        CodeSigninLifetime,
+        CodeSigninAttempts,
         LinkMagicLifetime,
         LinkInvitationLifetime,
         PhotoMaxBytes,
@@ -969,6 +1021,8 @@ public static class Settings
         AbuseSmsPollInterval,
         AbuseSmsDrainFactor,
         AbuseBotDefenceSignals,
+        AbuseBotDefenceRangesRefresh,
+        AbuseBotDefenceRangesMaxAge,
         ExfiltrationReadVolumeAlerting,
         ExfiltrationExportStepUpRequired,
         ExfiltrationExportRateLimit,
@@ -993,6 +1047,7 @@ public static class Settings
         AlertingSmsSeverityThreshold,
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
+        DerivationMaterialisedDriftCheck,
         OrganizationDeletionGrace,
         TakedownGrace,
         AccountDeletionGrace,
@@ -1013,6 +1068,7 @@ public static class Settings
         OutboxRetryInitial,
         OutboxRetryFactor,
         OutboxRetryMaxAttempts,
+        OutboxClaimTimeout,
         SweepInterval,
         NotificationLanguages,
         NotificationEmailSendingDomain,
@@ -1037,8 +1093,6 @@ public static class Settings
         HostingLocation,
         HostingCrossBorderBasis,
         LegalGoverningLanguage,
-        AuditEnabled,
-        TokenSignatureVerification,
         OidcAccessTokenLifetime,
         OidcCodeLifetime,
         RedirectDefaultClient,
@@ -1051,7 +1105,7 @@ public static class Settings
     /// per host-declared category.
     /// </summary>
     public static IReadOnlyList<SettingFamily> Families { get; } =
-        [OrganizationPhoto, OrganizationPolicy, HostCategoryRetention, OrganizationStepUpEnforcement];
+        [OrganizationPolicy, HostCategoryRetention];
 
     /// <summary>
     /// The keys a deployment has to name, because they name the deployment and the

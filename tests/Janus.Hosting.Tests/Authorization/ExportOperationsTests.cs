@@ -17,7 +17,7 @@ namespace Janus.Hosting.Tests.Authorization;
 /// the hourly limit, and a row of its own in the audit trail (OPS-ALERT-006, D-045).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class ExportOperationsTests : IDisposable
+public sealed class ExportOperationsTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 9, 0, 0, TimeSpan.Zero);
 
@@ -30,11 +30,16 @@ public sealed class ExportOperationsTests : IDisposable
     private readonly BulkExportLedgerInMemory _ledger = new();
     private readonly AccessAuditInMemory _audit = new();
     private readonly FixedClock _clock = new(Noon);
+    private readonly UnitOfWorkInMemory _work = new();
 
     /// <inheritdoc/>
-    public void Dispose() => _randomness.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        await _work.DisposeAsync();
+        _randomness.Dispose();
+    }
 
-    private ExportOperations Exports => new(Model, _ledger, _audit, _configuration, _clock);
+    private ExportOperations Exports => new(Model, _ledger, _audit, _configuration, _work, _clock);
 
     /// <summary>
     /// OPS-ALERT-006 AC1: an export is one of the actions the host declared as one, so
@@ -134,6 +139,29 @@ public sealed class ExportOperationsTests : IDisposable
         Assert.Equal(
             ErrorCodes.Throttled,
             Refusal(await AdmitAsync(nightly, HostPermissions.Export))?.Code);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-006, CONV-DESIGN-003: an export admitted while this one waited for the
+    /// actor's exports is counted, so the export past the limit is refused and neither
+    /// counted nor recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_006_AnExportAdmittedMeanwhileIsCountedAsync()
+    {
+        var clerk = SubjectId.New(_randomness);
+
+        _configuration.Set(Settings.ExfiltrationExportRateLimit, 1);
+        _ledger.Holding = () =>
+            _ = _ledger.RecordAsync(clerk, principal: null, Noon, Noon.AddHours(-1), TestContext.Current.CancellationToken).AsTask();
+
+        Assert.Equal(ErrorCodes.Throttled, Refusal(await AdmitAsync(AccessContext.Of(clerk), HostPermissions.Export))?.Code);
+        Assert.Single(_ledger.Admitted);
+        Assert.Empty(_audit.Exports);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

@@ -1,135 +1,144 @@
-abuse.botdefence.repeatedattempts
-abuse.botdefence.signals
-abuse.nonexistent.window
-abuse.sms.balancefloor
-abuse.sms.drainfactor
-abuse.sms.pollinterval
-abuse.source.ratelimit
-abuse.throttle.account.cap
-abuse.throttle.decay
-abuse.throttle.delay.factor
-abuse.throttle.delay.initial
-abuse.throttle.delay.max
-abuse.throttle.enabled
-abuse.throttle.threshold
-account.deletion.grace
-alerting.authfailures.threshold
-alerting.callback.threshold
-alerting.dedupe.window
-alerting.denials.threshold
-alerting.email.destinations
-alerting.nonexistent.threshold
-alerting.owner.email
-alerting.owner.enabled
-alerting.owner.sms
-alerting.recovery.accountthreshold
-alerting.recovery.approverthreshold
-alerting.sessions.distance
-alerting.sessions.window
-alerting.sms.destinations
-alerting.sms.severitythreshold
-audit.enabled
-authz.reverselookup.budget
-backup.restoretest.canary
-backup.restoretest.interval
-backup.restoretest.objective
-backup.retention
-breakglass.session.lifetime
-code.verification.attempts
-code.verification.lifetime
-device.verification.enabled
-device.verification.lifetime
-domain.reverify.interval
-exfiltration.export.auditing
-exfiltration.export.ratelimit
-exfiltration.export.stepuprequired
-exfiltration.readvolume.alerting
-exfiltration.readvolume.baselinewindow
-exfiltration.readvolume.factor
-exfiltration.readvolume.minimum
-factor.recoverycodes.count
-factor.totp.drift
-factor.trusteddevice.failurelimit
-factor.trusteddevice.lifetime
-hosting.crossborderbasis
-hosting.environment
-hosting.location
-identifier.change.coolingoff
-identifiers.email.max
-identifiers.phone.max
-identifiers.username.changecooloff
-identifiers.username.enabled
-integration.callback.ratelimit
-integration.mail.endpoint
-integration.sms.endpoint
-legal.governinglanguage
-link.invitation.lifetime
-link.magic.lifetime
-location.database.maxage
-location.database.refresh
-maintenance.expiry.warninglead
-notification.email.relayregistered
-notification.email.sendingdomain
-notification.languages
-oidc.accesstoken.lifetime
-oidc.code.lifetime
-organization.deletion.grace
-organization.multiplememberships
-outbox.poll.interval
-outbox.retry.factor
-outbox.retry.initial
-outbox.retry.maxattempts
-password.argon2.iterations
-password.argon2.memory
-password.argon2.parallelism
-password.blocklist.corpusmaxage
-password.blocklist.selfhosted.address
-password.blocklist.source
-password.blocklist.sources
-password.floor.singlefactor
-password.floor.withmfa
-password.maximum
-photo.maxbytes
-photo.maxdimension
-policy.default
-policy.enforcement.grace
-preferences.maxsize
-privacy.calendar.timezone
-privacy.export.ratelimit
-privacy.holidays
-privacy.request.decision
-privacy.request.warninglead
-privacy.workingdays
-profile.dateofbirth
-profile.legalname
-recovery.approvers.required
-recovery.codes.reminder
-recovery.invalidation.noticeinterval
-recovery.invalidation.window
-recovery.link.lifetime
-recovery.ratelimit.account
-recovery.ratelimit.approver
-redirect.defaultclient
-registration.adultaffirmation
-registration.events.pollinterval
-registration.phone
-registration.session.lifetime
-restrictions
-retention.audit.routine
-retention.audit.security
-retention.consent
-service.name
-session.aal2.absolute
-session.aal2.inactivity
-session.default.absolute
-session.default.inactivity
-session.stepup.recency
-sweep.interval
-takedown.grace
-token.signature.verification
-token.signing.algorithm
-token.signing.rotation
-webauthn.algorithms
-webauthn.origins
-webauthn.relatedorigins
-webauthn.rpid
+abuse.botdefence.ranges.maxage duration R
+abuse.botdefence.ranges.refresh duration R
+abuse.botdefence.repeatedattempts integer R
+abuse.botdefence.signals multiple-choice R allowed=datacenterRange,repeatedAttempts
+abuse.nonexistent.window duration R
+abuse.sms.balancefloor decimal R
+abuse.sms.drainfactor decimal R floor=1.0
+abuse.sms.pollinterval duration R
+abuse.source.ratelimit integer R
+abuse.source.sitelimit integer R
+abuse.throttle.account.cap duration R ceiling=PT1M
+abuse.throttle.decay duration R
+abuse.throttle.delay.factor decimal R floor=1.0
+abuse.throttle.delay.initial duration R
+abuse.throttle.delay.max duration R ceiling=PT10M
+abuse.throttle.enabled flag P
+abuse.throttle.threshold integer R
+account.deletion.grace duration R floor=P7D
+alerting.authfailures.threshold integer R
+alerting.callback.threshold integer R
+alerting.dedupe.window duration R
+alerting.denials.threshold integer R
+alerting.email.destinations text-list R minimum=1
+alerting.nonexistent.threshold integer R
+alerting.owner.email text R
+alerting.owner.enabled flag R
+alerting.owner.sms text R
+alerting.recovery.accountthreshold integer R
+alerting.recovery.approverthreshold integer R
+alerting.sessions.distance integer R
+alerting.sessions.window duration R
+alerting.sms.destinations text-list R minimum=1
+alerting.sms.severitythreshold choice R allowed=high,normal
+authz.reverselookup.budget duration R
+backup.restoretest.canary text R
+backup.restoretest.interval duration R ceiling=P90D
+backup.restoretest.objective duration R ceiling=PT8H
+backup.retention duration R floor=P14D
+breakglass.session.lifetime duration R ceiling=PT12H
+code.signin.attempts integer R ceiling=10
+code.signin.lifetime duration R ceiling=PT30M
+code.verification.attempts integer R ceiling=10
+code.verification.lifetime duration R ceiling=PT30M
+derivation.materialised.driftcheck duration R
+device.verification.enabled flag R
+device.verification.lifetime duration R ceiling=P365D
+domain.reverify.interval duration R floor=PT1H
+exfiltration.export.auditing flag P
+exfiltration.export.ratelimit integer R
+exfiltration.export.stepuprequired flag R
+exfiltration.readvolume.alerting flag R
+exfiltration.readvolume.baselinewindow duration R
+exfiltration.readvolume.factor decimal R floor=1.0
+exfiltration.readvolume.minimum integer R
+factor.recoverycodes.count integer R
+factor.totp.drift integer R
+factor.trusteddevice.failurelimit integer R ceiling=5
+factor.trusteddevice.lifetime duration R ceiling=P90D
+hosting.crossborderbasis text P
+hosting.environment text R
+hosting.location choice P allowed=inside,outside
+identifier.change.coolingoff duration R floor=P3D
+identifiers.email.max integer R floor=1
+identifiers.phone.max integer R floor=1
+identifiers.username.changecooloff duration R floor=P1D
+identifiers.username.enabled flag R
+integration.callback.claimtimeout duration R floor=PT1M
+integration.callback.ratelimit integer R
+integration.mail.endpoint text P
+integration.mailserver.endpoint text P
+integration.sms.endpoint text P
+legal.governinglanguage text P
+link.invitation.lifetime duration R ceiling=P30D
+link.magic.lifetime duration R ceiling=PT1H
+location.database.maxage duration R
+location.database.refresh duration R
+maintenance.expiry.warninglead duration R
+notification.email.relayregistered text-set R
+notification.email.sendingdomain text R
+notification.languages text-list R minimum=1
+oidc.accesstoken.lifetime duration R ceiling=PT1H
+oidc.code.lifetime duration R ceiling=PT10M
+organization.deletion.grace duration R floor=P7D
+organization.multiplememberships flag R
+outbox.claim.timeout duration R floor=PT30S ceiling=PT10M
+outbox.poll.interval duration R ceiling=PT1M
+outbox.retry.factor decimal R floor=1.0
+outbox.retry.initial duration R
+outbox.retry.maxattempts integer R floor=1
+password.argon2.iterations integer R
+password.argon2.memory integer R
+password.argon2.parallelism integer R
+password.blocklist.corpusmaxage duration R
+password.blocklist.selfhosted.address text R
+password.blocklist.source choice R allowed=offline,rangeApi,selfHosted
+password.blocklist.sources multiple-choice R allowed=context,dictionary,leaked minimum=1 unremovable=leaked
+password.floor.singlefactor integer R floor=15
+password.floor.withmfa integer R floor=8
+password.maximum integer R floor=64
+photo.maxbytes integer R ceiling=10485760
+photo.maxdimension integer R
+policy family R
+policy.default policy R
+policy.enforcement.grace duration R ceiling=P90D
+preferences.maxsize integer R ceiling=65536
+privacy.calendar.timezone text P
+privacy.export.ratelimit integer R
+privacy.holidays date-list R
+privacy.request.decision integer R ceiling=6
+privacy.request.warninglead integer R
+privacy.workingdays multiple-choice R allowed=friday,monday,saturday,sunday,thursday,tuesday,wednesday minimum=1
+profile.dateofbirth choice R allowed=off,optional,required
+profile.legalname choice R allowed=off,optional,required
+recovery.approvers.required integer R
+recovery.codes.reminder duration R
+recovery.invalidation.noticeinterval duration R
+recovery.invalidation.window duration R
+recovery.link.lifetime duration R
+recovery.ratelimit.account integer R
+recovery.ratelimit.approver integer R
+redirect.defaultclient text P
+registration.adultaffirmation choice R allowed=off,required
+registration.events.pollinterval duration R floor=PT1S
+registration.phone choice R allowed=optional,required
+registration.session.lifetime duration R ceiling=P3D
+restrictions restriction-set R
+retention family R
+retention.audit.routine duration R floor=P30D
+retention.audit.security duration R floor=P1830D
+retention.consent duration R floor=P366D
+service.name text R
+session.aal2.absolute duration R ceiling=P1D
+session.aal2.inactivity duration R ceiling=PT12H
+session.default.absolute duration R ceiling=P365D
+session.default.inactivity duration R ceiling=P365D
+session.stepup.recency duration R
+sweep.interval duration R ceiling=PT15M
+takedown.grace duration R floor=P7D
+token.signing.algorithm choice P allowed=ES256
+token.signing.rotation duration R
+webauthn.algorithms integer-list P unremovable=-7
+webauthn.origins text-list P minimum=1
+webauthn.relatedorigins text-list R
+webauthn.rpid text P

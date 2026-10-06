@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Sending;
@@ -10,7 +12,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
-using Janus.Hosting.Sending;
+using Janus.Hosting.Tests.Sending;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Alerting;
@@ -33,6 +35,7 @@ public sealed class AlertRouterTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendOutboxInMemory _outbox = new();
     private readonly AlertLedgerInMemory _alerts = new();
     private readonly AlertLogInMemory _log = new();
     private readonly MessageTemplatesInMemory _templates = new();
@@ -58,27 +61,10 @@ public sealed class AlertRouterTests : IAsyncDisposable
         _sms.Balance = 1000m;
     }
 
-    private AlertRouter Router =>
-        new(
-            _configuration,
-            new SendingService(
-                _configuration,
-                _ledger,
-                new SendOutboxInMemory(),
-                _templates,
-                _mail,
-                _sms,
-                RestrictionKeySuppliers.None,
-                Considered.Nothing(_work, _clock),
-                new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                _work,
-                _events,
-                _events,
-                _clock,
-                _randomness),
-            _alerts,
-            _work,
-            _log);
+    private SendingPath Path =>
+        new(_configuration, _ledger, _outbox, _templates, _mail, _sms, _balances, _work, _events, _clock, _randomness);
+
+    private AlertRouter Router => new(_configuration, Path.Send, _alerts, _work, _log);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -122,6 +108,27 @@ public sealed class AlertRouterTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-002 AC3, D-177: two alerts of one condition under different scopes in
+    /// one window are both delivered, so a degradation for one mailbox never hides one
+    /// for another; a repeat under the same scope still folds.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_002_AC3_OneConditionUnderTwoScopesIsTwoAlertsAsync()
+    {
+        AlertDelivery one = await RaisedAsync(
+            Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:one", Noon));
+        AlertDelivery other = await RaisedAsync(
+            Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:two", Noon.AddMinutes(1)));
+        AlertDelivery repeated = await RaisedAsync(
+            Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:one", Noon.AddMinutes(2)));
+
+        Assert.False(one.Deduplicated);
+        Assert.False(other.Deduplicated);
+        Assert.True(repeated.Deduplicated);
+        Assert.Equal(4, _mail.Taken.Count);
+    }
+
+    /// <summary>
     /// OPS-ALERT-003: email carries every condition and SMS carries only the severe
     /// ones, so a Normal condition does not spend the prepaid balance.
     /// </summary>
@@ -161,7 +168,7 @@ public sealed class AlertRouterTests : IAsyncDisposable
     [Fact]
     public async Task OPS_ALERT_003_AC2_ABalanceFloorBreachIsReportedDespiteTheStopAsync()
     {
-        _sms.Balance = 0m;
+        _balances.Given(new BalanceReading(Noon, 0m));
 
         AlertDelivery delivered = await RaisedAsync(
             Alerts.Of(AlertCondition.SmsBalance, null, Noon));
@@ -245,15 +252,18 @@ public sealed class AlertRouterTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-004 AC3: with owner notification off, a break-glass use still
-    /// reaches the owner's address and number.
+    /// OPS-ALERT-004 AC3 and OPS-BOOT-004 AC2: with owner notification off, a
+    /// break-glass use, and a generation, still reach the owner's address and number.
     /// </summary>
-    [Fact]
-    public async Task OPS_ALERT_004_AC3_ABreakGlassUseReachesTheOwnerRegardlessAsync()
+    /// <param name="condition">The break-glass condition raised.</param>
+    [Theory]
+    [InlineData(AlertCondition.BreakGlassUsed)]
+    [InlineData(AlertCondition.BreakGlassGenerated)]
+    public async Task OPS_ALERT_004_AC3_ABreakGlassUseReachesTheOwnerRegardlessAsync(AlertCondition condition)
     {
         _configuration.Set(Settings.AlertingOwnerEnabled, false);
 
-        AlertDelivery delivered = await RaisedAsync(Raised(AlertCondition.BreakGlassUsed));
+        AlertDelivery delivered = await RaisedAsync(Raised(condition));
 
         Assert.Equal(3, delivered.Email);
         Assert.Equal(2, delivered.Sms);
@@ -265,10 +275,46 @@ public sealed class AlertRouterTests : IAsyncDisposable
             message => string.Equals(message.Destination.Value, "+201009999999", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// OPS-ALERT-002, D-022: the claim that an alert is the first of its window is
+    /// committed before any message is sent, so no transport is called while the
+    /// router's transaction is open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_002_TheClaimIsCommittedBeforeTheAlertIsSentAsync()
+    {
+        var witness = new TransactionWitness(_work);
+        SendingPath path = Path;
+
+        path.Replaced = witness;
+
+        var router = new AlertRouter(_configuration, path.Send, _alerts, _work, _log);
+
+        _ = await router.RaiseAsync(Raised(AlertCondition.RestrictionGranted), TestContext.Current.CancellationToken);
+
+        Assert.Equal(TwoAddresses.Length, witness.OpenAtSend.Count);
+        Assert.All(witness.OpenAtSend, open => Assert.Equal(0, open));
+    }
+
     private static AlertRaised Raised(AlertCondition condition) => Alerts.Of(condition, null, Noon);
 
     private async Task<AlertDelivery> RaisedAsync(AlertRaised raised) =>
         (await Router.RaiseAsync(raised, TestContext.Current.CancellationToken)).Match(
             delivered => delivered,
             error => throw new Xunit.Sdk.XunitException($"The alert was refused: {error.Code}."));
+
+    // A handler that takes every message and writes down how many transactions stood
+    // open when it was asked to.
+    private sealed class TransactionWitness(UnitOfWorkInMemory work) : INotificationHandler
+    {
+        public List<int> OpenAtSend { get; } = [];
+
+        public ValueTask<Result> SendAsync(SendRequest request, CancellationToken cancellationToken)
+        {
+            OpenAtSend.Add(work.Opened - work.Committed);
+
+            return ValueTask.FromResult(Result.Success());
+        }
+    }
 }

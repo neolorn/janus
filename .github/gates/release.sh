@@ -7,7 +7,9 @@
 # links its migration note; a release tag names the version its commit added.
 # REF-001 AC2 and LIB-API-001: the version is raised as well by what the contract's
 # lists lost or gained since the previous release: the configuration keys, the
-# library-owned schema, the error codes, the audit actions and the permissions.
+# library-owned schema, the error codes and the status each answers with, the HTTP
+# endpoints with the browser profile's stage order, the audit actions and the
+# permissions.
 # CONV-VCS-003 AC2: a commit that breaks the contract as released carries the breaking
 # marker; it breaks it where it removes or changes a shipped line, marks one removed in
 # an unshipped file, or takes away an entry of a list the previous release held. A
@@ -31,6 +33,8 @@ src/Janus.Core/Permissions.cs Permission permission'
 listed=(
   tests/Janus.Core.Tests/configuration-keys.txt
   tests/Janus.Storage.Tests/schema.txt
+  tests/Janus.Hosting.Tests/error-statuses.txt
+  tests/Janus.Hosting.Tests/endpoints.txt
   src/Janus.Core/ErrorCodes.cs
   src/Janus.Core/AuditActions.cs
   src/Janus.Core/Permissions.cs
@@ -80,16 +84,35 @@ removed() {
 }
 
 # The contract's lists at a commit, one entry a line and each named for its list: the
-# configuration keys and the library-owned schema as their contract tests hold them,
-# and the codes and names as their catalogues declare them, read from the literal each
-# declaration parses. A schema line is named for its relation, since a column's line
-# alone reads the same in every table that has it.
+# configuration keys, the library-owned schema, the codes' statuses and the endpoints
+# as their contract tests hold them, and the codes and names as their catalogues
+# declare them, read from the literal each declaration parses. A schema line is named
+# for its relation, since a column's line alone reads the same in every table that has
+# it. An endpoint's line is named for its endpoint for the same reason, and under it for
+# the request or the status it belongs to; each code a status carries is an entry of
+# its own, so a code gained is not read as a status lost; a stage of the browser
+# profile is named with its place, so stages reordered are stages lost.
 contract() {
   {
     git show "$1:tests/Janus.Core.Tests/configuration-keys.txt" 2>/dev/null \
       | sed -n 's/^\(..*\)$/configuration key \1/p' || true
     git show "$1:tests/Janus.Storage.Tests/schema.txt" 2>/dev/null \
       | awk '/^[^ ]/ { relation = $2; print "schema " $0; next } NF { print "schema " relation ":" $0 }' || true
+    git show "$1:tests/Janus.Hosting.Tests/error-statuses.txt" 2>/dev/null \
+      | sed -n 's/^\(..*\)$/error status \1/p' || true
+    git show "$1:tests/Janus.Hosting.Tests/endpoints.txt" 2>/dev/null \
+      | awk '
+        /^[^ ]/ { endpoint = $0; place = 0; print "endpoint " $0; next }
+        { line = $0; sub(/^ +/, "", line) }
+        /^  [^ ]/ && endpoint == "pipeline" && $1 !~ /^[0-9]+$/ { print "endpoint pipeline:" ++place " " line; next }
+        /^  [^ ]/ && $1 == "request" { part = $1; print "endpoint " endpoint ":" line; next }
+        /^  [^ ]/ {
+          part = $1
+          print "endpoint " endpoint ":" part
+          for (code = 2; code <= NF; code++) print "endpoint " endpoint ":" part " " $code
+          next
+        }
+        NF { print "endpoint " endpoint ":" part ":" line }' || true
 
     while read -r file type label; do
       git show "$1:${file}" 2>/dev/null \

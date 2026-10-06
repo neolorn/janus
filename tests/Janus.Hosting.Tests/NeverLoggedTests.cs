@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
@@ -24,12 +25,12 @@ namespace Janus.Hosting.Tests;
 public sealed class NeverLoggedTests
 {
     /// <summary>
-    /// CONV-LOG-003 AC1: the sign-on secret and the recovery codes shown once are
-    /// marked as types.
+    /// CONV-LOG-003 AC1: a registered client's secrets and the recovery codes shown
+    /// once are marked as types.
     /// </summary>
     [Fact]
     public void CONV_LOG_003_AC1_EveryTypeCarryingAForbiddenValueIsMarked() =>
-        Assert.Empty(Unmarked([typeof(SignOnSecret), typeof(RecoveryCodesView)]));
+        Assert.Empty(Unmarked([typeof(RegisteredSecret), typeof(RecoveryCodesView)]));
 
     /// <summary>
     /// CONV-LOG-003 AC1: every password, code and token a request carries in or an
@@ -46,6 +47,7 @@ public sealed class NeverLoggedTests
             Member<CancelLossRequest>(nameof(CancelLossRequest.Token)),
             Member<EnrolmentRequest>(nameof(EnrolmentRequest.Token)),
             Member<BeginRegistrationRequest>(nameof(BeginRegistrationRequest.InvitationToken)),
+            Member<BeginRegistrationRequest>(nameof(BeginRegistrationRequest.ChallengeToken)),
             Member<PresentFactorRequest>(nameof(PresentFactorRequest.Value)),
             Member<PresentFactorRequest>(nameof(PresentFactorRequest.LinkToken)),
             Member<VerifyRequest>(nameof(VerifyRequest.Code)),

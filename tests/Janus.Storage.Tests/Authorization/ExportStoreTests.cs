@@ -8,6 +8,7 @@ using Janus.Identity.Audit;
 using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Identity.Audit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authorization;
@@ -67,6 +68,30 @@ public sealed class ExportStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// OPS-ALERT-006, CONV-DESIGN-003 AC6: exports by one actor at once are each counted
+    /// with the actor's exports held, so no more are admitted than the limit.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_006_ExportsAtOnceAdmitNoMoreThanTheLimitAsync()
+    {
+        var clerk = new SubjectId(Guid.CreateVersion7());
+
+        bool[] admitted = await Task.WhenAll(
+            AdmittedOnceAsync(clerk, limit: 2),
+            AdmittedOnceAsync(clerk, limit: 2),
+            AdmittedOnceAsync(clerk, limit: 2),
+            AdmittedOnceAsync(clerk, limit: 2));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(2, admitted.Count(answer => answer));
+        Assert.Equal(
+            2,
+            await reading.BulkExports.CountAsync(export => export.Actor == clerk, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// OPS-ALERT-006, D-045: an admitted export is recorded on its own, as a security
     /// event naming who exported, the operation, the kind of record and the one record
     /// the call named, and a system principal's under its name and its reason.
@@ -82,15 +107,22 @@ public sealed class ExportStoreTests(DatabaseFixture database)
         var documents = ResourceType.Parse("document");
         var nightly = SystemPrincipal.ForOrganization("nightly-report", "the nightly report", organization);
 
-        await using (StoreContext writing = database.Context())
+        var services = new ServiceCollection();
+
+        services.AddStorageArea(database.ConnectionString);
+
+        await using (ServiceProvider provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true }))
+        await using (AsyncServiceScope scope = provider.CreateAsyncScope())
         {
-            var audit = new AccessAudit(new DataConnections(writing));
+            IAccessAudit audit = scope.ServiceProvider.GetRequiredService<IAccessAudit>();
 
             await audit.RecordAsync(
                 new ExportedAccess(
                     AuditRecordId.New(TimeProvider.System),
                     clerk,
                     clerk,
+                    BreakGlassReason: null,
                     Principal: null,
                     organization,
                     export,
@@ -104,6 +136,7 @@ public sealed class ExportStoreTests(DatabaseFixture database)
                     AuditRecordId.New(TimeProvider.System),
                     Acting: null,
                     Effective: null,
+                    BreakGlassReason: null,
                     nightly,
                     organization,
                     export,
@@ -139,11 +172,36 @@ public sealed class ExportStoreTests(DatabaseFixture database)
                 TestContext.Current.CancellationToken));
     }
 
+    // An admission as the gate makes one: the actor's exports held, the hour counted,
+    // and the export recorded only under the limit.
+    private async Task<bool> AdmittedOnceAsync(SubjectId actor, int limit)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        var ledger = new BulkExportLedger(writing, new DataConnections(writing));
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        await ledger.HoldAsync(actor, principal: null, TestContext.Current.CancellationToken);
+
+        bool admitted = (await ledger.SinceAsync(actor, principal: null, Noon.AddHours(-1), TestContext.Current.CancellationToken))
+            .Count < limit;
+
+        if (admitted)
+        {
+            await ledger.RecordAsync(actor, principal: null, Noon, Noon.AddHours(-1), TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return admitted;
+    }
+
     private async Task RecordedAsync(SubjectId? actor, string? principal, DateTimeOffset at)
     {
         await using StoreContext context = database.Context();
 
-        await new BulkExportLedger(new DataConnections(context))
+        await new BulkExportLedger(context, new DataConnections(context))
             .RecordAsync(actor, principal, at, at.AddHours(-1), TestContext.Current.CancellationToken);
     }
 
@@ -154,7 +212,7 @@ public sealed class ExportStoreTests(DatabaseFixture database)
     {
         await using StoreContext context = database.Context();
 
-        return await new BulkExportLedger(new DataConnections(context))
+        return await new BulkExportLedger(context, new DataConnections(context))
             .SinceAsync(actor, principal, since, TestContext.Current.CancellationToken);
     }
 
@@ -162,7 +220,7 @@ public sealed class ExportStoreTests(DatabaseFixture database)
     {
         await using StoreContext reading = database.Context();
 
-        return await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
-            .FindBySubjectAsync(actor, TestContext.Current.CancellationToken);
+        return await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
+            .FindNamingAsync(actor, TestContext.Current.CancellationToken);
     }
 }

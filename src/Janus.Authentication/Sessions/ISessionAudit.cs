@@ -23,6 +23,10 @@ internal interface ISessionAudit
     /// </summary>
     /// <param name="session">Which session.</param>
     /// <param name="subject">Whose.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="presented">What was presented.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -30,6 +34,7 @@ internal interface ISessionAudit
     ValueTask PresentedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         IReadOnlyCollection<Factor> presented,
         DateTimeOffset at,
         CancellationToken cancellationToken);
@@ -53,10 +58,30 @@ internal interface ISessionAudit
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records that the new-device check's code was refused. No actor was established,
+    /// and the refused value was no factor, so the record names none.
+    /// </summary>
+    /// <param name="subject">
+    /// The account whose sign-in the code would have completed, or nothing where the
+    /// handle opened none.
+    /// </param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask DeviceVerificationFailedAsync(
+        SubjectId? subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records that a factor presented to step a live session up was refused.
     /// </summary>
     /// <param name="session">Which session.</param>
     /// <param name="subject">Whose.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="presented">Which factor was refused.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -64,6 +89,7 @@ internal interface ISessionAudit
     ValueTask StepUpFailedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         Factor presented,
         DateTimeOffset at,
         CancellationToken cancellationToken);

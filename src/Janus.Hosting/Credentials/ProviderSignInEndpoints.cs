@@ -23,7 +23,11 @@ namespace Janus.Hosting.Credentials;
 /// out with, bound to what the browser carries. The return a provider sends the
 /// browser to is on the machine profile, because a provider that returns by a posted
 /// form posts across sites: it reads nothing of the browser and sends it on, by a
-/// read, to the continuation.
+/// read, to the continuation. The start and the continuation declare the codes
+/// chapter 09 gives each to carry in the query member <c>error</c> of its redirect
+/// (CONV-DESIGN-006). A link's gate is asked at both ends: at the start, before the
+/// browser leaves, and again on the return before it links, so the start declares the
+/// gate's codes beside its own.
 /// </remarks>
 internal static class ProviderSignInEndpoints
 {
@@ -60,7 +64,17 @@ internal static class ProviderSignInEndpoints
                     string? intent,
                     string? returnTo,
                     CancellationToken cancellationToken) =>
-                    signIn.StartAsync(context, provider, intent, returnTo, cancellationToken));
+                    signIn.StartAsync(context, provider, intent, returnTo, cancellationToken))
+                .Declares(EndpointDeclaration.Answering().Carrying(
+                    ErrorCodes.RequestMalformed,
+                    ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.ProviderUnavailable,
+                    ErrorCodes.SessionExpired,
+                    ErrorCodes.RegistrationSignedIn,
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.Denied))
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapGet(
                 Start + route + Returned,
@@ -70,18 +84,44 @@ internal static class ProviderSignInEndpoints
                     string? state,
                     string? error,
                     CancellationToken cancellationToken) =>
-                    signIn.ReturnAsync(context, provider, code, state, error, cancellationToken));
+                    signIn.ReturnAsync(context, provider, code, state, error, cancellationToken))
+                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid).Carrying(
+                    ErrorCodes.Throttled,
+                    ErrorCodes.ProviderUnavailable,
+                    ErrorCodes.FactorRejected,
+                    ErrorCodes.CredentialSuspended,
+                    ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.FactorRequired,
+                    ErrorCodes.PolicyGraceExpired,
+                    ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.SessionExpired,
+                    ErrorCodes.IdentifierInvalid,
+                    ErrorCodes.IdentifierMixedScript,
+                    ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.RestrictionExceeded,
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.Denied))
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = endpoints.MapMethods(
                 Return + route + Returned,
                 [HttpMethods.Get, HttpMethods.Post],
                 (HttpContext context, CancellationToken cancellationToken) =>
-                    ForwardAsync(context, route, cancellationToken));
+                    ForwardAsync(context, route, cancellationToken))
+                .Declares(EndpointDeclaration.Answering())
+                .Produces(StatusCodes.Status303SeeOther);
 
             _ = SessionRequired.On(endpoints.MapPost(
                 Link + route,
                 (ICredentials credentials, RequestSession browser, CancellationToken cancellationToken) =>
-                    LinkableAsync(credentials, browser, provider, cancellationToken)));
+                    LinkableAsync(credentials, browser, provider, cancellationToken)))
+                .Declares(EndpointDeclaration.Answering(
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.Denied,
+                    ErrorCodes.FactorNotPermitted))
+                .Produces(StatusCodes.Status204NoContent);
 
             _ = SessionRequired.On(endpoints.MapDelete(
                 Link + route,
@@ -89,7 +129,13 @@ internal static class ProviderSignInEndpoints
                     RequestSession browser,
                     HttpContext context,
                     CancellationToken cancellationToken) =>
-                    UnlinkAsync(credentials, browser, context, provider, cancellationToken)));
+                    UnlinkAsync(credentials, browser, context, provider, cancellationToken)))
+                .Declares(EndpointDeclaration.Answering(
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.CredentialNotFound,
+                    ErrorCodes.LinkLastCredential))
+                .Produces(StatusCodes.Status204NoContent);
         }
 
         return endpoints;
@@ -127,8 +173,8 @@ internal static class ProviderSignInEndpoints
     }
 
     // IDN-LIFE-012, chapter 10 section 5a: whether the session may link now, which
-    // the start of the round trip asks again, so a browser learns it must step up
-    // before it leaves for the provider rather than after it returns.
+    // the round trip asks again at its start and on its return, so a browser learns it
+    // must step up before it leaves for the provider rather than after it returns.
     private static async Task<IResult> LinkableAsync(
         ICredentials credentials,
         RequestSession browser,
@@ -170,5 +216,5 @@ internal static class ProviderSignInEndpoints
     // BFF-STEP-001: both are mounted as endpoints that need a session, so the stage
     // that requires one has already answered a request that arrived without it.
     private static CredentialAuthority Acting(RequestSession browser) =>
-        CredentialAuthority.Of(AccessContext.Of(browser.Required.Subject), browser.Required.Id);
+        CredentialAuthority.Of(browser.Asking, browser.Required.Id);
 }

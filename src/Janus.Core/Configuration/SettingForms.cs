@@ -18,11 +18,6 @@ internal static class SettingForms
         new(ReadDuration, XmlConvert.ToString, "an ISO 8601 duration");
 
     /// <summary>
-    /// A value that is on or off.
-    /// </summary>
-    public static SettingForm<bool> Flag { get; } = new(ReadFlag, WriteFlag, "true or false");
-
-    /// <summary>
     /// What an organization changes about the system policy, written as chapter 10
     /// section 4.1a writes the policy object with every field optional.
     /// </summary>
@@ -33,15 +28,6 @@ internal static class SettingForms
         Configuration.Duration.TryParse(stored, out TimeSpan duration)
             ? Result.Success(duration)
             : Result.Failure<TimeSpan>(malformed);
-
-    private static Result<bool> ReadFlag(string stored, Error malformed) => stored switch
-    {
-        "true" => Result.Success(true),
-        "false" => Result.Success(false),
-        _ => Result.Failure<bool>(malformed),
-    };
-
-    private static string WriteFlag(bool value) => value ? "true" : "false";
 
     private static Result<PolicyOverride> ReadOverride(string stored, Error malformed) =>
         SettingText
@@ -123,7 +109,8 @@ internal static class SettingForms
                 gates,
                 redundancy,
                 written.SelfServiceRecovery,
-                written.EmailDomains));
+                written.EmailDomains,
+                written.Photos));
     }
 
     private static string WriteOverride(PolicyOverride value) =>
@@ -142,7 +129,8 @@ internal static class SettingForms
                     StringComparer.Ordinal),
                 value.CredentialRedundancy is { } redundancy ? SettingText.Of(redundancy) : null,
                 value.SelfServiceRecovery,
-                value.EmailDomains is { } domains ? [.. domains] : null));
+                value.EmailDomains is { } domains ? [.. domains] : null,
+                value.Photos));
 
     private sealed record Written(
         string? RequiredAssurance,
@@ -150,7 +138,8 @@ internal static class SettingForms
         Dictionary<string, WrittenGate>? Gates,
         string? CredentialRedundancy,
         bool? SelfServiceRecovery,
-        string[]? EmailDomains);
+        string[]? EmailDomains,
+        bool? Photos);
 
     private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }

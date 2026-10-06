@@ -28,7 +28,8 @@ public abstract record DomainEvent(DateTimeOffset RaisedAt, string IdempotencyKe
     public SubjectId? Actor { get; init; }
 
     /// <summary>
-    /// Whose authority they acted under, where it was not their own.
+    /// Whose authority they acted under, as the access context that raised the event gives
+    /// it; it is carried beside the actor and never compared with it (AUTHZ-IMP-001).
     /// </summary>
     public SubjectId? Effective { get; init; }
 }

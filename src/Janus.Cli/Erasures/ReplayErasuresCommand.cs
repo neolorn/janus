@@ -167,7 +167,13 @@ internal static class ReplayErasuresCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
+
+        // CONV-DESIGN-007, CONV-CODE-007: the ring the document was read into stands in
+        // the place of the one the core registers, so every service of the command
+        // borrows from the ring the command filled.
+        services.AddCoreArea();
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<ErasureReplay>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

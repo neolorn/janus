@@ -1,25 +1,24 @@
 using System;
-using System.Globalization;
 using Janus.Core;
 
 namespace Janus.Authentication.Organizations;
 
 /// <summary>
-/// A domain in the one form it is listed, looked up and compared under: the ASCII form
-/// of its canonical form, which the case fold has already put in lower case.
+/// A domain in the one form it is listed, looked up and compared under: its canonical
+/// form converted to its ASCII form by the library's own UTS #46 processing, in lower
+/// case.
 /// </summary>
 /// <remarks>
 /// Implements REG-DOM-001 and IDN-ORG-006. An address's domain is read the same way, so
 /// a domain entered in its Unicode form and an address written in its ASCII form, or the
-/// other way about, are one domain; what does not read is admitted by no lock.
+/// other way about, are one domain; what does not read is admitted by no lock. The form
+/// comes from tables the library carries, so it is the same on every machine.
 /// </remarks>
 internal static class DomainName
 {
     // The name the record is published at, `_identity-verify.` and the domain, is itself
     // a name DNS carries, so the domain leaves room for the prefix within 253 octets.
     private const int MaximumLength = 253 - 17;
-
-    private static readonly IdnMapping Mapping = new() { UseStd3AsciiRules = true };
 
     /// <summary>
     /// Reads a domain as it was entered.
@@ -33,14 +32,12 @@ internal static class DomainName
         ArgumentNullException.ThrowIfNull(entered);
 
         domain = string.Empty;
-        string canonical = CanonicalForm.Of(entered.Trim());
 
-        if (canonical.Length is 0 || canonical.EndsWith('.') || !canonical.Contains('.', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (Ascii(canonical).Match<string?>(value => value, _ => null) is not { } ascii
+        // The label count and the length are judged on the converted name: the
+        // conversion reads the full stops of other scripts as label separators, and has
+        // already refused an empty label, a trailing dot among them.
+        if (!CanonicalForm.TryDomainToAscii(CanonicalForm.Of(entered.Trim()), out string ascii)
+            || !ascii.Contains('.', StringComparison.Ordinal)
             || ascii.Length > MaximumLength)
         {
             return false;
@@ -65,19 +62,5 @@ internal static class DomainName
         domain = string.Empty;
 
         return at > 0 && TryRead(value[(at + 1)..], out domain);
-    }
-
-    private static Result<string> Ascii(string canonical)
-    {
-        try
-        {
-            return Result.Success(Mapping.GetAscii(canonical));
-        }
-        catch (ArgumentException)
-        {
-            // IdnMapping answers a name it cannot map with this exception and nothing
-            // else, and a name it cannot map is not a domain.
-            return Result.Failure<string>(Error.From(ErrorCodes.RequestMalformed));
-        }
     }
 }

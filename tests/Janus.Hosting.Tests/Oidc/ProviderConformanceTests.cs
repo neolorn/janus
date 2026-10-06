@@ -106,8 +106,9 @@ public sealed class ProviderConformanceTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-006 AC1, API-REDIR-001 AC1: a destination that is not the registered
-    /// one character for character never receives the code, however near it is.
+    /// AUTH-OIDC-006 AC1 (D-166, 145): a pushed destination that is not the registered
+    /// one character for character is refused <c>invalid_request</c> with no reference,
+    /// however near it is, and each refusal is recorded once.
     /// </summary>
     /// <param name="asked">The destination the request names.</param>
     /// <returns>The work of the test.</returns>
@@ -120,20 +121,22 @@ public sealed class ProviderConformanceTests
     [InlineData("http://app.example.test/signin/callback")]
     [InlineData("https://app.example.test.attacker.test/signin/callback")]
     [InlineData("https://app.example.test:8443/signin/callback")]
-    public async Task AUTH_OIDC_006_AC1_OnlyTheExactRegisteredDestinationReceivesTheCodeAsync(string asked)
+    public async Task AUTH_OIDC_006_AC1_APushNamingAnotherDestinationIsRefusedAsync(string asked)
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await RelyingParty.PreparedAsync(deployment);
-        Answer answered = await browser.SendAsync(
-            "GET",
-            await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: true, asked));
+        _ = await RelyingParty.PreparedAsync(deployment);
 
-        Assert.Equal(StatusCodes.Status302Found, answered.Status);
-        Assert.Equal(
-            RelyingParty.Destination,
-            RelyingParty.Where(answered)[..RelyingParty.Where(answered).IndexOf('?', StringComparison.Ordinal)]);
-        Assert.NotEmpty(RelyingParty.Returned(answered, "code"));
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            asked,
+            "openid email");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Refused(pushed, OpenIddictConstants.Errors.InvalidRequest);
+        Assert.Single(deployment.OidcLog.Entries);
     }
 
     /// <summary>

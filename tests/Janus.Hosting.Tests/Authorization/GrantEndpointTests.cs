@@ -383,6 +383,27 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-CFG-007 AC1, CONV-DESIGN-003 AC6: the role is read again under its lock as the
+    /// grant is written, so one that came to carry system administration meanwhile is
+    /// not conferred by an administrator without it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_007_AC1_ARoleThatCameToAdministerMeanwhileIsNotConferredAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GrantManage);
+
+        _deployment.Roles.Locking = name =>
+            _ = _deployment.Roles.RecordAsync(Role.Of(name, Permissions.All), CancellationToken.None).AsTask();
+
+        Answer conferred = await GrantedAsync(administrator, "organization", Administration.ToString(), role: Reader);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, conferred.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), conferred.Text("code"));
+        Assert.Empty(await HeldAsync(Administration));
+    }
+
+    /// <summary>
     /// OPS-CFG-007: revoking system administration requires system administration.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -432,6 +453,44 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-BOOT-002, D-166: the reserved account's <c>system-administrator</c> grant is
+    /// what the break-glass session holds, so a system administrator stepped up is
+    /// refused its revocation and the grant stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountsAdministrationIsNotRevokedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(
+            Administration,
+            Permissions.GrantManage,
+            Permissions.SystemAdminister);
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                new GrantSubject(SubjectType.User, Holder),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                new SubjectId(Holder),
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(new SubjectId(Holder));
+
+        Answer refused = await RevokedAsync(administrator, bootstrapped.Id.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Null((await _deployment.AccessGrants.FindAsync(bootstrapped.Id, CancellationToken.None))!.RevokedAt);
+    }
+
+    /// <summary>
     /// AUTH-STEP-001 and chapter 10 section 5a: granting and revoking are the
     /// <c>grant:manage</c> step-up action, so a session whose proof is no longer recent
     /// changes nothing.
@@ -457,10 +516,53 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a grant refused under its role's lock, and a revocation
+    /// refused under the grant's because another revoked it while this one waited, each
+    /// roll the unit of work back, so no unit of work is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AGrantOrARevocationRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(administrator, "document", "d-1");
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer again = await GrantedAsync(administrator, "document", "d-1");
+
+        Assert.Equal(ErrorCodes.GrantDuplicate.ToString(), again.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        var id = new GrantId(Guid.Parse(created.Text("id")));
+
+        _deployment.AccessGrants.Locking = held =>
+        {
+            _deployment.AccessGrants.Locking = null;
+            _ = held.Revoke(actor, _deployment.Clock.GetUtcNow(), "Revoked meanwhile.");
+        };
+
+        Answer revoked = await RevokedAsync(administrator, id.ToString());
+
+        Assert.Equal(ErrorCodes.GrantNotFound.ToString(), revoked.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+
+        // Whether a unit of work is open, how many were left neither committed nor rolled
+        // back, and how many were rolled back.
+        (bool Open, int Unended, int RolledBack) Ended() =>
+            (
+                _deployment.Work.Open,
+                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+                _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001: a grant names a role, an organization, and a group of the
-    /// grant's own organization; anything else is a malformed request naming the
-    /// member. A record the deployment holds no registration for is refused rather
-    /// than malformed (CONV-DESIGN-002 AC3).
+    /// grant's own organization. A body that cannot be read is malformed; a role the
+    /// deployment does not hold, or a group that does not exist or belongs to another
+    /// organization, is unresolved, naming the member (D-166). A record the deployment
+    /// holds no registration for is refused rather than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -476,6 +578,8 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Answer unnamed = await GrantedAsync(administrator, "organization", "not-an-organization");
         Answer unknownRole = await GrantedAsync(administrator, "document", "d-1", role: RoleName.Parse("auditor"));
         Answer foreignGroup = await GrantedAsync(administrator, "document", "d-1", group: foreign.Id);
+        Answer missingGroup = await GrantedAsync(
+            administrator, "document", "d-1", group: new GroupId(Guid.NewGuid()));
         Answer localGroup = await GrantedAsync(administrator, "document", "d-1", group: local.Id);
         Answer untyped = await administrator.SendAsync(
             "POST",
@@ -488,13 +592,40 @@ public sealed class GrantEndpointTests : IAsyncLifetime
             ("reason", "Needs it."));
 
         Assert.Equal("resourceId", Member(unnamed));
-        Assert.Equal("role", Member(unknownRole));
-        Assert.Equal("subjectId", Member(foreignGroup));
+        Assert.Equal("role", Unresolved(unknownRole));
+        Assert.Equal("subjectId", Unresolved(foreignGroup));
+        Assert.Equal("subjectId", Unresolved(missingGroup));
         Assert.Equal("resourceType", Member(untyped));
         Assert.Equal(StatusCodes.Status201Created, localGroup.Status);
         Assert.Equal(
             new GrantSubject(SubjectType.Group, local.Id.Value),
             (await StoredAsync(localGroup)).Subject);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-001, CONV-DESIGN-003: a group removed while the grant waited for the
+    /// organization's groups is no group to give it to, so nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_001_AGroupRemovedMeanwhileIsGivenNothingAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        var tellers = Group.Create(new GroupId(Guid.NewGuid()), Branch, "Tellers");
+
+        await _deployment.Groups.CreateAsync(tellers, CancellationToken.None);
+
+        _deployment.Groups.Holding = held =>
+            _ = _deployment.Groups.RemoveAsync(tellers.Id, CancellationToken.None).AsTask();
+
+        Answer given = await GrantedAsync(administrator, "document", "d-1", group: tellers.Id);
+
+        Assert.Equal("subjectId", Unresolved(given));
+        Assert.Empty(await _deployment.AccessGrants.HeldByAsync(
+            [GrantSubject.Of(tellers.Id)],
+            Branch,
+            _deployment.Clock.GetUtcNow(),
+            CancellationToken.None));
     }
 
     /// <summary>
@@ -658,6 +789,29 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Empty(await HeldAsync(Branch));
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a reason past 1024 characters after
+    /// trimming is malformed, and a blank one refused with its own code, before the
+    /// service is reached, so a caller without the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_AReasonOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await AuthorisedAsync(Branch);
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer longer = await GrantedAsync(caller, "document", "d-1", reason: overlong);
+        Answer blank = await GrantedAsync(caller, "document", "d-1", reason: "   ");
+        Answer unrevoked = await caller.SendAsync("DELETE", "/admin/grants/" + Guid.NewGuid(), ("reason", overlong));
+
+        Assert.Equal("reason", Member(longer));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, blank.Status);
+        Assert.Equal(ErrorCodes.GrantReasonRequired.ToString(), blank.Text("code"));
+        Assert.Equal("reason", Member(unrevoked));
+        Assert.Empty(await HeldAsync(Branch));
+    }
+
     private static Task<Answer> ReadAsync(Browser administrator, string subjectType, string subjectId) =>
         administrator.SendAsync(
             "GET",
@@ -666,6 +820,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+
+        return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
+    }
+
+    private static string Unresolved(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.GrantUnresolved.ToString(), answer.Text("code"));
 
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
     }
@@ -690,6 +852,44 @@ public sealed class GrantEndpointTests : IAsyncLifetime
                     ? details.EnumerateObject().Select(member => "details." + member.Name)
                     : [])
                 .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step and before the
+    /// first write refuses a grant and a revocation inside their unit of work, which
+    /// rolls back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAGrantAndARevocationAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        Grant written = await WrittenAsync();
+
+        foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
+        {
+            () => GrantedAsync(administrator, "organization", Branch.ToString()),
+            () => RevokedAsync(administrator, written.Id.ToString()),
+        })
+        {
+            int rolledBack = _deployment.Work.RolledBack;
+
+            _deployment.Gate.Admitted = _ => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+
+            Answer refused = await change();
+
+            _deployment.Gate.Lift(actor);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+            Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+            Assert.False(_deployment.Work.Open);
+        }
+
+        Grant held = Assert.Single(await HeldAsync(Branch));
+
+        Assert.Equal(written.Id, held.Id);
+        Assert.Null(held.RevokedAt);
     }
 
     private static Task<Answer> RevokedAsync(Browser administrator, string id) =>

@@ -43,15 +43,35 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "رمز التحقق الخاص بك هو {code}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
                 "رمز التحقق هو {code}.")),
         (
+            MessageKind.VerificationLink,
+            new Words(
+                "Your verification code",
+                "Your verification code is {code}. Or confirm with this: {link}. It expires shortly. If you did not ask for it, ignore this message.",
+                "Your verification code is {code}. Or confirm with this: {link}"),
+            new Words(
+                "رمز التحقق",
+                "رمز التحقق الخاص بك هو {code}. أو أكد بهذا: {link}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
+                "رمز التحقق {code} أو أكد بهذا: {link}")),
+        (
             MessageKind.SignInLink,
             new Words(
                 "Your sign-in link",
-                "Use this to sign in: {token}. It expires shortly. If you did not ask for it, ignore this message.",
-                "Sign in with this: {token}"),
+                "Use this to sign in: {link}. It expires shortly. If you did not ask for it, ignore this message.",
+                "Sign in with this: {link}"),
             new Words(
                 "رابط تسجيل الدخول",
-                "استخدم هذا لتسجيل الدخول: {token}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
-                "لتسجيل الدخول: {token}")),
+                "استخدم هذا لتسجيل الدخول: {link}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
+                "لتسجيل الدخول: {link}")),
+        (
+            MessageKind.SignInCode,
+            new Words(
+                "Your sign-in code",
+                "Your sign-in code is {code}. It expires shortly. If you did not ask for it, ignore this message.",
+                null),
+            new Words(
+                "رمز تسجيل الدخول",
+                "رمز تسجيل الدخول الخاص بك هو {code}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
+                null)),
         (
             MessageKind.SecondStepCode,
             new Words(
@@ -73,15 +93,25 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "حدث تغيير في حسابك. إن لم يكن منك فسجل الدخول وأمن حسابك.",
                 "حدث تغيير في حسابك. إن لم يكن منك فأمن حسابك.")),
         (
+            MessageKind.CredentialSuspended,
+            new Words(
+                "A sign-in method on your account was suspended",
+                "A sign-in method on your account was suspended and will stop working. If this was not you, cancel it here: {link}",
+                "A sign-in method was suspended. Not you? Cancel: {link}"),
+            new Words(
+                "تم تعليق وسيلة دخول في حسابك",
+                "تم تعليق وسيلة دخول في حسابك وستتوقف عن العمل. إن لم يكن هذا منك فألغه من هنا: {link}",
+                "عُلقت وسيلة دخول. لست أنت؟ ألغه: {link}")),
+        (
             MessageKind.EnrolmentLink,
             new Words(
                 "Your enrolment link",
-                "Use this to finish setting up your new way of signing in: {token}. It expires shortly.",
-                "Finish setting up your sign-in method: {token}"),
+                "Use this to finish setting up your new way of signing in: {link}. It expires shortly.",
+                "Finish setting up your sign-in method: {link}"),
             new Words(
                 "رابط التسجيل",
-                "استخدم هذا لإتمام إعداد وسيلة الدخول الجديدة: {token}. ينتهي بعد قليل.",
-                "لإتمام الإعداد: {token}")),
+                "استخدم هذا لإتمام إعداد وسيلة الدخول الجديدة: {link}. ينتهي بعد قليل.",
+                "لإتمام الإعداد: {link}")),
         (
             MessageKind.Alert,
             new Words(
@@ -126,12 +156,12 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
             MessageKind.IdentifierRemoved,
             new Words(
                 "An address was removed from your account",
-                "An address or a number was removed from your account. If it was not you, undo it with this: {token}",
-                "An address or a number was removed. Undo it with this: {token}"),
+                "An address or a number was removed from your account. If it was not you, undo it with this: {link}",
+                "An address or a number was removed. Undo it with this: {link}"),
             new Words(
                 "أُزيل عنوان من حسابك",
-                "أُزيل عنوان أو رقم من حسابك. إن لم يكن منك فتراجع عنه بهذا: {token}",
-                "أُزيل عنوان. للتراجع: {token}")),
+                "أُزيل عنوان أو رقم من حسابك. إن لم يكن منك فتراجع عنه بهذا: {link}",
+                "أُزيل عنوان. للتراجع: {link}")),
         (
             MessageKind.IdentifierDetached,
             new Words(
@@ -166,22 +196,22 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
             MessageKind.IdentifierChangeConfirm,
             new Words(
                 "Confirm the change to your account",
-                "Confirm that this address or number may be replaced: {token}",
-                "Confirm the change with this: {token}"),
+                "Confirm that this address or number may be replaced: {link}",
+                "Confirm the change with this: {link}"),
             new Words(
                 "أكد التغيير في حسابك",
-                "أكد أن هذا العنوان أو الرقم يمكن استبداله: {token}",
-                "أكد التغيير بهذا: {token}")),
+                "أكد أن هذا العنوان أو الرقم يمكن استبداله: {link}",
+                "أكد التغيير بهذا: {link}")),
         (
             MessageKind.RecoveryLink,
             new Words(
                 "Your recovery link",
-                "Use this to set a new password: {token}. It removes nothing else from your account.",
-                "Set a new password with this: {token}"),
+                "Use this to set a new password: {link}. It removes nothing else from your account.",
+                "Set a new password with this: {link}"),
             new Words(
                 "رابط الاستعادة",
-                "استخدم هذا لتعيين كلمة مرور جديدة: {token}. لا يزيل شيئا آخر من حسابك.",
-                "لكلمة مرور جديدة: {token}")),
+                "استخدم هذا لتعيين كلمة مرور جديدة: {link}. لا يزيل شيئا آخر من حسابك.",
+                "لكلمة مرور جديدة: {link}")),
         (
             MessageKind.PrivacyRequestReceived,
             new Words(
@@ -206,31 +236,41 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
             MessageKind.DeactivationNotice,
             new Words(
                 "Your account is deactivated",
-                "Your account is deactivated. Stand it back up with this: {token}",
-                "Your account is deactivated. Stand it back up: {token}"),
+                "Your account is deactivated. Stand it back up with this: {link}",
+                "Your account is deactivated. Stand it back up: {link}"),
             new Words(
                 "حسابك موقوف",
-                "حسابك موقوف الآن. لإعادته كما كان استخدم هذا: {token}",
-                "حسابك موقوف. لإعادته: {token}")),
+                "حسابك موقوف الآن. لإعادته كما كان استخدم هذا: {link}",
+                "حسابك موقوف. لإعادته: {link}")),
         (
             MessageKind.DeletionNotice,
             new Words(
                 "Your account is set to be deleted",
-                "Your account will be deleted when its grace window ends. Cancel it with this: {token}",
-                "Your account will be deleted soon. Cancel it: {token}"),
+                "Your account will be deleted when its grace window ends. Cancel it with this: {link}",
+                "Your account will be deleted soon. Cancel it: {link}"),
             new Words(
                 "حسابك في طريقه للحذف",
-                "سيُحذف حسابك بانتهاء مهلة السماح. لإلغاء ذلك استخدم هذا: {token}",
-                "سيُحذف حسابك. للإلغاء: {token}")),
+                "سيُحذف حسابك بانتهاء مهلة السماح. لإلغاء ذلك استخدم هذا: {link}",
+                "سيُحذف حسابك. للإلغاء: {link}")),
+        (
+            MessageKind.OobDeletionNotice,
+            new Words(
+                "Your account is set to be deleted",
+                "A request to delete your account was carried out. Your account will be deleted when its grace window ends.",
+                "A request to delete your account was carried out. It will be deleted soon."),
+            new Words(
+                "حسابك في طريقه للحذف",
+                "نُفذ طلب لحذف حسابك. سيُحذف حسابك بانتهاء مهلة السماح.",
+                "نُفذ طلب لحذف حسابك. سيُحذف قريبا.")),
         (
             MessageKind.InvitationLink,
             new Words(
                 "You are invited to join an organization",
-                "You are invited to join an organization. Accept with this: {token}. It expires after a while. If you did not expect it, ignore this message.",
+                "You are invited to join an organization. Accept with this: {link}. It expires after a while. If you did not expect it, ignore this message.",
                 null),
             new Words(
                 "دعوة للانضمام إلى مؤسسة",
-                "أنت مدعو للانضمام إلى مؤسسة. للقبول استخدم هذا: {token}. تنتهي صلاحيتها بعد مدة. إن لم تكن تتوقعها فتجاهل هذه الرسالة.",
+                "أنت مدعو للانضمام إلى مؤسسة. للقبول استخدم هذا: {link}. تنتهي صلاحيتها بعد مدة. إن لم تكن تتوقعها فتجاهل هذه الرسالة.",
                 null)),
         (
             MessageKind.RecoveryCodesReminder,

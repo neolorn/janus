@@ -173,6 +173,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(Ahmed, entry.Subject);
         Assert.Equal(Noon, entry.At);
         Assert.Equal(erasure.ToString(), entry.Details["erasure"].GetString());
+        Assert.Equal("erasure-requested", entry.Details["kind"].GetString());
         Assert.Equal(
             ["records"],
             entry.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
@@ -182,9 +183,37 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003a, CONV-DESIGN-003: an erasure another operator closed while this
+    /// completion waited for its row is refused as no longer failed, and nothing more
+    /// is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AnErasureClosedMeanwhileIsNotClosedTwiceAsync()
+    {
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        _outbox.Locking = held =>
+        {
+            _outbox.Locking = null;
+            held.CompleteManually();
+        };
+
+        Error refused = Refused(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        Assert.Equal(ErrorCodes.ErasureNotFailed, refused.Code);
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a: the manual path is for permanent failure, so an erasure the
     /// subscribers are still working through, or one already complete, is refused and
-    /// nothing is recorded.
+    /// nothing is recorded; the step-up is not asked for a delivery the path would not
+    /// close (X8).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -202,26 +231,86 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(ErasureStatus.AwaitingSubscribers, awaiting.Status);
         Assert.Empty(_audit.Entries);
         Assert.Equal(0, _work.Opened);
+        Assert.Empty(_stepUp.Asked);
     }
 
     /// <summary>
-    /// IDN-LIFE-003a: only an erasure is completed on this path, so a takedown's failed
-    /// delivery is not closed through it.
+    /// IDN-LIFE-003a: a takedown's failed delivery is closed by hand, named by its
+    /// <c>takedownId</c>, and recorded with its kind; no erasures row or ledger line is
+    /// touched, since it is no erasure's.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003a_OnlyAnErasureIsCompletedByHandHereAsync()
+    public async Task IDN_LIFE_003a_AFailedTakedownDeliveryIsCompletedByHandAsync()
     {
-        var takedown = Delivery.Of(Ahmed, SubjectEventKind.TakedownExecuted, Noon);
+        _ledger = new ErasureLedgerInMemory();
 
-        takedown.Fail();
-        await _outbox.AddAsync(takedown, TestContext.Current.CancellationToken);
+        Delivery takedown = await FailedAsync(SubjectEventKind.TakedownExecuted);
+
+        Held(await CompletedAsync(Mona, new ErasureId(takedown.Id.Value)));
+
+        PrivacyAuditEntry entry = Assert.Single(_audit.Entries);
+
+        Assert.Equal(ErasureStatus.Complete, takedown.Status);
+        Assert.Empty(_erasures.Erasures);
+        Assert.Empty(_ledger.Lines);
+        Assert.DoesNotContain("erasure-ledger", takedown.Confirmed);
+        Assert.Equal(AuditActions.ErasureCompleted, entry.Action);
+        Assert.Equal(Ahmed, entry.Subject);
+        Assert.Equal(new ErasureId(takedown.Id.Value).ToString(), entry.Details["erasure"].GetString());
+        Assert.Equal("takedown-executed", entry.Details["kind"].GetString());
+        Assert.Equal(
+            ["records"],
+            entry.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
+        Assert.Contains((Mona, Browser, StepUpAction.ErasureComplete), _stepUp.Asked);
+        Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a: a restriction's failed delivery is closed by hand and recorded
+    /// with its kind; no erasures row or ledger line is touched.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AFailedRestrictionDeliveryIsCompletedByHandAsync()
+    {
+        _ledger = new ErasureLedgerInMemory();
+
+        Delivery restriction = await FailedAsync(SubjectEventKind.RestrictionChanged);
+        Delivery erasure = await ErasedAsync(Sara, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        Held(await CompletedAsync(Mona, new ErasureId(restriction.Id.Value)));
+
+        PrivacyAuditEntry entry = Assert.Single(_audit.Entries);
+
+        Assert.Equal(ErasureStatus.Complete, restriction.Status);
+        Assert.Equal(ErasureStatus.Failed, erasure.Status);
+        Assert.Equal(ErasureStatus.Failed, Assert.Single(_erasures.Erasures).Status);
+        Assert.Empty(_ledger.Lines);
+        Assert.Equal("restriction-changed", entry.Details["kind"].GetString());
+        Assert.Equal(Ahmed, entry.Subject);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a: an export's delivery is none of the three kinds the manual path
+    /// closes, so it is not found there, and an identifier naming nothing is not found
+    /// either; the step-up is not asked for either (X8).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_ADeliveryOfAnotherKindIsNotFoundAsync()
+    {
+        Delivery export = await FailedAsync(SubjectEventKind.ExportRequested);
 
         Assert.Equal(
             ErrorCodes.ErasureNotFound,
-            Refused(await CompletedAsync(Mona, new ErasureId(takedown.Id.Value))).Code);
-        Assert.Equal(ErasureStatus.Failed, takedown.Status);
+            Refused(await CompletedAsync(Mona, new ErasureId(export.Id.Value))).Code);
+        Assert.Equal(
+            ErrorCodes.ErasureNotFound,
+            Refused(await CompletedAsync(Mona, new ErasureId(Guid.NewGuid()))).Code);
+        Assert.Equal(ErasureStatus.Failed, export.Status);
         Assert.Empty(_audit.Entries);
+        Assert.Empty(_stepUp.Asked);
     }
 
     /// <summary>
@@ -317,6 +406,46 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-GATE-006 AC3 and DR-016: a restriction of the operator committed after the
+    /// gate step refuses the completion inside its unit of work, which rolls back with
+    /// nothing closed and nothing recorded. The ledger line appended before the unit of
+    /// work names an erasure committed before and stands; a completion made later closes
+    /// the erasure, and the ledger holds that one line and no other.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ACompletionRefusedAtTheSecondAskLeavesTheLedgerLineStandingAsync()
+    {
+        const string line = "2026-09-24T11:00:00Z 11111111-1111-4111-8111-111111111111 minor-takedown";
+
+        _ledger = new ErasureLedgerInMemory();
+
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+        var erasure = new ErasureId(delivery.Id.Value);
+
+        _gate.Admitted = () => _work.Meanwhile = () => _gate.Restrict(Mona);
+
+        Error refused = Refused(await CompletedAsync(Mona, erasure));
+
+        Assert.Equal(ErrorCodes.Restricted, refused.Code);
+        Assert.Equal([line], _ledger.Lines);
+        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+        Assert.Equal(ErasureStatus.Failed, Assert.Single(_erasures.Erasures).Status);
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+
+        _gate.Lift(Mona);
+
+        Held(await CompletedAsync(Mona, erasure));
+
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal([line], _ledger.Lines.Distinct());
+    }
+
+    /// <summary>
     /// DR-016 AC2: a line the worker already made durable is not written again by the
     /// manual path.
     /// </summary>
@@ -405,6 +534,18 @@ public sealed class ErasureServiceTests : IAsyncDisposable
 
         await _outbox.AddAsync(delivery, TestContext.Current.CancellationToken);
         _erasures.Add(row);
+
+        return delivery;
+    }
+
+    // A delivery of another kind whose retries were spent.
+    private async ValueTask<Delivery> FailedAsync(SubjectEventKind kind)
+    {
+        var delivery = Delivery.Of(Ahmed, kind, Noon.AddHours(-2));
+
+        delivery.Attempted(Noon.AddHours(-2), TimeSpan.FromSeconds(30), 2.0m, 1.0);
+        delivery.Fail();
+        await _outbox.AddAsync(delivery, TestContext.Current.CancellationToken);
 
         return delivery;
     }

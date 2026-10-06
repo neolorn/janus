@@ -6,6 +6,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Requests;
+using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Xunit;
 using Xunit.Sdk;
@@ -61,6 +62,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
             _requests,
             new WorkingCalendar(_configuration),
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGateInMemory(),
             _accounts,
             new RestrictionGrant(_accounts, _outbox),
             _notices,
@@ -121,6 +123,48 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
         Assert.Equal(AlertCondition.PrivacyDeadlineApproaching, raised.Condition);
         Assert.Equal(receipt.RequestId.ToString(), raised.Scope);
         Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002, PRIV-RIGHT-002 AC2: the warning's row is written in the
+    /// transaction that marks the request warned, so a row that cannot be written fails
+    /// the pass and the request is not marked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AWarningThatCannotBeWrittenFailsThePassAsync()
+    {
+        _ = await SubmittedAsync(PrivacyRequestType.Restriction);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// INT-SMS-003: the alert names the request's type and status as chapter 10 section
+    /// 5.12c spells them, which is what the operator's message is measured and filled
+    /// with.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AnAlertCarriesTheTypeAndStatusAsTheChapterSpellsThemAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Rectification);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
+
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
+
+        PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
+
+        Assert.Equal("rectification", raised.Details["type"].GetString());
+        Assert.Equal("open", raised.Details["status"].GetString());
     }
 
     /// <summary>
@@ -248,6 +292,31 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-002 AC5, CONV-DESIGN-003: a request fulfilled while the pass waited
+    /// for its row is left as decided: it does not lapse and the subject is not told
+    /// it was refused.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC5_ARequestDecidedMeanwhileDoesNotLapseAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Erasure);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
+
+        _requests.Locking = request =>
+        {
+            _requests.Locking = null;
+            request.Fulfil(_clock.GetUtcNow());
+        };
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+        Assert.DoesNotContain(_notices.Told, told => told.Message is MessageKind.PrivacyRequestLapsed);
+        Assert.Empty(_alerts.Raised);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001 AC3: the lapse is a decision, so it is audited like one.
     /// </summary>
     /// <returns>The work of running it.</returns>
@@ -260,6 +329,86 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
+        Assert.Contains(
+            _audit.Entries,
+            entry => entry.Action.ToString() is "privacy.request.lapsed");
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a request decided while the pass waited for its row is
+    /// answered with nothing written, so the pass rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARequestDecidedMeanwhileRollsThePassBackAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Erasure);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
+
+        _requests.Locking = request =>
+        {
+            _requests.Locking = null;
+            request.Fulfil(_clock.GetUtcNow());
+        };
+
+        _work.Reset();
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a request the pass reaches again between its warning and
+    /// its escalation is changed in nothing, so the pass rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARequestThePassChangesNothingOfRollsBackAsync()
+    {
+        _ = await SubmittedAsync(PrivacyRequestType.Restriction);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+
+        _work.Reset();
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        _ = Assert.Single(_alerts.Raised);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18, PRIV-RIGHT-002 AC4: the notice of a lapse that every channel
+    /// refuses fails nothing. The request is recorded deemed refused by lapse and
+    /// audited, and the pass commits both.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ALapseWhoseNoticeIsRefusedIsRecordedAndCommittedAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Erasure);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
+
+        _notices.Refuses = true;
+        _work.Reset();
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(PrivacyRequestStatus.DeemedRefusedByLapse, Assert.Single(_requests.Queue).Status);
+        Assert.DoesNotContain(_notices.Told, told => told.Message is MessageKind.PrivacyRequestLapsed);
         Assert.Contains(
             _audit.Entries,
             entry => entry.Action.ToString() is "privacy.request.lapsed");

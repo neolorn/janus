@@ -13,6 +13,8 @@ namespace Janus.Hosting.Tests.Background;
 /// </summary>
 internal sealed class JobRunsInMemory : IJobRuns
 {
+    private readonly Lock _gate = new();
+
     private readonly Dictionary<string, Run> _runs = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -20,8 +22,13 @@ internal sealed class JobRunsInMemory : IJobRuns
     /// </summary>
     /// <param name="job">The job's name.</param>
     /// <returns>The instant.</returns>
-    public DateTimeOffset? SucceededAt(string job) =>
-        _runs.TryGetValue(job, out Run? run) ? run.SucceededAt : null;
+    public DateTimeOffset? SucceededAt(string job)
+    {
+        lock (_gate)
+        {
+            return _runs.TryGetValue(job, out Run? run) ? run.SucceededAt : null;
+        }
+    }
 
     /// <inheritdoc/>
     public ValueTask<bool> ClaimAsync(
@@ -30,29 +37,35 @@ internal sealed class JobRunsInMemory : IJobRuns
         TimeSpan interval,
         CancellationToken cancellationToken)
     {
-        if (!_runs.TryGetValue(job, out Run? run))
+        lock (_gate)
         {
-            _runs[job] = new Run(now) { AttemptedAt = now };
+            if (!_runs.TryGetValue(job, out Run? run))
+            {
+                _runs[job] = new Run(now) { AttemptedAt = now };
+
+                return ValueTask.FromResult(true);
+            }
+
+            if (run.AttemptedAt > now - interval)
+            {
+                return ValueTask.FromResult(false);
+            }
+
+            run.AttemptedAt = now;
 
             return ValueTask.FromResult(true);
         }
-
-        if (run.AttemptedAt > now - interval)
-        {
-            return ValueTask.FromResult(false);
-        }
-
-        run.AttemptedAt = now;
-
-        return ValueTask.FromResult(true);
     }
 
     /// <inheritdoc/>
     public ValueTask SucceededAsync(string job, DateTimeOffset at, CancellationToken cancellationToken)
     {
-        if (_runs.TryGetValue(job, out Run? run))
+        lock (_gate)
         {
-            run.SucceededAt = at;
+            if (_runs.TryGetValue(job, out Run? run))
+            {
+                run.SucceededAt = at;
+            }
         }
 
         return ValueTask.CompletedTask;
@@ -66,16 +79,19 @@ internal sealed class JobRunsInMemory : IJobRuns
         TimeSpan window,
         CancellationToken cancellationToken)
     {
-        if (!_runs.TryGetValue(job, out Run? run)
-            || (run.SucceededAt ?? run.RecordedAt) >= now - (interval * 2)
-            || run.LapseRaisedAt > now - window)
+        lock (_gate)
         {
-            return ValueTask.FromResult(false);
+            if (!_runs.TryGetValue(job, out Run? run)
+                || (run.SucceededAt ?? run.RecordedAt) >= now - (interval * 2)
+                || run.LapseRaisedAt > now - window)
+            {
+                return ValueTask.FromResult(false);
+            }
+
+            run.LapseRaisedAt = now;
+
+            return ValueTask.FromResult(true);
         }
-
-        run.LapseRaisedAt = now;
-
-        return ValueTask.FromResult(true);
     }
 
     private sealed class Run(DateTimeOffset recordedAt)

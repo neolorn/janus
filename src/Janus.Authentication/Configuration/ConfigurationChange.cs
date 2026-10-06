@@ -15,8 +15,17 @@ namespace Janus.Authentication.Configuration;
 /// <param name="After">What it reads as now, in the same form.</param>
 /// <param name="Loosening">Whether the change loosens the deployment.</param>
 /// <param name="Reason">The written reason, which a loosening requires.</param>
-/// <param name="Actor">Who made it.</param>
+/// <param name="Actor">
+/// Who made it, or the empty identifier where a system principal made it.
+/// </param>
+/// <param name="BreakGlassReason">
+/// The reason given at the use of the break-glass credential, where the change was made
+/// in the session it opened, or nothing.
+/// </param>
 /// <param name="At">When it was made.</param>
+/// <param name="Principal">
+/// The name of the system principal that made it, or nothing where a person did.
+/// </param>
 /// <remarks>
 /// Implements OPS-CFG-002 and OPS-CFG-005: who, what, from, to, when and why, with the
 /// values written exactly as the settings table writes them, so an entry reads the same
@@ -29,4 +38,6 @@ internal sealed record ConfigurationChange(
     bool Loosening,
     string? Reason,
     SubjectId Actor,
-    DateTimeOffset At);
+    string? BreakGlassReason,
+    DateTimeOffset At,
+    string? Principal);

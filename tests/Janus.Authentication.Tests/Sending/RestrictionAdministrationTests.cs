@@ -57,12 +57,19 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
+        _gate.GrantEveryone(administrative, Permissions.RestrictionEdit);
+        _gate.GrantEveryone(administrative, Permissions.RestrictionGrant);
     }
 
-    private RestrictionAdministration Administration =>
+    private RestrictionAdministration Administration => Announcing(_events);
+
+    // The administration with its own events and alerts going where a test says, the
+    // configuration change beneath it announcing as it always does.
+    private RestrictionAdministration Announcing(EventsInMemory announced) =>
         new(
             _configuration,
             new ConfigurationAdministration(
+                _configuration,
                 _configuration,
                 _changes,
                 new AdministrativeScope(_gate, _administrative),
@@ -71,12 +78,13 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
                 _events,
                 _work,
                 _clock),
+            new AdministrativeScope(_gate, _administrative),
             _ledger,
             _audit,
             RestrictionKeySuppliers.None,
             _work,
-            _events,
-            _events,
+            announced,
+            announced,
             _clock);
 
     /// <inheritdoc/>
@@ -98,10 +106,32 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             Tightened(),
             "an incident",
             Wanting,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.StepUpRequired, Refusal(refused));
+        Assert.Empty(_audit.Edits);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3: a restriction named outside the rule is refused with
+    /// <c>config.value.notallowed</c> before a transaction is opened, and nothing is
+    /// written.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ARestrictionNamedOutsideTheRuleIsRefusedBeforeAnythingBeginsAsync()
+    {
+        Result refused = await Administration.EditAsync(
+            "SMS Destination",
+            Tightened(),
+            "an incident",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Refusal(refused));
+        Assert.Equal(0, _work.Opened);
         Assert.Empty(_audit.Edits);
         Assert.Empty(_events.Published);
     }
@@ -115,13 +145,13 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     {
         var actor = SubjectId.New(_randomness);
 
-        await EditedAsync("sms.destination", Tightened(), reason: null, actor);
+        await EditedAsync("sms.destination", Tightened(), "an incident", actor);
 
         SendAuditInMemory.Edit written = Assert.Single(_audit.Edits);
 
         Assert.Equal("sms.destination", written.Name);
         Assert.False(written.Loosening);
-        Assert.Null(written.Reason);
+        Assert.Equal("an incident", written.Reason);
         Assert.Equal(actor, written.Actor);
 
         SendingRestrictionChanged announced = Assert.Single(_events.Of<SendingRestrictionChanged>());
@@ -129,6 +159,40 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         Assert.Equal("sms.destination", announced.Restriction);
         Assert.False(announced.Loosening);
         Assert.Equal(actor, announced.Actor);
+    }
+
+    /// <summary>
+    /// OPS-CFG-002 AC6, CONV-DESIGN-003: another restriction tightened while the edit
+    /// waited for the set's row stays tightened, as the edit is made on the set as
+    /// committed rather than as it was read before.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_002_AC6_ARestrictionTightenedMeanwhileStaysTightenedAsync()
+    {
+        Restriction tightened = new(
+            "email.destination",
+            RestrictionKeyKind.Destination,
+            null,
+            RestrictionPurpose.Any,
+            [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]);
+
+        _configuration.Holding = key =>
+        {
+            _configuration.Holding = null;
+            _configuration.Set<IReadOnlyList<Restriction>>(
+                Settings.Restrictions,
+                [.. Settings.Restrictions.Default.Where(one => one.Name != tightened.Name), tightened]);
+        };
+
+        await EditedAsync("sms.destination", Tightened(), "an incident");
+
+        IReadOnlyList<Restriction> declared = (await Administration
+            .AllAsync(TestContext.Current.CancellationToken)).Match(
+            value => value,
+            error => throw new Xunit.Sdk.XunitException($"The set was refused: {error.Code}."));
+
+        Assert.Equal(tightened.Buckets, declared.Single(one => one.Name == tightened.Name).Buckets);
+        Assert.Equal(Tightened().Buckets, declared.Single(one => one.Name == "sms.destination").Buckets);
     }
 
     /// <summary>
@@ -182,11 +246,38 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             Loosened(),
             reason: null,
             Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, Refusal(refused));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, Refusal(refused));
         Assert.Empty(_audit.Edits);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC2: an edit of the set is a change to a runtime setting, so a
+    /// tightening carries its reason as a loosening does; one with none is refused
+    /// naming the set, and nothing is written or announced.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AC2_ARestrictionTighteningWithNoReasonIsRefusedAsync()
+    {
+        Result refused = await Administration.EditAsync(
+            "sms.destination",
+            Tightened(),
+            reason: null,
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Error refusal = refused.Match(
+            () => throw new Xunit.Sdk.XunitException("The change was not refused."),
+            error => error);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refusal.Code);
+        Assert.Equal(Settings.Restrictions.Key.ToString(), refusal.Details["key"].GetString());
+        Assert.Empty(_audit.Edits);
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published);
     }
 
     /// <summary>
@@ -201,11 +292,54 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             2,
             reason: null,
             Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, Refusal(refused));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, Refusal(refused));
         Assert.Empty(_audit.Grants);
+    }
+
+    /// <summary>
+    /// API-CONV-002, D-166: a reason past 1024 characters after trimming is refused to
+    /// an in-process caller as at the boundary, naming it, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AReasonPastItsLengthIsRefusedAsync()
+    {
+        string overlong = new('r', 1025);
+
+        Error edited = Refused(await Administration.EditAsync(
+            "sms.destination",
+            Loosened(),
+            overlong,
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken));
+        Error granted = Refused(await Administration.GrantAsync(
+            "sms.destination",
+            Phone.Value,
+            2,
+            overlong,
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken));
+
+        Assert.All(
+            new[] { edited, granted },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.RequestMalformed, refusal.Code);
+                Assert.Equal("reason", refusal.Details["member"].GetString());
+            });
+        Assert.Empty(_audit.Edits);
+        Assert.Empty(_audit.Grants);
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published);
+
+        static Error Refused(Result result) =>
+            result.Match(
+                () => throw new Xunit.Sdk.XunitException("The change was not refused."),
+                error => error);
     }
 
     /// <summary>
@@ -217,7 +351,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     {
         var actor = SubjectId.New(_randomness);
 
-        _ledger.Given(new RestrictionKey("sms.destination", Phone.Value), Noon, Noon, Noon);
+        _ledger.Given(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), Noon, Noon, Noon);
 
         (await Administration.GrantAsync(
             "sms.destination",
@@ -225,13 +359,13 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             2,
             "support: their carrier dropped both",
             Satisfied,
-            actor,
+            AccessContext.Of(actor),
             TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The grant was refused: {error.Code}."));
 
         Assert.Equal(
-            ("sms.destination", 2, "support: their carrier dropped both", actor),
+            ("sms.destination", 2, "support: their carrier dropped both", actor, (string?)null),
             Assert.Single(_audit.Grants));
 
         SendingRestrictionGranted announced = Assert.Single(_events.Of<SendingRestrictionGranted>());
@@ -243,21 +377,68 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC4: a grant naming a restriction the deployment does not
-    /// declare, or no credit at all, is refused.
+    /// CONV-DESIGN-003 AC5 and AC8: an edit whose event could not be written is refused
+    /// after the change beneath it joined its transaction, and the whole is rolled back
+    /// and left closed with nothing of it committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnEditWhoseEventIsNotWrittenIsRolledBackAsync()
+    {
+        var refusing = new EventsInMemory { Refusal = Error.From(ErrorCodes.SystemFault) };
+
+        Result refused = await Announcing(refusing).EditAsync(
+            "sms.destination",
+            Tightened(),
+            "an incident",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a grant whose event could not be written is refused, and its
+    /// transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AGrantWhoseEventIsNotWrittenIsRolledBackAsync()
+    {
+        var refusing = new EventsInMemory { Refusal = Error.From(ErrorCodes.SystemFault) };
+
+        Result refused = await Announcing(refusing).GrantAsync(
+            "sms.destination",
+            Phone.Value,
+            2,
+            "a reason",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC4, D-166: a grant naming a restriction the deployment does not
+    /// declare is a record not found, and one of no credit at all is a value the set
+    /// does not admit.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC4_AGrantOnNothingIsRefusedAsync()
     {
         Assert.Equal(
-            ErrorCodes.ConfigurationValueNotAllowed,
+            ErrorCodes.RestrictionNotFound,
             Refusal(await Administration.GrantAsync(
                 "no.such.restriction",
                 Phone.Value,
                 2,
                 "a reason",
                 Satisfied,
-                SubjectId.New(_randomness),
+                AccessContext.Of(SubjectId.New(_randomness)),
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(
@@ -268,7 +449,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
                 0,
                 "a reason",
                 Satisfied,
-                SubjectId.New(_randomness),
+                AccessContext.Of(SubjectId.New(_randomness)),
                 TestContext.Current.CancellationToken)));
     }
 
@@ -285,7 +466,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             1,
             "a reason",
             Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The grant was refused: {error.Code}."));
@@ -343,6 +524,57 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             { "sms.destination", null },
         };
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: an edit's event carries the acting and the effective identity
+    /// of the context that edited, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AnEditCarriesBothIdentitiesOfItsContextAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+
+        (await Administration.EditAsync(
+            "sms.destination",
+            Tightened(),
+            "an incident",
+            Satisfied,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The edit was refused: {error.Code}."));
+
+        SendingRestrictionChanged announced = Assert.Single(_events.Of<SendingRestrictionChanged>());
+
+        Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a grant's event carries the acting and the effective identity
+    /// of the context that granted, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AGrantCarriesBothIdentitiesOfItsContextAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+
+        _ledger.Given(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), Noon, Noon, Noon);
+
+        (await Administration.GrantAsync(
+            "sms.destination",
+            Phone.Value,
+            2,
+            "support: their carrier dropped both",
+            Satisfied,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The grant was refused: {error.Code}."));
+
+        SendingRestrictionGranted announced = Assert.Single(_events.Of<SendingRestrictionGranted>());
+
+        Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
+    }
+
     private static Restriction Loosened() =>
         new(
             "sms.destination",
@@ -364,7 +596,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             ? number
             : throw new Xunit.Sdk.XunitException("The number does not parse.");
 
-    private static SendRequest Texted() =>
+    private static OutboundMessage Texted() =>
         new(
             SendDestination.Of(Phone),
             MessageKind.VerificationCode,
@@ -393,7 +625,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             replacement,
             reason,
             Satisfied,
-            actor ?? SubjectId.New(_randomness),
+            AccessContext.Of(actor ?? SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken);
 
         edited.Switch(

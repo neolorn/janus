@@ -97,6 +97,83 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-005 AC4, AUTHZ-GRANT-003 AC4: the live grants a derivation was
+    /// precomputed into are read for one role and one type across every organization,
+    /// which is what the drift check holds against the host's rows; a grant somebody
+    /// wrote and one taken back are not among them, and one the drift check wrote reads
+    /// back naming the nil subject as its granter.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC4_TheLiveMaterialisedGrantsAreReadInEveryOrganizationAsync()
+    {
+        string type = "binder" + Guid.NewGuid().ToString("n")[..8];
+        OrganizationId one = await _deployment.OrganizationAsync(Noon);
+        OrganizationId other = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await RoleAsync();
+
+        Grant Written(OrganizationId organization, GrantKind kind) =>
+            Grant.Create(
+                GrantId.New(TimeProvider.System),
+                GrantSubject.Of(account),
+                RoleName.Parse("editor"),
+                organization,
+                Reference(type),
+                deny: false,
+                kind,
+                expiresAt: null,
+                grantedBy: default,
+                Noon,
+                "AUTHZ-DERIVE-005")
+                .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Grant first = Written(one, GrantKind.Materialised);
+        Grant second = Written(other, GrantKind.Materialised);
+        Grant takenBack = Written(other, GrantKind.Materialised);
+        Grant written = Written(one, GrantKind.Stored);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            foreach (Grant grant in new[] { first, second, takenBack, written })
+            {
+                await Store(writing).CreateAsync(grant, TestContext.Current.CancellationToken);
+            }
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext revoking = database.Context())
+        {
+            await using var transaction = new UnitOfWork(revoking);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            takenBack.Revoke(default, Noon, "AUTHZ-DERIVE-005")
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            await Store(revoking).RecordAsync(takenBack, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<Grant> live = await Store(reading).MaterialisedAsync(
+            RoleName.Parse("editor"),
+            ResourceType.Parse(type),
+            Noon,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { first.Id, second.Id }.OrderBy(id => id.Value),
+            live.Select(grant => grant.Id).OrderBy(id => id.Value));
+        Assert.All(live, grant => Assert.Equal(default, grant.GrantedBy));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001 AC2: a grant with no resource is on the whole organization, and
     /// is read for every record in it.
     /// </summary>
@@ -390,8 +467,12 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        Assert.True(await Store(reading).NamesAsync(RoleName.Parse("editor"), TestContext.Current.CancellationToken));
-        Assert.False(await Store(reading).NamesAsync(RoleName.Parse("nobody-holds-this"), TestContext.Current.CancellationToken));
+        Assert.True(await new RoleReferences(reading).NamedAsync(
+            RoleName.Parse("editor"),
+            TestContext.Current.CancellationToken));
+        Assert.False(await new RoleReferences(reading).NamedAsync(
+            RoleName.Parse("nobody-holds-this"),
+            TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -428,6 +509,32 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    /// <summary>
+    /// AUTHZ-GRANT-002, CONV-DESIGN-003 AC6: two grants saying the same thing at once
+    /// are each written under the lock on their role's row, so the second finds the
+    /// first and one grant stands.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_002_TwoGrantsSayingOneThingAtOnceWriteOneAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        ResourceReference record = Reference("document");
+
+        await RoleAsync();
+
+        bool[] written = await Task.WhenAll(
+            WrittenOnceAsync(GrantSubject.Of(account), organization, record, account),
+            WrittenOnceAsync(GrantSubject.Of(account), organization, record, account));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, written.Count(answer => answer));
+        Assert.Equal(
+            1,
+            await reading.Grants.CountAsync(row => row.Organization == organization, TestContext.Current.CancellationToken));
+    }
 
     private static GrantStore Store(StoreContext context) =>
         new(context, new DataConnections(context));
@@ -501,6 +608,36 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
 
         return grant.Id;
+    }
+
+    // Each grant is its own request, judging the duplicate under the role's lock as the
+    // grant service does.
+    private async Task<bool> WrittenOnceAsync(
+        GrantSubject subject,
+        OrganizationId organization,
+        ResourceReference on,
+        SubjectId grantedBy)
+    {
+        Grant grant = Written(subject, organization, on, null, grantedBy);
+
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        GrantStore store = Store(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        Assert.NotNull(await new RoleStore(writing).FindForUpdateAsync(grant.Role, TestContext.Current.CancellationToken));
+
+        bool fresh = !await store.ExistsAsync(grant, Noon, TestContext.Current.CancellationToken);
+
+        if (fresh)
+        {
+            await store.CreateAsync(grant, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return fresh;
     }
 
     private async Task<ResourceReference> RegisterAsync(

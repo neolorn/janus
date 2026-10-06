@@ -22,6 +22,16 @@ internal interface IAuthenticatorStore
     ValueTask<Authenticator?> FindAsync(AuthenticatorId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one credential under a lock on its row, held until the operation's
+    /// transaction ends, so a decision made on what it carries is made alone (D-166 X3).
+    /// </summary>
+    /// <param name="id">Which credential.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credential as it stands once the lock is taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Authenticator?> FindForUpdateAsync(AuthenticatorId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads the credential an authenticator answered with, which is how a
     /// discoverable credential is resolved: the browser names the credential and not
     /// the account.
@@ -48,6 +58,20 @@ internal interface IAuthenticatorStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Every credential of an account, whatever its state, read under a lock on each
+    /// row held until the operation's transaction ends, so a decision on what the
+    /// account would keep is made on the set as committed and cannot race another
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose credentials.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credentials as committed when the locks were taken.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<Authenticator>> OfForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Every credential of an account, whatever its state.
     /// </summary>
     /// <param name="subject">Whose credentials.</param>
@@ -55,6 +79,25 @@ internal interface IAuthenticatorStore
     /// <returns>The credentials.</returns>
     ValueTask<IReadOnlyList<Authenticator>> OfAsync(
         SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the account already holds a credential of this kind under this label,
+    /// compared as the database compares the column, without regard to case, and as its
+    /// unique index would refuse it.
+    /// </summary>
+    /// <param name="subject">Whose credentials.</param>
+    /// <param name="factor">Which kind.</param>
+    /// <param name="label">The label asked for.</param>
+    /// <param name="except">The credential being renamed, which does not hold against itself.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether the label is held.</returns>
+    /// <remarks>Implements AUTH-FACT-001 AC5 and OPS-DB-001.</remarks>
+    ValueTask<bool> LabelHeldAsync(
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        AuthenticatorId? except,
         CancellationToken cancellationToken);
 
     /// <summary>

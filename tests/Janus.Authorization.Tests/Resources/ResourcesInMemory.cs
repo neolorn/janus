@@ -43,6 +43,10 @@ internal sealed class ResourcesInMemory : IResourceStore
     }
 
     /// <inheritdoc/>
+    public ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken) =>
+        ValueTask.CompletedTask;
+
+    /// <inheritdoc/>
     public ValueTask RegisterAsync(RegisteredResource resource, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resource);

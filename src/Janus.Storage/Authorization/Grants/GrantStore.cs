@@ -54,6 +54,33 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A grant's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Grants.Local.Any(record => record.Id == id);
+
+        GrantRecord? held = (await context.Grants
+                .FromSql($"SELECT * FROM identity.grants WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken)
     {
         IReadOnlyList<OrganizationId> scoped = await context.Grants
@@ -71,7 +98,7 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         ArgumentNullException.ThrowIfNull(grant);
 
         await context.Grants.AddAsync(Write(grant), cancellationToken).ConfigureAwait(false);
-        await RaiseAsync(grant.Subject, cancellationToken).ConfigureAwait(false);
+        await RaiseAsync(connections, grant.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -88,7 +115,7 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         record.RevokedAt = grant.RevokedAt;
         record.RevocationReason = grant.RevocationReason;
 
-        await RaiseAsync(grant.Subject, cancellationToken).ConfigureAwait(false);
+        await RaiseAsync(connections, grant.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -115,16 +142,25 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
-    public async ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken) =>
-        await context.Grants
-            .AnyAsync(row => row.Role == role, cancellationToken)
-            .ConfigureAwait(false);
-
-    /// <inheritdoc/>
     public async ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken) =>
         await context.Grants
             .AnyAsync(row => row.SubjectType == holder.Type && row.SubjectId == holder.Value, cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Grant>> NamingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        List<GrantRecord> records = await context.Grants
+            .Where(row => row.SubjectType == SubjectType.User && row.SubjectId == subject.Value)
+            .OrderBy(row => row.GrantedAt)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. records.Select(Read)];
+    }
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Grant>> HeldByAsync(
@@ -180,6 +216,25 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
                 && (row.ExpiresAt == null || row.ExpiresAt > at)
                 && row.ResourceType == type
                 && records.Contains(row.ResourceId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(Read)];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        List<GrantRecord> rows = await context.Grants
+            .Where(row => row.Kind == GrantKind.Materialised
+                && row.Role == role
+                && row.RevokedAt == null
+                && (row.ExpiresAt == null || row.ExpiresAt > at)
+                && row.ResourceType == type)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -261,7 +316,18 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         record.RevokedAt,
         record.RevocationReason);
 
-    private async ValueTask RaiseAsync(GrantSubject subject, CancellationToken cancellationToken)
+    /// <summary>
+    /// Raises the counter of every account a change to the grants of a subject reaches,
+    /// in the ambient transaction.
+    /// </summary>
+    /// <param name="connections">Where the statement takes its connection from.</param>
+    /// <param name="subject">Whose grants changed.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of raising it.</returns>
+    internal static async ValueTask RaiseAsync(
+        DataConnections connections,
+        GrantSubject subject,
+        CancellationToken cancellationToken)
     {
         // The counter is raised from the statement rather than through the tracker,
         // because a group's grant reaches as many accounts as the closure holds and

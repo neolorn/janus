@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Grants;
-using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -13,40 +12,45 @@ using Janus.Core.Configuration;
 namespace Janus.Authorization.Gate;
 
 /// <summary>
-/// Who can access one record: the grants that reach it and, where the host supplied its
-/// rows, the grants its derivations produce.
+/// Who can access one record: the grants that reach it and the grants its derivations
+/// produce.
 /// </summary>
-/// <param name="model">The host's declaration, read for which derivations reach the record.</param>
+/// <param name="derived">Which derivations reach the record, with what each confers.</param>
 /// <param name="records">Where what contains the record is read.</param>
 /// <param name="grants">Where the grants on the record and its containers are read.</param>
+/// <param name="sources">Where a relationship's rows are read through the source the host declared.</param>
 /// <param name="configuration">Where the bound on evaluating the derivations is read.</param>
 /// <param name="time">The clock liveness and the bound are read against.</param>
 /// <remarks>
-/// Implements AUTHZ-DERIVE-007 and AUTHZ-GATE-004 (D-161). Stored grants, materialised
-/// ones among them, are rows and are read by query. A derivation has no row to look
-/// up, so each one reaching the record is evaluated over the host's relation for the
-/// record and every container of the type the relationship is declared on, inside
-/// <c>authz.reverselookup.budget</c>; a derivation the bound stops is named rather
-/// than left out in silence.
+/// Implements AUTHZ-DERIVE-007, AUTHZ-DERIVE-005 AC6 and AUTHZ-GATE-004 (D-161, D-166,
+/// D-183). Stored grants, materialised ones among them, are rows and are read by query.
+/// A derivation has no row to look up, so each one reaching the record is evaluated
+/// over the host's relation for the record and every container of the type the
+/// relationship is declared on, inside <c>authz.reverselookup.budget</c>; a derivation
+/// the bound stops is named rather than left out in silence. The relation is read
+/// through the source the host declared for it, one statement in the host's context
+/// for each derivation, or over the rows a caller of the library hands in. A derivation
+/// whose role allows nothing confers nothing and is not reported, as a stored grant of
+/// such a role is not.
 /// </remarks>
 internal sealed class ReverseLookup(
-    AuthorizationModel model,
+    Derivations derived,
     IResourceStore records,
     IGrantStore grants,
+    IRelationshipSources sources,
     IConfigurationStore configuration,
     TimeProvider time)
 {
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
     /// <summary>
-    /// The grants reaching a record, and the grants its derivations produce where the
-    /// host's rows are given.
+    /// The grants reaching a record, and the grants its derivations produce.
     /// </summary>
     /// <param name="resource">The record, or the organization itself.</param>
     /// <param name="organization">The organization the record sits in.</param>
     /// <param name="relationships">
-    /// The host's relationship rows, by name, or nothing where only the stored grants
-    /// are asked for.
+    /// The host's relationship rows, by name, where the caller handed them in, or
+    /// nothing where they are read through the sources the host declared.
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
@@ -54,13 +58,16 @@ internal sealed class ReverseLookup(
     /// first, then those on the whole organization, and the derived ones after them.
     /// </returns>
     /// <exception cref="ArgumentException">A relationship a derivation follows from was not supplied.</exception>
+    /// <exception cref="InvalidOperationException">No source is declared for a relationship that is read through one.</exception>
     public async ValueTask<ResourceAccess> LookedUpAsync(
         ResourceReference resource,
         OrganizationId organization,
         IReadOnlyDictionary<string, RelationshipRows>? relationships,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<ResourceReference> ancestry = resource.Type == OrganizationWide
+        bool organizationWide = resource.Type == OrganizationWide;
+
+        IReadOnlyList<ResourceReference> ancestry = organizationWide
             ? []
             : await records.AncestryAsync(resource, cancellationToken).ConfigureAwait(false);
 
@@ -75,13 +82,14 @@ internal sealed class ReverseLookup(
                 .Select(grant => Explained(grant, resource)),
         ];
 
-        if (relationships is null)
+        if (organizationWide)
         {
             return new ResourceAccess(resource, reaching, Partial: false, Unevaluated: []);
         }
 
         List<string> unevaluated = await DerivedAsync(
             resource,
+            organization,
             ancestry,
             relationships,
             reaching,
@@ -89,6 +97,16 @@ internal sealed class ReverseLookup(
 
         return new ResourceAccess(resource, reaching, unevaluated.Count > 0, unevaluated);
     }
+
+    /// <summary>
+    /// Whether the host declared a source for every relationship a derivation reaching
+    /// records of the type follows from, so the view can be answered in full without
+    /// rows handed in.
+    /// </summary>
+    /// <param name="type">The kind of thing the record is.</param>
+    /// <returns>Whether every one can be read.</returns>
+    public bool Sourced(ResourceType type) =>
+        derived.Following(type).All(relationship => sources.Declares(relationship.Name));
 
     // AUTHZ-GATE-004: the container is named as an explanation names it, and a grant on
     // the record itself or on the whole organization names none.
@@ -107,6 +125,23 @@ internal sealed class ReverseLookup(
             grant.Deny,
             on == resource ? null : on);
     }
+
+    // AUTHZ-GATE-004 (D-162): a grant a fact produced has no row, so it carries no
+    // identifier, names itself as derived, and names the record the relationship's row
+    // names where that is not the record asked about.
+    private static ExplainedGrant Explained(
+        ConferredDerivation each,
+        SubjectId holder,
+        ResourceReference above,
+        ResourceReference resource) =>
+        new(
+            Id: null,
+            GrantKind.Derived,
+            SubjectType.User,
+            holder.Value,
+            each.Role,
+            Deny: false,
+            above == resource ? null : above);
 
     private static int Nearness(Grant grant, IReadOnlyList<ResourceReference> ancestry)
     {
@@ -132,50 +167,7 @@ internal sealed class ReverseLookup(
                     $"The rows of the relationship '{relationship.Name}' were not supplied."),
                 nameof(relationships));
 
-    // AUTHZ-DERIVE-007 AC2: the bound runs across the derivations and is read between
-    // rows, and one it stops in the middle contributes nothing, so a derivation is
-    // either answered whole or named.
-    private async ValueTask<List<string>> DerivedAsync(
-        ResourceReference resource,
-        IReadOnlyList<ResourceReference> ancestry,
-        IReadOnlyDictionary<string, RelationshipRows> relationships,
-        List<ExplainedGrant> reaching,
-        CancellationToken cancellationToken)
-    {
-        TimeSpan budget = (await configuration
-                .ReadAsync(Settings.AuthzReverseLookupBudget, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(read => read, _ => Settings.AuthzReverseLookupBudget.Default);
-
-        using var bounded = new CancellationTokenSource(budget, time);
-
-        var unevaluated = new List<string>();
-
-        foreach (ReachingDerivation each in model.Derivations(resource.Type))
-        {
-            if (each.Derivation.Materialised)
-            {
-                continue;
-            }
-
-            RelationshipRows rows = Supplied(relationships, each.Relationship);
-
-            if (await HeldAsync(each, resource, ancestry, rows, bounded.Token, cancellationToken)
-                    .ConfigureAwait(false)
-                is List<ExplainedGrant> held)
-            {
-                reaching.AddRange(held);
-            }
-            else
-            {
-                Unevaluated(unevaluated, each);
-            }
-        }
-
-        return unevaluated;
-    }
-
-    private static void Unevaluated(List<string> unevaluated, ReachingDerivation each)
+    private static void Unevaluated(List<string> unevaluated, ConferredDerivation each)
     {
         if (!unevaluated.Contains(each.Relationship.Name, StringComparer.Ordinal))
         {
@@ -183,12 +175,12 @@ internal sealed class ReverseLookup(
         }
     }
 
-    // AUTHZ-DERIVE-001: a derivation reaches the record through every container of the
-    // type its relationship is declared on, the record itself included, and each
-    // holder of a row on one of them holds the role the derivation confers. Nothing
-    // is answered for a derivation the bound stopped.
+    // AUTHZ-DERIVE-001: over the rows a caller handed in, a derivation reaches the record
+    // through every container of the type its relationship is declared on, the record
+    // itself included, and each holder of a row on one of them holds the role the
+    // derivation confers. Nothing is answered for a derivation the bound stopped.
     private static async ValueTask<List<ExplainedGrant>?> HeldAsync(
-        ReachingDerivation each,
+        ConferredDerivation each,
         ResourceReference resource,
         IReadOnlyList<ResourceReference> ancestry,
         RelationshipRows rows,
@@ -216,15 +208,102 @@ internal sealed class ReverseLookup(
                     return null;
                 }
 
-                held.Add(new ExplainedGrant(
-                    Id: null,
-                    GrantKind.Derived,
-                    SubjectType.User,
-                    holder.Value,
-                    each.Derivation.Role,
-                    Deny: false,
-                    above == resource ? null : above));
+                held.Add(Explained(each, holder, above, resource));
             }
+        }
+
+        return held;
+    }
+
+    // AUTHZ-DERIVE-007 AC2: the bound runs across the derivations and is read between
+    // rows, and one it stops in the middle contributes nothing, so a derivation is
+    // either answered whole or named.
+    private async ValueTask<List<string>> DerivedAsync(
+        ResourceReference resource,
+        OrganizationId organization,
+        IReadOnlyList<ResourceReference> ancestry,
+        IReadOnlyDictionary<string, RelationshipRows>? relationships,
+        List<ExplainedGrant> reaching,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ConferredDerivation> conferring = await derived
+            .ConferringAsync(resource.Type, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        var unevaluated = new List<string>();
+
+        if (conferring.Count == 0)
+        {
+            return unevaluated;
+        }
+
+        TimeSpan budget = (await configuration
+                .ReadAsync(Settings.AuthzReverseLookupBudget, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        using var bounded = new CancellationTokenSource(budget, time);
+
+        // A grant that confers nothing is not reported (AUTHZ-DERIVE-007), and a
+        // derivation whose role allows nothing produces only such grants.
+        foreach (ConferredDerivation each in conferring.Where(each => each.Confers.Count > 0))
+        {
+            List<ExplainedGrant>? held = relationships is null
+                ? await HeldAsync(each, resource, bounded.Token, cancellationToken).ConfigureAwait(false)
+                : await HeldAsync(
+                        each,
+                        resource,
+                        ancestry,
+                        Supplied(relationships, each.Relationship),
+                        bounded.Token,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            if (held is null)
+            {
+                Unevaluated(unevaluated, each);
+            }
+            else
+            {
+                reaching.AddRange(held);
+            }
+        }
+
+        return unevaluated;
+    }
+
+    // AUTHZ-DERIVE-005 AC6, LIB-HOST-001: through the source the host declared, the
+    // holders on the record and on every container of the relationship's type are one
+    // statement in the host's context, over the rows and the ancestry of one instance of
+    // it. Nothing is answered for a derivation the bound stopped.
+    private async ValueTask<List<ExplainedGrant>?> HeldAsync(
+        ConferredDerivation each,
+        ResourceReference resource,
+        CancellationToken bound,
+        CancellationToken cancellationToken)
+    {
+        if (bound.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        var held = new List<ExplainedGrant>();
+
+        await foreach (HeldRelationship row in sources
+            .HeldAbove(each.Relationship, resource)
+            .WithCancellation(cancellationToken)
+            .ConfigureAwait(false))
+        {
+            if (bound.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            held.Add(Explained(
+                each,
+                row.Holder,
+                new ResourceReference(each.Relationship.On, row.Resource),
+                resource));
         }
 
         return held;

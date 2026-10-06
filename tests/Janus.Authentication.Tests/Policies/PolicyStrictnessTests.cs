@@ -69,7 +69,8 @@ public sealed class PolicyStrictnessTests
             new Dictionary<StepUpAction, Gate> { [StepUpAction.PolicyChange] = Strict },
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
-            EmailDomains: null);
+            EmailDomains: null,
+            Photos: null);
 
         Assert.Null(PolicyStrictness.BelowSystem(StrictSystem, PolicyOverride.None));
         Assert.Null(PolicyStrictness.BelowSystem(StrictSystem, tighter));
@@ -116,7 +117,8 @@ public sealed class PolicyStrictnessTests
             new Dictionary<StepUpAction, Gate> { [StepUpAction.PolicyChange] = Strict },
             CredentialRedundancy: null,
             SelfServiceRecovery: null,
-            EmailDomains: null);
+            EmailDomains: null,
+            Photos: null);
         Policy raised = system with
         {
             LoginFactors = new HashSet<Factor> { Factor.Passkey },

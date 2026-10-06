@@ -22,6 +22,8 @@ public sealed class ConsentTests : IAsyncDisposable
 
     private const string Marketing = "marketing";
 
+    private const string Newsletter = "newsletter";
+
     private const string Performance = "performance";
 
     private const string Security = "security";
@@ -205,6 +207,88 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-008 AC5, CONV-DESIGN-003: a consent withdrawn while this withdrawal
+    /// waited for the subject's records is withdrawn already, so this one announces and
+    /// records nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC5_AConsentWithdrawnMeanwhileIsWithdrawnOnceAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        int announced = _events.Of<ConsentChanged>().Count;
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _ = _consents.WithdrawConsentAsync(Ahmed, Recommendations, Noon, CancellationToken.None).AsTask();
+        };
+
+        Assert.True(await WithdrawAsync(Recommendations));
+        Assert.Equal(announced, _events.Of<ConsentChanged>().Count);
+        Assert.DoesNotContain(_audit.Entries, entry => entry.Action.Equals(AuditActions.ConsentWithdrawn));
+        Assert.Equal(Noon, Assert.Single(await HeldAsync()).WithdrawnAt);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a withdrawal of a consent or of an objection that another
+    /// transaction made first, and an objection that meets one recorded meanwhile, each
+    /// answer success having written nothing, so each unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AChangeMadeMeanwhileIsRolledBackAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _ = _consents.WithdrawConsentAsync(Ahmed, Recommendations, Noon, CancellationToken.None).AsTask();
+        };
+        _work.Reset();
+
+        Assert.True(await WithdrawAsync(Recommendations));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+
+        Assert.True(await ObjectAsync(Security));
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _ = _consents.WithdrawObjectionAsync(Ahmed, Security, Noon, CancellationToken.None).AsTask();
+        };
+        _work.Reset();
+
+        Result withdrawn = await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None);
+
+        Assert.True(withdrawn.Match(() => true, _ => false));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+
+        _consents.Adding = () =>
+        {
+            _consents.Adding = null;
+            _ = _consents
+                .AddAsync(
+                    Ahmed,
+                    new ObjectionRecord(
+                        Security,
+                        ConsentService.Notice,
+                        "1",
+                        ConsentMechanism.Administrator,
+                        Noon,
+                        WithdrawnAt: null),
+                    CancellationToken.None)
+                .AsTask();
+        };
+        _work.Reset();
+
+        Assert.True(await ObjectAsync(Security));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+    }
+
+    /// <summary>
     /// PRIV-SENS-002a AC1: withdrawing the consent-based purpose of a record announces
     /// that purpose alone, so a handler the host registered for the contractual
     /// purpose of the same record is never invoked by it.
@@ -257,6 +341,69 @@ public sealed class ConsentTests : IAsyncDisposable
         Assert.True(held.Standing);
         Assert.True(announced.Objecting);
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002, PRIV-CONS-008 AC4, PRIV-RIGHT-001a AC2: a grant, a withdrawal
+    /// and an objection whose event row cannot be written fail with that failure and
+    /// commit nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AChangeWhoseEventCannotBeWrittenCommitsNothingAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedGrantAsync(Marketing));
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedWithdrawalAsync(Recommendations));
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Consents.ObjectAsync(Acting, Security, ConsentMechanism.Dashboard, CancellationToken.None))
+                .Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a grant, a withdrawal, an objection and the withdrawal of an
+    /// objection, each refused after its unit of work began, each roll it back, so
+    /// nothing stays open and nothing is committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeRefusedAfterItBeganRollsBackAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedGrantAsync(Marketing));
+        Assert.Equal((false, 0, 1), (_work.Open, _work.Committed, _work.RolledBack));
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedWithdrawalAsync(Recommendations));
+        Assert.Equal((false, 0, 2), (_work.Open, _work.Committed, _work.RolledBack));
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Consents.ObjectAsync(Acting, Security, ConsentMechanism.Dashboard, CancellationToken.None))
+                .Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal((false, 0, 3), (_work.Open, _work.Committed, _work.RolledBack));
+
+        _events.Refusal = null;
+
+        Assert.True(await ObjectAsync(Security));
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None))
+                .Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal((false, 0, 1), (_work.Open, _work.Committed, _work.RolledBack));
     }
 
     /// <summary>
@@ -404,6 +551,472 @@ public sealed class ConsentTests : IAsyncDisposable
             ErrorCodes.NoticeUnpublished,
             refused.Match(() => default(ErrorCode?), error => error.Code));
         Assert.Empty(await HeldAsync());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-008 AC5: withdrawing a consent the subject never gave is answered as
+    /// the withdrawal, and nothing is recorded, announced or audited.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC1_WithdrawingAConsentNeverGivenAnswersAsTheWithdrawalAsync()
+    {
+        Assert.True(await WithdrawAsync(Recommendations));
+
+        Assert.Empty(await HeldAsync());
+        Assert.Empty(_events.Of<ConsentChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC6: an objection is recorded against the privacy notice, so one
+    /// made before any version of it is published is refused with the code that names
+    /// that, and nothing is recorded.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AnObjectionBeforeAnyNoticeIsNamedAsSuchAsync()
+    {
+        var unpublished = new ConsentService(
+            _consents,
+            new LegalDocumentStoreInMemory(),
+            Declaration.Processing,
+            _events,
+            _audit,
+            _work,
+            _clock);
+
+        Result refused = await unpublished.ObjectAsync(
+            Acting,
+            Security,
+            ConsentMechanism.Dashboard,
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.NoticeUnpublished,
+            refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Empty(await ObjectionsAsync());
+        Assert.Empty(_events.Of<ObjectionChanged>());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC6: withdrawing an objection the subject never made is answered
+    /// as the withdrawal, and nothing is recorded, announced or audited; a purpose whose
+    /// basis is not objectable is still refused as such (AC5).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_WithdrawingAnObjectionNeverMadeAnswersAsTheWithdrawalAsync()
+    {
+        Result withdrawn = await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None);
+        Result notObjectable = await Consents.WithdrawObjectionAsync(Acting, Recommendations, CancellationToken.None);
+
+        Assert.Null(withdrawn.Match(() => (Error?)null, error => error));
+        Assert.Equal(
+            ErrorCodes.PurposeNotObjectable,
+            notObjectable.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Empty(await ObjectionsAsync());
+        Assert.Empty(_events.Of<ObjectionChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1, PRIV-CONS-007: a grant named <c>dashboard</c> over a consent
+    /// a material revision superseded, and the subject never withdrew, is the answer to
+    /// being asked again and is recorded as <c>reconsent</c> by the service itself; over
+    /// one the subject withdrew it is recorded as named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_ADashboardGrantOverASupersededConsentIsRecordedAsReconsentAsync()
+    {
+        await SupersededAsync(Recommendations, withdrawn: false);
+        await SupersededAsync(Marketing, withdrawn: true);
+
+        Assert.True(await GrantAsync(Recommendations));
+        Assert.True(await GrantAsync(Marketing));
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync();
+
+        Assert.Equal(
+            ConsentMechanism.Reconsent,
+            Assert.Single(held, record => record.Live && record.Purpose == Recommendations).Mechanism);
+        Assert.Equal(
+            ConsentMechanism.Dashboard,
+            Assert.Single(held, record => record.Live && record.Purpose == Marketing).Mechanism);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1: a grant named by any mechanism other than <c>dashboard</c>
+    /// over a superseded consent is recorded as named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AnAdministratorGrantOverASupersededConsentIsRecordedAsNamedAsync()
+    {
+        await SupersededAsync(Recommendations, withdrawn: false);
+
+        Assert.True(await GrantAsync(Recommendations, ConsentMechanism.Administrator));
+
+        Assert.Equal(
+            ConsentMechanism.Administrator,
+            Assert.Single(await HeldAsync(), record => record.Live).Mechanism);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC4: a grant after a withdrawal is a record of its own, the
+    /// withdrawn one stays as it was, and one record is live.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC4_AGrantAfterAWithdrawalAddsARecordAndLeavesTheEarlierAsItWasAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        await WithdrawAsync(Recommendations);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        Assert.True(await GrantAsync(Recommendations));
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync();
+
+        Assert.Equal(2, held.Count);
+        Assert.Equal(Noon, held[0].GrantedAt);
+        Assert.Equal(Noon.AddDays(1), held[0].WithdrawnAt);
+        Assert.Equal(Noon.AddDays(2), held[1].GrantedAt);
+        Assert.Equal([false, true], held.Select(record => record.Live));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC4: a grant after a supersession is a record of its own, and the
+    /// superseded one stays as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC4_AGrantAfterASupersessionAddsARecordAndLeavesTheEarlierAsItWasAsync()
+    {
+        await SupersededAsync(Recommendations, withdrawn: false);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        Assert.True(await GrantAsync(Recommendations));
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync();
+
+        Assert.Equal(2, held.Count);
+        Assert.Equal(Noon, held[0].GrantedAt);
+        Assert.Equal(Noon, held[0].SupersededAt);
+        Assert.Null(held[0].WithdrawnAt);
+        Assert.Equal([false, true], held.Select(record => record.Live));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC6: a grant while a live record the purpose admits stands adds no
+    /// record, raises no event, writes no audit record and is answered as a grant,
+    /// before any unit of work begins.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC6_AGrantOverALiveRecordThePurposeAdmitsChangesNothingAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        ConsentRecord given = Assert.Single(await HeldAsync());
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        _work.Reset();
+
+        Assert.True(await GrantAsync(Recommendations));
+        Assert.True(await GrantAsync(Recommendations, ConsentMechanism.Administrator));
+
+        Assert.Equal(given, Assert.Single(await HeldAsync()));
+        Assert.Single(_events.Of<ConsentChanged>());
+        Assert.Single(_audit.Entries);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC6: a grant that meets a live record written between its read and
+    /// its addition adds none, raises no event and is answered as a grant.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC6_AGrantMeetingARecordWrittenMeanwhileAddsNoneAsync()
+    {
+        ConsentRecord meanwhile = Live(Recommendations, ConsentService.Notice, ConsentKind.Written);
+
+        _consents.Adding = () => _consents.Keep(Ahmed, meanwhile);
+
+        Assert.True(await GrantAsync(Recommendations));
+
+        Assert.Equal(meanwhile, Assert.Single(await HeldAsync()));
+        Assert.Empty(_events.Of<ConsentChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC6: a grant that finds a live record written while it waited for
+    /// the subject's records adds none, raises no event and is answered as a grant.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC6_AGrantFindingARecordWrittenWhileItWaitedAddsNoneAsync()
+    {
+        ConsentRecord meanwhile = Live(Recommendations, ConsentService.Notice, ConsentKind.Written);
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _consents.Keep(Ahmed, meanwhile);
+        };
+
+        Assert.True(await GrantAsync(Recommendations));
+
+        Assert.Equal(meanwhile, Assert.Single(await HeldAsync()));
+        Assert.Empty(_events.Of<ConsentChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a grant that began the outermost unit of work and met a
+    /// record written meanwhile succeeds having written nothing, so its unit of work is
+    /// rolled back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnOutermostGrantThatAddsNothingIsRolledBackAsync()
+    {
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _consents.Keep(Ahmed, Live(Recommendations, ConsentService.Notice, ConsentKind.Written));
+        };
+
+        bool granted = await GrantAsync(Recommendations);
+
+        Assert.True(granted);
+        Assert.Equal((1, 0, 1, false), (_work.Opened, _work.Committed, _work.RolledBack, _work.Open));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: the same grant made inside a unit of work another operation
+    /// opened ends its level with a commit, so the whole is not marked and the outer
+    /// operation commits what it wrote.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AJoinedGrantThatAddsNothingCommitsItsLevelAsync()
+    {
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _consents.Keep(Ahmed, Live(Recommendations, ConsentService.Notice, ConsentKind.Written));
+        };
+        Assert.True((await _work.BeginAsync(CancellationToken.None)).Match(outermost => outermost, _ => false));
+
+        bool granted = await GrantAsync(Recommendations);
+
+        Assert.True(granted);
+        Assert.Equal((2, 1, 0, true), (_work.Opened, _work.Committed, _work.RolledBack, _work.Open));
+        Assert.True((await _work.CommitAsync(CancellationToken.None)).Match(() => true, _ => false));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC6: a grant over a live record recorded against another document
+    /// than the one its purpose now names stamps it superseded and adds one record, in
+    /// one transaction, raising <c>superseded</c> and then <c>granted</c>; named
+    /// <c>dashboard</c>, it is recorded <c>reconsent</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC6_AGrantOverALiveRecordAgainstAnotherDocumentSupersedesItAndAddsOneAsync()
+    {
+        _documents.Hold(new DocumentVersion(Declaration.Newsletter, "1", "ar", "النص", [], Noon));
+        _consents.Keep(Ahmed, Live(Newsletter, ConsentService.Notice, ConsentKind.Ordinary));
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        Assert.True(await GrantAsync(Newsletter));
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync();
+
+        Assert.Equal(2, held.Count);
+        Assert.Equal(ConsentService.Notice, held[0].Document);
+        Assert.Equal(Noon.AddDays(1), held[0].SupersededAt);
+        Assert.Null(held[0].WithdrawnAt);
+        Assert.Equal(
+            (Declaration.Newsletter, ConsentMechanism.Reconsent, true),
+            (held[1].Document, held[1].Mechanism, held[1].Live));
+        Assert.Equal(
+            [ConsentChange.Superseded, ConsentChange.Granted],
+            _events.Of<ConsentChanged>().Select(raised => raised.Change));
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001: a grant an administrator makes over a live record the purpose
+    /// no longer admits is recorded as named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AnAdministratorGrantOverALiveRecordNoLongerAdmittedIsRecordedAsNamedAsync()
+    {
+        _documents.Hold(new DocumentVersion(Declaration.Newsletter, "1", "ar", "النص", [], Noon));
+        _consents.Keep(Ahmed, Live(Newsletter, ConsentService.Notice, ConsentKind.Ordinary));
+
+        Assert.True(await GrantAsync(Newsletter, ConsentMechanism.Administrator));
+
+        Assert.Equal(
+            ConsentMechanism.Administrator,
+            Assert.Single(await HeldAsync(), record => record.Live).Mechanism);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001: a live record of the ordinary kind is one a purpose requiring the
+    /// written kind does not admit, so a grant stamps it superseded and adds the
+    /// written record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AGrantOverALiveRecordOfAKindThePurposeDoesNotAdmitSupersedesItAsync()
+    {
+        _consents.Keep(Ahmed, Live(Recommendations, ConsentService.Notice, ConsentKind.Ordinary));
+
+        Assert.True(await GrantAsync(Recommendations));
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync();
+
+        Assert.Equal([ConsentKind.Ordinary, ConsentKind.Written], held.Select(record => record.Kind));
+        Assert.Equal([false, true], held.Select(record => record.Live));
+        Assert.Equal(Noon, held[0].SupersededAt);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC6, CONV-DESIGN-003 AC5: a grant over a live record the purpose no
+    /// longer admits whose event row cannot be written fails with that failure and rolls
+    /// back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC6_AReplacingGrantWhoseEventCannotBeWrittenRollsBackAsync()
+    {
+        _consents.Keep(Ahmed, Live(Recommendations, ConsentService.Notice, ConsentKind.Ordinary));
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedGrantAsync(Recommendations));
+        Assert.Equal((false, 0, 1), (_work.Open, _work.Committed, _work.RolledBack));
+        Assert.Empty(_audit.Entries);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC6: objecting again while an objection stands records nothing,
+    /// raises no <c>ObjectionChanged</c> and is answered as an objection, before any
+    /// unit of work begins.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC6_ObjectingAgainWhileAnObjectionStandsRecordsNothingAsync()
+    {
+        await ObjectAsync(Security);
+
+        ObjectionRecord standing = Assert.Single(await ObjectionsAsync());
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        _work.Reset();
+
+        Assert.True(await ObjectAsync(Security));
+
+        Assert.Equal(standing, Assert.Single(await ObjectionsAsync()));
+        Assert.Single(_events.Of<ObjectionChanged>());
+        Assert.Single(_audit.Entries);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC6: an objection that meets one recorded between its read and
+    /// its addition records nothing, raises no <c>ObjectionChanged</c> and is answered
+    /// as an objection.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC6_AnObjectionMeetingOneRecordedMeanwhileRecordsNothingAsync()
+    {
+        var meanwhile = new ObjectionRecord(
+            Security,
+            ConsentService.Notice,
+            "1",
+            ConsentMechanism.Administrator,
+            Noon,
+            WithdrawnAt: null);
+
+        _consents.Adding = () =>
+            _ = _consents.AddAsync(Ahmed, meanwhile, CancellationToken.None).AsTask();
+
+        Assert.True(await ObjectAsync(Security));
+
+        Assert.Equal(meanwhile, Assert.Single(await ObjectionsAsync()));
+        Assert.Empty(_events.Of<ObjectionChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a: an objection is recorded as a consent record is, so one made
+    /// after a withdrawal is a record of its own and the withdrawn one stays as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC2_AnObjectionAfterAWithdrawalIsARecordOfItsOwnAsync()
+    {
+        await ObjectAsync(Security);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        _ = await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        Assert.True(await ObjectAsync(Security));
+
+        IReadOnlyList<ObjectionRecord> held = await ObjectionsAsync();
+
+        Assert.Equal(2, held.Count);
+        Assert.Equal(Noon, held[0].RecordedAt);
+        Assert.Equal(Noon.AddDays(1), held[0].WithdrawnAt);
+        Assert.Equal([false, true], held.Select(record => record.Standing));
+        Assert.Equal(
+            [true, false, true],
+            _events.Of<ObjectionChanged>().Select(raised => raised.Objecting));
+    }
+
+    private static ConsentRecord Live(string purpose, string document, ConsentKind kind) =>
+        new(
+            purpose,
+            document,
+            "1",
+            ConsentMechanism.Registration,
+            kind,
+            Noon,
+            WithdrawnAt: null,
+            SupersededAt: null);
+
+    // A consent the subject gave and a material revision then ended, taken back or not.
+    private async Task SupersededAsync(string purpose, bool withdrawn)
+    {
+        Assert.True(await GrantAsync(purpose));
+        Assert.True(await _consents.SupersedeAsync(Ahmed, purpose, Noon, CancellationToken.None));
+
+        if (withdrawn)
+        {
+            Assert.True(await _consents.WithdrawConsentAsync(Ahmed, purpose, Noon, CancellationToken.None));
+        }
     }
 
     private async Task<ErrorCode?> RefusedGrantAsync(string purpose) =>

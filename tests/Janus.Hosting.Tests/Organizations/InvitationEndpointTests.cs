@@ -3,6 +3,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Invitations;
+using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -14,7 +17,7 @@ namespace Janus.Hosting.Tests.Organizations;
 /// The invitations over <c>/admin/organizations/{id}/invitations</c> of chapter 09
 /// section 8a: issuing a time-boxed link and revoking an unused one, and the end of a
 /// membership over <c>/admin/organizations/{id}/memberships</c> (IDN-LIFE-009a,
-/// IDN-MEM-001, REG-INV-001, REG-MAIL-001).
+/// IDN-MEM-001, REG-INV-001, REG-MAIL-001, REG-MAIL-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class InvitationEndpointTests : IAsyncDisposable
@@ -42,11 +45,32 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             MessageKind.InvitationLink,
             SendKind.Email,
             "en",
-            new MessageTemplate("invitation", "{token}"));
+            new MessageTemplate("invitation", "{link}"));
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// AUTH-ABUSE-004: an invitation link is asked for by an administrator, so it is
+    /// counted under the purpose a sign-in link is and by no <c>notification</c>
+    /// restriction, which counts notices alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AnInvitationLinkIsCountedByNoNotificationRestrictionAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        Assert.Equal(
+            StatusCodes.Status201Created,
+            (await administrator.SendAsync("POST", PathOf(Branch), Personal)).Status);
+
+        Assert.Empty(_deployment.SendLedger.Sends(
+            new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, "invited@elsewhere.test")));
+        Assert.Single(_deployment.SendLedger.Sends(
+            new RestrictionKey("email.destination", RestrictionKeyKind.Destination, "invited@elsewhere.test")));
+    }
 
     /// <summary>
     /// IDN-LIFE-009a and REG-INV-001: an invitation binding an email answers
@@ -72,7 +96,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(System.Text.Json.JsonValueKind.Null, bound.Json().GetProperty("token").ValueKind);
         Assert.Equal(
             _deployment.Invitations.Held[0].Token,
-            OpaqueToken.Of(_deployment.Mail.Taken[^1].Body.Trim()).Fingerprint());
+            OpaqueToken.Of(Landing.Token(_deployment.Mail.Taken[^1].Body)).Fingerprint());
 
         Assert.Equal(StatusCodes.Status201Created, open.Status);
         Assert.Equal(
@@ -82,7 +106,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// 09 section 8a and REG-INV-001 AC4: an integrated-mail invitation without a
-    /// personal email is a validation error, <c>422</c>, naming the member.
+    /// personal email, without a corporate address, or naming one address as both, is
+    /// <c>422</c> <c>identity.invitation.addressrequired</c>, naming the member.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -94,12 +119,72 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             "POST",
             PathOf(Administration),
             """{"corporateEmail":"invited@example.test"}""");
+        Answer uncorporate = await administrator.SendAsync("POST", PathOf(Administration), Personal);
+        Answer same = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@example.test","corporateEmail":"invited@example.test"}""");
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
-        Assert.Equal(ErrorCodes.IdentifierInvalid.ToString(), refused.Text("code"));
+        Assert.Equal(ErrorCodes.InvitationAddressRequired.ToString(), refused.Text("code"));
         Assert.Equal("email", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, uncorporate.Status);
+        Assert.Equal(ErrorCodes.InvitationAddressRequired.ToString(), uncorporate.Text("code"));
+        Assert.Equal("corporateEmail", uncorporate.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, same.Status);
+        Assert.Equal(ErrorCodes.InvitationAddressRequired.ToString(), same.Text("code"));
+        Assert.Equal("email", same.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Empty(_deployment.Invitations.Held);
         Assert.Empty(_deployment.Mailboxes.Held);
+    }
+
+    /// <summary>
+    /// REG-MAIL-001 and 09 section 8a: a corporate address a standing invitation reserves
+    /// is <c>409</c> <c>identity.mailbox.taken</c> naming <c>corporateEmail</c>, and
+    /// nothing more is issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        Answer first = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test"}""");
+        Answer taken = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"other@elsewhere.test","corporateEmail":"invited@example.test"}""");
+
+        Assert.Equal(StatusCodes.Status201Created, first.Status);
+        Assert.Equal(StatusCodes.Status409Conflict, taken.Status);
+        Assert.Equal(ErrorCodes.MailboxTaken.ToString(), taken.Text("code"));
+        Assert.Equal("corporateEmail", taken.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Single(_deployment.Invitations.Held);
+    }
+
+    /// <summary>
+    /// REG-INV-001 and 09 section 8a: an invitation naming a document never published is
+    /// <c>422</c> <c>api.request.invalid</c> naming <c>documents</c>, and nothing is
+    /// issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnUnpublishedDocumentIsRefusedAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        Answer refused = await administrator.SendAsync(
+            "POST",
+            PathOf(Branch),
+            """{"email":"invited@elsewhere.test","documents":["unwritten"]}""");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), refused.Text("code"));
+        Assert.Equal("documents", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Invitations.Held);
     }
 
     /// <summary>
@@ -142,6 +227,30 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         Assert.Equal("roles", Member(role));
         Assert.Equal("corporateEmail", Member(corporate));
+    }
+
+    /// <summary>
+    /// REG-INV-001 (D-166, 223 (3)): a role the deployment does not hold, named in the
+    /// body, is <c>422</c> <c>authz.grant.unresolved</c> naming <c>roles</c>, and nothing
+    /// is issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_ARoleTheDeploymentDoesNotHoldIsUnresolvedAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Branch, Permissions.GrantManage);
+
+        Answer refused = await administrator.SendAsync(
+            "POST",
+            PathOf(Branch),
+            """{"email":"invited@elsewhere.test","roles":["ghost"]}""");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.GrantUnresolved.ToString(), refused.Text("code"));
+        Assert.Equal("roles", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Invitations.Held);
     }
 
     /// <summary>
@@ -205,8 +314,57 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC6 and AC7 and 09 section 8a: a corporate address whose mailbox
+    /// was held before answers <c>409</c> <c>identity.invitation.mailboxheld</c> until
+    /// the body names <c>formerMailbox</c> with a reason; a value the member does not
+    /// take is a <c>400</c>, and a <c>formerMailbox</c> where no held mailbox
+    /// stands is a <c>422</c> <c>api.request.invalid</c> naming it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC6_AMailboxSomeoneHeldPassesOnlyUnderAFormerMailboxAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var retired = Mailbox.Reserved(Parsed("invited@example.test"), _deployment.Clock.GetUtcNow().AddYears(-1));
+
+        retired.Hold(new SubjectId(Guid.NewGuid()));
+        retired.Retire(_deployment.Clock.GetUtcNow().AddMonths(-1));
+        _deployment.Mailboxes.Held.Add(retired);
+
+        Answer held = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test"}""");
+        Answer unreadable = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","formerMailbox":"keep","reason":"Kept."}""");
+        Answer invalid = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"other@elsewhere.test","corporateEmail":"other@example.test","formerMailbox":"transfer","reason":"Kept."}""");
+        Answer replaced = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","formerMailbox":"replace","reason":"Kept."}""");
+
+        Assert.Equal(StatusCodes.Status409Conflict, held.Status);
+        Assert.Equal(ErrorCodes.InvitationMailboxHeld.ToString(), held.Text("code"));
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unreadable.Text("code"));
+        Assert.Equal("formerMailbox", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), invalid.Text("code"));
+        Assert.Equal("formerMailbox", invalid.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status201Created, replaced.Status);
+        Assert.Equal(2, _deployment.Mailboxes.Held.Count);
+        Assert.NotNull(retired.RemovalOwedAt);
+        Assert.Single(_deployment.Invitations.Held);
+    }
+
+    /// <summary>
     /// 09 section 8a: revoking an unused invitation answers <c>204</c>, and again;
-    /// one the organization never issued is a <c>400</c> naming it.
+    /// one the organization never issued is <c>404</c> <c>identity.invitation.notfound</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -222,7 +380,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
         Assert.Equal(StatusCodes.Status204NoContent, again.Status);
-        Assert.Equal("invitationId", Member(unknown));
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.InvitationNotFound.ToString(), unknown.Text("code"));
         Assert.True(Assert.Single(_deployment.Invitations.Held).IsRevoked);
         Assert.Equal(
             [AuditActions.InvitationIssued, AuditActions.InvitationRevoked],
@@ -231,8 +390,9 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// 09 section 8a and IDN-MEM-001: ending a membership answers <c>204</c> and writes
-    /// it down; an account holding no current membership of the organization is a
-    /// <c>400</c> naming it, and one without <c>membership:manage</c> is refused.
+    /// it down; an account holding no current membership of the organization, a second
+    /// end included, is <c>404</c> <c>identity.membership.notfound</c>, and one without
+    /// <c>membership:manage</c> is refused.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -252,9 +412,116 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
-        Assert.Equal("subject", Member(again));
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
         Assert.Equal((member, Branch), (Assert.Single(_deployment.Endings.Ended).Subject, _deployment.Endings.Ended[0].Organization));
         Assert.Equal(AuditActions.MembershipEnded, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
+    /// <summary>
+    /// REG-INV-001, IDN-MEM-001 and 09 section 8a: issuing, revoking and ending a
+    /// membership under an organization the deployment does not hold is <c>404</c>
+    /// <c>identity.organization.notfound</c>, whichever organization the permission is
+    /// asked in, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var unheld = new OrganizationId(Guid.NewGuid());
+        var member = new SubjectId(Guid.NewGuid());
+
+        string id = (await administrator.SendAsync("POST", PathOf(Branch), Personal)).Text("id");
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Answer[] answers =
+        [
+            await administrator.SendAsync("POST", PathOf(unheld), Personal),
+            await administrator.SendAsync("DELETE", PathOf(unheld) + "/" + id),
+            await administrator.SendAsync("DELETE", MembershipOf(unheld, member)),
+        ];
+
+        Assert.All(answers, answer => Assert.Equal(StatusCodes.Status404NotFound, answer.Status));
+        Assert.All(answers, answer => Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), answer.Text("code")));
+        Assert.False(Assert.Single(_deployment.Invitations.Held).IsRevoked);
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC3, API-CONV-002 AC3 and REG-MAIL-003: a reason past 1024
+    /// characters after trimming, or one without a former mailbox, is malformed before
+    /// the service is reached, so a caller without the permission is answered for the
+    /// body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_AReasonOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await Flow.SignedInAsync(_deployment);
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer longer = await caller.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","formerMailbox":"replace","reason":""" + "\"" + overlong + "\"}");
+        Answer unpaired = await caller.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","reason":"Kept."}""");
+
+        Assert.Equal("reason", Member(longer));
+        Assert.Equal("reason", Member(unpaired));
+        Assert.Empty(_deployment.Invitations.Held);
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the issuing and the revoking of an
+    /// invitation and the ending of a membership, the administrator's own included, and
+    /// nothing of any is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachMembershipChangeAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        SubjectId acting = _deployment.Directory.Created[^1].Subject;
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+        _deployment.Memberships.Place(acting, Branch);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", PathOf(Branch), Personal));
+
+        Assert.Empty(_deployment.Invitations.Held);
+
+        string id = (await administrator.SendAsync("POST", PathOf(Branch), Personal)).Text("id");
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", PathOf(Branch) + "/" + id));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", MembershipOf(Branch, member)));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", MembershipOf(Branch, acting)));
+
+        Assert.False(Assert.Single(_deployment.Invitations.Held).IsRevoked);
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
     }
 
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>

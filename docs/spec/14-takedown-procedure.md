@@ -48,6 +48,11 @@ You are not hunting for this. You are not ignoring it when it lands.
 Four steps, in **two phases**. The system provides one operation — the takedown
 (IDN-LIFE-003) — so they do not need to be done by hand or in sequence.
 
+The takedown applies to an account that is active, restricted or suspended, and to one
+already in a deletion window of its own (one the person asked for, or one an out-of-band
+erasure request began). From the trigger the person can no longer cancel that deletion
+from their inbox (IDN-LIFE-003, D-166).
+
 **Phase one — the moment you trigger it.** In one transaction the identity system:
 
 **1. Suspends the account.** Access stops immediately: every session ends, sign-in
@@ -67,27 +72,40 @@ D-148): the takedown screen reads it and shows the host's step as still outstand
 until the host confirms against it (the label shown is illustrative). No erasures row
 exists yet; that record belongs to phase two.
 
-**Phase two — seven days later, automatically.**
+**Phase two — when the window closes, automatically.**
 
-**3 — Remove personal data.** When the takedown window (`takedown.grace`, default
-seven days) elapses, the identity system erases: it destroys the subject's encryption
+**3 — Remove personal data.** When the takedown window closes, the identity system
+erases: it destroys the subject's encryption
 key (PRIV-RIGHT-005a) and **neutralises** their searchable fingerprint
 (PRIV-RIGHT-005c) — overwritten, never removed. Every personal field becomes
 unrecoverable at once; the anonymised record and the audit trail survive
 (PRIV-RIGHT-005). The account is then `deleted`.
 
+The window is `takedown.grace` (default seven days) from the trigger. Where the account
+was already in a deletion window of its own, it closes at the earlier of that window's
+end and the trigger plus `takedown.grace`, so a takedown never erases later than the
+person's own request would have (IDN-LIFE-003, D-166).
+
 **Why the window.** Nothing is processed during it (the account is locked and the host
 has stopped what it held) but a mistake can still be undone. If it turns out an adult
-was misjudged, **reverse the takedown** from the account's admin page inside the seven
-days: the account returns to `active` and the person can sign in again. The host
-receives `TakedownReversed`; whether it restores what it stopped is the host's rule.
-After the window, there is nothing to reverse.
+was misjudged, **reverse the takedown** from the account's admin page inside the
+window: the account returns to the state it held when you triggered the takedown
+(IDN-LIFE-003, D-166). An account that was active is active again and the person can sign
+in; one that was restricted is restricted again; one that was suspended stays suspended
+with the same origin, so an administrator's suspension is still lifted only by an
+administrator and an owner's deactivation only by its owner; one that was in its own
+deletion window returns to that deletion and its clock. The host receives
+`TakedownReversed`; whether it restores what it stopped is the host's rule. After the
+window, there is nothing to reverse.
 
 **Do not record the takedown as finished until every step shows complete**: the
 host's step confirmed against its outbox record and, after the window, the
 erasure complete in the erasures row (IDN-LIFE-003b). If a step
 fails permanently you will be alerted immediately (OPS-ALERT-001); you do not need to
-watch for it.
+watch for it. Once the host has done the part whose delivery failed, close it with the
+manual completion path (`POST /admin/erasures/{id}/complete`, naming the takedown by its
+`takedownId` or the erasure by its `id`, IDN-LIFE-003a); the completion is itself
+recorded, and the step then shows complete (D-166).
 
 ---
 

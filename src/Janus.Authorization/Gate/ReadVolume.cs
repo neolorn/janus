@@ -64,27 +64,26 @@ internal sealed class ReadVolume(
             .AddAsync(actor, today.Match(day => day, _ => default), records, cancellationToken)
             .ConfigureAwait(false);
 
-        // An unreadable setting does not silence the condition: its default stands.
         bool alerting = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeAlerting, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeAlerting.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         decimal factor = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeFactor, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeFactor.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int minimum = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeMinimum, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeMinimum.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         decimal mean = await store.BaselineAsync(actor, cancellationToken).ConfigureAwait(false);
 
         if (alerting && counted > minimum && counted > factor * mean)
         {
-            await alerts
+            return await alerts
                 .RaiseAsync(
                     AlertCondition.ReadVolumeAnomaly,
                     actor.ToString(),
@@ -105,10 +104,14 @@ internal sealed class ReadVolume(
     /// Recomputes every person's daily mean over the window before today and forgets
     /// the counts older than the window.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many people have a mean, or the refusal the settings gave.</returns>
-    public async ValueTask<Result<int>> RebaselineAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result<int>> RebaselineAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Monitoring(context);
+
         Result<DateOnly> today = await TodayAsync(cancellationToken).ConfigureAwait(false);
 
         if (today.Match(_ => (Error?)null, error => error) is Error unread)
@@ -119,9 +122,13 @@ internal sealed class ReadVolume(
         TimeSpan window = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeBaselineWindow, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeBaselineWindow.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
 
         int baselined = await store
             .RebaselineAsync(
@@ -130,10 +137,23 @@ internal sealed class ReadVolume(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<int>(notCommitted);
+        }
 
         return Result.Success(baselined);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
 
     // OPS-ALERT-005, D-153: a day is the calendar day in the deployment's zone, the
     // same day the privacy clock counts.

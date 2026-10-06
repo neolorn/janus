@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -63,8 +64,9 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-004 AC3: the try that reaches the cap ends the code, the right code
-    /// after it is refused, and the replacement leaves the dead one dead.
+    /// AUTH-FACT-004 AC3: each of five wrong tries is refused as wrong, the one that
+    /// reaches the cap ending the code; the right code after it is refused as expired,
+    /// and the replacement leaves the dead one dead.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_004_AC3_TheCapEndsTheCodeAndAReplacementLeavesItDeadAsync()
@@ -73,12 +75,12 @@ public sealed class VerificationCodesTests : IAsyncDisposable
 
         string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
 
-        for (int attempt = 0; attempt < 4; attempt++)
+        for (int attempt = 0; attempt < 5; attempt++)
         {
             Assert.Equal(ErrorCodes.CodeInvalid, await RefusalAsync(Wrong(right)));
         }
 
-        Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(Wrong(right)));
+        Assert.Empty(_codes.All);
         Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(right));
         Assert.Empty(_codes.All);
 
@@ -101,6 +103,49 @@ public sealed class VerificationCodesTests : IAsyncDisposable
         Assert.Null(await RefusalAsync(right));
         Assert.Empty(_codes.All);
         Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(right));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong try is decided in its caller's unit
+    /// of work and begins none of its own, the count written on the code's record being
+    /// all the refusal wrote.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AWrongTryIsCountedInItsCallersUnitOfWorkAsync()
+    {
+        string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
+
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeInvalid, await RefusalAsync(Wrong(right)));
+        Assert.Equal((0, 0, 0), (_work.Opened, _work.Committed, _work.RolledBack));
+
+        VerificationCode held = Assert.Single(_codes.All);
+
+        Assert.Equal(1, held.Attempts);
+        Assert.True(held.Is(right));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a try past the code's lifetime is refused as
+    /// expired and changes nothing on the code's record, which is left to the sweep.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ATryPastTheLifetimeLeavesTheRecordAsItStoodAsync()
+    {
+        string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(Wrong(right)));
+        Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(right));
+        Assert.Equal((0, 0, 0), (_work.Opened, _work.Committed, _work.RolledBack));
+
+        VerificationCode held = Assert.Single(_codes.All);
+
+        Assert.Equal(0, held.Attempts);
+        Assert.Equal(1, await _codes.SweepAsync(_clock.GetUtcNow(), TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -132,6 +177,56 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     {
         Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync("000000"));
         Assert.False(await Service.OutstandingAsync(Holder, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004: the record of a held or reserved value lives the lifetime a code
+    /// does, answers each of the first tries up to the cap as wrong whatever is
+    /// presented and every one after as expired, shows no digits, and is swept as a
+    /// code past its lifetime is.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_ARecordNoCodeMatchesIsAnsweredAndSweptAsACodeIsAsync()
+    {
+        _configuration.Set(Settings.CodeVerificationAttempts, 5);
+        string[] presented = ["000000", string.Empty, "no digits", "123456", "0"];
+        var answers = new List<ErrorCode?>();
+        Assert.True((await Service.WithholdAsync(Holder, TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        DateTimeOffset expiry = Assert.Single(_codes.All).ExpiresAt;
+        string? shown = await Service.ShownAsync(Holder, TestContext.Current.CancellationToken);
+
+        foreach (string entered in presented)
+        {
+            answers.Add(await RefusalAsync(entered));
+        }
+
+        ErrorCode? afterTheCap = await RefusalAsync("000000");
+        _ = await Service.WithholdAsync(Holder, TestContext.Current.CancellationToken);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        ErrorCode? afterTheLifetime = await RefusalAsync("000000");
+        _ = await Service.WithholdAsync(Holder, TestContext.Current.CancellationToken);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        int swept = await _codes.SweepAsync(_clock.GetUtcNow(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(Noon + Settings.CodeVerificationLifetime.Default, expiry);
+        Assert.Null(shown);
+        Assert.All(answers, answer => Assert.Equal(ErrorCodes.CodeInvalid, answer));
+        Assert.Equal(ErrorCodes.CodeExpired, afterTheCap);
+        Assert.Equal(ErrorCodes.CodeExpired, afterTheLifetime);
+        Assert.Equal(1, swept);
+        Assert.Empty(_codes.All);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-007 AC2: the digits are drawn from the generator the service is
+    /// given, as four bytes read as one number below the million.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator()
+    {
+        using var randomness = new FixedRandomness(0x2A, 0x00, 0x00, 0x00);
+
+        Assert.Equal("000042", VerificationCode.Draw(randomness));
     }
 
     /// <inheritdoc/>

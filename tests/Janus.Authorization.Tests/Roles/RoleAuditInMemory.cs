@@ -36,10 +36,14 @@ internal sealed class RoleAuditInMemory : IRoleAudit
         IReadOnlyList<Permission> after,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new RoleChange(AuditActions.RoleDefined, role, before, after, reason, actor, at));
+        _changes.Add(new RoleChange(AuditActions.RoleDefined, role, before, after, reason, actor, at)
+        {
+            BreakGlassReason = breakGlassReason,
+        });
 
         return ValueTask.CompletedTask;
     }
@@ -63,10 +67,14 @@ internal sealed class RoleAuditInMemory : IRoleAudit
         IReadOnlyList<Permission> before,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new RoleChange(AuditActions.RoleRemoved, role, before, After: null, reason, actor, at));
+        _changes.Add(new RoleChange(AuditActions.RoleRemoved, role, before, After: null, reason, actor, at)
+        {
+            BreakGlassReason = breakGlassReason,
+        });
 
         return ValueTask.CompletedTask;
     }
@@ -88,5 +96,12 @@ internal sealed class RoleAuditInMemory : IRoleAudit
         IReadOnlyList<Permission>? After,
         string Reason,
         SubjectId Actor,
-        DateTimeOffset At);
+        DateTimeOffset At)
+    {
+        /// <summary>
+        /// The reason given at the use of the break-glass credential, where the change
+        /// was made in the session it opened, or nothing.
+        /// </summary>
+        public string? BreakGlassReason { get; init; }
+    }
 }

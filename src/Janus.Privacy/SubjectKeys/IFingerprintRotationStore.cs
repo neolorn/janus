@@ -36,13 +36,13 @@ internal interface IFingerprintRotationStore
     /// identifiers, the reservations of the identifiers they removed, and the subjects
     /// their linked providers know them by.
     /// </summary>
-    /// <param name="after">The last subject reached, or nothing to start at the first.</param>
-    /// <param name="count">How many subjects the batch takes.</param>
+    /// <param name="after">The last row of the subject-key table reached, or nothing to start at the first.</param>
+    /// <param name="count">How many rows the batch takes.</param>
     /// <param name="now">The instant a reservation is read at.</param>
     /// <param name="cancellationToken">Abandons the batch.</param>
-    /// <returns>The last subject taken, or nothing where none was left, and how many fingerprints were computed again.</returns>
+    /// <returns>The last row taken, or nothing where none was left, and how many fingerprints were computed again.</returns>
     ValueTask<KeyRotationBatch> RecomputeSubjectsAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         DateTimeOffset now,
         CancellationToken cancellationToken);
@@ -60,7 +60,9 @@ internal interface IFingerprintRotationStore
 
     /// <summary>
     /// How many fingerprints still read stand under a version other than the current:
-    /// the ones nothing can compute again, and any the last batch did not reach.
+    /// the ones nothing can compute again (a held username, an erased subject's
+    /// reservation, an abuse ledger line that still counts, a sign-in in progress), and
+    /// any the last batch did not reach.
     /// </summary>
     /// <param name="now">The instant a hold or a reservation is read at.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
@@ -68,9 +70,9 @@ internal interface IFingerprintRotationStore
     ValueTask<int> StandingAsync(DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Forgets what is under a version other than the current and would be read under
-    /// nothing once that version is retired: the lines of the ledgers that count
-    /// attempts, sends, notices, registrations and callbacks, and the holds released.
+    /// Forgets what is under a version other than the current and lapses on no clock of
+    /// its own: unspent restriction credit and the username holds already released, and
+    /// nothing else. Whatever lapses on its own is waited for, never forgotten.
     /// </summary>
     /// <param name="now">The instant a hold is read at.</param>
     /// <param name="cancellationToken">Abandons the write.</param>

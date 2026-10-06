@@ -16,6 +16,9 @@ namespace Janus.Authentication.Tests.Alerting;
 [Trait("kind", "unit")]
 public sealed class EnvironmentWatchTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("clock-drift", "INF-HOST-001", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     private readonly EnvironmentInMemory _environment = new();
@@ -49,7 +52,7 @@ public sealed class EnvironmentWatchTests
         {
             Assert.Equal(AlertCondition.ClockDrift, alert.Condition);
             Assert.Equal(AlertSeverity.Normal, alert.Severity);
-            Assert.Equal(Alerts.Key(AlertCondition.ClockDrift, scope: null), Alerts.Deduplication(alert.IdempotencyKey));
+            Assert.Equal(Alerts.Key(AlertCondition.ClockDrift, scope: null, named: null), Alerts.Deduplication(alert.IdempotencyKey));
             Assert.Equal(30d, alert.Details["toleranceSeconds"].GetDouble());
         });
         Assert.Equal(31d, raised[0].Details["offsetSeconds"].GetDouble());
@@ -112,8 +115,8 @@ public sealed class EnvironmentWatchTests
 
         Assert.Equal(
             [
-                Alerts.Key(AlertCondition.Degradation, "clock.reference.absent"),
-                Alerts.Key(AlertCondition.Degradation, "clock.reference.unread"),
+                Alerts.Key(AlertCondition.Degradation, "clock.reference.absent", named: null),
+                Alerts.Key(AlertCondition.Degradation, "clock.reference.unread", named: null),
             ],
             _alerts.Of<AlertRaised>().Select(alert => Alerts.Deduplication(alert.IdempotencyKey)));
     }
@@ -166,12 +169,12 @@ public sealed class EnvironmentWatchTests
 
         Assert.Equal(
             [
-                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.absent"),
-                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.unread"),
+                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.absent", named: null),
+                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.unread", named: null),
             ],
             _alerts.Of<AlertRaised>().Select(alert => Alerts.Deduplication(alert.IdempotencyKey)));
     }
 
-    private static async Task WatchedAsync(Func<CancellationToken, ValueTask<Result>> watch) =>
-        Assert.Null((await watch(TestContext.Current.CancellationToken)).Match(() => (Error?)null, error => error));
+    private static async Task WatchedAsync(Func<AccessContext, CancellationToken, ValueTask<Result>> watch) =>
+        Assert.Null((await watch(Watcher, TestContext.Current.CancellationToken)).Match(() => (Error?)null, error => error));
 }

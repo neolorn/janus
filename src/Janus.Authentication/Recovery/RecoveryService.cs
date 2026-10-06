@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -34,7 +35,9 @@ namespace Janus.Authentication.Recovery;
 /// <param name="stepUp">What the approver's session has to have proved.</param>
 /// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="nonExistence">What answers an ask no link of its own answers.</param>
+/// <param name="signals">What is known about a number before a link is texted to it.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="alerts">Where the anomaly alerts go.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
@@ -63,8 +66,10 @@ internal sealed class RecoveryService(
     SessionService sessions,
     StepUpGuard stepUp,
     AdministrativeScope scope,
-    INotificationHandler sending,
+    IGovernedSend sending,
+    LandingLinks landing,
     NonExistenceNotice nonExistence,
+    PhoneSignals signals,
     ThrottleService throttle,
     IAlertChannels alerts,
     IConfigurationStore configuration,
@@ -78,6 +83,11 @@ internal sealed class RecoveryService(
     // Both rate limits of AUTH-RECOV-002 are stated per day, which is the one window
     // they are counted over (chapter 10 section 4.4).
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
+
+    // A recovery link by text amounts to the entry a sign-in link by text is, which is
+    // what the carrier's signal is asked about (AUTH-FACT-002b).
+    private static readonly Factor TextedLink =
+        FactorCatalogue.Sent[(IdentifierKind.Phone, MessageChannels.Factors[MessageKind.RecoveryLink])];
 
     /// <inheritdoc/>
     public async ValueTask<Result> BeginAsync(
@@ -123,12 +133,24 @@ internal sealed class RecoveryService(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(ThrottleService.Refusal(time.GetUtcNow() + delay));
+            return Result.Failure(Error.Throttled(time.GetUtcNow() + delay));
         }
 
         if (channel is null)
         {
             return Result.Success();
+        }
+
+        // AUTH-FACT-002b AC6: no recovery link goes to a number the carrier reports a
+        // recent change of SIM or of network for, and the ask is answered as every ask
+        // is. The question is asked of the number whether or not an account holds it,
+        // so nothing about existence is told either way (AUTH-ABUSE-003 AC1).
+        if (channel.Kind is IdentifierKind.Phone
+            && !await signals.AllowsAsync(TextedLink, channel.Canonical, owner, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return await WithheldAsync(channel, language, source, unheld: false, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return owner is SubjectId subject
@@ -150,52 +172,46 @@ internal sealed class RecoveryService(
         ArgumentNullException.ThrowIfNull(source);
 
         DateTimeOffset now = time.GetUtcNow();
-        RecoveryLink? link = await FindAsync(token, cancellationToken).ConfigureAwait(false);
 
-        if (link is null || link.Purpose is not RecoveryPurpose.SelfService || link.SpentAt is not null)
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
-            return Result.Failure(Error.From(ErrorCodes.RecoveryTokenInvalid));
+            return Result.Failure(notBegun);
         }
 
-        if (link.HasExpired(now))
+        // D-166 X3: the link is read under its lock, so a second completion of it waits
+        // for this one to commit and finds it spent; the password is set under the same
+        // lock, so only the completion that spends the link sets one.
+        RecoveryLink? link = await LockedAsync(token, cancellationToken).ConfigureAwait(false);
+        Error? failure = Unopened(link, RecoveryPurpose.SelfService, ErrorCodes.RecoveryTokenInvalid, now);
+
+        if (failure is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.RecoveryTokenExpired));
+            _ = (await SetAsync(link!.Subject, password, cancellationToken).ConfigureAwait(false))
+                .Match(() => true, error => Withheld<bool>(error, ref failure));
         }
-
-        Error? failure = null;
-
-        _ = (await SetAsync(link.Subject, password, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref failure));
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        link.Spend(session: null, now);
+        link!.Spend(session: null, now);
 
         await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
 
         // D-140: recovery is the way back for an account its own holder deactivated,
-        // and finishing it is what stands it up again.
+        // and finishing it is what stands it up again; who suspended it is read on
+        // the account's row under its lock (D-166 X3), so an administrator's
+        // suspension committed meanwhile is not stood up.
+        await accounts.HoldAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
         if (await accounts.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false)
             is SuspensionOrigin.Self)
         {
             await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
-        }
-
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        // IDN-LIFE-008: a changed password ends every session that was held under the
-        // old one, wherever it is held.
-        _ = (await sessions.EndAccountAsync(link.Subject, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
         }
 
         _ = await NotifyAsync(
@@ -206,6 +222,22 @@ internal sealed class RecoveryService(
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        // IDN-LIFE-008: a changed password ends every session that was held under the
+        // old one, wherever it is held.
+        _ = (await sessions.EndAccountAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(() => true, error => Withheld<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
 
         return Result.Success();
     }
@@ -245,17 +277,24 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(denied);
         }
 
-        if (await stepUp
-                .PassedAsync(approver, session, StepUpAction.RecoveryApprove, cancellationToken)
-                .ConfigureAwait(false)
-            is Error closed)
-        {
-            return Result.Failure<ApprovedRecovery>(closed);
-        }
-
-        if (reason.Trim().Length is 0)
+        // API-CONV-002, X4: the reason and the channel are free text of 1 to 1024
+        // characters after trimming, refused for an in-process caller as the endpoint
+        // refuses them.
+        if (reason.Trim() is not { Length: > 0 } stated)
         {
             return Result.Failure<ApprovedRecovery>(Error.From(ErrorCodes.RecoveryReasonRequired));
+        }
+
+        if (stated.Length > 1024)
+        {
+            return Result.Failure<ApprovedRecovery>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
+
+        if (channelUsed.Trim().Length is 0 or > 1024)
+        {
+            return Result.Failure<ApprovedRecovery>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("channelUsed")));
         }
 
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
@@ -269,10 +308,21 @@ internal sealed class RecoveryService(
                 Error.From(ErrorCodes.RecoveryChannelNotOnAccount));
         }
 
+        // D-178, 09 section 8: the step-up is judged after every other refusal the
+        // approval can give before its transaction.
+        if (await stepUp
+                .PassedAsync(approver, session, StepUpAction.RecoveryApprove, cancellationToken)
+                .ConfigureAwait(false)
+            is Error closed)
+        {
+            return Result.Failure<ApprovedRecovery>(closed);
+        }
+
         return await StandAsync(
+                context,
                 approver,
                 subject,
-                reason.Trim(),
+                stated,
                 channel,
                 source,
                 cancellationToken)
@@ -287,26 +337,35 @@ internal sealed class RecoveryService(
         ArgumentNullException.ThrowIfNull(token);
 
         DateTimeOffset now = time.GetUtcNow();
-        RecoveryLink? link = await FindAsync(token, cancellationToken).ConfigureAwait(false);
-
-        if (link is null || link.Purpose is not RecoveryPurpose.Enrolment || link.SpentAt is not null)
-        {
-            return Result.Failure<EnrolmentSession>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
-        }
-
-        if (link.HasExpired(now))
-        {
-            return Result.Failure<EnrolmentSession>(Error.From(ErrorCodes.RecoveryTokenExpired));
-        }
-
         var opened = EnrolmentSessionId.New(time);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolmentSession>(notBegun);
+        }
 
-        link.Spend(opened, now);
+        // D-166 X3: the link is read under its lock, so a second opening of it waits for
+        // this one to commit and finds it spent.
+        RecoveryLink? link = await LockedAsync(token, cancellationToken).ConfigureAwait(false);
+        Error? failure = Unopened(link, RecoveryPurpose.Enrolment, ErrorCodes.EnrolmentTokenInvalid, now);
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolmentSession>(failure);
+        }
+
+        link!.Spend(opened, now);
 
         await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<EnrolmentSession>(notCommitted);
+        }
 
         // D-147: the session the link opens is capped by the link's own lifetime and
         // never given one of its own.
@@ -404,12 +463,26 @@ internal sealed class RecoveryService(
     // AUTHZ-SCOPE-001: the permission is held in an organization, and an approver
     // approves for any account with the permission one of their own organizations
     // grants them. The account being recovered need belong to none.
-    private async ValueTask<RecoveryLink?> FindAsync([NeverLogged] string token, CancellationToken cancellationToken) =>
+    private async ValueTask<RecoveryLink?> LockedAsync([NeverLogged] string token, CancellationToken cancellationToken) =>
         token is { Length: > 0 }
             ? await links
-                .FindAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
+                .FindForUpdateAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false)
             : null;
+
+    // What a link that does not open the endpoint consuming it is refused with: one
+    // spent, of the other purpose or none at all is invalid, and one past its lifetime
+    // has expired.
+    private static Error? Unopened(
+        RecoveryLink? link,
+        RecoveryPurpose purpose,
+        ErrorCode invalid,
+        DateTimeOffset now) =>
+        link is null || link.Purpose != purpose || link.SpentAt is not null
+            ? Error.From(invalid)
+            : link.HasExpired(now)
+                ? Error.From(ErrorCodes.RecoveryTokenExpired)
+                : null;
 
     // AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because no
     // account holds the address or the account cannot be recovered by it, is answered
@@ -423,7 +496,7 @@ internal sealed class RecoveryService(
         nonExistence.AnswerAsync(
             channel.Destination,
             MessageKind.RecoveryLink,
-            RestrictionPurpose.Notification,
+            RestrictionPurpose.SignIn,
             source,
             language,
             unheld,
@@ -466,19 +539,27 @@ internal sealed class RecoveryService(
         var token = OpaqueToken.Draw(randomness);
         string? recipient = await LanguageAsync(subject, language, cancellationToken).ConfigureAwait(false);
 
+        // AUTH-ABUSE-004: a link a person asked for answers to the restrictions a
+        // sign-in link answers to, and no notification restriction counts it.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         _ = (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         channel.Destination,
                         MessageKind.RecoveryLink,
-                        RestrictionPurpose.Notification,
+                        RestrictionPurpose.SignIn,
                         source,
                         recipient)
                     {
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Recovery, token.Value),
                         },
                     },
                     cancellationToken)
@@ -487,22 +568,32 @@ internal sealed class RecoveryService(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            // AUTH-ABUSE-006: the gateway floor's refusal answers the ask as it would
+            // have been answered, as it does for a number no account holds, so the
+            // floor tells nothing of an account. Nothing else was written.
+            return failure.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await links
             .ReplaceAsync(
                 RecoveryLink.Issue(token, subject, RecoveryPurpose.SelfService, now, lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
 
     // D-140: an account its own holder deactivated recovers; one an administrator
-    // suspended, or one on its way out, does not.
+    // suspended, or one on its way out, does not. A restricted account signs in, so it
+    // recovers as an active one does (IDN-ACCT-007).
     private async ValueTask<bool> RecoverableAsync(
         SubjectId subject,
         CancellationToken cancellationToken)
@@ -510,7 +601,7 @@ internal sealed class RecoveryService(
         AccountState? state = await accounts.StateAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        return state is AccountState.Active
+        return state is AccountState.Active or AccountState.Restricted
             || (state is AccountState.Suspended
                 && await accounts.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
                     is SuspensionOrigin.Self);
@@ -547,6 +638,7 @@ internal sealed class RecoveryService(
                         presented,
                         words,
                         StepUp.Reachable(HeldFactors.Of(enrolled, password: true).Standing).Level,
+                        actor: null,
                         cancellationToken)
                     .ConfigureAwait(false))
                 .Match(_ => Result.Success(), Result.Failure);
@@ -585,8 +677,8 @@ internal sealed class RecoveryService(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,
@@ -628,7 +720,7 @@ internal sealed class RecoveryService(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested, languages);
     }
@@ -650,6 +742,7 @@ internal sealed class RecoveryService(
     // AUTH-RECOV-002: one approval is recorded, counted and alerted on; the link goes
     // out only once as many approvers as the deployment requires have stood behind it.
     private async ValueTask<Result<ApprovedRecovery>> StandAsync(
+        AccessContext context,
         SubjectId approver,
         SubjectId subject,
         string reason,
@@ -683,6 +776,29 @@ internal sealed class RecoveryService(
         DateTimeOffset now = time.GetUtcNow();
         DateTimeOffset since = now - Day;
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ApprovedRecovery>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope
+                .RefusedAsync(context, Permissions.RecoveryApprove, cancellationToken)
+                .ConfigureAwait(false)
+            is Error restricted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(restricted);
+        }
+
+        // D-166 X3: the approvals are counted under their hold, so approvals given at
+        // once are counted against both day limits as approvals given one after another.
+        await approvals.HoldAsync(cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<DateTimeOffset> drawn = await approvals.ForAsync(subject, since, cancellationToken)
             .ConfigureAwait(false);
 
@@ -691,18 +807,35 @@ internal sealed class RecoveryService(
 
         if (Later(Lifts(drawn, perAccount, now), Lifts(given, perApprover, now)) is DateTimeOffset lifts)
         {
-            return Result.Failure<ApprovedRecovery>(ThrottleService.Refusal(lifts));
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(Error.Throttled(lifts));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        // AUTH-RECOV-002: the link goes out once as many approvers as the deployment
+        // requires stand behind it, this one among them, counted under the same hold.
+        bool linked = await StandingAsync(subject, approver, now - lifetime, cancellationToken)
+            .ConfigureAwait(false) >= required;
+
+        // The link spends every approval that stood behind it, and the approval that
+        // completes them is written spent, since it is spent in the unit of work that
+        // writes it.
+        if (linked)
+        {
+            await approvals.SpendAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        }
+
         await approvals
-            .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
+            .AddAsync(
+                new RecoveryApproval(subject, approver, channel.Canonical, now, linked ? now : null),
+                cancellationToken)
             .ConfigureAwait(false);
         await audit
-            .ApprovedAsync(approver, subject, reason, channel.Kind, now, cancellationToken)
+            .ApprovedAsync(approver, context.BreakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+        // CONV-DESIGN-002: the alert's row is written in the transaction that records
+        // the approval it counts, so an alert that cannot be written records nothing.
         Result raised = await RaiseAsync(
                 subject,
                 approver,
@@ -714,27 +847,36 @@ internal sealed class RecoveryService(
 
         if (raised.Match(() => (Error?)null, error => error) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<ApprovedRecovery>(unraised);
         }
 
-        if (await StandingAsync(subject, now - lifetime, cancellationToken).ConfigureAwait(false)
-            < required)
+        // AUTH-RECOV-002, AUTHZ-GATE-006, D-186: the link's send is undertaken in the
+        // unit of work that writes the approval and its record, so the gate's second ask
+        // covers both, and a send a restriction or the gateway floor refuses leaves no
+        // approval, no record of it and no send.
+        if (linked
+            && await LinkedAsync(approver, subject, channel, source, now, lifetime, cancellationToken)
+                .ConfigureAwait(false) is Error unsent)
         {
-            return Result.Success(new ApprovedRecovery(EnrolmentLinkExpiresAt: null));
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(unsent);
         }
 
-        return await SendAsync(
-                approver,
-                subject,
-                channel,
-                source,
-                now,
-                lifetime,
-                cancellationToken)
-            .ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ApprovedRecovery>(notCommitted);
+        }
+
+        return Result.Success(new ApprovedRecovery(linked ? now + lifetime : null));
     }
 
-    private async ValueTask<Result<ApprovedRecovery>> SendAsync(
+    // D-166 119 (3): the link's record is written first and its send undertaken after,
+    // in the caller's unit of work; a refusal of that send is the caller's to roll back.
+    private async ValueTask<Error?> LinkedAsync(
         SubjectId approver,
         SubjectId subject,
         Channel channel,
@@ -743,7 +885,6 @@ internal sealed class RecoveryService(
         TimeSpan lifetime,
         CancellationToken cancellationToken)
     {
-        Error? failure = null;
         var token = OpaqueToken.Draw(randomness);
 
         // IDN-ATTR-001: the request is the approver's and says nothing of the language
@@ -751,31 +892,6 @@ internal sealed class RecoveryService(
         string? language = await LanguageAsync(subject, requested: null, cancellationToken)
             .ConfigureAwait(false);
 
-        _ = (await sending
-                .SendAsync(
-                    new SendRequest(
-                        channel.Destination,
-                        MessageKind.EnrolmentLink,
-                        RestrictionPurpose.Notification,
-                        source,
-                        language)
-                    {
-                        Subject = subject,
-                        Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
-                        {
-                            ["token"] = token.Value,
-                        },
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false))
-            .Match(_ => true, error => Withheld<bool>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<ApprovedRecovery>(failure);
-        }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await links
             .ReplaceAsync(
                 RecoveryLink.Issue(
@@ -792,8 +908,28 @@ internal sealed class RecoveryService(
                     channel.Kind is not IdentifierKind.Email),
                 cancellationToken)
             .ConfigureAwait(false);
-        await approvals.SpendAsync(subject, now, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await sending
+                .UndertakeAsync(
+                    new OutboundMessage(
+                        channel.Destination,
+                        MessageKind.EnrolmentLink,
+                        RestrictionPurpose.SignIn,
+                        source,
+                        language)
+                    {
+                        Subject = subject,
+                        Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
+                        {
+                            ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
+                        },
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return refused;
+        }
 
         _ = await NotifyAsync(
                 subject,
@@ -804,11 +940,14 @@ internal sealed class RecoveryService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(new ApprovedRecovery(now + lifetime));
+        return null;
     }
 
+    // The approvers standing behind the account's re-enrolment once this one has joined
+    // them. The approval being given is not yet a row, so it is counted here.
     private async ValueTask<int> StandingAsync(
         SubjectId subject,
+        SubjectId approver,
         DateTimeOffset from,
         CancellationToken cancellationToken)
     {
@@ -816,7 +955,7 @@ internal sealed class RecoveryService(
             .StandingForAsync(subject, from, cancellationToken)
             .ConfigureAwait(false);
 
-        var approvers = new HashSet<SubjectId>();
+        var approvers = new HashSet<SubjectId> { approver };
 
         foreach (RecoveryApproval approval in standing)
         {
@@ -836,24 +975,15 @@ internal sealed class RecoveryService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        Error? failure = null;
-
         int account = (await configuration
                 .ReadAsync(Settings.AlertingRecoveryAccountThreshold, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<int>(error, ref failure));
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int raised = (await configuration
                 .ReadAsync(Settings.AlertingRecoveryApproverThreshold, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<int>(error, ref failure));
-
-        // The thresholds are the alert's, not the approval's: one that will not read
-        // leaves the alert unraised and the approval as it stands.
-        if (failure is not null)
-        {
-            return Result.Success();
-        }
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (forAccount >= account)
         {

@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Organizations;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Identity.Organizations;
 
@@ -23,13 +25,36 @@ internal sealed class OrganizationStore(StoreContext context) : IOrganizationSto
     {
         OrganizationRecord? record = await StoredAsync(id, cancellationToken).ConfigureAwait(false);
 
-        return record is null ? null : Organization.Existing(
-            record.Id,
-            record.Name,
-            record.CreatedAt,
-            record.IsAdministrative,
-            record.DeletionRequestedAt,
-            record.ErasedAt);
+        return Read(record);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Organization?> FindForUpdateAsync(
+        OrganizationId id,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An organization's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Organizations.Local.Any(record => record.Id == id);
+
+        OrganizationRecord? held = (await context.Organizations
+                .FromSql($"SELECT * FROM identity.organizations WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
     }
 
     /// <inheritdoc/>
@@ -64,12 +89,21 @@ internal sealed class OrganizationStore(StoreContext context) : IOrganizationSto
 
         // IDN-ORG-003: the erasure is the one change that touches the name, which it
         // replaces with the identifier the row goes on resolving under. The key follows
-        // the name, and a row written before the key was takes it here (IDN-ACCT-004).
+        // the name (IDN-ACCT-004).
         record.Name = organization.Name;
         record.CanonicalName = organization.CanonicalName;
         record.DeletionRequestedAt = organization.DeletionRequestedAt;
         record.ErasedAt = organization.ErasedAt;
     }
+
+    private static Organization? Read(OrganizationRecord? record) =>
+        record is null ? null : Organization.Existing(
+            record.Id,
+            record.Name,
+            record.CreatedAt,
+            record.IsAdministrative,
+            record.DeletionRequestedAt,
+            record.ErasedAt);
 
     private async ValueTask<OrganizationRecord?> StoredAsync(
         OrganizationId id,

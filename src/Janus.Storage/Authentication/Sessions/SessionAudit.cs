@@ -32,11 +32,17 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
     private const string Session = "session";
     private const string Factors = "factors";
     private const string Refused = "factor";
+    private const string Verification = "verification";
+
+    // The one verification whose refused code is an authentication failure: the
+    // new-device check's (CONV-LOG-005).
+    private const string Device = "device";
 
     /// <inheritdoc/>
     public async ValueTask PresentedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         IReadOnlyCollection<Factor> presented,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -51,6 +57,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                     at,
                     subject,
                     subject,
+                    breakGlassReason,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -64,9 +71,9 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
 
     /// <inheritdoc/>
     /// <remarks>
-    /// No actor was established, so the acting subject is the nil subject; the
-    /// effective subject is the account the attempt was made against, or the nil
-    /// subject where there was none, which is the recorded fact.
+    /// No actor was established, so the acting and effective identities are the nil
+    /// subject; the record's subject is the account the attempt was made against, or
+    /// nothing where there was none, which is the recorded fact (IDN-AUD-001, D-166).
     /// </remarks>
     public ValueTask FailedAsync(
         SubjectId? subject,
@@ -80,7 +87,8 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                 Failed,
                 at,
                 actingSubject: default,
-                subject ?? default,
+                subject,
+                breakGlassReason: null,
                 organization: null,
                 new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                 {
@@ -89,9 +97,35 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
             cancellationToken);
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// No actor was established, so the acting subject is the nil subject; the details
+    /// name the verification and no factor, since the code refused was none.
+    /// </remarks>
+    public ValueTask DeviceVerificationFailedAsync(
+        SubjectId? subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        records.AppendAsync(
+            AuditRecord.Of(
+                AuditRecordId.New(time),
+                AuditCategory.Security,
+                Failed,
+                at,
+                actingSubject: default,
+                subject ?? default,
+                breakGlassReason: null,
+                organization: null,
+                new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
+                {
+                    [Verification] = JsonSerializer.SerializeToElement(Device),
+                }),
+            cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask StepUpFailedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         Factor presented,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
@@ -103,6 +137,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                 at,
                 subject,
                 subject,
+                breakGlassReason,
                 organization: null,
                 new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                 {

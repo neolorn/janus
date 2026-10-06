@@ -66,15 +66,15 @@ internal static class RelyingParty
             (Protocol, OidcClientKind.Protocol),
         })
         {
-            await deployment.Clients.RecordAsync(
+            await deployment.Clients.AddAsync(
                 new OidcClient(
                     clientId,
                     clientId,
                     kind,
                     Destination,
                     ["openid", "email", "offline_access"]),
-                OpaqueToken.Of(Secret).Fingerprint(),
-                DateTimeOffset.MinValue,
+                Encoding.UTF8.GetBytes(Secret),
+                deployment.Clock.GetUtcNow(),
                 TestContext.Current.CancellationToken);
         }
     }

@@ -16,6 +16,12 @@ internal sealed class VerificationCodeStoreInMemory : IVerificationCodeStore
     private readonly Dictionary<string, VerificationCode> _codes = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// The unit of work the operations under test run in. Where a test names it, what
+    /// the store wrote inside a unit of work that rolled back is put back.
+    /// </summary>
+    public UnitOfWorkInMemory? Work { get; set; }
+
+    /// <summary>
     /// Every code the store holds.
     /// </summary>
     public IReadOnlyCollection<VerificationCode> All => _codes.Values;
@@ -27,9 +33,17 @@ internal sealed class VerificationCodeStoreInMemory : IVerificationCodeStore
         ValueTask.FromResult(_codes.GetValueOrDefault(Key(holder)));
 
     /// <inheritdoc/>
+    public ValueTask<VerificationCode?> FindForUpdateAsync(
+        byte[] holder,
+        CancellationToken cancellationToken) =>
+        FindAsync(holder, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(VerificationCode code, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(code);
+
+        Enlist();
 
         _codes[Key(code.Holder)] = code;
 
@@ -54,6 +68,8 @@ internal sealed class VerificationCodeStoreInMemory : IVerificationCodeStore
     /// <inheritdoc/>
     public ValueTask RemoveAsync(byte[] holder, CancellationToken cancellationToken)
     {
+        Enlist();
+
         _ = _codes.Remove(Key(holder));
 
         return ValueTask.CompletedTask;
@@ -79,5 +95,25 @@ internal sealed class VerificationCodeStoreInMemory : IVerificationCodeStore
         ArgumentNullException.ThrowIfNull(holder);
 
         return Convert.ToHexString(holder);
+    }
+
+    private void Enlist()
+    {
+        if (Work is null)
+        {
+            return;
+        }
+
+        var held = new Dictionary<string, VerificationCode>(_codes, StringComparer.Ordinal);
+
+        Work.Undoing(() =>
+        {
+            _codes.Clear();
+
+            foreach (KeyValuePair<string, VerificationCode> code in held)
+            {
+                _codes[code.Key] = code.Value;
+            }
+        });
     }
 }

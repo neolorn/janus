@@ -14,6 +14,8 @@ namespace Janus.Authentication.Tests.Mailboxes;
 /// </summary>
 internal sealed class MailboxStoreInMemory : IMailboxStore
 {
+    private readonly Dictionary<MailboxId, DateTimeOffset> _claims = [];
+
     /// <summary>
     /// Every mailbox, as the rows hold them.
     /// </summary>
@@ -26,6 +28,12 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
     public HashSet<SubjectId> Standing { get; } = [];
 
     /// <summary>
+    /// The holders erased, whose mailboxes are no longer read, as the store leaves them
+    /// once their key is gone.
+    /// </summary>
+    public HashSet<SubjectId> Erased { get; } = [];
+
+    /// <summary>
     /// How many times a change was carried onto a row.
     /// </summary>
     public int Recorded { get; private set; }
@@ -35,12 +43,31 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
     /// </summary>
     public List<Guid?> Keys { get; } = [];
 
+    /// <summary>
+    /// The mailboxes a claim is held on, each with when that claim times out.
+    /// </summary>
+    public IReadOnlyDictionary<MailboxId, DateTimeOffset> Claims => _claims;
+
+    /// <summary>
+    /// Stands in for another pass that takes the row over, as one would once the claim
+    /// on it had timed out.
+    /// </summary>
+    /// <param name="mailbox">The row.</param>
+    /// <param name="until">When the other pass's claim times out.</param>
+    public void TakeOver(MailboxId mailbox, DateTimeOffset until) => _claims[mailbox] = until;
+
+    // A mailbox whose holder was erased has nothing left that reads its address, and
+    // one whose removal the server confirmed is a mailbox no more.
+    private IEnumerable<Mailbox> Readable =>
+        Held
+            .Where(mailbox => mailbox.StandsForAddress || mailbox.Pushed is not MailboxState.Removed)
+            .Where(mailbox => mailbox.Holder is not SubjectId holder || !Erased.Contains(holder));
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<MailboxStanding>>(
         [
-            .. Held
-                .Where(mailbox => mailbox.ReleasedAt is null || mailbox.Pushed is not MailboxState.Removed)
+            .. Readable
                 .OrderBy(mailbox => mailbox.ReservedAt)
                 .Select(mailbox => new MailboxStanding(
                     mailbox,
@@ -49,22 +76,22 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
 
     /// <inheritdoc/>
     public ValueTask<Mailbox?> FindAsync(EmailAddress address, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Address == address));
+        ValueTask.FromResult(Readable.FirstOrDefault(mailbox => mailbox.Address == address && mailbox.StandsForAddress));
 
     /// <inheritdoc/>
     public ValueTask<Mailbox?> FindAsync(MailboxId id, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Id == id));
+        ValueTask.FromResult(Readable.FirstOrDefault(mailbox => mailbox.Id == id));
 
     /// <inheritdoc/>
     public ValueTask<Mailbox?> HeldByAsync(SubjectId holder, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Held.SingleOrDefault(mailbox => mailbox.IsHeld && mailbox.Holder == holder));
+        ValueTask.FromResult(Readable.SingleOrDefault(mailbox => mailbox.IsHeld && mailbox.Holder == holder));
 
     /// <inheritdoc/>
     public ValueTask AddAsync(Mailbox mailbox, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(mailbox);
 
-        if (Held.Any(held => held.Address == mailbox.Address))
+        if (Readable.Any(held => held.Address == mailbox.Address && held.StandsForAddress))
         {
             throw new InvalidOperationException("The address already has a mailbox.");
         }
@@ -87,4 +114,68 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<DateTimeOffset?> ClaimAsync(
+        MailboxId mailbox,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (!Held.Exists(held => held.Id == mailbox)
+            || (_claims.TryGetValue(mailbox, out DateTimeOffset until) && until > now))
+        {
+            return ValueTask.FromResult<DateTimeOffset?>(null);
+        }
+
+        _claims[mailbox] = now + timeout;
+
+        return ValueTask.FromResult<DateTimeOffset?>(now + timeout);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<MailboxStanding?> StandingAsync(MailboxId mailbox, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            Readable.FirstOrDefault(held => held.Id == mailbox) is Mailbox found
+                ? new MailboxStanding(found, found.Holder is SubjectId holder && Standing.Contains(holder))
+                : null);
+
+    /// <inheritdoc/>
+    public ValueTask<bool> AttemptAsync(Mailbox mailbox, DateTimeOffset claim, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        if (!Holds(mailbox.Id, claim))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        Recorded++;
+        Keys.Add(mailbox.PendingKey);
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> RecordAsync(Mailbox mailbox, DateTimeOffset claim, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        if (!Holds(mailbox.Id, claim))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        Recorded++;
+        Keys.Add(mailbox.PendingKey);
+
+        return ValueTask.FromResult(_claims.Remove(mailbox.Id));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> ReleaseAsync(MailboxId mailbox, DateTimeOffset claim, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Holds(mailbox, claim) && _claims.Remove(mailbox));
+
+    private bool Holds(MailboxId mailbox, DateTimeOffset claim) =>
+        _claims.TryGetValue(mailbox, out DateTimeOffset until) && until == claim;
 }

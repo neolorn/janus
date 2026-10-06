@@ -26,7 +26,9 @@ internal sealed class OidcAuthorizationConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_oidc_authorizations_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(authorization => authorization.Id).HasName("pk_oidc_authorizations");
 

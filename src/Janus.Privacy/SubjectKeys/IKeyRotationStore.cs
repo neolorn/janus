@@ -7,8 +7,8 @@ namespace Janus.Privacy.SubjectKeys;
 
 /// <summary>
 /// What the key-encryption key's rotation reads and writes: the progress of every
-/// rotation, which the fingerprint key's shares, and every value held wrapped under a
-/// version of the key.
+/// rotation, which the fingerprint key's shares, and the subject keys, the only values
+/// wrapped under a version of the key.
 /// </summary>
 /// <remarks>
 /// Implements OPS-SEC-003, OPS-MIG-003a and CONV-DESIGN-003. Every value is unwrapped
@@ -24,6 +24,18 @@ internal interface IKeyRotationStore
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>Whether it does.</returns>
     ValueTask<bool> UnderMaintenanceCredentialAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Holds the progress of the kind's rotations against every other run of it until
+    /// the operation's transaction ends, so the progress is read as committed and two
+    /// runs at once start, take each batch and complete one after the other
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="kind">Which key.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding it.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(KeyRotationKind kind, CancellationToken cancellationToken);
 
     /// <summary>
     /// The rotation of the kind to the highest version, where one was ever started.
@@ -61,12 +73,12 @@ internal interface IKeyRotationStore
     /// Re-wraps, under the current version, the keys among the next subjects after the
     /// point the ordered pass has reached that are under another.
     /// </summary>
-    /// <param name="after">The last subject reached, or nothing to start at the first.</param>
-    /// <param name="count">How many subjects the batch takes.</param>
+    /// <param name="after">The last row of the subject-key table reached, or nothing to start at the first.</param>
+    /// <param name="count">How many rows the batch takes.</param>
     /// <param name="cancellationToken">Abandons the batch.</param>
-    /// <returns>The last subject taken, or nothing where none was left, and how many keys were re-wrapped.</returns>
+    /// <returns>The last row taken, or nothing where none was left, and how many keys were re-wrapped.</returns>
     ValueTask<KeyRotationBatch> ReWrapSubjectKeysAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         CancellationToken cancellationToken);
 
@@ -79,14 +91,4 @@ internal interface IKeyRotationStore
     /// <param name="cancellationToken">Abandons the batch.</param>
     /// <returns>How many keys were re-wrapped.</returns>
     ValueTask<int> ReWrapRemainingSubjectKeysAsync(int count, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Re-wraps, under the current version, the values held wrapped under another beside
-    /// the subject keys: an invitation's, a reserved mailbox's, a registration's and a
-    /// queued message's own data key, a sign-on proof, and a token signing key.
-    /// </summary>
-    /// <param name="count">How many values the batch takes at most.</param>
-    /// <param name="cancellationToken">Abandons the batch.</param>
-    /// <returns>How many values were re-wrapped.</returns>
-    ValueTask<int> ReWrapHeldValuesAsync(int count, CancellationToken cancellationToken);
 }

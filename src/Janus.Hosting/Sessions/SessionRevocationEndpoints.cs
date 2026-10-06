@@ -32,8 +32,18 @@ internal static class SessionRevocationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/{subject:guid}/sessions/revoke", RevokeAccountAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/sessions/revoke-all", RevokeEveryAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/{subject}/sessions/revoke", RevokeAccountAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/sessions/revoke-all", RevokeEveryAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -41,7 +51,7 @@ internal static class SessionRevocationEndpoints
     private static async Task<IResult> RevokeAccountAsync(
         ISessions sessions,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessions);
@@ -50,8 +60,9 @@ internal static class SessionRevocationEndpoints
         return Answers.Of(
             await sessions
                 .RevokeAccountAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new SubjectId(subject),
+                    browser.Asking,
+                    browser.Required.Id,
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -67,7 +78,7 @@ internal static class SessionRevocationEndpoints
 
         return Answers.Of(
             await sessions
-                .RevokeEveryAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .RevokeEveryAsync(browser.Asking, browser.Required.Id, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

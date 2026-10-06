@@ -3,6 +3,8 @@ using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Tests.Passwords;
@@ -175,6 +177,56 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-010 AC6: a deployment whose origin is configured with its host in
+    /// Unicode admits a ceremony whose client data carries that origin with its host in
+    /// ASCII form, which is how a browser writes it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_010_AC6_AnOriginConfiguredInUnicodeAdmitsACeremonyInAsciiFormAsync()
+    {
+        _configuration.Set(
+            Settings.WebAuthnOrigins,
+            (IReadOnlyList<string>)["https://app.bücher.de"]);
+        _configuration.Set(Settings.WebAuthnRelyingPartyId, "bücher.de");
+
+        WebAuthnMaterial read = Value(await Service.ReadAsync(
+            Factor.Passkey,
+            Attestation("a-challenge", "https://app.xn--bcher-kva.de", "xn--bcher-kva.de"),
+            "a-challenge",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("xn--bcher-kva.de", read.RelyingPartyId);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-010: a ceremony's origin is matched ordinally against the origins as
+    /// held, so one that carries another port, or the host as no browser writes it, is
+    /// admitted by none.
+    /// </summary>
+    /// <param name="origin">The origin the client data carries.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("https://app.xn--bcher-kva.de:8443")]
+    [InlineData("https://app.bücher.de")]
+    [InlineData("http://app.xn--bcher-kva.de")]
+    public async Task AUTH_FACT_010_ACeremonyFromAnOriginNotHeldIsRefusedAsync(string origin)
+    {
+        _configuration.Set(
+            Settings.WebAuthnOrigins,
+            (IReadOnlyList<string>)["https://app.bücher.de"]);
+        _configuration.Set(Settings.WebAuthnRelyingPartyId, "bücher.de");
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.ReadAsync(
+                Factor.Passkey,
+                Attestation("a-challenge", origin, "xn--bcher-kva.de"),
+                "a-challenge",
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-FACT-014 AC2: a credential from an authenticator that attested to nothing
     /// enrols, attestation being asked of none of them.
     /// </summary>
@@ -267,6 +319,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnUserVerificationRequired,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserVerified = false },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -281,10 +334,13 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         AuthenticatorId id = await EnrolledAsync(subject, Registration() with { Counter = 9 });
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.WebAuthnCounterMismatch,
             Refusal(await Service.PresentAsync(
                 Assertion() with { Counter = 8 },
+                identified: true,
                 TestContext.Current.CancellationToken)));
 
         (AuditAction action, SubjectId audited, AuthenticatorId credential) =
@@ -293,6 +349,40 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.Equal("auth.credential.countermismatch", action.ToString());
         Assert.Equal(subject, audited);
         Assert.Equal(id, credential);
+
+        // The refusal's record is committed, and the stored counter is left as it was.
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(
+            9u,
+            (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a credential invalidated while its assertion waited for
+    /// the lock is refused, and the refusal ends the unit of work it was decided in
+    /// with nothing committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACredentialInvalidatedMeanwhileRollsBackAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+
+        _authenticators.Locking = credential => credential.Invalidate();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion(),
+                identified: true,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_audit.Records);
     }
 
     /// <summary>
@@ -309,7 +399,65 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnCounterMismatch,
             Refusal(await Service.PresentAsync(
                 Assertion() with { Counter = 9 },
+                identified: true,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC3 (WebAuthn Level 3 section 7.2): the check applies where either
+    /// counter is above nought, so a counter of nought presented against a stored one
+    /// above it is not above the stored value: it is rejected and audited, and the
+    /// stored counter is left as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC3_ACounterOfNoughtAgainstAStoredCounterIsRejectedAndAuditedAsync()
+    {
+        SubjectId subject = Subject();
+        AuthenticatorId id = await EnrolledAsync(subject, Registration() with { Counter = 9 });
+
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 0 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Authenticator held = (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(
+            ("auth.credential.countermismatch", subject, id),
+            Assert.Single(_audit.Records.Select(record => (record.Item1.ToString(), record.Item2, record.Item3))));
+        Assert.Equal((9u, null), (held.WebAuthn!.Counter, held.LastUsedAt));
+        Assert.Equal((1, 0), (_work.Committed, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC3: where nothing is stored, a first counter above nought is above
+    /// the stored value, so it is accepted and recorded, and the same counter presented
+    /// again has not advanced.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC3_AFirstCounterAboveNoughtIsRecordedAndTheSameOneAgainIsRejectedAsync()
+    {
+        AuthenticatorId id = await EnrolledAsync(Subject(), Registration() with { Counter = 0 });
+
+        ErrorCode? first = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 5 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+        ErrorCode? again = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 5 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(first);
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, again);
+        Assert.Equal(
+            5u,
+            (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
     }
 
     /// <summary>
@@ -324,9 +472,11 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { Counter = 0 },
+            identified: true,
             TestContext.Current.CancellationToken)));
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { Counter = 0 },
+            identified: true,
             TestContext.Current.CancellationToken)));
     }
 
@@ -341,6 +491,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { Counter = 10 },
+            identified: true,
             TestContext.Current.CancellationToken)));
 
         Authenticator held =
@@ -423,6 +574,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnRelyingPartyChanged,
             Refusal(await Service.PresentAsync(
                 Assertion() with { RelyingPartyId = "example.net" },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -530,13 +682,61 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { UserHandle = WebAuthnService.Handle(subject) },
+            identified: true,
             TestContext.Current.CancellationToken)));
 
         Assert.Equal(
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserHandle = WebAuthnService.Handle(Without()) },
+                identified: true,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-PM-001 AC4: where the ceremony was opened for no named account, an assertion
+    /// that returns no user handle names nobody and is refused, where the same
+    /// assertion returning the handle is accepted.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_AnAssertionWithNoHandleIsRefusedWhereNoAccountWasNamedAsync()
+    {
+        SubjectId subject = Subject();
+
+        await EnrolledAsync(subject, Registration());
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion(),
+                identified: false,
+                TestContext.Current.CancellationToken)));
+        Assert.Null(Refusal(await Service.PresentAsync(
+            Assertion() with { UserHandle = WebAuthnService.Handle(subject), Counter = 0 },
+            identified: false,
+            TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-PM-001 AC4: a second-step security key answers a ceremony opened for the
+    /// account the sign-in named and returns no handle, and is judged as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_ASecondStepKeyWithNoHandleIsJudgedAsBeforeAsync()
+    {
+        _ = Value(await Service.CompleteAsync(
+            Subject(),
+            Factor.SecurityKey,
+            Label(),
+            Registration(),
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(Refusal(await Service.PresentAsync(
+            Assertion(),
+            identified: true,
+            TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -553,6 +753,25 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserHandle = "not-a-handle" },
+                identified: true,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-PM-001 and PRIV-RIGHT-005a AC18: a handle carrying the max UUID, which no
+    /// subject can be made from, names no account and is refused as a stranger's is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_AnAssertionWhoseHandleIsTheMaxUuidIsRefusedAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion() with { UserHandle = Base64Url.EncodeToString(Guid.AllBitsSet.ToByteArray(bigEndian: true)) },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -577,6 +796,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion(),
+                identified: true,
                 TestContext.Current.CancellationToken)));
 
     /// <summary>
@@ -590,7 +810,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         SubjectId subject = Without();
 
         Assert.Equal(
-            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.FactorPasswordRequired,
             Refusal(await Service.CompleteAsync(
                 subject,
                 Factor.SecurityKey,
@@ -652,6 +872,104 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.False(await SyncedAsync(bound));
     }
 
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a suspended key is judged as an active one would be. An
+    /// assertion that passes every check is refused <c>auth.credential.suspended</c>
+    /// and writes neither its counter nor its use, and one that fails a check is
+    /// refused as that check refuses an active key's.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_ASuspendedKeyIsRefusedSuspendedOnlyWhereItsAssertionIsAcceptedAsync()
+    {
+        AuthenticatorId id = await EnrolledAsync(Subject(), Registration() with { Counter = 9 });
+        Authenticator key = (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+        key.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? accepted = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 10 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+        ErrorCode? unverified = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 10, UserVerified = false },
+            identified: true,
+            TestContext.Current.CancellationToken));
+        ErrorCode? moved = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = 8 },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, accepted);
+        Assert.Equal(ErrorCodes.WebAuthnUserVerificationRequired, unverified);
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, moved);
+        Assert.Equal(9u, key.WebAuthn!.Counter);
+        Assert.Null(key.LastUsedAt);
+        Assert.False(_work.Open);
+        Assert.Single(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC9, AUTH-FACT-014 AC3: a suspended key goes through the counter
+    /// check an active one does, first. One whose counter did not advance, equal to the
+    /// stored one, below it, or nought against a stored one, is refused
+    /// <c>auth.webauthn.countermismatch</c> and audited as an active key's is, and is
+    /// told nothing of the suspension.
+    /// </summary>
+    /// <param name="counter">The counter the assertion carries, against a stored 9.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(9u)]
+    [InlineData(8u)]
+    [InlineData(0u)]
+    public async Task AUTH_RECOV_007_AC9_ASuspendedKeyWhoseCounterDidNotAdvanceIsRefusedACounterMismatchAsync(
+        uint counter)
+    {
+        SubjectId subject = Subject();
+        AuthenticatorId id = await EnrolledAsync(subject, Registration() with { Counter = 9 });
+        Authenticator key = (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+        key.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(
+            Assertion() with { Counter = counter },
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(
+            ("auth.credential.countermismatch", subject, id),
+            Assert.Single(_audit.Records.Select(record => (record.Item1.ToString(), record.Item2, record.Item3))));
+        Assert.Equal((9u, null), (key.WebAuthn!.Counter, key.LastUsedAt));
+        Assert.Equal((1, 0), (_work.Committed, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC2: a key suspended while its assertion waited for the lock is
+    /// refused <c>auth.credential.suspended</c>, and the refusal ends the unit of work
+    /// it was decided in with nothing committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC2_AKeySuspendedMeanwhileIsRefusedSuspendedAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+        _authenticators.Locking = credential => credential.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.PresentAsync(
+            Assertion(),
+            identified: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CredentialSuspended, refused);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_audit.Records);
+    }
+
     private static WebAuthnRegistration Registration() =>
         new(
             new byte[] { 1, 2, 3 },
@@ -662,6 +980,33 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             BackupEligible: false,
             BackupState: false,
             Counter: 0);
+
+    // What a browser sends back from a creation ceremony run at an origin: the client
+    // data carrying that origin, and authenticator data bound to the relying party.
+    private static AuthenticatorAttestation Attestation(string challenge, string origin, string relyingParty)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        byte[] clientData = JsonSerializer.SerializeToUtf8Bytes(
+            new Dictionary<string, string>(capacity: 3, StringComparer.Ordinal)
+            {
+                ["type"] = "webauthn.create",
+                ["challenge"] = challenge,
+                ["origin"] = origin,
+            });
+
+        byte[] authenticatorData = new byte[37];
+
+        SHA256.HashData(Encoding.UTF8.GetBytes(relyingParty)).CopyTo(authenticatorData, 0);
+        authenticatorData[32] = 0x05;
+
+        return new AuthenticatorAttestation(
+            Base64Url.EncodeToString(new byte[] { 1, 2, 3 }),
+            Base64Url.EncodeToString(clientData),
+            Base64Url.EncodeToString(authenticatorData),
+            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
+            Algorithm: -7);
+    }
 
     // REG-PM-001: the handle is the subject identifier; the two shown values are the
     // account's own primary email and display name.

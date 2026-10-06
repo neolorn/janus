@@ -31,6 +31,65 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
     private const string InsufficientPrivilege = "42501";
 
+    // OPS-MIG-003a AC5 (D-166, 135): every privilege two roles can hold on a schema, on
+    // a table, view, materialised view or sequence, on a column the role does not hold
+    // through its table, and on a function, in every schema of the database, with
+    // whether each role holds it, privileges held through PUBLIC counted, and whether
+    // the object is in the library's schema. Each line names the object, its kind
+    // first, and the right, as the serialized model lists them (AUTHZ-MODEL-005).
+    private const string Privileges =
+        """
+        SELECT 'SCHEMA ' || nspname || ' ' || right_held AS held,
+               nspname = 'identity' AS library,
+               has_schema_privilege(@maintenance, pg_namespace.oid, right_held) AS maintenance,
+               has_schema_privilege(@control, pg_namespace.oid, right_held) AS control
+        FROM pg_namespace,
+             unnest(ARRAY['USAGE', 'CREATE']) AS right_held
+        UNION ALL
+        SELECT CASE relkind
+                   WHEN 'v' THEN 'VIEW '
+                   WHEN 'm' THEN 'MATERIALIZED VIEW '
+                   WHEN 'S' THEN 'SEQUENCE '
+                   ELSE 'TABLE ' END
+               || nspname || '.' || relname || ' ' || right_held,
+               nspname = 'identity',
+               CASE relkind
+                   WHEN 'S' THEN has_sequence_privilege(@maintenance, pg_class.oid, right_held)
+                   ELSE has_table_privilege(@maintenance, pg_class.oid, right_held) END,
+               CASE relkind
+                   WHEN 'S' THEN has_sequence_privilege(@control, pg_class.oid, right_held)
+                   ELSE has_table_privilege(@control, pg_class.oid, right_held) END
+        FROM pg_class
+        JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+             unnest(CASE relkind
+                 WHEN 'S' THEN ARRAY['USAGE', 'SELECT', 'UPDATE']
+                 ELSE ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] END)
+                 AS right_held
+        WHERE relkind IN ('r', 'p', 'v', 'm', 'S')
+        UNION ALL
+        SELECT 'COLUMN ' || nspname || '.' || relname || '.' || attname || ' ' || right_held,
+               nspname = 'identity',
+               has_column_privilege(@maintenance, pg_class.oid, attnum, right_held)
+                   AND NOT has_table_privilege(@maintenance, pg_class.oid, right_held),
+               has_column_privilege(@control, pg_class.oid, attnum, right_held)
+                   AND NOT has_table_privilege(@control, pg_class.oid, right_held)
+        FROM pg_attribute
+        JOIN pg_class ON pg_class.oid = pg_attribute.attrelid
+        JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+             unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']) AS right_held
+        WHERE relkind IN ('r', 'p', 'v', 'm')
+          AND attnum > 0
+          AND NOT attisdropped
+        UNION ALL
+        SELECT 'FUNCTION ' || nspname || '.' || proname || '('
+               || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE',
+               nspname = 'identity',
+               has_function_privilege(@maintenance, pg_proc.oid, 'EXECUTE'),
+               has_function_privilege(@control, pg_proc.oid, 'EXECUTE')
+        FROM pg_proc
+        JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
+        """;
+
     /// <summary>
     /// PRIV-RET-002 AC1: an update or a delete of an audit row issued by the
     /// application is refused, and the insert and the read it does need are not.
@@ -209,13 +268,21 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
-    /// OPS-MIG-003a AC4: the maintenance role reads and writes the rotation's progress,
-    /// and of a table holding a value wrapped beside the subject keys it reaches the
-    /// row's key, the version and the wrapped value and no other column (entry 316 of
-    /// the decisions pending review).
+    /// OPS-MIG-003a AC4, OPS-SEC-003: the maintenance role reads and writes the rotation's
+    /// progress, and reaches no value wrapped under the deployment's data key, since the
+    /// rotation re-wraps rows of the subject-key table and nothing else (D-166, 316).
     /// </summary>
-    [Fact]
-    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheWrappedValuesAndNoOtherColumnAsync()
+    /// <param name="refusedStatement">A statement over a value beside the subject keys.</param>
+    [Theory]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.invitations")]
+    [InlineData("UPDATE identity.mailboxes SET wrapped_key = wrapped_key WHERE id = id")]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.registration_sessions")]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.send_outbox")]
+    [InlineData("SELECT count(private_key)::int FROM identity.signing_keys")]
+    [InlineData("SELECT count(signon_verifier)::int FROM identity.preauthentication_sessions")]
+    [InlineData("SELECT count(verifier)::int FROM identity.provider_attempts")]
+    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync(
+        string refusedStatement)
     {
         await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
 
@@ -223,14 +290,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             "SELECT count(*)::int FROM identity.key_rotations"));
         Assert.Equal(0, await connection.ExecuteAsync(
             "UPDATE identity.key_rotations SET processed = processed"));
-        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
-            "SELECT count(key_version)::int FROM identity.invitations"));
-        Assert.Equal(0, await connection.ExecuteAsync(
-            "UPDATE identity.signing_keys SET key_version = key_version WHERE key_id = key_id"));
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteScalarAsync<int>(
-                "SELECT count(enc_identifiers)::int FROM identity.invitations"));
+            await connection.ExecuteAsync(refusedStatement));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
 
@@ -245,8 +307,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     /// <summary>
     /// OPS-MIG-003a AC4, OPS-SEC-003 AC6: of a table holding a keyed fingerprint the
     /// maintenance role reaches what computing it again needs and no other column, and
-    /// of a ledger the version a line is hashed under and the line to forget, never the
-    /// hash (entry 318 of the decisions pending review).
+    /// of a ledger the version a line is hashed under, never the hash and never the line
+    /// to delete; it deletes unspent restriction credit and released username holds and
+    /// no other line (D-183).
     /// </summary>
     [Fact]
     public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync()
@@ -258,8 +321,14 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             UPDATE identity.identifiers SET fingerprint = fingerprint, fingerprint_version = fingerprint_version
             WHERE identifier_id = identifier_id AND subject = subject AND enc_canonical = enc_canonical
             """));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.throttle_counters WHERE fingerprint_version <> 1"));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.signin_challenges WHERE fingerprint_version <> 1"));
         Assert.Equal(0, await connection.ExecuteAsync(
-            "DELETE FROM identity.throttle_counters WHERE fingerprint_version <> 1"));
+            "DELETE FROM identity.send_grants WHERE fingerprint_version <> 1"));
+        Assert.Equal(0, await connection.ExecuteAsync(
+            "DELETE FROM identity.username_holds WHERE fingerprint_version <> 1 AND releases_at <= now()"));
 
         PostgresException withheld = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteScalarAsync<int>("SELECT count(enc_entered)::int FROM identity.identifiers"));
@@ -268,55 +337,81 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
         Assert.Equal(InsufficientPrivilege, withheld.SqlState);
         Assert.Equal(InsufficientPrivilege, hashed.SqlState);
+
+        foreach (string ledger in new[]
+        {
+            "callbacks", "nonexistence_notices", "registration_sources", "send_counters",
+            "send_key_counters", "sends", "signin_challenges", "throttle_counters",
+        })
+        {
+            PostgresException kept = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await connection.ExecuteAsync(
+                    $"DELETE FROM identity.{ledger} WHERE fingerprint_version <> 1"));
+
+            Assert.Equal(InsufficientPrivilege, kept.SqlState);
+        }
     }
 
     /// <summary>
-    /// OPS-MIG-003a AC2, AC4: what the serialized model lists for the maintenance
-    /// credential is what the database grants it, so the listing a reviewer reads
-    /// cannot drift from the migration that writes the grants.
+    /// OPS-MIG-003a AC2, AC4 and AC5, AUTHZ-MODEL-005 AC3: in the library's schema the
+    /// maintenance credential holds exactly what the serialized model lists, whether
+    /// granted to it or held through <c>PUBLIC</c>: on the schema, on every table, view,
+    /// materialised view and sequence and their columns, and on every function. The
+    /// listing a reviewer reads cannot drift from the migration that writes the grants.
     /// </summary>
     [Fact]
-    public async Task OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync()
+    public async Task OPS_MIG_003a_AC5_TheLibrarysSchemaHoldsExactlyTheListedGrantsAsync()
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         IEnumerable<string> held = await connection.QueryAsync<string>(
-            """
-            SELECT 'SCHEMA ' || nspname || ' ' || right_held
-            FROM pg_namespace,
-                 unnest(ARRAY['USAGE', 'CREATE']) AS right_held
-            WHERE nspname = 'identity'
-              AND has_schema_privilege('identity_maintenance', oid, right_held)
-            UNION ALL
-            SELECT 'TABLE identity.' || relname || ' ' || right_held
-            FROM pg_class
-            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
-                 unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS right_held
-            WHERE nspname = 'identity'
-              AND relkind IN ('r', 'p')
-              AND has_table_privilege('identity_maintenance', pg_class.oid, right_held)
-            UNION ALL
-            SELECT 'COLUMN identity.' || relname || '.' || attname || ' ' || right_held
-            FROM pg_attribute
-            JOIN pg_class ON pg_class.oid = pg_attribute.attrelid
-            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
-                 unnest(ARRAY['SELECT', 'INSERT', 'UPDATE']) AS right_held
-            WHERE nspname = 'identity'
-              AND relkind IN ('r', 'p')
-              AND attnum > 0
-              AND NOT attisdropped
-              AND has_column_privilege('identity_maintenance', pg_class.oid, attnum, right_held)
-              AND NOT has_table_privilege('identity_maintenance', pg_class.oid, right_held)
-            UNION ALL
-            SELECT 'FUNCTION identity.' || proname || '('
-                   || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE'
-            FROM pg_proc
-            JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
-            WHERE nspname = 'identity'
-              AND has_function_privilege('identity_maintenance', pg_proc.oid, 'EXECUTE')
-            """);
+            "SELECT held FROM (" + Privileges + ") AS privileges WHERE library AND maintenance",
+            new { maintenance = "identity_maintenance", control = "identity_maintenance" });
 
         Assert.Equal(Listed().Order(StringComparer.Ordinal), held.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// OPS-MIG-003a AC5, D-183: in every other schema of the database the maintenance
+    /// credential holds exactly what a role granted nothing holds, <c>USAGE</c> on
+    /// <c>public</c> among it, which is the database's and the host's and which the
+    /// library's migrations neither list nor revoke. A host's own schema is among them.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003a_AC5_OutsideTheLibrarysSchemaTheRoleHoldsWhatARoleGrantedNothingHoldsAsync()
+    {
+        string control = "identity_control_" + Guid.NewGuid().ToString("n")[..12];
+        string host = "host_" + Guid.NewGuid().ToString("n")[..12];
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(
+            $"""
+            CREATE ROLE {control};
+            CREATE SCHEMA {host};
+            CREATE TABLE {host}.orders (id uuid PRIMARY KEY, placed_at timestamptz NOT NULL);
+            CREATE SEQUENCE {host}.order_numbers;
+            CREATE VIEW {host}.recent_orders AS SELECT id FROM {host}.orders;
+            CREATE FUNCTION {host}.order_count() RETURNS bigint LANGUAGE sql AS 'SELECT 0::bigint';
+            """);
+
+        try
+        {
+            IEnumerable<string> differing = await connection.QueryAsync<string>(
+                "SELECT held FROM (" + Privileges + ") AS privileges WHERE NOT library AND maintenance <> control",
+                new { maintenance = "identity_maintenance", control });
+            IEnumerable<string> everyRole = await connection.QueryAsync<string>(
+                "SELECT held FROM (" + Privileges + ") AS privileges WHERE NOT library AND control",
+                new { maintenance = "identity_maintenance", control });
+
+            Assert.Empty(differing);
+            Assert.Contains("SCHEMA public USAGE", everyRole);
+            Assert.Contains("FUNCTION " + host + ".order_count() EXECUTE", everyRole);
+        }
+        finally
+        {
+            await connection.ExecuteAsync($"DROP SCHEMA {host} CASCADE; DROP ROLE {control};");
+        }
     }
 
     /// <summary>

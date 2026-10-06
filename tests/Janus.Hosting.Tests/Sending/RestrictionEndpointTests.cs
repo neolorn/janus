@@ -66,6 +66,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
 
         Assert.Equal("destination", email.GetProperty("key").GetString());
         Assert.Equal("any", email.GetProperty("purpose").GetString());
+        Assert.Equal("email", email.GetProperty("channel").GetString());
 
         JsonElement fixedBucket = email.GetProperty("buckets")[1];
 
@@ -75,8 +76,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004: one restriction reads by its name, and a name no restriction has
-    /// is a malformed request naming <c>name</c>.
+    /// AUTH-ABUSE-004: one restriction reads by its name.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -85,12 +85,9 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit);
 
         Answer read = await administrator.SendAsync("GET", "/admin/restrictions/notification.destination");
-        Answer unknown = await administrator.SendAsync("GET", "/admin/restrictions/no.such.restriction");
 
         Assert.Equal(StatusCodes.Status200OK, read.Status);
         Assert.Equal("notification", read.Text("purpose"));
-        Assert.Equal(StatusCodes.Status400BadRequest, unknown.Status);
-        Assert.Equal("name", unknown.Json().GetProperty("details").GetProperty("member").GetString());
     }
 
     /// <summary>
@@ -131,7 +128,8 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-004 AC3: a tightening from a session that has proved itself recently
-    /// takes effect, needs no reason, and is announced.
+    /// takes effect with its reason and needs no <c>system:administer</c>, and is
+    /// announced.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -139,7 +137,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     {
         Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit);
 
-        Answer edited = await EditedAsync(administrator, Tighter, reason: null);
+        Answer edited = await EditedAsync(administrator, Tighter, "a flood from one range");
 
         Assert.Equal(StatusCodes.Status204NoContent, edited.Status);
         Assert.Equal(2, (await SmsDestinationAsync()).Buckets[0].Maximum);
@@ -158,7 +156,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Answer edited = await EditedAsync(administrator, Looser, reason: null);
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, edited.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), edited.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), edited.Text("code"));
         Assert.Equal(3, (await SmsDestinationAsync()).Buckets[0].Maximum);
     }
 
@@ -196,6 +194,41 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Assert.Contains(
             _deployment.Events.Of<AlertRaised>(),
             alert => alert.Condition is AlertCondition.RestrictionLoosened);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC3 and chapter 10 section 5.15a: narrowing a restriction to one
+    /// channel lets the other channel's sends through, so it is a loosening, which
+    /// <c>restriction:edit</c> alone is refused and which with <c>system:administer</c>
+    /// and a reason takes effect and is announced as one; a channel outside the
+    /// vocabulary is a malformed request naming <c>channel</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC3_NarrowingAChannelIsALooseningAsync()
+    {
+        Browser editor = await AuthorisedAsync(Permissions.RestrictionEdit);
+
+        Answer refused = await NarrowedAsync(editor, "sms");
+        Answer unreadable = await NarrowedAsync(editor, "fax");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal("channel", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
+
+        _deployment.Gate.Grant(
+            _deployment.Directory.Created[^1].Subject,
+            Administration,
+            Permissions.SystemAdminister);
+
+        Answer narrowed = await NarrowedAsync(editor, "sms");
+
+        Assert.Equal(StatusCodes.Status204NoContent, narrowed.Status);
+        Assert.Equal(
+            RestrictionChannel.Sms,
+            (await InForceAsync()).Single(one => one.Name == "notification.destination").Channel);
+        Assert.True(Assert.Single(_deployment.Events.Of<SendingRestrictionChanged>()).Loosening);
     }
 
     /// <summary>
@@ -283,23 +316,165 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004: deleting a name no restriction has changes nothing and is a
-    /// malformed request naming <c>name</c>.
+    /// AUTH-ABUSE-004, D-166: a path naming a restriction the set does not hold is a
+    /// record not found, whether it is read, deleted or granted under, and nothing
+    /// changes; a credit at or below zero under a restriction the set holds stays a
+    /// value the set does not admit.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_004_DeletingAnUnknownNameIsMalformedAsync()
+    public async Task AUTH_ABUSE_004_AnUnknownNameIsNotFoundAsync()
     {
-        Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit, Permissions.SystemAdminister);
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
 
+        Answer read = await administrator.SendAsync("GET", "/admin/restrictions/no.such.restriction");
         Answer deleted = await administrator.SendAsync(
             "DELETE",
             "/admin/restrictions/no.such.restriction",
             ("reason", "a tidy set"));
+        Answer granted = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/no.such.restriction/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", "their carrier dropped both codes"));
+        Answer spent = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/sms.destination/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 0),
+            ("reason", "their carrier dropped both codes"));
 
-        Assert.Equal(StatusCodes.Status400BadRequest, deleted.Status);
-        Assert.Equal("name", deleted.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.All(
+            new[] { read, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status404NotFound, answer.Status);
+                Assert.Equal(ErrorCodes.RestrictionNotFound.ToString(), answer.Text("code"));
+            });
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), spent.Text("code"));
         Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004, chapter 09 section 8, D-183: a path naming a restriction outside
+    /// the rule of a restriction's name is a request the boundary does not read, refused
+    /// naming <c>name</c> on every route that takes one, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ANameOutsideItsRuleIsMalformedOnEveryRouteAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+
+        Answer read = await administrator.SendAsync("GET", "/admin/restrictions/No..Such");
+        Answer edited = await administrator.SendAsync(
+            "PUT",
+            "/admin/restrictions/No..Such",
+            ("key", "destination"),
+            ("buckets", Tighter),
+            ("reason", "a tidy set"));
+        Answer deleted = await administrator.SendAsync(
+            "DELETE",
+            "/admin/restrictions/No..Such",
+            ("reason", "a tidy set"));
+        Answer granted = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/No..Such/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", "their carrier dropped both codes"));
+
+        Assert.All(
+            new[] { read, edited, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+                Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code"));
+                Assert.Equal("name", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3, chapter 09 section 8 (D-187): the name is bound from the route as
+    /// a restriction's name, so a name outside the rule is answered naming <c>name</c>
+    /// before any body is read: a body that is no JSON, and one whose member does not
+    /// read, are never named.
+    /// </summary>
+    /// <param name="body">A body the endpoint cannot read.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("{")]
+    [InlineData("""{ "key": 7, "buckets": "none", "credit": "three" }""")]
+    public async Task INT_SMS_003_AC3_ANameOutsideItsRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+
+        Answer edited = await administrator.SendAsync("PUT", "/admin/restrictions/No..Such", body);
+        Answer deleted = await administrator.SendAsync("DELETE", "/admin/restrictions/No..Such", body);
+        Answer granted = await administrator.SendAsync("POST", "/admin/restrictions/No..Such/grant", body);
+
+        Assert.All(
+            new[] { edited, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+                Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code"));
+                Assert.Equal("name", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
+    /// API-CONV-002, CONV-CODE-006 AC2, D-166: a reason past 1024 characters after
+    /// trimming is a request the boundary does not read, refused naming it at the edit,
+    /// the deletion and the grant, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AReasonPastItsLengthIsMalformedAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+        string overlong = new('r', 1025);
+
+        Answer edited = await EditedAsync(administrator, Looser, overlong);
+        Answer deleted = await administrator.SendAsync(
+            "DELETE",
+            "/admin/restrictions/sms.source",
+            ("reason", overlong));
+        Answer granted = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/sms.destination/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", overlong));
+
+        Assert.All(
+            new[] { edited, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+                Assert.Equal("reason", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Contains(await InForceAsync(), one => one.Name == "sms.source");
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 
     /// <summary>
@@ -343,7 +518,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("credit", 3));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreasoned.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), unreasoned.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), unreasoned.Text("code"));
         Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 
@@ -387,7 +562,43 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("reason", null));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreasoned.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), unreasoned.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), unreasoned.Text("code"));
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses an edit, a deletion and a grant, and the
+    /// set and the credit stay as they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAnEditADeletionAndAGrantAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+        IReadOnlyList<Restriction> before = await InForceAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => EditedAsync(administrator, Tighter, "fewer texts"));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", "/admin/restrictions/sms.source", ("reason", "a load test")));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "POST",
+                "/admin/restrictions/sms.destination/grant",
+                ("keyValue", "+201001234567"),
+                ("credit", 3),
+                ("reason", "their carrier dropped both codes")));
+
+        Assert.Equal(before, await InForceAsync());
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
         Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 
@@ -398,6 +609,17 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("key", "destination"),
             ("buckets", buckets),
             ("reason", reason));
+
+    // notification.destination as it ships, but for the channel given.
+    private static Task<Answer> NarrowedAsync(Browser browser, string channel) =>
+        browser.SendAsync(
+            "PUT",
+            "/admin/restrictions/notification.destination",
+            ("key", "destination"),
+            ("purpose", "notification"),
+            ("channel", channel),
+            ("buckets", new object[] { new { max = 5, interval = "PT24H", window = "sliding" } }),
+            ("reason", "texts only"));
 
     private async Task<Restriction> SmsDestinationAsync() =>
         (await InForceAsync()).Single(one => one.Name == "sms.destination");

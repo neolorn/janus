@@ -93,19 +93,23 @@ public sealed class ModelTests
             // Standing: the state and the two windows `01` section 4 gives it, with
             // what the terms step wrote down of the age answer, the affirmation
             // derived from it and the versions accepted (REG-PROF-002, REG-SESS-007),
-            // and the mark of the one reserved account (OPS-BOOT-002).
+            // what a deletion or a suspension holds of the state it left (IDN-LIFE-003,
+            // PRIV-RIGHT-004), and the mark of the one reserved account (OPS-BOOT-002).
             "accounts.adult_affirmed",
             "accounts.age_group",
             "accounts.answered_age_at",
             "accounts.created_at",
             "accounts.deleting_by",
             "accounts.deleting_since",
+            "accounts.deletion_held",
+            "accounts.deletion_held_since",
             "accounts.emergency",
             "accounts.notice_version",
             "accounts.restriction_held",
             "accounts.state",
             "accounts.subject",
             "accounts.suspended_by",
+            "accounts.suspension_held",
             "accounts.terms_version",
 
             // Not an account field: the alert ledger of OPS-ALERT-002, holding one row
@@ -124,9 +128,11 @@ public sealed class ModelTests
 
             // Standing: the event record of IDN-AUD-001, with the attribute column
             // PRIV-RET-002 puts an event's personal field in and the principal and
-            // reason IDN-PRIN-001 records an action of background work under.
+            // reason IDN-PRIN-001 records an action of background work under, and the
+            // data subject a record concerns (IDN-AUD-001, D-166).
             "audit_records.acting_subject",
             "audit_records.action",
+            "audit_records.breakglass_reason",
             "audit_records.category",
             "audit_records.details",
             "audit_records.effective_subject",
@@ -136,6 +142,7 @@ public sealed class ModelTests
             "audit_records.organization",
             "audit_records.principal",
             "audit_records.principal_reason",
+            "audit_records.subject",
 
             // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
             // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011 and
@@ -196,10 +203,12 @@ public sealed class ModelTests
             "bulk_exports.principal",
 
             // Not an account field: a host callback's provider events, each claimed once
-            // by the hash of the provider's identifier (BFF-MACH-002).
+            // by the hash of the provider's identifier and settled once carried
+            // (BFF-MACH-002).
             "callback_events.callback",
             "callback_events.claimed_at",
             "callback_events.identifier",
+            "callback_events.settled_at",
 
             // Not an account field: the correlation references issued for a host's
             // unsigned callbacks, each held by its hash (INT-GEN-003, BFF-MACH-003).
@@ -221,13 +230,15 @@ public sealed class ModelTests
             "compliance_records.assessment_links",
             "compliance_records.data_owner",
             "compliance_records.id",
-            "compliance_records.organisational_measures",
+            "compliance_records.organizational_measures",
             "compliance_records.updated_at",
 
-            // Not an account field: what the subject consented to, against which version
-            // of the notice and where they said it (PRIV-CONS-001). Nothing here is
+            // Not an account field: what the subject consented to, against which document
+            // and version and where they said it (PRIV-CONS-001). Nothing here is
             // deleted: a withdrawal is a timestamp, because the record is the evidence.
+            "consents.document",
             "consents.granted_at",
+            "consents.id",
             "consents.kind",
             "consents.mechanism",
             "consents.notice_version",
@@ -259,6 +270,7 @@ public sealed class ModelTests
             // Not an account field: an emitted event waiting for the consumers the host
             // registered, and marked once they have it (LIB-API-001, CONV-DESIGN-002).
             "events.attempts",
+            "events.claimed_until",
             "events.failed_at",
             "events.id",
             "events.kind",
@@ -329,6 +341,7 @@ public sealed class ModelTests
             "identifier_removals.identifier_id",
             "identifier_removals.is_locked",
             "identifier_removals.kind",
+            "identifier_removals.removal_id",
             "identifier_removals.removed_at",
             "identifier_removals.subject",
             "identifier_removals.undo_fingerprint",
@@ -339,6 +352,7 @@ public sealed class ModelTests
             // REG-IDENT-007, REG-SESS-003).
             "identifier_verifications.browser",
             "identifier_verifications.enc_staged",
+            "identifier_verifications.enrolment",
             "identifier_verifications.identifier_id",
             "identifier_verifications.is_replacement",
             "identifier_verifications.link",
@@ -376,7 +390,6 @@ public sealed class ModelTests
             "invitations.invitee",
             "invitations.inviter",
             "invitations.issued_at",
-            "invitations.key_version",
             "invitations.mailbox",
             "invitations.organization",
             "invitations.revoked_at",
@@ -403,6 +416,16 @@ public sealed class ModelTests
             "key_rotations.retired_at",
             "key_rotations.started_at",
             "key_rotations.version",
+
+            // Not an account field: the lawful bases the host declared, each with the
+            // properties the library branches on, written whole at every start
+            // (PRIV-BASIS-001).
+            "lawful_bases.is_consent",
+            "lawful_bases.is_objectable",
+            "lawful_bases.key",
+            "lawful_bases.label",
+            "lawful_bases.requires_assessment",
+            "lawful_bases.requires_written_consent_for_sensitive",
 
             // Not an account field: the legal documents the deployment publishes, each
             // version binding in the one language it names (PRIV-CONS-005,
@@ -448,20 +471,21 @@ public sealed class ModelTests
             // Not an account field: a staff mailbox the library provisions, its address
             // under its holder's key and found by its fingerprint, and the push it owes
             // the mail server (INT-MAIL-006, INT-MAIL-007).
+            "mailboxes.attempted",
             "mailboxes.attempts",
             "mailboxes.canonicalisation_version",
+            "mailboxes.claimed_until",
             "mailboxes.enc_canonical",
             "mailboxes.failed_at",
             "mailboxes.fingerprint",
             "mailboxes.fingerprint_version",
             "mailboxes.holder",
             "mailboxes.id",
-            "mailboxes.key_version",
             "mailboxes.next_attempt_at",
             "mailboxes.pending",
             "mailboxes.pending_key",
             "mailboxes.pushed",
-            "mailboxes.released_at",
+            "mailboxes.removal_owed_at",
             "mailboxes.reserved_at",
             "mailboxes.retired_at",
             "mailboxes.wrapped_key",
@@ -493,6 +517,8 @@ public sealed class ModelTests
 
             // Not an account field: the purposes on an objectable basis the subject has
             // objected to (PRIV-RIGHT-001a).
+            "objections.document",
+            "objections.id",
             "objections.mechanism",
             "objections.notice_version",
             "objections.purpose",
@@ -521,6 +547,7 @@ public sealed class ModelTests
             "oidc_clients.redirect",
             "oidc_clients.scopes",
             "oidc_clients.secret",
+            "oidc_clients.secret_issued_at",
             "oidc_scopes.description",
             "oidc_scopes.descriptions",
             "oidc_scopes.display_name",
@@ -568,6 +595,7 @@ public sealed class ModelTests
             // Not an account field: one fact about a subject the host has its own half
             // of, and each subscriber's confirmation of it (IDN-LIFE-003a).
             "outbox.attempts",
+            "outbox.claimed_until",
             "outbox.id",
             "outbox.kind",
             "outbox.next_attempt_at",
@@ -606,7 +634,6 @@ public sealed class ModelTests
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
-            "preauthentication_sessions.signon_key_version",
             "preauthentication_sessions.signon_return",
             "preauthentication_sessions.signon_state",
             "preauthentication_sessions.signon_verifier",
@@ -629,6 +656,7 @@ public sealed class ModelTests
             "privacy_requests.escalated_at",
             "privacy_requests.id",
             "privacy_requests.identity_confirmation",
+            "privacy_requests.receipt_sent_at",
             "privacy_requests.received_at",
             "privacy_requests.status",
             "privacy_requests.subject",
@@ -653,7 +681,6 @@ public sealed class ModelTests
             "provider_attempts.created_at",
             "provider_attempts.id",
             "provider_attempts.intent",
-            "provider_attempts.key_version",
             "provider_attempts.nonce",
             "provider_attempts.preauthentication",
             "provider_attempts.provider",
@@ -664,11 +691,13 @@ public sealed class ModelTests
 
             // Not an account field: a raised condition waiting for the alert channels,
             // removed once they carry it (OPS-ALERT-001).
+            "raised_alerts.claimed_until",
             "raised_alerts.condition",
             "raised_alerts.details",
             "raised_alerts.id",
             "raised_alerts.idempotency_key",
             "raised_alerts.raised_at",
+            "raised_alerts.scope",
 
             // Not an account field: the records each person was given by day and each
             // person's daily mean, by identifier alone and forgotten once older than
@@ -706,6 +735,7 @@ public sealed class ModelTests
             // Not an account field: a recovery link, answered to by what it fingerprints
             // to, and, once spent, the enrolment session it opened (AUTH-RECOV-002).
             "recovery_links.approver",
+            "recovery_links.codes_shown_at",
             "recovery_links.expires_at",
             "recovery_links.issued_at",
             "recovery_links.mailbox_lost",
@@ -726,7 +756,6 @@ public sealed class ModelTests
             "registration_sessions.enc_session",
             "registration_sessions.expires_at",
             "registration_sessions.id",
-            "registration_sessions.key_version",
             "registration_sessions.provisional_subject",
             "registration_sessions.wrapped_key",
 
@@ -755,26 +784,29 @@ public sealed class ModelTests
             "roles.name",
 
             // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
-            // restriction key with the times counted against it, and the credit support
-            // kept apart from them.
+            // restriction key with the times counted against it, a destination's apart
+            // from every other key's, and the credit support kept apart from them.
             "send_counters.fingerprint_version",
             "send_counters.key",
             "send_counters.sent_at",
             "send_grants.credit",
             "send_grants.fingerprint_version",
             "send_grants.key",
+            "send_key_counters.fingerprint_version",
+            "send_key_counters.key",
+            "send_key_counters.sent_at",
 
             // The messages undertaken and not yet carried (D-022), each the whole of
             // what is to be sent under a key of the row's own, so that removing the row
             // removes the message with it (IDN-PRIN-003, PRIV-RIGHT-005a).
             "send_outbox.attempts",
+            "send_outbox.claimed_until",
             "send_outbox.enc_message",
             "send_outbox.id",
-            "send_outbox.key_version",
             "send_outbox.next_attempt_at",
             "send_outbox.recorded_at",
+            "send_outbox.reference",
             "send_outbox.subject",
-            "send_outbox.taken_languages",
             "send_outbox.wrapped_key",
 
             // Not an account field: the message a transport took (AUTH-ABUSE-004,
@@ -785,15 +817,24 @@ public sealed class ModelTests
             "sends.reference",
             "sends.sent_at",
             "sends.settles_at",
+            "sends.spent",
+            "sends.spent_versions",
 
-            // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
-            // fingerprint of its secret (AUTH-SESS-003), and where it was used from with
-            // the place under the key (AUTH-SESS-013).
+            // Sessions: the spine of AUTH-SESS-001, the instant it last reached each level
+            // and phishing resistance (AUTH-SESS-001, AUTH-SESS-002), the
+            // fingerprint of its secret (AUTH-SESS-003), where it was used from with
+            // the place under the key (AUTH-SESS-013), the client a registration
+            // captured (REG-SESS-008), and when it was last downgraded (AUTH-SESS-009).
+            "sessions.aal1_at",
+            "sessions.aal2_at",
+            "sessions.aal3_at",
             "sessions.absolute_expiry",
-            "sessions.attained",
-            "sessions.attained_at",
+            "sessions.breakglass_reason",
+            "sessions.client",
             "sessions.created_at",
             "sessions.csrf_fingerprint",
+            "sessions.delegated_at",
+            "sessions.downgraded_at",
             "sessions.ended_at",
             "sessions.id",
             "sessions.idle_expiry",
@@ -804,7 +845,6 @@ public sealed class ModelTests
             "sessions.origin_browser",
             "sessions.origin_os",
             "sessions.origin_place",
-            "sessions.phishing_resistant",
             "sessions.phishing_resistant_at",
             "sessions.satisfies_every_gate",
             "sessions.secret_fingerprint",
@@ -833,8 +873,12 @@ public sealed class ModelTests
 
             // Not an account field: a link or a code the library sent for a sign-in,
             // one per account per catalogue entry, spent on presentation
-            // (AUTH-FACT-016, REG-SESS-003), with the email it went to (REG-DOM-001).
+            // (AUTH-FACT-016, REG-SESS-003), with the email it went to (REG-DOM-001) and,
+            // for a second step's code, the sign-in or step-up it answers (AUTH-FACT-002)
+            // and the credential it was issued for (AUTH-FACT-004).
             "signin_links.browser",
+            "signin_links.challenge",
+            "signin_links.credential",
             "signin_links.email",
             "signin_links.enc_code",
             "signin_links.expires_at",
@@ -849,11 +893,15 @@ public sealed class ModelTests
             // AUTH-KEY-002).
             "signing_keys.algorithm",
             "signing_keys.created_at",
+            "signing_keys.is_current",
+            "signing_keys.is_next",
+            "signing_keys.kept_until",
             "signing_keys.key_id",
-            "signing_keys.key_version",
+            "signing_keys.longest_lifetime",
             "signing_keys.private_key",
             "signing_keys.public_key",
             "signing_keys.retires_at",
+            "signing_keys.signing_from",
             "signing_keys.superseded_at",
 
             // Not an account field: what the gateway last said its prepaid account stood

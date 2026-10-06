@@ -24,7 +24,9 @@ internal sealed class ExportConfiguration : IEntityTypeConfiguration<ExportRecor
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_privacy_exports_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(export => export.Id).HasName("pk_privacy_exports");
 

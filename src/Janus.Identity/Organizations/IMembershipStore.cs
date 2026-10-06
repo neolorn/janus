@@ -26,6 +26,31 @@ internal interface IMembershipStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads every membership an account holds, ended ones included, under a lock on
+    /// each row held until the operation's transaction ends, so an end decided on one
+    /// cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose memberships to read.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The memberships as committed when the locks were taken, oldest first.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<Membership>> FindBySubjectForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads every membership of an organization, ended ones included, under a lock on
+    /// each row held until the operation's transaction ends (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The memberships as committed when the locks were taken, oldest first.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<Membership>> FindByOrganizationForUpdateAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads every membership of an organization, ended ones included.
     /// </summary>
     /// <param name="organization">Which organization.</param>

@@ -10,9 +10,11 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
+using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Privacy.Consents;
 using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -333,10 +335,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-GATE-005 AC1 (D-162): a page asked for three permissions costs one
-    /// statement over the host's rows, not one for each of them. What the derivation's
-    /// role confers is model data, mapped where the model is, so the answer names the
-    /// one permission the reviewer's role allows and the cost does not follow the
+    /// AUTHZ-GATE-005 AC1 (D-162, D-166): a page asked for three permissions costs one
+    /// statement over the host's rows, not one for each of them, and the library's own
+    /// connection reads no grant and no ancestry beside it. What the derivation's role
+    /// confers is model data, mapped where the model is, so the answer names the one
+    /// permission the reviewer's role allows and the cost does not follow the
     /// permissions asked for.
     /// </summary>
     /// <returns>The work of running it.</returns>
@@ -353,6 +356,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
         await using HostContext reading = host.Context(counted);
+        using var traced = new TracedStatements();
 
         IReadOnlyList<Capability> page = Rendered(
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -366,6 +370,111 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         Assert.Equal([HostPermissions.Read], Assert.Single(page).Can);
         Assert.Equal(1, counted.Statements);
+        Assert.Equal(1, GrantReads(traced));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-005 AC1, AUTHZ-DERIVE-002 AC1 (D-166): on a page of fifty records a
+    /// derivation admits, a stored deny on one of them is decided in the same one
+    /// statement over the host's rows: the permission is absent from that record and
+    /// present on the others, as the single check with the host's rows answers each.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC1_AStoredDenyAndADerivationAreDecidedInOneStatementAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        List<ResourceId> page = [];
+
+        for (int record = 0; record < 50; record++)
+        {
+            ResourceReference reference = Reference(Document);
+            await nested.Deployment.RegisterAsync(reference, nested.Bottom, cancellationToken);
+            page.Add(reference.Id);
+        }
+
+        ResourceId denied = page[17];
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            new ResourceReference(Document, denied),
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        var counted = new CountedCommands();
+        IReadOnlyList<Capability> capabilities;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        await using (HostContext reading = host.Context(counted))
+        {
+            capabilities = Rendered(
+                await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .CapabilitiesAsync(
+                        AccessContext.Of(nested.Account),
+                        Document,
+                        page,
+                        [HostPermissions.Read],
+                        Sources(reading),
+                        cancellationToken));
+        }
+
+        Assert.Equal(1, counted.Statements);
+        Assert.Equal(page, capabilities.Select(capability => capability.Resource));
+
+        foreach (Capability capability in capabilities)
+        {
+            bool held = capability.Can.Contains(HostPermissions.Read);
+
+            Assert.Equal(capability.Resource != denied, held);
+            Assert.Equal(held, await ChecksAsync(nested.Account, new ResourceReference(Document, capability.Resource)));
+        }
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-001 (D-166): a single check with the host's rows is decided by one
+    /// statement in the host's context, stored grants and derivation together, and the
+    /// library's own connection reads no grant and no ancestry.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_001_ACheckWithTheHostsRowsReadsNoGrantThroughTheLibraryAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        var counted = new CountedCommands();
+        Result outcome;
+        int grantReads;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        await using (HostContext reading = host.Context(counted))
+        {
+            using var traced = new TracedStatements();
+
+            outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(nested.Account),
+                    HostPermissions.Read,
+                    nested.Record,
+                    Sources(reading),
+                    cancellationToken);
+            grantReads = GrantReads(traced);
+        }
+
+        Assert.True(outcome.Match(() => true, _ => false));
+        Assert.Equal(1, counted.Statements);
+        Assert.Equal(1, grantReads);
     }
 
     /// <summary>
@@ -457,35 +566,169 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals that name no acting subject are
-    /// counted together, so a run of them raises <c>denial-spike</c> with no scope.
+    /// AUTHZ-GATE-004, AUTHZ-CONCEAL-004 AC4, D-166: a refusal made inside a transaction
+    /// the caller rolls back is still recorded, resolves by its identifier, and counts
+    /// toward <c>alerting.denials.threshold</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC4_ADenialInsideATransactionThatRollsBackIsStillRecordedAndCountedAsync()
+    {
+        Nested nested = await NestAsync();
+        var refused = new List<AuditRecordId>();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            refused.Add(await RefusedInRolledBackWorkAsync(nested));
+        }
+
+        Assert.Equal(refused.Count, await DenialsRecordedAsync(nested.Account));
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IAccessAudit audit = scope.ServiceProvider.GetRequiredService<IAccessAudit>();
+
+            foreach (AuditRecordId correlation in refused)
+            {
+                DeniedAccess? found = await audit.FindAsync(correlation, TestContext.Current.CancellationToken);
+
+                Assert.Equal(nested.Account, found?.Acting);
+            }
+        }
+
+        Assert.Equal(0, await SpikesAsync(nested.Account));
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC4, CONV-DESIGN-002 AC5, D-183: the refusal that takes its
+    /// actor's count past <c>alerting.denials.threshold</c> inside a transaction the
+    /// caller rolls back raises <c>denial-spike</c>, with its <c>AlertRaised</c> row,
+    /// whatever the caller's outcome.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC4_ASpikeRaisedInsideATransactionThatRollsBackStandsAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        Assert.Equal((0, 0), (await SpikesAsync(nested.Account), await AnnouncedAsync(nested.Account)));
+
+        _ = await RefusedInRolledBackWorkAsync(nested);
+
+        Assert.Equal((1, 1), (await SpikesAsync(nested.Account), await AnnouncedAsync(nested.Account)));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC6, AUTHZ-CONCEAL-004: two refusals of one actor made at once are
+    /// counted one after the other, the actor's refusals being held while each is
+    /// counted, so the one that passes the threshold raises the spike.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC6_TwoRefusalsAtOnceAreCountedOneAfterTheOtherAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default - 1; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        bool[] admitted = await Task.WhenAll(
+            ChecksAsync(nested.Account, nested.Record),
+            ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal([false, false], admitted);
+        Assert.Equal(Settings.AlertingDenialsThreshold.Default + 1, await DenialsRecordedAsync(nested.Account));
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-009a, D-166: a grant in the administrative organization confers nothing
+    /// on an account holding no current membership of it, and the same grant confers
+    /// once the account holds one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AnAdministrativeGrantConfersNothingWithoutAMembershipAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            role,
+            null,
+            false,
+            null,
+            administrative,
+            cancellationToken);
+
+        Assert.False(await HeldAsync(account, administrative));
+
+        await deployment.MemberAsync(account, administrative, cancellationToken);
+
+        Assert.True(await HeldAsync(account, administrative));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals recording the nil subject and no
+    /// principal are counted as one actor, so a run of them raises <c>denial-spike</c>
+    /// naming that subject.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync()
     {
         Nested nested = await NestAsync();
+        int before = await SpikesAsync(default(SubjectId).ToString());
 
         for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
         {
-            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
-            await using HostContext reading = host.Context();
-
-            Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-                .RequireAsync(
-                    AccessContext.Of(SystemPrincipal.ForOrganization(
-                        "import",
-                        "the nightly import",
-                        nested.Deployment.Organization)),
-                    HostPermissions.Read,
-                    nested.Record,
-                    Sources(reading),
-                    TestContext.Current.CancellationToken);
-
-            Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
+            Assert.False(await ChecksAsync(default, nested.Record));
         }
 
-        Assert.NotEqual(0, await SpikesAsync(null));
+        Assert.Equal(before + 1, await SpikesAsync(default(SubjectId).ToString()));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1, D-183: a system principal's refusals are counted
+    /// by its name, so each principal is an actor of its own: one job's refusals neither
+    /// raise another's spike nor hide in it, and the alert names the job.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_APrincipalsRefusalsAreCountedByItsNameAsync()
+    {
+        Nested nested = await NestAsync();
+        string runaway = "import-" + Guid.NewGuid().ToString("n")[..8];
+        string other = "export-" + Guid.NewGuid().ToString("n")[..8];
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            await RefusedAsWorkAsync(runaway, nested);
+        }
+
+        await RefusedAsWorkAsync(other, nested);
+
+        Assert.Equal((0, 0), (await SpikesAsync(runaway), await SpikesAsync(other)));
+
+        await RefusedAsWorkAsync(runaway, nested);
+
+        Assert.Equal((1, 0), (await SpikesAsync(runaway), await SpikesAsync(other)));
     }
 
     /// <summary>
@@ -758,13 +1001,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// BFF-CAP-002 AC2: a permission the model does not declare, asked for beside one
-    /// it does, is in no capability's <c>can</c> and no <c>requires</c>, even where a
-    /// stored role allows it, and what is declared is answered as it is alone.
+    /// BFF-CAP-002 AC2, AUTHZ-PRIN-003 AC1: a permission the model does not declare,
+    /// asked for beside one it does, is no capability of any response: the page raises
+    /// even where a stored role allows it, and answers nothing.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_CAP_002_AC2_AnUndeclaredPermissionAppearsInNoCapabilityAsync()
+    public async Task BFF_CAP_002_AC2_AnUndeclaredPermissionIsRaisedAndAnsweredInNoCapabilityAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var undeclared = Permission.Parse("document:share");
@@ -786,7 +1029,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
         await using HostContext reading = host.Context();
 
-        Capability capability = Assert.Single(Rendered(
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .CapabilitiesAsync(
                     AccessContext.Of(nested.Account),
@@ -794,10 +1037,50 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     [nested.Record.Id],
                     [HostPermissions.Read, undeclared],
                     Sources(reading),
-                    cancellationToken)));
+                    cancellationToken));
+    }
 
-        Assert.Equal([HostPermissions.Read], capability.Can);
-        Assert.Empty(capability.Requires);
+    /// <summary>
+    /// CONV-ERR-001 AC3, AUTHZ-PRIN-003 AC1: a permission the model does not declare,
+    /// named by the calling code at a request, raises at every gate entry point that
+    /// takes one, before the gate reads anything of the caller or records a refusal, so
+    /// a restricted caller meets the same fault as any other.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_ERR_001_AC3_AnUndeclaredPermissionRaisesAtTheRequestBeforeTheGateReadsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+        var undeclared = Permission.Parse("document:share");
+        var context = AccessContext.Of(nested.Account);
+        OrganizationId organization = nested.Deployment.Organization;
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Func<Task>[] asking =
+        [
+            async () => await gate.RequireAsync(context, undeclared, nested.Record, cancellationToken),
+            async () => await gate.RequireAsync(context, undeclared, nested.Record, Sources(reading), cancellationToken),
+            async () => await gate.RequireAsync(context, undeclared, organization, cancellationToken),
+            async () => await gate.FilterAsync(context, undeclared, Document, organization, Sources(reading), cancellationToken),
+            async () => await gate.FragmentAsync(context, undeclared, Document, organization, "document", "id", cancellationToken),
+            async () => await gate.ExplainAsync(context, undeclared, nested.Record, cancellationToken),
+            async () => await gate.ExplainAsync(context, undeclared, nested.Record, Sources(reading), cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, Document, [nested.Record.Id], [undeclared], cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, Document, [nested.Record.Id], [undeclared], Sources(reading), cancellationToken),
+        ];
+
+        foreach (Func<Task> asked in asking)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(asked);
+        }
+
+        Assert.Equal(0, await DenialsRecordedAsync(nested.Account));
     }
 
     /// <summary>
@@ -1242,10 +1525,156 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Assert.Contains(derived.Id.ToString(), listed, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// PRIV-SENS-002 AC1, AC5, AUTHZ-GATE-002 AC4: a list for an action bound to a
+    /// consent-based purpose admits the records whose data subject consented and no
+    /// other, through the expression and the fragment alike, while the list for an
+    /// action resting on another basis admits them all.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002_AC1_AListAdmitsOnlyTheRecordsWhoseSubjectsConsentedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Recommend]);
+        SubjectId giving = await nested.Deployment.AccountAsync(cancellationToken);
+        SubjectId withholding = await nested.Deployment.AccountAsync(cancellationToken);
+        ResourceReference given = Reference(Document);
+        ResourceReference withheld = Reference(Document);
+
+        await nested.Deployment.RegisterAsync(given, nested.Bottom, cancellationToken, giving);
+        await nested.Deployment.RegisterAsync(withheld, nested.Bottom, cancellationToken, withholding);
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account), nested.Role, nested.Top, false, null, null, cancellationToken);
+        await ConsentedAsync(giving);
+
+        await using HostContext reading = host.Context();
+
+        Assert.Equal(3, (await ListedAsync(nested, reading)).Count);
+        Assert.Equal([given.Id.ToString()], await ListedAsync(nested, reading, HostPermissions.Recommend));
+        Assert.Equal([given.Id.ToString()], await ListedByFragmentAsync(nested, HostPermissions.Recommend));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002a AC2, AC3, PRIV-SENS-002 AC5: a withdrawal takes the record out of
+    /// the next list for the consent-based purpose, through the expression and the
+    /// fragment alike, and leaves it in the list for the purpose resting on another
+    /// basis.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002a_AC2_AWithdrawalRemovesTheRecordFromTheNextListAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Recommend]);
+        SubjectId giving = await nested.Deployment.AccountAsync(cancellationToken);
+        ResourceReference given = Reference(Document);
+
+        await nested.Deployment.RegisterAsync(given, nested.Bottom, cancellationToken, giving);
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account), nested.Role, nested.Top, false, null, null, cancellationToken);
+        await ConsentedAsync(giving);
+
+        await using HostContext reading = host.Context();
+
+        IReadOnlyList<string> before = await ListedAsync(nested, reading, HostPermissions.Recommend);
+
+        await WithdrawnAsync(giving);
+
+        Assert.Equal([given.Id.ToString()], before);
+        Assert.Empty(await ListedAsync(nested, reading, HostPermissions.Recommend));
+        Assert.Empty(await ListedByFragmentAsync(nested, HostPermissions.Recommend));
+        Assert.Contains(given.Id.ToString(), await ListedAsync(nested, reading), StringComparer.Ordinal);
+    }
+
+    // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
+    // sensitive type, recorded for its data subject against the privacy notice.
+    private async Task ConsentedAsync(SubjectId subject)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        Assert.True(await scope.ServiceProvider.GetRequiredService<IConsentStore>().AddAsync(
+            subject,
+            new ConsentRecord(
+                "recommendations",
+                "privacy-notice",
+                "1",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Written,
+                Deployment.Noon,
+                WithdrawnAt: null,
+                SupersededAt: null),
+            cancellationToken));
+
+        await work.CommitAsync(cancellationToken);
+    }
+
+    private async Task WithdrawnAsync(SubjectId subject)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        Assert.True(await scope.ServiceProvider.GetRequiredService<IConsentStore>().WithdrawConsentAsync(
+            subject,
+            "recommendations",
+            Deployment.Noon.AddHours(1),
+            cancellationToken));
+
+        await work.CommitAsync(cancellationToken);
+    }
+
+    // The same listing through the fragment, composed into a hand-written query over
+    // the host's own table.
+    private async Task<IReadOnlyList<string>> ListedByFragmentAsync(Nested nested, Permission permission)
+    {
+        SqlFilter fragment;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .FragmentAsync(
+                    AccessContext.Of(nested.Account),
+                    permission,
+                    Document,
+                    nested.Deployment.Organization,
+                    "identity_authz_row",
+                    "id",
+                    TestContext.Current.CancellationToken));
+        }
+
+        var arguments = new DynamicParameters();
+
+        foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
+        {
+            arguments.Add(parameter.Key, parameter.Value);
+        }
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT identity_authz_row.id FROM host.documents AS identity_authz_row WHERE " + fragment.Text + ";",
+            arguments,
+            cancellationToken: TestContext.Current.CancellationToken))];
+    }
+
     // What a listing over the host's own table returns with the filter applied, which
     // is the path a derivation is evaluated through (D-160): the rows of the host's
     // relation are the host's, and its context executes the composed query.
-    private async Task<IReadOnlyList<string>> ListedAsync(Nested nested, HostContext reading)
+    private async Task<IReadOnlyList<string>> ListedAsync(
+        Nested nested,
+        HostContext reading,
+        Permission? permission = null)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
 
@@ -1253,7 +1682,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .FilterAsync(
                     AccessContext.Of(nested.Account),
-                    HostPermissions.Read,
+                    permission ?? HostPermissions.Read,
                     Document,
                     nested.Deployment.Organization,
                     Sources(reading),
@@ -1287,7 +1716,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     // What the host supplies from its own context, the same object every path on a
     // type with a derivation takes (D-161).
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
@@ -1454,6 +1883,173 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Assert.False(await ChecksAsync(nested.Account, nested.Record, HostPermissions.Edit));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after a modifying action passed the
+    /// gate step refuses it where the gate is asked again inside the action's unit of
+    /// work, on a record and on the account's own settings alike, and a reading action
+    /// stays admitted.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedAfterTheGateStepRefusesInsideTheUnitOfWorkAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+        ISettingsRestriction settings = scope.ServiceProvider.GetRequiredService<ISettingsRestriction>();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var context = AccessContext.Of(nested.Account);
+
+        Assert.True((await gate.RequireAsync(
+                context, HostPermissions.Edit, nested.Record, Sources(reading), cancellationToken))
+            .Match(() => true, _ => false));
+        Assert.Null(await settings.RefusedAsync(context, cancellationToken));
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            (await gate.RequireAsync(context, HostPermissions.Edit, nested.Record, Sources(reading), cancellationToken))
+                .Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.Restricted, (await settings.RefusedAsync(context, cancellationToken))?.Code);
+        Assert.True((await gate.RequireAsync(
+                context, HostPermissions.Read, nested.Record, Sources(reading), cancellationToken))
+            .Match(() => true, _ => false));
+
+        await work.RollbackAsync();
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction begun while an admitted action holds the row
+    /// waits for that action to commit, a host's action in a unit of work it opened
+    /// included, and decides the account's next action.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionBegunWhileAnAdmittedActionHoldsTheRowWaitsForItAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Task restricted;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            await using HostContext reading = host.Context();
+
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            _ = await work.BeginAsync(cancellationToken);
+
+            Assert.True((await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(
+                        AccessContext.Of(nested.Account),
+                        HostPermissions.Edit,
+                        nested.Record,
+                        Sources(reading),
+                        cancellationToken))
+                .Match(() => true, _ => false));
+
+            restricted = nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+            await WaitingOnTheAccountAsync(cancellationToken);
+
+            Assert.False(restricted.IsCompleted);
+
+            _ = await work.CommitAsync(cancellationToken);
+        }
+
+        await restricted.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Edit));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006: a reading action is refused by no restriction, so inside a unit
+    /// of work it holds no row and a restriction does not wait for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AReadingActionInsideAUnitOfWorkHoldsNoRowAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Assert.True((await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(nested.Account),
+                    HostPermissions.Read,
+                    nested.Record,
+                    Sources(reading),
+                    cancellationToken))
+            .Match(() => true, _ => false));
+
+        await nested.Deployment
+            .RestrictAsync(nested.Account, cancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+
+        await work.RollbackAsync();
+    }
+
+    // A statement is waiting on a lock of the accounts table, as the database itself
+    // reports it, so the case lets the holder commit only then.
+    private async Task WaitingOnTheAccountAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(TimeSpan.FromSeconds(30));
+
+        while (await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                   "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%identity.accounts%'",
+                   cancellationToken: bounded.Token)) == 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), bounded.Token);
+        }
+    }
+
     private async Task<Capability> CapabilityAsync(Nested nested)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
@@ -1493,7 +2089,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             proved,
             TimeSpan.FromDays(7),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
 
@@ -1534,7 +2130,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         return await scope.ServiceProvider
             .GetRequiredService<ISettingsRestriction>()
-            .RefusedAsync(account, TestContext.Current.CancellationToken);
+            .RefusedAsync(AccessContext.Of(account), TestContext.Current.CancellationToken);
     }
 
     private async Task<ErrorCode?> RefusalAsync(
@@ -1580,7 +2176,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             new { account = account.Value });
     }
 
-    private async Task<int> SpikesAsync(SubjectId? account)
+    private async Task<int> SpikesAsync(SubjectId account) => await SpikesAsync(account.ToString());
+
+    // The spikes raised for one actor: an account by its identifier, background work by
+    // its principal's name.
+    private async Task<int> SpikesAsync(string actor)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -1589,7 +2189,89 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             SELECT count(*)::int FROM identity.raised_alerts
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
-            new { key = Alerts.Key(AlertCondition.DenialSpike, account?.ToString()) + "@%" });
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, actor) + "@%" });
+    }
+
+    // The AlertRaised rows the library announced for one account's spike, as the rows of
+    // its events table (OPS-ALERT-001, CONV-DESIGN-002).
+    private async Task<int> AnnouncedAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->>'IdempotencyKey' LIKE @key
+            """,
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account.ToString()) + "@%" });
+    }
+
+    // One refusal of background work acting for the deployment's organization under the
+    // name given.
+    private async Task RefusedAsWorkAsync(string principal, Nested nested)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(SystemPrincipal.ForOrganization(
+                    principal,
+                    "the nightly import",
+                    nested.Deployment.Organization)),
+                HostPermissions.Read,
+                nested.Record,
+                Sources(reading),
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
+    }
+
+    // The statements of every connection that read the grants or the ancestry, which
+    // with the host's rows are the host's own and none of the library's.
+    private static int GrantReads(TracedStatements traced) =>
+        traced.Texts.Count(text =>
+            text.Contains("effective_grants", StringComparison.Ordinal)
+            || text.Contains("ancestry", StringComparison.Ordinal));
+
+    // An organization-wide check, as an administrative operation makes it.
+    private async Task<bool> HeldAsync(SubjectId account, OrganizationId organization)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(account),
+                HostPermissions.Read,
+                organization,
+                TestContext.Current.CancellationToken);
+
+        return outcome.Match(() => true, _ => false);
+    }
+
+    // A refusal inside a unit of work the caller then abandons, which rolls it back.
+    private async Task<AuditRecordId> RefusedInRolledBackWorkAsync(Nested nested)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().BeginAsync(cancellationToken);
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(nested.Account),
+                HostPermissions.Read,
+                nested.Record,
+                Sources(reading),
+                cancellationToken);
+
+        Error refusal = outcome.Match(
+            () => throw new Xunit.Sdk.XunitException("The check was not refused."),
+            error => error);
+
+        return new AuditRecordId(refusal.Details["correlation"].GetGuid());
     }
 
     private async Task<bool> ChecksAsync(

@@ -119,34 +119,106 @@ internal static class CallbackIntake
         ILogger log,
         CancellationToken cancellationToken)
     {
+        Error refused = await CountedAsync(context, callback, check, admission, work, log, cancellationToken)
+            .ConfigureAwait(false);
+
+        await Refusal.WriteAsync(context, refused, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Counts and records one refusal and ends its unit of work, leaving the answer to
+    /// a caller whose provider expects a shape of its own.
+    /// </summary>
+    /// <param name="context">The request.</param>
+    /// <param name="callback">The callback's name.</param>
+    /// <param name="check">The check that refused it.</param>
+    /// <param name="admission">What counts rejections and raises the alert.</param>
+    /// <param name="work">The transaction the count is kept in.</param>
+    /// <param name="log">Where the refusal is recorded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// <c>integration.callback.rejected</c> where the refusal was counted, or the
+    /// failure that kept it from being counted.
+    /// </returns>
+    public static async ValueTask<Error> CountedAsync(
+        HttpContext context,
+        string callback,
+        CallbackCheck check,
+        CallbackAdmission admission,
+        IUnitOfWork work,
+        ILogger log,
+        CancellationToken cancellationToken)
+    {
         CallbackLog.Refused(log, callback, check, context.TraceIdentifier);
 
         Result rejected = await admission
             .RejectAsync(RequestOrigin.Source(context.Request), cancellationToken)
             .ConfigureAwait(false);
 
+        Error refused = rejected.Match(() => Error.From(ErrorCodes.CallbackRejected), error => error);
+
+        await EndedAsync(refused, work, cancellationToken).ConfigureAwait(false);
+
+        return refused;
+    }
+
+    /// <summary>
+    /// Refuses a callback that arrived carrying the browser's session cookie, inside
+    /// the transaction the caller opened: the callback is counted against its source
+    /// first, as every callback is, and within the rate limit the refusal is counted as
+    /// a rejection and answered as one.
+    /// </summary>
+    /// <param name="context">The request.</param>
+    /// <param name="admission">What counts callbacks and rejections and raises the alert.</param>
+    /// <param name="work">The transaction the counts are kept in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of answering it.</returns>
+    /// <remarks>Implements BFF-MACH-001 criterion 2 and INT-GEN-003 criterion 4.</remarks>
+    public static async ValueTask CookieRefusedAsync(
+        HttpContext context,
+        CallbackAdmission admission,
+        IUnitOfWork work,
+        CancellationToken cancellationToken)
+    {
+        string source = RequestOrigin.Source(context.Request);
+
+        Result admitted = await admission.AdmitAsync(source, cancellationToken).ConfigureAwait(false);
+        Result refused = admitted.Match(() => true, _ => false)
+            ? await admission.RejectAsync(source, cancellationToken).ConfigureAwait(false)
+            : admitted;
+
         await AnsweredAsync(
                 context,
-                rejected.Match(() => Error.From(ErrorCodes.CallbackRejected), error => error),
+                refused.Match(() => Error.From(ErrorCodes.CallbackRejected), error => error),
                 work,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    // The counts are kept whenever the callback was answered as rejected; any other
-    // failure leaves the transaction to roll back with the request's scope.
     private static async ValueTask AnsweredAsync(
         HttpContext context,
         Error error,
         IUnitOfWork work,
         CancellationToken cancellationToken)
     {
-        if (error.Code == ErrorCodes.CallbackRejected)
-        {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
+        await EndedAsync(error, work, cancellationToken).ConfigureAwait(false);
 
         await Refusal.WriteAsync(context, error, cancellationToken).ConfigureAwait(false);
+    }
+
+    // The counts are kept whenever the callback was answered as rejected; any other
+    // failure rolls the transaction back before it is answered.
+    private static async ValueTask EndedAsync(Error error, IUnitOfWork work, CancellationToken cancellationToken)
+    {
+        if (error.Code == ErrorCodes.CallbackRejected)
+        {
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+        else
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+        }
     }
 
     private static bool Within(IPAddress? address, IReadOnlyCollection<IPNetwork> sources)

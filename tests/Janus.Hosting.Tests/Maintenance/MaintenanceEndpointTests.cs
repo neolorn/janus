@@ -46,19 +46,15 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Answer replaced = await browser.SendAsync(
             "PUT",
             "/admin/compliance/licences",
-            (
-                "licences",
-                new object[]
+            Listed(
+                new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
+                new
                 {
-                    new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
-                    new
-                    {
-                        id = Premises,
-                        kind = "permit",
-                        name = "Premises permit",
-                        expiresAt = now.AddMonths(5),
-                        renewedAt = now.AddMonths(-7),
-                    },
+                    id = Premises,
+                    kind = "permit",
+                    name = "Premises permit",
+                    expiresAt = now.AddMonths(5),
+                    renewedAt = now.AddMonths(-7),
                 }));
 
         Assert.Equal(StatusCodes.Status204NoContent, replaced.Status);
@@ -124,7 +120,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Answer unnamed = await browser.SendAsync(
             "PUT",
             "/admin/compliance/licences",
-            ("licences", new object[] { new { id = Operating, kind = "lease", name = "Lease", expiresAt = now } }));
+            Listed(new { id = Operating, kind = "lease", name = "Lease", expiresAt = now }));
 
         Assert.Equal(StatusCodes.Status400BadRequest, unnamed.Status);
         Assert.Equal("kind", unnamed.Json().GetProperty("details").GetProperty("member").GetString());
@@ -137,6 +133,44 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status400BadRequest, unknown.Status);
         Assert.Equal("task", unknown.Json().GetProperty("details").GetProperty("member").GetString());
+
+        Assert.Empty(await _deployment.Maintenance.LicencesAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(_deployment.Maintenance.Log);
+    }
+
+    /// <summary>
+    /// OPS-MAINT-001 (D-166, 323): two licences under one identifier and a task dated
+    /// after now are well formed and refused on what they mean, each invalid at its
+    /// member, and nothing is stored.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_MAINT_001_ARequestRefusedOnItsMeaningIsInvalidAtItsMemberAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer restated = await browser.SendAsync(
+            "PUT",
+            "/admin/compliance/licences",
+            Listed(
+                new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
+                new { id = Operating, kind = "licence", name = "Restated", expiresAt = now.AddYears(3) }));
+
+        Answer ahead = await browser.SendAsync(
+            "POST",
+            "/admin/compliance/maintenance",
+            ("task", "approver-review"),
+            ("performedAt", now.AddDays(1)));
+
+        foreach ((Answer answer, string member) in new[] { (restated, "id"), (ahead, "performedAt") })
+        {
+            JsonElement body = answer.Json();
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+            Assert.Equal("api.request.invalid", body.GetProperty("code").GetString());
+            Assert.Equal(member, body.GetProperty("details").GetProperty("member").GetString());
+        }
 
         Assert.Empty(await _deployment.Maintenance.LicencesAsync(TestContext.Current.CancellationToken));
         Assert.Empty(_deployment.Maintenance.Log);
@@ -161,7 +195,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
             (await browser.SendAsync(
                 "PUT",
                 "/admin/compliance/licences",
-                ("licences", Array.Empty<object>()))).Status);
+                Listed())).Status);
         Assert.Equal(
             StatusCodes.Status403Forbidden,
             (await browser.SendAsync("GET", "/admin/compliance/maintenance")).Status);
@@ -176,6 +210,66 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Maintenance.Log);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a note past 1024 characters after
+    /// trimming, or a blank one, is malformed before the service is reached, so a
+    /// caller without the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_ANoteOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        foreach (string note in new[] { "   ", " " + new string('n', 1025) + " " })
+        {
+            Answer answer = await browser.SendAsync(
+                "POST",
+                "/admin/compliance/maintenance",
+                ("task", "approver-review"),
+                ("performedAt", now),
+                ("note", note));
+
+            Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+            Assert.Equal("note", answer.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(_deployment.Maintenance.Log);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the replacing of the licences and the recording of
+    /// a task, and neither is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesBothRecordsAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                "/admin/compliance/licences",
+                Listed(new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) })));
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                "/admin/compliance/maintenance",
+                ("task", "envelope-rotation"),
+                ("performedAt", now.AddDays(-1)),
+                ("note", "Rotated with the release.")));
+
+        Assert.Empty((await browser.SendAsync("GET", "/admin/compliance/licences")).Json().GetProperty("licences").EnumerateArray());
+        Assert.Empty(_deployment.Maintenance.Log);
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
@@ -186,4 +280,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
 
         return browser;
     }
+
+    // 09 section 8a: the body of the route is the list of records itself.
+    private static string Listed(params object[] licences) => JsonSerializer.Serialize(licences);
 }

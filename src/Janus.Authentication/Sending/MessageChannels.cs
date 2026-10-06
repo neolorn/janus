@@ -9,10 +9,11 @@ namespace Janus.Authentication.Sending;
 /// a template for in every configured language.
 /// </summary>
 /// <remarks>
-/// Implements INT-SMS-001, AUTH-ABUSE-003, AUTH-ABUSE-005 and REG-MAIL-001. Two
+/// Implements INT-SMS-001, AUTH-ABUSE-003, AUTH-ABUSE-005 and REG-MAIL-001. Three
 /// messages are mail alone: the answer to a request made for an address no account
-/// holds, which is sent to an address and never to a number (AUTH-ABUSE-003), and an
-/// invitation's link, which goes to the email the invitation binds.
+/// holds, which is sent to an address and never to a number (AUTH-ABUSE-003), an
+/// invitation's link, which goes to the email the invitation binds, and the
+/// <c>emailCode</c> sign-in code, which is not among the uses INT-SMS-001 admits.
 /// </remarks>
 internal static class MessageChannels
 {
@@ -26,6 +27,7 @@ internal static class MessageChannels
     public static IReadOnlyList<MessageKind> Messages { get; } =
     [
         MessageKind.VerificationCode,
+        MessageKind.VerificationLink,
         MessageKind.SignInLink,
         MessageKind.SecondStepCode,
         MessageKind.SecurityNotice,
@@ -46,6 +48,9 @@ internal static class MessageChannels
         MessageKind.DeletionNotice,
         MessageKind.InvitationLink,
         MessageKind.RecoveryCodesReminder,
+        MessageKind.SignInCode,
+        MessageKind.CredentialSuspended,
+        MessageKind.OobDeletionNotice,
     ];
 
     /// <summary>
@@ -66,6 +71,8 @@ internal static class MessageChannels
         MessageKind.DeactivationNotice,
         MessageKind.DeletionNotice,
         MessageKind.RecoveryCodesReminder,
+        MessageKind.CredentialSuspended,
+        MessageKind.OobDeletionNotice,
     ]);
 
     /// <summary>
@@ -73,13 +80,31 @@ internal static class MessageChannels
     /// whether each carries a link. Which entry one amounts to follows from that and
     /// the channel it goes out on (AUTH-FACT-016); no property tells a message that
     /// authenticates from one that verifies, so the one place that is written is here.
+    /// A recovery link is among them: by text it reaches a number as a sign-in link
+    /// does, so the carrier's signal is asked about it the same way (AUTH-FACT-002b).
     /// </summary>
     public static FrozenDictionary<MessageKind, bool> Factors { get; } = FrozenDictionary
         .ToFrozenDictionary<MessageKind, bool>(
         [
             new KeyValuePair<MessageKind, bool>(MessageKind.SignInLink, true),
             new KeyValuePair<MessageKind, bool>(MessageKind.SecondStepCode, false),
+            new KeyValuePair<MessageKind, bool>(MessageKind.RecoveryLink, true),
         ]);
+
+    /// <summary>
+    /// The messages that answer an ask of a sign-in link, an email code or a recovery,
+    /// the notice to an address no account holds among them. The ask is answered before
+    /// any transport is called, whether its message is sent or not, so none of these has
+    /// an attempt inside the request: the outbox publisher carries each (AUTH-ABUSE-003,
+    /// AUTH-ABUSE-004).
+    /// </summary>
+    public static FrozenSet<MessageKind> AnsweredFirst { get; } = FrozenSet.ToFrozenSet(
+    [
+        MessageKind.SignInLink,
+        MessageKind.SignInCode,
+        MessageKind.RecoveryLink,
+        MessageKind.NoAccount,
+    ]);
 
     /// <summary>
     /// The channels one message goes out on.
@@ -87,5 +112,7 @@ internal static class MessageChannels
     /// <param name="message">The message.</param>
     /// <returns>Its channels.</returns>
     public static IReadOnlyList<SendKind> Of(MessageKind message) =>
-        message is MessageKind.NoAccount or MessageKind.InvitationLink ? MailAlone : Both;
+        message is MessageKind.NoAccount or MessageKind.InvitationLink or MessageKind.SignInCode
+            ? MailAlone
+            : Both;
 }

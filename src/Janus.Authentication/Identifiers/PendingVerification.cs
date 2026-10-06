@@ -1,25 +1,31 @@
 using System;
+using System.Security.Cryptography;
 using Janus.Authentication.Registration;
 using Janus.Core;
 
 namespace Janus.Authentication.Identifiers;
 
 /// <summary>
-/// An identifier of a live account waiting to be proved: the one an add staged
-/// unverified, or the value a replace will swap in when it proves.
+/// A value a live account is waiting to prove: the one an add will write as an
+/// identifier when it verifies, or the one a replace will swap in. It holds the value
+/// until then, and the account holds no identifier for it.
 /// </summary>
 /// <remarks>
 /// Implements REG-IDENT-004, REG-IDENT-007 and REG-SESS-003. The verification itself
 /// is the registration's, unchanged: the same code, the same link, the same five
 /// tries, and the same rule that a link pressed anywhere but the browser that staged
 /// it proves nothing. What this adds is whose it is, which browser staged it, and,
-/// for a replace, whether the address being displaced has still to confirm.
+/// for a replace, which enrolment session staged it where one did and whether the
+/// address being displaced has still to confirm.
 /// </remarks>
 internal sealed class PendingVerification
 {
+    private const int UuidLength = 16;
+
     private PendingVerification(
         SubjectId subject,
         SessionId? browser,
+        EnrolmentSessionId? enrolment,
         StagedIdentity staged,
         bool isReplacement,
         bool oldMustConfirm,
@@ -27,11 +33,18 @@ internal sealed class PendingVerification
     {
         Subject = subject;
         Browser = browser;
+        Enrolment = enrolment;
         Staged = staged;
         IsReplacement = isReplacement;
         OldMustConfirm = oldMustConfirm;
         StagedAt = stagedAt;
     }
+
+    /// <summary>
+    /// What follows the UUID's bytes in the holder of a confirmation's record: the name
+    /// of the link that asks for the confirmation, as <c>10</c> spells it.
+    /// </summary>
+    public static ReadOnlySpan<byte> ConfirmationName => "identifier-confirm"u8;
 
     /// <summary>
     /// Whose identifier is waiting.
@@ -44,6 +57,13 @@ internal sealed class PendingVerification
     /// session staged it and no browser holds a session at all (AUTH-RECOV-002).
     /// </summary>
     public SessionId? Browser { get; }
+
+    /// <summary>
+    /// The enrolment session that staged the replace, which is the only enrolment
+    /// session its code is taken from, and nothing where a session staged it
+    /// (AUTH-RECOV-002, REG-IDENT-007).
+    /// </summary>
+    public EnrolmentSessionId? Enrolment { get; }
 
     /// <summary>
     /// The value being proved, with what was sent to prove it.
@@ -91,7 +111,43 @@ internal sealed class PendingVerification
         Staged.IsVerified && (!OldMustConfirm || OldConfirmedAt is not null);
 
     /// <summary>
-    /// Stages the verification of an identifier the account has just taken on.
+    /// The holder of the verification-code record a pending verification's code is
+    /// answered from: the SHA-256 of its UUID's sixteen bytes in the order of RFC 9562,
+    /// which is what the sweep computes in the database (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="identifier">The identifier the pending verification is held under.</param>
+    /// <returns>The holder.</returns>
+    public static byte[] CodeHolder(IdentifierId identifier)
+    {
+        Span<byte> named = stackalloc byte[UuidLength];
+
+        _ = identifier.Value.TryWriteBytes(named, bigEndian: true, out _);
+
+        return SHA256.HashData(named);
+    }
+
+    /// <summary>
+    /// The holder of the record the displaced address's confirmation of a replace is
+    /// held in, which is one of its own beside the new address's code: the SHA-256 of
+    /// the same sixteen bytes followed by the name of the link that asks for it
+    /// (REG-IDENT-007, AUTH-FACT-004).
+    /// </summary>
+    /// <param name="identifier">The identifier the pending verification is held under.</param>
+    /// <returns>The holder.</returns>
+    public static byte[] ConfirmationHolder(IdentifierId identifier)
+    {
+        ReadOnlySpan<byte> confirmation = ConfirmationName;
+        Span<byte> named = stackalloc byte[UuidLength + confirmation.Length];
+
+        _ = identifier.Value.TryWriteBytes(named, bigEndian: true, out _);
+        confirmation.CopyTo(named[UuidLength..]);
+
+        return SHA256.HashData(named);
+    }
+
+    /// <summary>
+    /// Stages the verification of a value the account is adding, under the identifier
+    /// the verified identifier then keeps (REG-IDENT-004).
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="browser">The session it was added from.</param>
@@ -110,6 +166,7 @@ internal sealed class PendingVerification
         return new PendingVerification(
             subject,
             browser,
+            enrolment: null,
             staged,
             isReplacement: false,
             oldMustConfirm: false,
@@ -125,6 +182,10 @@ internal sealed class PendingVerification
     /// The session the replace was made from, or nothing where an enrolment session
     /// made it.
     /// </param>
+    /// <param name="enrolment">
+    /// The enrolment session the replace was made from, or nothing where a session made
+    /// it.
+    /// </param>
     /// <param name="staged">The new value, under the identifier it will replace.</param>
     /// <param name="oldMustConfirm">
     /// Whether the address being displaced has to confirm, which is so only where the
@@ -136,6 +197,7 @@ internal sealed class PendingVerification
     public static PendingVerification ToReplace(
         SubjectId subject,
         SessionId? browser,
+        EnrolmentSessionId? enrolment,
         StagedIdentity staged,
         bool oldMustConfirm,
         DateTimeOffset stagedAt)
@@ -145,6 +207,7 @@ internal sealed class PendingVerification
         return new PendingVerification(
             subject,
             browser,
+            enrolment,
             staged,
             isReplacement: true,
             oldMustConfirm,
@@ -157,6 +220,7 @@ internal sealed class PendingVerification
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="browser">The session it was staged from.</param>
+    /// <param name="enrolment">The enrolment session it was staged from.</param>
     /// <param name="staged">The value being proved.</param>
     /// <param name="isReplacement">Whether proving it swaps a value.</param>
     /// <param name="oldMustConfirm">Whether the displaced address has to confirm.</param>
@@ -168,6 +232,7 @@ internal sealed class PendingVerification
     public static PendingVerification Existing(
         SubjectId subject,
         SessionId? browser,
+        EnrolmentSessionId? enrolment,
         StagedIdentity staged,
         bool isReplacement,
         bool oldMustConfirm,
@@ -177,7 +242,7 @@ internal sealed class PendingVerification
     {
         ArgumentNullException.ThrowIfNull(staged);
 
-        return new PendingVerification(subject, browser, staged, isReplacement, oldMustConfirm, stagedAt)
+        return new PendingVerification(subject, browser, enrolment, staged, isReplacement, oldMustConfirm, stagedAt)
         {
             OldConfirmedAt = oldConfirmedAt,
             OldLink = oldLink,

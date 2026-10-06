@@ -28,15 +28,24 @@ public interface IConsents
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records a consent for one purpose, against the notice version current now.
+    /// Records a consent for one purpose, against the notice version current now, as
+    /// a record of its own. Where the subject holds a live record the purpose admits,
+    /// nothing is recorded or raised; a live record the purpose no longer admits is
+    /// stamped superseded by the grant that replaces it.
     /// </summary>
     /// <param name="context">Whose consent.</param>
     /// <param name="purpose">Which purpose, and only one.</param>
-    /// <param name="mechanism">Where it was given.</param>
+    /// <param name="mechanism">
+    /// Where it was given. A grant named <see cref="ConsentMechanism.Dashboard"/> over
+    /// a consent the subject holds superseded and not withdrawn, or over a live one
+    /// the purpose no longer admits, is recorded as
+    /// <see cref="ConsentMechanism.Reconsent"/>; every other is recorded as named.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: a purpose the declaration does not carry, or one
-    /// whose basis is not consent.
+    /// Success, a grant over a live record the purpose admits included, or the
+    /// refusal: a purpose the declaration does not carry, or one whose basis is not
+    /// consent.
     /// </returns>
     ValueTask<Result> GrantAsync(
         AccessContext context,
@@ -67,15 +76,18 @@ public interface IConsents
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records an objection to one purpose, which is always honoured.
+    /// Records an objection to one purpose, which is always honoured, as a record of
+    /// its own. Where the subject's objection to the purpose stands, nothing is
+    /// recorded or raised.
     /// </summary>
     /// <param name="context">Whose objection.</param>
     /// <param name="purpose">Which purpose.</param>
     /// <param name="mechanism">Where it was recorded.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or <c>privacy.purpose.notobjectable</c> where the purpose's basis
-    /// carries no right to object.
+    /// Success, an objection while one stands included, or
+    /// <c>privacy.purpose.notobjectable</c> where the purpose's basis carries no right
+    /// to object.
     /// </returns>
     ValueTask<Result> ObjectAsync(
         AccessContext context,
