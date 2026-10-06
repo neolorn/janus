@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A fault of the sign-on over the deployment's own state names what failed in the
+  fault's log entry, read by its correlation identifier. A client secret or the
+  authentication application's published keys that cannot be read make a fault
+  carrying the code and the details their read answered (a configuration read that
+  failed, or a unit of work that could not begin or commit), where the entry kept a
+  type and frames alone before. An identity token that does not hold up makes a
+  fault carrying the validation's own fault as its inner fault, whose type names
+  the check that failed (signature, issuer, audience or lifetime), kept by type and
+  frames and never by message.
 - A fault of the sign-on is logged at Error and at no other level. A client secret
   that cannot be read, at the push and at the exchange, the authentication
   application's published keys that cannot be read, and an identity token that does

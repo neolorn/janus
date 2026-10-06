@@ -14,6 +14,7 @@ using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -410,6 +411,10 @@ public sealed class SignOnTests
 
         Faulted(faulted);
         Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.StartupDeclarationMissing,
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
         Assert.Empty(deployment.Provider.Asked);
         Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
     }
@@ -438,6 +443,10 @@ public sealed class SignOnTests
 
         Faulted(faulted);
         Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.StartupDeclarationMissing,
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             deployment.Provider.Asked,
             asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
@@ -504,8 +513,23 @@ public sealed class SignOnTests
 
         Answer faulted = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
 
+        // BFF-ERR-002 AC2: the validation's own fault is kept beneath the sign-on's, by
+        // its type, which names the check that failed, and never by its message.
+        Type check = fails switch
+        {
+            "signature" => typeof(SecurityTokenInvalidSignatureException),
+            "issuer" => typeof(SecurityTokenInvalidIssuerException),
+            "audience" => typeof(SecurityTokenInvalidAudienceException),
+            _ => typeof(SecurityTokenInvalidLifetimeException),
+        };
+        string kept = Kept(deployment, faulted);
+
         Faulted(faulted);
         Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, kept, StringComparison.Ordinal);
+        Assert.Contains("inner " + check.FullName, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain("IDX", kept, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not hold up", kept, StringComparison.Ordinal);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
@@ -577,6 +601,89 @@ public sealed class SignOnTests
         Assert.Equal(Settings.TokenSigningRotation.Key, deployment.Configuration.Unread);
         Faulted(faulted);
         Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.StartupDeclarationMissing,
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5 and BFF-ERR-002 AC2: a client secret that cannot be read, here
+    /// one whose replacement is due and whose unit of work cannot begin, makes a fault
+    /// carrying the code and the details its read answered, which the fault's log entry
+    /// keeps under the correlation identifier, and no other entry of the sign-on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_ASecretThatCannotBeReadFaultsWithTheCodeAndDetailsItsReadAnsweredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        deployment.Clock.Advance(Settings.TokenSigningRotation.Default);
+
+        // The browser is issued its pre-authentication session first, so the opening
+        // refused next is the one the secret's replacement makes.
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", "/auth/session");
+
+        deployment.Work.RefusesBegin = Unbegun;
+
+        Answer faulted = await arriving.SendAsync("GET", Start);
+
+        Assert.Null(deployment.Work.RefusesBegin);
+        Faulted(faulted);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.SystemFault + " unit=\"begin\"",
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
+        Assert.Empty(deployment.Provider.Asked);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5 and BFF-ERR-002 AC2: the authentication application's published
+    /// keys that cannot be read, here a set whose change is due and whose unit of work
+    /// cannot begin, make a fault carrying the code and the details their read
+    /// answered, which the fault's log entry keeps under the correlation identifier,
+    /// and no other entry of the sign-on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_PublishedKeysThatCannotBeReadFaultWithTheCodeAndDetailsTheirReadAnsweredAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        // The set's change falls due once the exchange has been answered, and the
+        // opening it makes, the first after that answer, is refused.
+        deployment.Provider.Answered = address =>
+        {
+            if (address.AbsolutePath is "/oidc/token")
+            {
+                deployment.Clock.Advance(Settings.TokenSigningRotation.Default);
+                deployment.Work.RefusesBegin = Unbegun;
+            }
+        };
+
+        Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Null(deployment.Work.RefusesBegin);
+        Faulted(faulted);
+        Assert.Empty(deployment.SignOnLog.Entries);
+        Assert.Contains(
+            typeof(CodedFault).FullName + " " + ErrorCodes.SystemFault + " unit=\"begin\"",
+            Kept(deployment, faulted),
+            StringComparison.Ordinal);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
@@ -1491,6 +1598,23 @@ public sealed class SignOnTests
         Assert.DoesNotContain(
             deployment.Logs.Lines,
             line => line.Contains(Described, StringComparison.Ordinal));
+    }
+
+    // A unit of work that could not begin, as a store answers one: a code and the
+    // details that name what broke.
+    private static Error Unbegun =>
+        Error.From(ErrorCodes.SystemFault, "unit", JsonSerializer.SerializeToElement("begin"));
+
+    // BFF-ERR-002 AC2: the one entry a fault is kept in the log as, found by the
+    // correlation identifier its answer carries.
+    private static string Kept(Deployment deployment, Answer faulted)
+    {
+        string correlation = faulted.Text("correlationId");
+
+        return Assert.Single(
+            deployment.Logs.Lines,
+            line => line.Contains(correlation, StringComparison.Ordinal)
+                && line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal));
     }
 
     // BFF-ERR-002: the pipeline's answer to a fault, which sends the browser nowhere.

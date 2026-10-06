@@ -14,6 +14,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Oidc;
+using Janus.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -65,7 +66,11 @@ namespace Janus.Hosting.Bff;
 /// as the protocol defines one or is longer than this library takes, which arrived
 /// through the browser and is recorded in no entry. A fault the push, the exchange or
 /// the authorization response answered records, beside its own entry, the status and
-/// the error read and nothing else of the answer.
+/// the error read and nothing else of the answer. A fault is recorded at Error and at
+/// no other level, and names what failed: that of a secret or keys that cannot be read
+/// carries the code and the details the read answered, that of a token that does not
+/// hold up the validation's own fault beneath it, and a client in no registry and a
+/// token carrying no session identifier, whose faults carry no code, an entry each.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -258,14 +263,12 @@ internal sealed class SignOn(
         error.Length is >= 1 and <= ErrorLimit
         && error.All(static character => character is >= ' ' and <= '~' and not ('"' or '\\'));
 
-    // BFF-ERR-001 AC5, chapter 09: the application's client in no registry, and its
-    // secret that cannot be read, are the deployment's own state and so faults, never
-    // a refusal that would send every person round to sign in again.
+    // BFF-ERR-001 AC5, chapter 09: the application's client in no registry is the
+    // deployment's own state and so a fault, never a refusal that would send every
+    // person round to sign in again. The registry answers that it holds none rather
+    // than failing, so the fault carries no code and an entry of its own names it.
     private static InvalidOperationException Unregistered() =>
         new("This application's client is in no registry.");
-
-    private static InvalidOperationException SecretUnread() =>
-        new("This application's client secret could not be read.");
 
     private static string? Text(JsonDocument body, string member) =>
         body.RootElement.ValueKind is JsonValueKind.Object
@@ -327,10 +330,7 @@ internal sealed class SignOn(
         bool silent,
         CancellationToken cancellationToken)
     {
-        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
-        {
-            throw SecretUnread();
-        }
+        string secret = await SecretAsync(registered, cancellationToken).ConfigureAwait(false);
 
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -386,10 +386,7 @@ internal sealed class SignOn(
             throw Unregistered();
         }
 
-        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
-        {
-            throw SecretUnread();
-        }
+        string secret = await SecretAsync(registered, cancellationToken).ConfigureAwait(false);
 
         string? identity = await ExchangedAsync(context, registered, secret, attempt, code, cancellationToken)
             .ConfigureAwait(false);
@@ -518,11 +515,14 @@ internal sealed class SignOn(
 
     // OPS-SEC-002: the secret is read from the registry at each request and held
     // nowhere, so one rotated since the last request is the one presented.
-    private async ValueTask<string?> SecretAsync(OidcClient registered, CancellationToken cancellationToken)
+    // BFF-ERR-001 AC5, BFF-ERR-002 AC2: a secret that cannot be read is the
+    // deployment's own state and so a fault, which carries the code and the details
+    // the read answered so that its log entry names what broke.
+    private async ValueTask<string> SecretAsync(OidcClient registered, CancellationToken cancellationToken)
     {
         Result<byte[]> read = await secrets.CurrentAsync(registered.ClientId, cancellationToken).ConfigureAwait(false);
 
-        return read.Match<string?>(
+        return read.Match(
             current =>
             {
                 try
@@ -534,14 +534,17 @@ internal sealed class SignOn(
                     CryptographicOperations.ZeroMemory(current);
                 }
             },
-            _ => null);
+            unread => throw new CodedFault(unread));
     }
 
     // AUTH-KEY-001 AC2: the identity token is judged against the set the deployment
     // publishes, for this client and no other, before a claim of it is believed.
     // BFF-ERR-001 AC5, chapter 09: published keys that cannot be read, and a token
     // that does not hold up under them, in its signature, its issuer, its audience or
-    // its expiry, are the deployment's own state and so faults. So is a token that
+    // its expiry, are the deployment's own state and so faults: the first carries the
+    // code and the details the read answered, and the second the validation's own
+    // fault beneath it, whose type names the check that failed and which is kept by
+    // type and frames and never by message (BFF-ERR-002 AC2). So is a token that
     // holds up and carries no session identifier, the provider writing the record's in
     // every one it issues here (AUTH-SESS-012 AC9); that fault carries no code, so an
     // entry of its own names it.
@@ -550,12 +553,9 @@ internal sealed class SignOn(
         string identity,
         CancellationToken cancellationToken)
     {
-        if ((await oidc.KeysAsync(cancellationToken).ConfigureAwait(false))
-                .Match<IReadOnlyList<PublishedSigningKey>?>(keys => keys, _ => null)
-            is not IReadOnlyList<PublishedSigningKey> published)
-        {
-            throw new InvalidOperationException("The authentication application's published keys could not be read.");
-        }
+        IReadOnlyList<PublishedSigningKey> published =
+            (await oidc.KeysAsync(cancellationToken).ConfigureAwait(false))
+            .Match(keys => keys, unread => throw new CodedFault(unread));
 
         string provider = addresses.Provider.TrimEnd('/');
         var parameters = new TokenValidationParameters
@@ -574,7 +574,9 @@ internal sealed class SignOn(
 
         if (!read.IsValid)
         {
-            throw new InvalidOperationException("The identity token the authentication application issued did not hold up.");
+            throw new InvalidOperationException(
+                "The identity token the authentication application issued did not hold up.",
+                read.Exception);
         }
 
         if (read.Claims.TryGetValue(OidcClaimNames.Session, out object? named)
