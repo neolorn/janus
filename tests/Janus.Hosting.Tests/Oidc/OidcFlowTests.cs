@@ -6,10 +6,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
@@ -803,6 +805,72 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// AUTH-SESS-012 AC9: every identity token issued to a browser application carries
+    /// in <c>sid</c> the identifier of the session record its code was issued from,
+    /// whichever record the browser held and whichever application exchanged the code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC9_AnIdentityTokenNamesTheRecordItsCodeWasIssuedFromAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser first = await RelyingParty.PreparedAsync(deployment);
+
+        await deployment.Clients.AddAsync(
+            new OidcClient(
+                Second,
+                Second,
+                OidcClientKind.BrowserApplication,
+                RelyingParty.Destination,
+                ["openid", "email"]),
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        // A second record of the same person, held by a browser of its own, which is
+        // what a second device leaves.
+        var secret = OpaqueToken.Of("the-session-secret-of-a-second-browser");
+        var second = new Browser(deployment);
+
+        await deployment.Sessions.AddAsync(
+            Session.Begin(
+                SessionId.New(deployment.Clock),
+                Single(deployment.Sessions.All).Subject,
+                new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+                deployment.Clock.GetUtcNow(),
+                TimeSpan.FromDays(1),
+                TimeSpan.FromDays(30),
+                breakGlassReason: null),
+            secret.Fingerprint(),
+            OpaqueToken.Of("the-csrf-token-of-a-second-browser").Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        second.Hold(BrowserCookies.Session, secret.Value);
+
+        string held = Record(deployment, first);
+        string other = Record(deployment, second);
+        var machine = new Machine(deployment);
+
+        Assert.NotEqual(held, other);
+
+        foreach ((Browser browser, string record) in new[] { (first, held), (second, other) })
+        {
+            foreach (string clientId in new[] { RelyingParty.Application, Second })
+            {
+                string code = await RelyingParty.CodeAsync(deployment, browser, clientId);
+                Answer exchanged = await machine.PostAsync(
+                    "/oidc/token",
+                    RelyingParty.Code(code, clientId));
+
+                Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+                Assert.Equal(record, Claim(exchanged.Text("id_token"), "sid"));
+            }
+        }
+    }
+
+    /// <summary>
     /// API-REDIR-001 AC4: the destination that was replaced is recorded, and the
     /// request that named the registered one records nothing, so what the log holds
     /// is the attempts and not the traffic.
@@ -891,6 +959,12 @@ public sealed class OidcFlowTests
         ("client_id", RelyingParty.Protocol),
         ("client_secret", RelyingParty.Secret),
     ];
+
+    // The identifier of the session record behind the session cookie a browser holds.
+    private static string Record(Deployment deployment, Browser browser) =>
+        deployment.Sessions.Behind(OpaqueToken.Of(browser.Cookies[BrowserCookies.Session])) is Session live
+            ? live.Id.Value.ToString()
+            : throw new InvalidOperationException("The browser holds no session.");
 
     private static Session Single(IReadOnlyCollection<Session> sessions)
     {
