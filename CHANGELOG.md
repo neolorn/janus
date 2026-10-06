@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Event 10 of the browser profile's log (`SignOnRefused`), which nothing has written
+  since a refusal of the sign-on came to be logged once, is no longer declared. Its
+  identifier and its name are given to no other event of that log, so a query or an
+  alert kept on either matches nothing from now on.
 - `POST /auth/factor` at a sign-in where a second step is accepted before any first
   factor answers 200 `factorRequired` with `required` naming the first factors of the
   `available` that `POST /auth/begin` answered, where it named every usable second

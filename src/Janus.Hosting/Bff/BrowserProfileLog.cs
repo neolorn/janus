@@ -12,7 +12,9 @@ namespace Janus.Hosting.Bff;
 /// <remarks>
 /// Implements BFF-CSRF-001, BFF-CSRF-004, BFF-ERR-002, BFF-LOG-001, CONV-LOG-001,
 /// CONV-LOG-002 and CONV-LOG-005. Which layer refused is recorded and never answered,
-/// and no entry carries a cookie, a token or an address.
+/// and no entry carries a cookie, a token or an address. An entry nothing writes is
+/// declared no longer, and neither its identifier nor its name is given to another:
+/// event 10 (<c>SignOnRefused</c>) is such a one.
 /// </remarks>
 internal static partial class BrowserProfileLog
 {
@@ -126,18 +128,6 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Warning,
         Message = "A sign-on return presented a state this browser was not sent out with ({CorrelationId}).")]
     public static partial void SignOnStateRejected(ILogger log, string correlationId);
-
-    /// <summary>
-    /// A return the provider refused, by the code it refused with.
-    /// </summary>
-    /// <param name="log">The logger.</param>
-    /// <param name="correlationId">What resolves the request.</param>
-    /// <param name="code">What the provider refused with.</param>
-    [LoggerMessage(
-        EventId = 10,
-        Level = LogLevel.Warning,
-        Message = "A sign-on was refused by the provider with {Code} ({CorrelationId}).")]
-    public static partial void SignOnRefused(ILogger log, string correlationId, string code);
 
     /// <summary>
     /// An exchange that could not be made or judged, the client's secret or the
