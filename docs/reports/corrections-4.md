@@ -1848,6 +1848,17 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface line, no change to `endpoints.txt`, no truth-table row. `CHANGELOG.md` conflicted at the merge: both sides are kept, and four lines of the first entry's earlier wording that the conflict left beside its corrected wording were taken out.
 - Questions 243 to 247.
 
+### `part/provider` (D-196), merged as `badb9321`: question 244, the provider's side
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| AUTH-SESS-012 criterion 9: every ID token the provider issues to a browser application carries in `sid` the identifier of the session record its code was issued from | `2758f888` | AUTH-SESS-012 | `OidcFlowTests.AUTH_SESS_012_AC9_AnIdentityTokenNamesTheRecordItsCodeWasIssuedFromAsync` |
+
+- No test held the criterion under its name. The test arranges two session records of one person, each behind a browser of its own, and two browser applications; each of the four identity tokens names the record behind its browser's session. It passed with no change to the provider.
+- Three earlier tests assert `sid` with one session record only, so none tells the record a code was issued from apart from the only record: `OidcFlowTests.AUTH_SESS_012_AC5_TheExchangeIsBackChannelAndNamesTheSessionAsync`, `OidcFlowTests.BFF_SESS_003_AC2_ASecondApplicationReEstablishesSilentlyAsync`, `OidcFlowTests.AUTH_OIDC_001_AC4_TheProtocolClientsTokenIsTheSignedInPersonsAsync`. Unchanged.
+- Where an ID token is built: the code's principal takes `sid` from the session record at the authorization (`AuthorizationIssue`); the token endpoint signs that principal in again and answers `invalid_grant` for one with no `sid` or one that is no identifier (`TokenIssue`). The refresh grant is open to protocol clients only. No path issues a browser application an ID token without it.
+- No migration, no public surface line, no change to `endpoints.txt`, no truth-table row, no changelog line (a test alone).
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4946,6 +4957,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** Such an ask is before a first factor, so 202 and nothing told, and is also the case the rule of `required` was built for at an ask, 200 and a code sent where the signal is clear.
 - **Parked.** The condition under which an ask is before a first factor. If such an ask is 202, the ask's branch of question 229 and its two tests fall with it.
 - **Answer:** D-195.
+- **Confirmed under D-196, nothing changed:** with the two tests of question 229 removed, no test at a sign-in holds an ask leaving out a factor already accepted (question 219). The only arrangement that reached the rule is now a 202, so no sign-in test is owed, and the step-up tests hold the rule.
 
 **237. Tier 2. `09` `POST /auth/factor`: the challenge's `available` read at the later call.**
 
@@ -5019,7 +5031,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The declaration is removed and the number left unused.
   2. It stays declared.
 - **Parked.** The removal.
-- **Answer:** pending.
+- **Answer:** D-196.
 
 **244. Tier 2. BFF-ERR-001 criterion 5: an identity token that holds up and names no session.**
 
@@ -5031,7 +5043,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. A refusal, with an inside code no chapter gives.
   3. As it is.
 - **Parked.** Readings 1 and 2.
-- **Answer:** pending.
+- **Answer:** D-196.
 
 **245. Tier 2. BFF-LOG-001 criterion 2: entries 11, 12 and 14 written beside a fault.**
 
@@ -5042,7 +5054,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. Entries 11 and 14 are no longer written for a fault; entry 12 stays. Entry 14 is then left with no caller.
   3. None of the three is written for a fault.
 - **Parked.** Readings 2 and 3.
-- **Answer:** pending.
+- **Answer:** D-196.
 
 **246. Tier 2. `11` section 7.5: the code behind a fault of the deployment's own state.**
 
@@ -5053,7 +5065,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As it is.
   2. Those faults carry the code the read failed with.
 - **Parked.** Reading 2.
-- **Answer:** pending.
+- **Answer:** D-196.
 
 **247. Tier 3. CONV-LOG-003 and BFF-ERR-001: the `error` of an authorization response written to entry 26.**
 
@@ -5061,7 +5073,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** For a refused authorization response, entry 26 carries the query's `error` exactly as the browser brought it, with no bound on its length or its characters, as built for D-194. The return's `state` is checked before it. Entry 27 carries on that path one of two fixed values only.
 - **What the specification says.** BFF-ERR-001 lets the `error` the library's own authentication application wrote be logged. The value arrives through the browser.
 - **Parked.** Any bound on that value. Nothing changed.
-- **Answer:** pending.
+- **Answer:** D-196.
 
 ## 5. Gate result
 
