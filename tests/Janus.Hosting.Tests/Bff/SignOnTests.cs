@@ -40,6 +40,11 @@ public sealed class SignOnTests
 
     private const string Described = "a-description-never-logged";
 
+    private const string Forged = "forged";
+
+    // What every category the library logs under begins with.
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
+
     /// <summary>
     /// BFF-SESS-006 AC1: a browser that holds no session here, whose person holds a
     /// live record at the authentication application, ends with a session of this
@@ -1045,6 +1050,104 @@ public sealed class SignOnTests
         Assert.Empty(refused.Body);
         Logged(deployment, error);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5, BFF-SESS-006 and chapter 09: an authorization response's
+    /// <c>error</c> reaches the return through the browser, so one that does not read
+    /// as RFC 6749 Appendix A.7 defines an error, or is longer than 64 characters, is a
+    /// refusal whatever else the return carries: the browser is returned to the stored
+    /// return address with the code of a session that is not there, the code of a
+    /// request that cannot be read is recorded once at Information as what it carried
+    /// inside, no code is traded, and no entry the library writes carries the value.
+    /// </summary>
+    /// <param name="unread">The one respect the value does not read in.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("line break")]
+    [InlineData("control character")]
+    [InlineData("quotation mark")]
+    [InlineData("backslash")]
+    [InlineData("delete")]
+    [InlineData("outside ASCII")]
+    [InlineData("empty")]
+    [InlineData("65 characters")]
+    public async Task BFF_ERR_001_AC5_AnAuthorizationResponsesErrorThatDoesNotReadReturnsTheBrowserExpiredAndIsInNoEntryAsync(
+        string unread)
+    {
+        string error = unread switch
+        {
+            "line break" => Forged + "\r\nentry",
+            "control character" => Forged + "\u0001entry",
+            "quotation mark" => Forged + "\"entry",
+            "backslash" => Forged + "\\entry",
+            "delete" => Forged + "\u007Fentry",
+            "outside ASCII" => Forged + "éentry",
+            "empty" => string.Empty,
+            _ => Forged + new string('e', 65 - Forged.Length),
+        };
+
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        Answer refused = await arriving.SendAsync(
+            "GET",
+            Returned(deployment, "error=" + Uri.EscapeDataString(error) + "&code=a-code"));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, ErrorCodes.RequestMalformed.ToString());
+        Assert.DoesNotContain(
+            deployment.SignOnLog.Carried.SelectMany(entry => entry.Values),
+            value => value is not null && value.Contains(Forged, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            deployment.Logs.Lines,
+            line => line.StartsWith(Library, StringComparison.Ordinal)
+                && line.Contains(Forged, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            deployment.Provider.Asked,
+            asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5 and chapter 09: an authorization response's <c>error</c> of
+    /// exactly 64 characters, each one RFC 6749 Appendix A.7 allows and the outermost of
+    /// its ranges among them, reads: it is taken as the provider wrote it, a refusal
+    /// recorded at Information with that value as what it carried inside.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC5_AnAuthorizationResponsesErrorOf64CharactersThatReadsIsLoggedAsync()
+    {
+        const string outermost = " !#[]~";
+        string error = outermost + new string('e', 64 - outermost.Length);
+
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        Answer refused = await arriving.SendAsync(
+            "GET",
+            Returned(deployment, "error=" + Uri.EscapeDataString(error)));
+
+        Assert.Equal(64, error.Length);
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, error);
     }
 
     /// <summary>

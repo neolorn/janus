@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- At the sign-on's return, the `error` of an authorization response is judged as text
+  before it is acted on or logged, since it reaches the return through the browser.
+  It reads only as RFC 6749 Appendix A.7 defines `error` (one or more characters of
+  %x20 to %x21, %x23 to %x5B and %x5D to %x7E) and only up to 64 characters, a bound
+  of the library's own. A value that does not read, an empty one among them, makes
+  the return a refusal whatever else it carries: the browser is returned with
+  `auth.session.expired`, event 26 records `api.request.malformed` as the code it
+  carried inside, and no entry the library writes carries the value. Before, event
+  26 carried such a value exactly as the browser brought it, line breaks and any
+  length included, and a return carrying an empty `error` beside a `code` went on to
+  the exchange. A value that reads is handled as before.
 - Event 10 of the browser profile's log (`SignOnRefused`), which nothing has written
   since a refusal of the sign-on came to be logged once, is no longer declared. Its
   identifier and its name are given to no other event of that log, so a query or an

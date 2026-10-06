@@ -60,9 +60,11 @@ namespace Janus.Hosting.Bff;
 /// published keys that cannot be read; an identity token that does not hold up under
 /// them; and a derivation failing with a code whose row names a fault or that no row
 /// names (10 section 6). A return carrying neither a code nor an error, and a token
-/// whose session has ended since, are refusals. A fault the push, the exchange or the
-/// authorization response answered records, beside its own entry, the status and the
-/// error read and nothing else of the answer.
+/// whose session has ended since, are refusals, and so is a return whose error does
+/// not read as the protocol defines one or is longer than this library takes, which
+/// arrived through the browser and is recorded in no entry. A fault the push, the
+/// exchange or the authorization response answered records, beside its own entry, the
+/// status and the error read and nothing else of the answer.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -109,6 +111,10 @@ internal sealed class SignOn(
     private const string ProviderFailed = "server_error";
 
     private const string ProviderUnavailable = "temporarily_unavailable";
+
+    // BFF-ERR-001: the most characters an authorization response's error reads at. The
+    // bound is this library's own and no part of RFC 6749.
+    private const int ErrorLimit = 64;
 
     /// <summary>
     /// Starts the flow for a browser that holds no session here.
@@ -178,6 +184,15 @@ internal sealed class SignOn(
             return Answers.Refused(ErrorCodes.SessionCsrfInvalid);
         }
 
+        // BFF-ERR-001 AC5, chapter 09: an authorization response's error reaches here
+        // through the browser, so it is judged as text before anything is made of it.
+        // One that does not read is a refusal, what it carried inside is the code of a
+        // request that cannot be read, and the value itself is recorded nowhere.
+        if (error is not null && !Reads(error))
+        {
+            return Refused(context, attempt.ReturnTo, ErrorCodes.RequestMalformed.ToString());
+        }
+
         // AUTH-SESS-012 AC3: `login_required` answers the silent attempt and nothing
         // else, so the second attempt asks the provider to sign the person in and the
         // provider forwards them rather than refusing again.
@@ -196,9 +211,9 @@ internal sealed class SignOn(
             throw new InvalidOperationException("The authentication application failed the authorization request.");
         }
 
-        if (error is { Length: > 0 } refused)
+        if (error is not null)
         {
-            return Refused(context, attempt.ReturnTo, refused);
+            return Refused(context, attempt.ReturnTo, error);
         }
 
         // BFF-ERR-001 AC5, chapter 09: a return carrying neither a code nor an error is
@@ -234,6 +249,13 @@ internal sealed class SignOn(
 
     private static string Address(string provider, string route) =>
         provider.TrimEnd('/') + route;
+
+    // RFC 6749 Appendix A.7: an error is one or more characters of %x20-21, %x23-5B
+    // and %x5D-7E, which is printable ASCII without the quotation mark and the
+    // backslash, so no line break and no control character.
+    private static bool Reads(string error) =>
+        error.Length is >= 1 and <= ErrorLimit
+        && error.All(static character => character is >= ' ' and <= '~' and not ('"' or '\\'));
 
     // BFF-ERR-001 AC5, chapter 09: the application's client in no registry, and its
     // secret that cannot be read, are the deployment's own state and so faults, never
