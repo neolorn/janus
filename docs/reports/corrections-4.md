@@ -1832,6 +1832,22 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - The changelog's unreleased line of `eb5fbe31` is corrected to what is now true.
 - No migration, no public surface line, no change to `endpoints.txt`, no truth-table row.
 
+### `part/signon` (D-195), merged as `c9b4a629`: questions 239 to 242
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Questions 239 and 240: faults, 500 `system.fault`: the client in no registry, at the start and the return; its secret unreadable, at the push and the exchange; an identity token failing in signature, issuer, audience or expiry; published keys unreadable; a derivation code whose status is 500 (a row of `10` naming a fault, or no row). Refusals returning `auth.session.expired`: a return with neither `code` nor `error`, logged with `api.request.malformed`; a token whose session has ended, logged with `auth.session.expired` | `3d563ee9` | BFF-SESS-006, BFF-ERR-001, BFF-LOG-001 | `SignOnTests.BFF_ERR_001_AC5_AStartWhoseClientIsInNoRegistryIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AReturnWhoseClientIsInNoRegistryIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_APushWhoseSecretCannotBeReadIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AnExchangeWhoseSecretCannotBeReadIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AnIdentityTokenThatDoesNotHoldUpIsAFaultAsync`, `SignOnTests.BFF_SESS_006_AC1_AnIdentityTokenThatHoldsUpEstablishesTheSessionAsync`, `SignOnTests.BFF_ERR_001_AC5_PublishedKeysThatCannotBeReadAreAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_ADerivationFailingWithAFaultsCodeIsAFaultAsync`, `SignOnTests.BFF_ERR_001_AC5_AReturnCarryingNeitherCodeNorErrorReturnsTheBrowserExpiredAndIsLoggedAsync`, `SignOnTests.BFF_ERR_001_AC5_ATokenWhoseSessionHasEndedReturnsTheBrowserExpiredAndIsLoggedAsync` |
+| Question 241: a fault the push, the exchange or the authorization response answered writes entry 27 at Error with the status read (push and exchange) and the `error` read, and nothing else | `0d50b441` | BFF-SESS-006, BFF-ERR-001 | `SignOnTests.BFF_ERR_001_AC5_AFaultThePushAnsweredLogsTheStatusAndTheErrorReadAsync`, `SignOnTests.BFF_ERR_001_AC5_AFaultTheExchangeAnsweredLogsTheStatusAndTheErrorReadAsync`, `SignOnTests.BFF_ERR_001_AC5_AFaultTheAuthorizationResponseAnsweredLogsTheErrorReadAsync` |
+| Question 242: a refused authorization response no longer writes entry 10, nor a 400 `invalid_grant` entry 11; entry 26 is the one record | `7cdc24c3` | BFF-LOG-001, BFF-ERR-001 | `SignOnTests.BFF_LOG_001_AC2_ARefusedAuthorizationResponseIsLoggedOnceAsync`, `SignOnTests.BFF_LOG_001_AC2_ARefusedExchangeIsLoggedOnceAsync` |
+
+- Questions 239 and 240: the tests were written first and 16 cases failed. Thirteen fault cases answered 302 where 500 was expected. The three cases of a return with neither `code` nor `error` returned the browser expired already and failed on entry 26. The token whose session has ended passed before and after: the derivation's path of D-194 already logged it.
+- A derivation's fault is judged by the status `ApiStatus` gives its code; no list of codes is typed in the sign-on. It is answered by the refusal writer, which logs it with its code.
+- Question 241: all 15 cases failed first, no entry 27 written. The tests hold that an `error_description` and an `error_uri` sent with the answer reach no log. Entry 27 is not written where nothing answered.
+- Question 242: both tests failed first, the log holding entry 10 or 11 beside entry 26.
+- Replaced: `SignOnTests.BFF_SESS_006_AStartThatFailsReturnsTheBrowserExpiredAsync`, which held the earlier rule for a client in no registry.
+- No migration, no public surface line, no change to `endpoints.txt`, no truth-table row. `CHANGELOG.md` conflicted at the merge: both sides are kept, and four lines of the first entry's earlier wording that the conflict left beside its corrected wording were taken out.
+- Questions 243 to 247.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4994,6 +5010,58 @@ part of 389 (3) and waits with 389 on question 48.
   2. Entry 26 takes the place of entry 10.
 - **Parked.** Reading 2.
 - **Answer:** D-195.
+
+**243. Tier 2. BFF-LOG-001: a log entry left with no caller.**
+
+- **Item.** Question 242.
+- **What the code does.** Entry 10 of the browser profile's log (`SignOnRefused`) is declared and nothing writes it. The log has never retired an entry: identifiers 1 to 27 are all declared.
+- **Readings.**
+  1. The declaration is removed and the number left unused.
+  2. It stays declared.
+- **Parked.** The removal.
+- **Answer:** pending.
+
+**244. Tier 2. BFF-ERR-001 criterion 5: an identity token that holds up and names no session.**
+
+- **Item.** Question 239.
+- **What the code does.** A token right in signature, issuer, audience and expiry whose `sid` is absent or is no identifier returns the browser with `auth.session.expired`, writes entry 11 (Warning) and no entry 26, as before D-195.
+- **What the specification says.** The criterion lists what does not hold up as signature, issuer, audience and expiry, and the refusal as a token whose session has ended. A token naming no session is in neither.
+- **Readings.**
+  1. A fault.
+  2. A refusal, with an inside code no chapter gives.
+  3. As it is.
+- **Parked.** Readings 1 and 2.
+- **Answer:** pending.
+
+**245. Tier 2. BFF-LOG-001 criterion 2: entries 11, 12 and 14 written beside a fault.**
+
+- **Item.** Questions 239 and 242.
+- **What the code does.** The failures that became faults still write the entry they wrote before, then throw: a client in no registry, entry 12 (Error); a secret unreadable, entry 14 at the push and entry 11 at the exchange (Warning); keys unreadable and a token that does not hold up, entry 11 (Warning). The wording of entries 11 and 14 speaks of the provider not taking the request or the code.
+- **Readings.**
+  1. As it is.
+  2. Entries 11 and 14 are no longer written for a fault; entry 12 stays. Entry 14 is then left with no caller.
+  3. None of the three is written for a fault.
+- **Parked.** Readings 2 and 3.
+- **Answer:** pending.
+
+**246. Tier 2. `11` section 7.5: the code behind a fault of the deployment's own state.**
+
+- **Item.** Question 239.
+- **What the code does.** A client in no registry, a secret or keys that cannot be read, and a token that does not hold up are thrown, so the fault log keeps their type and frames; the code the read failed with is dropped. A derivation's fault alone reaches the log with its code.
+- **What the specification says.** `11` section 7.5: "the code it carries where it carries one". CONV-ERR-001 criterion 1 bars a coded fault from the `auth.` and `authz.` families.
+- **Readings.**
+  1. As it is.
+  2. Those faults carry the code the read failed with.
+- **Parked.** Reading 2.
+- **Answer:** pending.
+
+**247. Tier 3. CONV-LOG-003 and BFF-ERR-001: the `error` of an authorization response written to entry 26.**
+
+- **Item.** Question 234.
+- **What the code does.** For a refused authorization response, entry 26 carries the query's `error` exactly as the browser brought it, with no bound on its length or its characters, as built for D-194. The return's `state` is checked before it. Entry 27 carries on that path one of two fixed values only.
+- **What the specification says.** BFF-ERR-001 lets the `error` the library's own authentication application wrote be logged. The value arrives through the browser.
+- **Parked.** Any bound on that value. Nothing changed.
+- **Answer:** pending.
 
 ## 5. Gate result
 
