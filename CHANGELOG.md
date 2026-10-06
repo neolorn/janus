@@ -13,10 +13,13 @@ against the public contract of LIB-API-001.
 - `POST /auth/factor` at a sign-in where a second step is accepted before any first
   factor answers 200 `factorRequired` with `required` naming the first factors of the
   `available` that `POST /auth/begin` answered, where it named every usable second
-  step the account holds, the one just accepted among them. A text code asked for
-  after it and answered 200, the number's signal having withheld the code, names the
-  same first factors, where it named the second steps not yet accepted or was refused
-  422 `auth.factor.rejected` once none of those was left.
+  step the account holds, the one just accepted among them. A text code asked for at
+  a sign-in while no first factor has been accepted on its challenge, a second step
+  accepted on it or not, is an ask before a first factor: it is answered 202, no
+  phone signal is asked and nothing is sent, whatever the account holds. Before, an
+  ask after a second step accepted first sent the code, or was answered 200 or 422
+  `auth.factor.rejected` where the number's signal withheld it, or 422
+  `auth.credential.suspended` for a suspended number.
 - At the sign-on, an error the authentication application answers is no longer always
   a refusal. Every error it answers the push with, every error of the exchange other
   than a 400 whose `error` is `invalid_grant`, and an authorization response whose

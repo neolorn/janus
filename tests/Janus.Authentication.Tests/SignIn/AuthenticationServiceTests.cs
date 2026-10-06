@@ -3675,82 +3675,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/factor</c>: a text code asked for at
-    /// a sign-in whose number answers <c>risk</c>, after a generated code was accepted
-    /// before any first factor, is answered with what is left to present, which is the
-    /// first factors the challenge opened with: the code accepted is not asked for
-    /// again, and no other second step is named.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskAfterASecondStepAcceptedFirstNamesTheFirstFactorsAsync()
-    {
-        SubjectId subject = await AccountAsync();
-
-        Enables(Factor.PhoneCode);
-        Holds(subject, Factor.PhoneCode);
-        Holds(subject, Factor.Totp);
-        Holds(subject, Factor.SecurityKey);
-        Remembered(subject);
-
-        SignInChallenge began = await BeganAsync(Address);
-        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
-            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
-
-        SignInProgress presented = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
-
-        Answers(PhoneSignal.Risk);
-
-        SignInProgress? offered = (await AskedAsync(began.Challenge, stepping: null))
-            .Match(progress => progress, error => throw new InvalidOperationException(error.Code.ToString()));
-
-        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
-        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
-        Assert.Equal(AssuranceLevel.Delegated, offered?.AssuranceLevel);
-        Assert.Equal(began.Available, offered?.Required);
-        Assert.Equal(presented.Required, offered?.Required);
-        Assert.DoesNotContain(Factor.Totp, offered?.Required ?? []);
-        Assert.DoesNotContain(Factor.SecurityKey, offered?.Required ?? []);
-        Assert.Empty(_notifications.Texts);
-        Assert.Empty(_throttle.Counted);
-    }
-
-    /// <summary>
-    /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/factor</c>: a text code asked for at
-    /// a sign-in whose number answers <c>risk</c>, where the only other second step the
-    /// account holds was accepted on the challenge before any first factor, is not left
-    /// with none: the first factors the challenge opened with are what is left, and the
-    /// ask names them, counting nothing.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskWithOnlyASecondStepAcceptedFirstIsNotRefusedAsync()
-    {
-        SubjectId subject = await AccountAsync();
-
-        Enables(Factor.PhoneCode);
-        Holds(subject, Factor.PhoneCode);
-        Holds(subject, Factor.Totp);
-        Remembered(subject);
-
-        SignInChallenge began = await BeganAsync(Address);
-        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
-            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
-
-        SignInProgress presented = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
-
-        Answers(PhoneSignal.Risk);
-
-        SignInProgress? offered = (await AskedAsync(began.Challenge, stepping: null))
-            .Match(progress => progress, error => throw new InvalidOperationException(error.Code.ToString()));
-
-        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
-        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
-        Assert.Equal(began.Available, offered?.Required);
-        Assert.Empty(_notifications.Texts);
-        Assert.Empty(_audit.Failed);
-        Assert.Empty(_throttle.Counted);
-    }
-
-    /// <summary>
     /// AUTH-FACT-002 AC7, chapter 09 <c>POST /auth/step-up</c>: a text code asked for at
     /// a step-up whose number answers <c>risk</c>, after a password was accepted on the
     /// challenge, is answered with the factors of the combinations left, the password
@@ -3986,6 +3910,72 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
         Assert.Empty(refused.Details);
         Assert.Empty(_notifications.Texts);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC8: a text code asked for at a sign-in on whose challenge a
+    /// generated code was accepted and no first factor is an ask before a first
+    /// factor. It asks no signal, issues no code, sends nothing and is answered as
+    /// every ask is, the same whatever the account holds: a number whose signal is
+    /// clear, one whose signal answers <c>risk</c>, a suspended one, or none.
+    /// </summary>
+    /// <param name="holds">Whether the account holds a number for the text code.</param>
+    /// <param name="suspended">Whether that number is suspended.</param>
+    /// <param name="answered">What the number's signal would answer.</param>
+    [Theory]
+    [InlineData(true, false, PhoneSignal.Clear)]
+    [InlineData(true, false, PhoneSignal.Risk)]
+    [InlineData(true, true, PhoneSignal.Clear)]
+    [InlineData(false, false, PhoneSignal.Clear)]
+    public async Task AUTH_FACT_002_AC8_AnAskAfterASecondStepAndBeforeAnyFirstFactorAsksNoSignalAndSendsNothingAsync(
+        bool holds,
+        bool suspended,
+        PhoneSignal answered)
+    {
+        SubjectId subject = await AccountAsync();
+        int signalled = 0;
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Remembered(subject);
+
+        if (holds)
+        {
+            Holds(subject, Factor.PhoneCode);
+        }
+
+        if (suspended)
+        {
+            Suspends(subject, Factor.PhoneCode);
+        }
+
+        _provider = new PhoneSignalProvider((_, _) =>
+        {
+            signalled++;
+
+            return ValueTask.FromResult(answered);
+        });
+
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress presented = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
+        int counted = _throttle.Counted.Count;
+
+        Result<SignInProgress?> asked = await AskedAsync(began.Challenge, stepping: null);
+
+        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
+        Assert.Equal(began.Available, presented.Required);
+        Assert.True(asked.Match(offered => offered is null, _ => false));
+        Assert.Equal(0, signalled);
+        Assert.Empty(_considered.Records);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_codes.All);
+        Assert.Empty(_audit.Failed);
+        Assert.Equal(counted, _throttle.Counted.Count);
+        Assert.False(_work.Open);
     }
 
     /// <summary>

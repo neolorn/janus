@@ -264,8 +264,7 @@ internal sealed class AuthenticationService(
     /// <returns>
     /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
     /// signal answers <c>risk</c>, what the challenge then offers, less the factors
-    /// accepted on it already, or the first factors it opened with where a second step
-    /// was accepted before any, or <c>auth.factor.rejected</c> where that is nothing; at
+    /// accepted on it already, or <c>auth.factor.rejected</c> where that is nothing; at
     /// a step-up whose number's signal answers <c>risk</c>, the factors of the
     /// combinations left without the entry, less those accepted already, none where the
     /// session already meets the gate, or <c>auth.stepup.required</c> where no
@@ -273,15 +272,15 @@ internal sealed class AuthenticationService(
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-FACT-002 AC6 and AC7 and AUTH-FACT-002b AC6. A handle that opens
-    /// nothing, a sign-in no first factor has been accepted for, an account holding no
-    /// such credential and a policy that does not permit it are sent nothing and
-    /// answered as an ask that sent its code. A number whose signal answers
-    /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
-    /// what is left to present, which an anonymous caller is never told, and which
-    /// names no factor accepted on the challenge already (D-193): the second steps it
-    /// still offers, or, where a second step was accepted before any first factor, the
-    /// first factors it opened with (D-194). At a step-up,
+    /// Implements AUTH-FACT-002 AC6 to AC8 and AUTH-FACT-002b AC6. A handle that opens
+    /// nothing, a sign-in no first factor has been accepted for, a second step accepted
+    /// on its challenge or not (D-195), an account holding no such credential and a
+    /// policy that does not permit it are sent nothing and answered as an ask that sent
+    /// its code; an ask before a first factor reads nothing of the account, so it asks
+    /// no signal. A number whose signal answers <c>risk</c> after a first factor is
+    /// sent nothing either, and the sign-in is told what is left to present, which an
+    /// anonymous caller is never told, and which names no factor accepted on the
+    /// challenge already (D-193). At a step-up,
     /// whose challenge names no action, what is left is judged against the strictest of
     /// the policy's gates, field by field, and answered as a sign-in's ask is
     /// (AUTH-STEP-002, D-187, D-188). An ask after a first factor, or under a session,
@@ -307,7 +306,7 @@ internal sealed class AuthenticationService(
 
         if (!Asks(factor)
             || open?.Subject is not SubjectId subject
-            || (stepping is SubjectId asking ? asking != subject : open.Presented.Count is 0)
+            || (stepping is SubjectId asking ? asking != subject : !FirstAccepted(open))
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false) is not AccountState.Active)
         {
             return Result.Success<SignInProgress?>(null);
@@ -374,30 +373,13 @@ internal sealed class AuthenticationService(
         Assurance reached = Assurance.Reached(Properties(open.Presented))
             ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
 
-        List<Factor> wanted;
+        List<Factor> wanted = Wanted(
+            policy,
+            await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false),
+            reached,
+            trusts: false);
 
-        if (FirstAccepted(open))
-        {
-            wanted = Wanted(
-                policy,
-                await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false),
-                reached,
-                trusts: false);
-
-            _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted || open.Presented.Contains(entry));
-        }
-        else
-        {
-            // 09 POST /auth/factor (D-194): after a second step accepted before any
-            // first factor, what is left is the first factors the challenge opened with.
-            wanted = (await FirstFactorsAsync(cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Withheld<List<Factor>>(error, ref failure));
-
-            if (failure is not null)
-            {
-                return Result.Failure<SignInProgress?>(failure);
-            }
-        }
+        _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted || open.Presented.Contains(entry));
 
         return wanted.Count is 0
             ? Result.Failure<SignInProgress?>(Error.From(ErrorCodes.FactorRejected))
