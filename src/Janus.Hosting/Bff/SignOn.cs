@@ -60,7 +60,9 @@ namespace Janus.Hosting.Bff;
 /// published keys that cannot be read; an identity token that does not hold up under
 /// them; and a derivation failing with a code whose row names a fault or that no row
 /// names (10 section 6). A return carrying neither a code nor an error, and a token
-/// whose session has ended since, are refusals.
+/// whose session has ended since, are refusals. A fault the push, the exchange or the
+/// authorization response answered records, beside its own entry, the status and the
+/// error read and nothing else of the answer.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -189,6 +191,8 @@ internal sealed class SignOn(
         // refusal of the person's, so the browser is not returned to sign in again.
         if (error is ProviderFailed or ProviderUnavailable)
         {
+            BrowserProfileLog.SignOnFaulted(log, context.TraceIdentifier, status: null, error);
+
             throw new InvalidOperationException("The authentication application failed the authorization request.");
         }
 
@@ -241,35 +245,6 @@ internal sealed class SignOn(
 
     private static InvalidOperationException SecretUnread() =>
         new("This application's client secret could not be read.");
-
-    // BFF-ERR-002, BFF-ERR-001 AC5, chapter 09: what the authentication application
-    // answered a push or an exchange with. The member asked for is the answer. A 400
-    // whose error is the one the caller names as a refusal is none; a push names no
-    // such error, so every error it reads is a fault. Every other answer is a fault:
-    // any other error, which refuses the deployment's own client or request, a 5xx, a
-    // 4xx naming no error, and a body that does not read.
-    private static async ValueTask<string?> AnsweredAsync(
-        HttpResponseMessage answered,
-        string member,
-        string? refusal,
-        CancellationToken cancellationToken)
-    {
-        using var body = JsonDocument.Parse(
-            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-
-        if (answered.IsSuccessStatusCode && Text(body, member) is { Length: > 0 } value)
-        {
-            return value;
-        }
-
-        return refusal is not null
-            && (int)answered.StatusCode is StatusCodes.Status400BadRequest
-            && string.Equals(Text(body, "error"), refusal, StringComparison.Ordinal)
-                ? null
-                : throw new InvalidOperationException(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The authentication application answered {(int)answered.StatusCode} with no answer this application takes."));
-    }
 
     private static string? Text(JsonDocument body, string member) =>
         body.RootElement.ValueKind is JsonValueKind.Object
@@ -361,7 +336,7 @@ internal sealed class SignOn(
             .PostAsync(new Uri(Address(addresses.Provider, "/oidc/par")), form, cancellationToken)
             .ConfigureAwait(false);
 
-        return await AnsweredAsync(answered, "request_uri", refusal: null, cancellationToken)
+        return await AnsweredAsync(context, answered, "request_uri", refusal: null, cancellationToken)
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The push was answered with no reference.");
     }
@@ -398,7 +373,7 @@ internal sealed class SignOn(
             throw SecretUnread();
         }
 
-        string? identity = await ExchangedAsync(registered, secret, attempt, code, cancellationToken)
+        string? identity = await ExchangedAsync(context, registered, secret, attempt, code, cancellationToken)
             .ConfigureAwait(false);
 
         if (identity is null)
@@ -447,6 +422,7 @@ internal sealed class SignOn(
     // and what comes back is read for the one claim that names the record and dropped.
     // Nothing comes back where the provider refused the code itself.
     private async Task<string?> ExchangedAsync(
+        HttpContext context,
         OidcClient registered,
         [NeverLogged] string secret,
         SignOnAttempt attempt,
@@ -469,7 +445,66 @@ internal sealed class SignOn(
             .PostAsync(new Uri(Address(addresses.Provider, "/oidc/token")), form, cancellationToken)
             .ConfigureAwait(false);
 
-        return await AnsweredAsync(answered, "id_token", CodeRefused, cancellationToken).ConfigureAwait(false);
+        return await AnsweredAsync(context, answered, "id_token", CodeRefused, cancellationToken).ConfigureAwait(false);
+    }
+
+    // BFF-ERR-002, BFF-ERR-001 AC5, chapter 09: what the authentication application
+    // answered a push or an exchange with. The member asked for is the answer. A 400
+    // whose error is the one the caller names as a refusal is none; a push names no
+    // such error, so every error it reads is a fault. Every other answer is a fault:
+    // any other error, which refuses the deployment's own client or request, a 5xx, a
+    // 4xx naming no error, and a body that does not read. Such a fault was answered,
+    // so the status and the error read are recorded beside it, and nothing else of the
+    // answer.
+    private async ValueTask<string?> AnsweredAsync(
+        HttpContext context,
+        HttpResponseMessage answered,
+        string member,
+        string? refusal,
+        CancellationToken cancellationToken)
+    {
+        int status = (int)answered.StatusCode;
+
+        using JsonDocument body = Read(
+            context,
+            status,
+            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+        if (answered.IsSuccessStatusCode && Text(body, member) is { Length: > 0 } value)
+        {
+            return value;
+        }
+
+        string? error = Text(body, "error");
+
+        if (refusal is not null
+            && status is StatusCodes.Status400BadRequest
+            && string.Equals(error, refusal, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        BrowserProfileLog.SignOnFaulted(log, context.TraceIdentifier, status, error);
+
+        throw new InvalidOperationException(string.Create(
+            CultureInfo.InvariantCulture,
+            $"The authentication application answered {status} with no answer this application takes."));
+    }
+
+    // BFF-ERR-001 AC5: a body that does not read was answered all the same, so its
+    // status is recorded beside the fault, which names no error.
+    private JsonDocument Read(HttpContext context, int status, string body)
+    {
+        try
+        {
+            return JsonDocument.Parse(body);
+        }
+        catch (JsonException)
+        {
+            BrowserProfileLog.SignOnFaulted(log, context.TraceIdentifier, status, error: null);
+
+            throw;
+        }
     }
 
     // OPS-SEC-002: the secret is read from the registry at each request and held

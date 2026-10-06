@@ -17,6 +17,15 @@ against the public contract of LIB-API-001.
   after it and answered 200, the number's signal having withheld the code, names the
   same first factors, where it named the second steps not yet accepted or was refused
   422 `auth.factor.rejected` once none of those was left.
+- A fault of the sign-on that the authentication application answered adds, beside
+  the fault's own entry, a new entry of the browser profile's log (event 27, Error)
+  carrying the status the push or the exchange was answered with and the `error` the
+  push, the exchange or the authorization response named, where it named one, and
+  nothing else of the answer, never its description. An operator reading the fault
+  by its correlation identifier can so tell `invalid_client` from `server_error`. A
+  fault nothing answered (the authentication application not reached, the client in
+  no registry, a secret or keys that cannot be read, an identity token that does not
+  hold up) adds no such entry.
 - At the sign-on, the deployment's own state is a fault, answered 500 `system.fault`,
   where each of these returned the browser with `auth.session.expired` before: the
   application's client in no registry, at `GET /auth/signon` and at its return; its
