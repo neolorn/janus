@@ -58,13 +58,14 @@ namespace Janus.Hosting.Bff;
 /// refused; an authorization response naming the provider's own failure; this
 /// application's client in no registry; its secret that cannot be read; the provider's
 /// published keys that cannot be read; an identity token that does not hold up under
-/// them; and a derivation failing with a code whose row names a fault or that no row
-/// names (10 section 6). A return carrying neither a code nor an error, and a token
-/// whose session has ended since, are refusals, and so is a return whose error does
-/// not read as the protocol defines one or is longer than this library takes, which
-/// arrived through the browser and is recorded in no entry. A fault the push, the
-/// exchange or the authorization response answered records, beside its own entry, the
-/// status and the error read and nothing else of the answer.
+/// them, or that holds up and carries no session identifier; and a derivation failing
+/// with a code whose row names a fault or that no row names (10 section 6). A return
+/// carrying neither a code nor an error, and a token naming a session that has ended
+/// since or is not found, are refusals, and so is a return whose error does not read
+/// as the protocol defines one or is longer than this library takes, which arrived
+/// through the browser and is recorded in no entry. A fault the push, the exchange or
+/// the authorization response answered records, beside its own entry, the status and
+/// the error read and nothing else of the answer.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -402,14 +403,7 @@ internal sealed class SignOn(
             return Refused(context, attempt.ReturnTo, CodeRefused);
         }
 
-        SessionId? spine = await RecordAsync(context, identity, cancellationToken).ConfigureAwait(false);
-
-        if (spine is not SessionId named)
-        {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
-            return Expired(attempt.ReturnTo);
-        }
+        SessionId named = await RecordAsync(context, identity, cancellationToken).ConfigureAwait(false);
 
         Result<IssuedSession> derived = await sessions
             .DeriveAsync(named, SessionType.PerApp, RequestOrigin.Of(context.Request), cancellationToken)
@@ -551,8 +545,11 @@ internal sealed class SignOn(
     // publishes, for this client and no other, before a claim of it is believed.
     // BFF-ERR-001 AC5, chapter 09: published keys that cannot be read, and a token
     // that does not hold up under them, in its signature, its issuer, its audience or
-    // its expiry, are the deployment's own state and so faults.
-    private async ValueTask<SessionId?> RecordAsync(
+    // its expiry, are the deployment's own state and so faults. So is a token that
+    // holds up and carries no session identifier, the provider writing the record's in
+    // every one it issues here (AUTH-SESS-012 AC9); that fault carries no code, so an
+    // entry of its own names it.
+    private async ValueTask<SessionId> RecordAsync(
         HttpContext context,
         string identity,
         CancellationToken cancellationToken)
@@ -588,12 +585,17 @@ internal sealed class SignOn(
             throw new InvalidOperationException("The identity token the authentication application issued did not hold up.");
         }
 
-        return read.Claims.TryGetValue(OidcClaimNames.Session, out object? named)
+        if (read.Claims.TryGetValue(OidcClaimNames.Session, out object? named)
             && Guid.TryParse(
                 Convert.ToString(named, CultureInfo.InvariantCulture),
                 CultureInfo.InvariantCulture,
-                out Guid record)
-                ? new SessionId(record)
-                : null;
+                out Guid record))
+        {
+            return new SessionId(record);
+        }
+
+        BrowserProfileLog.SignOnSessionUnnamed(log, context.TraceIdentifier);
+
+        throw new InvalidOperationException("The identity token the authentication application issued carried no session identifier.");
     }
 }

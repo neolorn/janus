@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- At the sign-on, an identity token from the authentication application that holds
+  up in its signature, its issuer, its audience and its expiry and carries no
+  session identifier in `sid` (the claim absent, or holding no identifier) is a
+  fault, answered 500 `system.fault`, where it returned the browser with
+  `auth.session.expired` before. The fault carries no code, so a new entry of the
+  browser profile's log (event 28, `SignOnSessionUnnamed`, Error) names it. A `sid`
+  that is an identifier naming a session that has ended or is not found still
+  returns the browser with `auth.session.expired`.
 - At the sign-on's return, the `error` of an authorization response is judged as text
   before it is acted on or logged, since it reaches the return through the browser.
   It reads only as RFC 6749 Appendix A.7 defines `error` (one or more characters of

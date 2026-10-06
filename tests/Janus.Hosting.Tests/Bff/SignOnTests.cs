@@ -517,6 +517,41 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// BFF-ERR-001 AC5, BFF-SESS-006 and chapter 09: an identity token that holds up in
+    /// its signature, its issuer, its audience and its expiry and carries no session
+    /// identifier in <c>sid</c>, the claim absent or holding no identifier, is a fault:
+    /// the browser is sent nowhere, no session is established, no refusal is recorded,
+    /// and one entry at Error names it, the fault carrying no code.
+    /// </summary>
+    /// <param name="sid">What the token carries in the claim, or nothing where it carries none.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("a-session-that-is-no-identifier")]
+    public async Task BFF_ERR_001_AC5_AnIdentityTokenCarryingNoSessionIdentifierIsAFaultAsync(string? sid)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        _ = await HolderAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        deployment.Provider.Answers["/oidc/token"] =
+            (HttpStatusCode.OK, await IssuedAsync(deployment, fails: null, sid));
+
+        Answer faulted = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
+
+        Faulted(faulted);
+        Assert.Equal([Unnamed], deployment.SignOnLog.Entries);
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
+    }
+
+    /// <summary>
     /// BFF-ERR-001 AC5 and chapter 09: an exchange after which the authentication
     /// application's published keys cannot be read is a fault: the browser is sent
     /// nowhere, no session is established and no refusal is recorded.
@@ -666,6 +701,44 @@ public sealed class SignOnTests
         Assert.Empty(refused.Body);
         Logged(deployment, ErrorCodes.SessionExpired.ToString());
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp && held.EndedAt is null);
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC5, BFF-LOG-001 AC2 and chapter 09: an identity token whose
+    /// <c>sid</c> is an identifier naming a session that is not found is a refusal, as
+    /// one naming a session that has ended is: the browser is returned to the stored
+    /// return address with the code of a session that is not there, and that same code
+    /// is recorded once at Information as what the refusal carried inside.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC5_ATokenWhoseSessionIsNotFoundReturnsTheBrowserExpiredAndIsLoggedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        _ = await HolderAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        deployment.Provider.Answers["/oidc/token"] = (
+            HttpStatusCode.OK,
+            await ExchangedAsync(
+                deployment,
+                fails: null,
+                new SessionId(Guid.CreateVersion7(deployment.Clock.GetUtcNow()))));
+
+        Answer refused = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
+
+        Assert.Equal(StatusCodes.Status302Found, refused.Status);
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Empty(refused.Body);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, ErrorCodes.SessionExpired.ToString());
+        Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
     /// <summary>
@@ -1380,6 +1453,10 @@ public sealed class SignOnTests
     // exchange or the authorization response answered.
     private static (LogLevel Level, int EventId) Beside => (LogLevel.Error, 27);
 
+    // BFF-ERR-001 AC5: the entry that names an identity token carrying no session
+    // identifier, whose fault carries no code.
+    private static (LogLevel Level, int EventId) Unnamed => (LogLevel.Error, 28);
+
     // BFF-LOG-001 AC2: one entry at Information names the code the browser was
     // returned with and, beside it, what the refusal carried inside.
     private static void Logged(Deployment deployment, string inside)
@@ -1469,7 +1546,12 @@ public sealed class SignOnTests
     private static async Task<string> ExchangedAsync(
         Deployment deployment,
         string? fails,
-        SessionId? record = null)
+        SessionId? record = null) =>
+        await IssuedAsync(deployment, fails, (record ?? Spine(deployment)).Value.ToString());
+
+    // The same answer with the token carrying in `sid` what a test names, or no such
+    // claim where it names nothing.
+    private static async Task<string> IssuedAsync(Deployment deployment, string? fails, string? sid)
     {
         CancellationToken cancellation = TestContext.Current.CancellationToken;
 
@@ -1490,18 +1572,24 @@ public sealed class SignOnTests
         }
 
         DateTimeOffset now = deployment.Clock.GetUtcNow();
+        var claims = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["sub"] = Guid.CreateVersion7(now).ToString(),
+            ["iat"] = now.AddMinutes(-10).ToUnixTimeSeconds(),
+            ["exp"] = now.AddMinutes(fails is "expiry" ? -1 : 5).ToUnixTimeSeconds(),
+        };
+
+        if (sid is not null)
+        {
+            claims["sid"] = sid;
+        }
+
         string identity = new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(
             new SecurityTokenDescriptor
             {
                 Issuer = fails is "issuer" ? "https://another.example.test" : "https://identity.example.test",
                 Audience = fails is "audience" ? "another-application" : Client,
-                Claims = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    ["sub"] = Guid.CreateVersion7(now).ToString(),
-                    ["sid"] = (record ?? Spine(deployment)).Value.ToString(),
-                    ["iat"] = now.AddMinutes(-10).ToUnixTimeSeconds(),
-                    ["exp"] = now.AddMinutes(fails is "expiry" ? -1 : 5).ToUnixTimeSeconds(),
-                },
+                Claims = claims,
                 SigningCredentials = new SigningCredentials(
                     new ECDsaSecurityKey(signer)
                     {

@@ -132,8 +132,8 @@ internal static partial class BrowserProfileLog
     /// <summary>
     /// An exchange that could not be made or judged, the client's secret or the
     /// provider's published keys not being read, or whose identity token did not hold
-    /// up or named no session (BFF-SESS-006 AC3). An exchange the provider refused is
-    /// recorded once, where the browser is returned (BFF-LOG-001 AC2).
+    /// up (BFF-SESS-006 AC3). An exchange the provider refused is recorded once, where
+    /// the browser is returned (BFF-LOG-001 AC2).
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="correlationId">What resolves the request.</param>
@@ -360,4 +360,18 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Error,
         Message = "A sign-on faulted on an answer of status {Status} naming the error {Error} ({CorrelationId}).")]
     public static partial void SignOnFaulted(ILogger log, string correlationId, int? status, string? error);
+
+    /// <summary>
+    /// A sign-on whose identity token held up and carried no session identifier in
+    /// <c>sid</c>, where the provider, which is the library's own, writes the record's
+    /// in every one it issues to a browser application. It is a fault that carries no
+    /// code, so this entry names it (BFF-SESS-006, BFF-ERR-001 AC5).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 28,
+        Level = LogLevel.Error,
+        Message = "A sign-on's identity token held up and carried no session identifier in sid ({CorrelationId}).")]
+    public static partial void SignOnSessionUnnamed(ILogger log, string correlationId);
 }
