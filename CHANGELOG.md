@@ -17,6 +17,19 @@ against the public contract of LIB-API-001.
   after it and answered 200, the number's signal having withheld the code, names the
   same first factors, where it named the second steps not yet accepted or was refused
   422 `auth.factor.rejected` once none of those was left.
+- At the sign-on, the deployment's own state is a fault, answered 500 `system.fault`,
+  where each of these returned the browser with `auth.session.expired` before: the
+  application's client in no registry, at `GET /auth/signon` and at its return; its
+  client secret that cannot be read, at the push and at the exchange; an identity
+  token from the authentication application that does not hold up in its signature
+  under that application's published keys, its issuer, its audience or its expiry;
+  those published keys that cannot be read; and a derivation that fails with a code
+  whose row names a fault or that no row names (`system.fault`,
+  `authz.policy.unregistered` and `authz.derivation.sourcesmissing` among them). A
+  return carrying neither `code` nor `error` still returns the browser with
+  `auth.session.expired` and is now recorded in event 26 with `api.request.malformed`
+  as the code it carried inside; an identity token whose session has ended since is
+  recorded there with `auth.session.expired`.
 - At the sign-on, an error the authentication application answers is no longer always
   a refusal. Every error it answers the push with, every error of the exchange other
   than a 400 whose `error` is `invalid_grant`, and an authorization response whose

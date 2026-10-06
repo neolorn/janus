@@ -43,6 +43,18 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
     /// </summary>
     public Func<CancellationToken, ValueTask>? BeforeReplacement { get; set; }
 
+    /// <summary>
+    /// Takes a client out of the registry, as a registry changed by hand loses one.
+    /// </summary>
+    /// <param name="clientId">Which client.</param>
+    public void Remove(string clientId)
+    {
+        lock (_gate)
+        {
+            _ = _clients.Remove(clientId);
+        }
+    }
+
     /// <inheritdoc/>
     public ValueTask<OidcClient?> FindAsync(string clientId, CancellationToken cancellationToken)
     {
