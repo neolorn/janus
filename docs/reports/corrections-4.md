@@ -5394,3 +5394,35 @@ its commits can be read.
 - Resolved by rule: nothing in this round.
 - Confirmed as built under D-194, nothing changed: questions 230, 232 and 235; `StepUp.cs` stays watched; the messages amended on a part's own branch in the round of D-193 stand.
 - Open: questions 236 to 242 (section 4). Not built for them: the condition under which an ask is before a first factor (236); `available` held on the challenge (237); restricted first factors withheld from `required` (238); the sign-on's five unnamed failures as faults or logged refusals (239); a derivation's fault code as a fault (240); the `error` behind a sign-on's fault logged (241); entry 26 in place of entry 10 (242).
+
+**`corrections-4`, after the items of D-195.** Full gate at `30f94326`, run locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). It ran twice on that commit, with nothing changed between: the first run failed one integration test of 1049, with every other job passing. The pipeline's last run on the pull request covers `083bde09`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3854 |
+| Contract tests | passed, 148 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1049 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 117 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). No migration since the last gate |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The first run's failure: `DatacenterRangesStoreTests.LIB_HOST_001_AC7_WithNoRangeSourceTheAbsenceIsRaisedWhileTheSignalIsCountedAsync`, in 0 ms. Its class fixture threw while it started: the connection to the test's database container failed with the operating system's socket error "the system lacked sufficient buffer space or a queue was full". The test's body did not run. Nothing was changed, and the second run passed.
+- The fast checks ran before the docs commit `19c3a040` and before every commit after it. The contract tests passed at every merge.
+- No `.git/index.lock` stood in the clone at the start of this round. No git configuration was changed. No commit was rewritten, on the working branch or on a part.
+- Resolved by rule: nothing in this round.
+- Confirmed as built under D-195, nothing changed: questions 237 and 238; the continuation's one list of question 231.
+- Open: questions 243 to 247 (section 4). Not built for them: the removal of entry 10's declaration (243); a token naming no session as a fault or a logged refusal (244); entries 11, 12 and 14 no longer written beside a fault (245); the code behind a fault of the deployment's own state carried into the log (246); a bound on the `error` entry 26 carries (247).
