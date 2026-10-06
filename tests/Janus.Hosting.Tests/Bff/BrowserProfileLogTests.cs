@@ -23,6 +23,8 @@ public sealed class BrowserProfileLogTests
     /// <param name="name">The event name the removed entry held.</param>
     [Theory]
     [InlineData(10, "SignOnRefused")]
+    [InlineData(11, "SignOnExchangeRejected")]
+    [InlineData(14, "SignOnPushRejected")]
     public void CONV_LOG_001_ARemovedEntrysIdentifierAndNameAreGivenToNoOther(int identifier, string name)
     {
         IReadOnlyList<(int EventId, string EventName)> declared = Declared();

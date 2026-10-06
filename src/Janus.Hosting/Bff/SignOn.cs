@@ -329,8 +329,6 @@ internal sealed class SignOn(
     {
         if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
         {
-            BrowserProfileLog.SignOnPushRejected(log, context.TraceIdentifier);
-
             throw SecretUnread();
         }
 
@@ -390,8 +388,6 @@ internal sealed class SignOn(
 
         if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
         {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
             throw SecretUnread();
         }
 
@@ -558,8 +554,6 @@ internal sealed class SignOn(
                 .Match<IReadOnlyList<PublishedSigningKey>?>(keys => keys, _ => null)
             is not IReadOnlyList<PublishedSigningKey> published)
         {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
             throw new InvalidOperationException("The authentication application's published keys could not be read.");
         }
 
@@ -580,8 +574,6 @@ internal sealed class SignOn(
 
         if (!read.IsValid)
         {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
             throw new InvalidOperationException("The identity token the authentication application issued did not hold up.");
         }
 

@@ -356,9 +356,7 @@ public sealed class SignOnTests
             "/auth/signon?returnTo=" + Uri.EscapeDataString(Page + "#keys"));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.Contains((LogLevel.Error, 12), deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Equal([Unregistered], deployment.SignOnLog.Entries);
         Assert.Empty(deployment.Provider.Asked);
         Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
     }
@@ -386,9 +384,7 @@ public sealed class SignOnTests
         Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.Contains((LogLevel.Error, 12), deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Equal([Unregistered], deployment.SignOnLog.Entries);
         Assert.DoesNotContain(
             deployment.Provider.Asked,
             asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
@@ -413,8 +409,7 @@ public sealed class SignOnTests
         Answer faulted = await new Browser(deployment).SendAsync("GET", Start);
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
         Assert.Empty(deployment.Provider.Asked);
         Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
     }
@@ -442,8 +437,7 @@ public sealed class SignOnTests
         Answer faulted = await arriving.SendAsync("GET", Local(Where(issued)));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
         Assert.DoesNotContain(
             deployment.Provider.Asked,
             asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
@@ -511,8 +505,7 @@ public sealed class SignOnTests
         Answer faulted = await arriving.SendAsync("GET", Returned(deployment, "code=a-code"));
 
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
@@ -583,8 +576,7 @@ public sealed class SignOnTests
 
         Assert.Equal(Settings.TokenSigningRotation.Key, deployment.Configuration.Unread);
         Faulted(faulted);
-        Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(Inside, deployment.SignOnLog.Entries);
+        Assert.Empty(deployment.SignOnLog.Entries);
         Assert.DoesNotContain(deployment.Sessions.All, held => held.Type is SessionType.PerApp);
     }
 
@@ -1452,6 +1444,10 @@ public sealed class SignOnTests
     // BFF-ERR-001 AC5: the entry a fault adds, beside its own, where the push, the
     // exchange or the authorization response answered.
     private static (LogLevel Level, int EventId) Beside => (LogLevel.Error, 27);
+
+    // BFF-ERR-001 AC5: the entry that names a client in no registry, whose fault
+    // carries no code.
+    private static (LogLevel Level, int EventId) Unregistered => (LogLevel.Error, 12);
 
     // BFF-ERR-001 AC5: the entry that names an identity token carrying no session
     // identifier, whose fault carries no code.
