@@ -382,14 +382,20 @@ with `integration.callback.rejected` (`09` section 10, IDN-LIFE-012a, D-192).
 ### 7.5 Sign-on
 
 An application answering 500 `system.fault` at `GET /auth/signon` or its return is a
-fault: the authentication application unreachable or failing (a 5xx, an answer not in
-its protocol's shape, `server_error` or `temporarily_unavailable` on the authorization
-response), the push or the exchange refused for the deployment's own client or request,
-or no pre-authentication session issued. Read the fault's logged detail by its
-correlation identifier, and check that the client the host declares (`SignOnClient`) is
-registered with its exact `redirect_uri` (LIB-HOST-001). A sign-on that keeps returning
-`auth.session.expired` logs, at Information, the code that refused it inside; read that
-the same way (BFF-SESS-006, BFF-LOG-001, D-194).
+fault: the authentication application unreachable or failing (a 5xx, a push or exchange
+answer not in its protocol's shape, `server_error` or `temporarily_unavailable` on the
+authorization response), the push or the exchange refused for the deployment's own
+client or request, the client in no registry, its secret or the application's published
+keys that cannot be read, an identity token that does not hold up, a derivation code
+that is a fault's, or no pre-authentication session issued. Read the fault's logged
+detail by its correlation identifier: its type and frames, the code it carries where it
+carries one (BFF-ERR-002), and, where the push, the exchange or the authorization
+response answered, the status and `error` read (D-195), and check that the client the
+host declares (`SignOnClient`) is registered with its exact `redirect_uri`
+(LIB-HOST-001). A sign-on that keeps returning `auth.session.expired` logs, at
+Information, the code that refused it inside, an inside `api.request.malformed` being a
+return carrying neither `code` nor `error`, or a value that does not read; read that the
+same way (BFF-SESS-006, BFF-LOG-001, D-194, D-195).
 
 
 

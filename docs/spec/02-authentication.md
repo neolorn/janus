@@ -144,7 +144,7 @@ requests and in credential records; eleven identifiers may appear in `loginFacto
 (D-151).
 
 *Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187,
-D-188, D-189, D-190, D-192, D-193*
+D-188, D-189, D-190, D-192, D-193, D-195*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -181,9 +181,11 @@ answered `auth.stepup.required` with the outcome AUTH-STEP-002 gives, `pending` 
 AUTH-STEP-002 step 1 judges it the ask is answered 200 with `required` empty, nothing
 further being needed (D-188); each 200 with which an ask at a step-up is answered
 reports what the factors accepted on the challenge reach together, as every 200 of the
-step-up does (AUTH-STEP-002, D-192). An ask before a first factor sends nothing and is
-answered 202, whatever the account holds; one after it, or under a session, naming a
-suspended number is answered as AUTH-RECOV-007 states (D-190).
+step-up does (AUTH-STEP-002, D-192). An ask at a sign-in before a first factor, that is
+while no first factor has been accepted on its challenge, a second step accepted on it
+or not, sends nothing and is answered 202, whatever the account holds (D-195); one after
+it, or under a session, naming a suspended number is answered as AUTH-RECOV-007 states
+(D-190).
 
 **Acceptance criteria**
 1. `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are absent from every
@@ -211,6 +213,9 @@ suspended number is answered as AUTH-RECOV-007 states (D-190).
    outcome AUTH-STEP-002 gives (`report-loss`, `enrol`, or `pending` with `pendingUntil`
    where a loss report is in flight), and with that gate already met, as AUTH-STEP-002
    step 1 judges it, it is answered 200 with `required` empty.
+8. A `phoneCode` ask at a sign-in, made while no first factor has been accepted on its
+   challenge, a second step accepted on it or not, asks no signal, sends nothing and is
+   answered 202, whatever the account holds.
 
 ---
 

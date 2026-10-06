@@ -557,8 +557,8 @@ assurance.
 
 `required` names what is left to present, never a factor already accepted on the
 challenge: at a sign-in, the second steps the challenge offers once a first factor is
-accepted, and where a second step was accepted before any first factor, the first
-factors of the challenge's `available` (D-193, D-194).
+accepted, and where a presenting call accepted a second step before any first factor,
+the first factors of the challenge's `available` (D-193, D-194, D-195).
 
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
@@ -606,11 +606,12 @@ lifetime or presented after the cap is `auth.code.expired`, a correct one includ
 Where the number's signal answers `risk`, nothing is sent and the call is answered with
 the challenge as it then stands: **200** `factorRequired` with `required` naming neither
 `phoneCode` nor a factor already accepted on the challenge (D-193), or **422**
-`auth.factor.rejected` where no factor is left (AUTH-FACT-002b). An ask before a first
-factor is **202** and sends nothing, whatever the account holds; after one, an ask
-naming a suspended number sends nothing and is **422** `auth.credential.suspended`,
-counting nothing, where the policy in force permits `phoneCode`, and **202** otherwise
-(AUTH-RECOV-007, IDN-LIFE-009b, D-190, D-191).
+`auth.factor.rejected` where no factor is left (AUTH-FACT-002b). An ask at a sign-in
+before a first factor, while no first factor has been accepted on its challenge, a
+second step accepted on it or not, is **202** and sends nothing, whatever the account
+holds (D-195); after one, an ask naming a suspended number sends nothing and is **422**
+`auth.credential.suspended`, counting nothing, where the policy in force permits
+`phoneCode`, and **202** otherwise (AUTH-RECOV-007, IDN-LIFE-009b, D-190, D-191).
 
 **Passkey assertions.** The assertion carries the user handle the authenticator
 returned. A handle naming an account other than the credential's owner, or none the
@@ -635,7 +636,7 @@ carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
 requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
-AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194*
+AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -828,14 +829,25 @@ whose `error` is `invalid_grant` (RFC 6749 section 5.2) is a refusal and every o
 error a fault, a 4xx whose body names no `error` among them; an authorization response's
 `error` is a refusal, save `login_required`, which pushes again, and `server_error` and
 `temporarily_unavailable` (RFC 6749 section 4.1.2.1), which are faults; a derivation the
-library refuses with a code of its own is a refusal. The `error`, or the library's own
-code, that a refusal carried inside is logged at Information beside the one returned
-(BFF-LOG-001, D-194).
+library refuses with a code of its own is a refusal, save a code whose row names a
+fault, or that no row names (`10` section 6), which is a fault (D-195). The deployment's
+own state is a fault too: the application's client in no registry, its secret that
+cannot be read, an identity token from the authentication application that does not hold
+up (its signature under that application's published keys, its issuer, its audience or
+its expiry), and that application's published keys that cannot be read; a return
+carrying neither `code` nor `error` is a refusal, its inside code
+`api.request.malformed`, and so is an identity token whose session has ended since, its
+inside code `auth.session.expired` (D-195). The `error`, or the library's own code, that
+a refusal carried inside is logged once, at Information, beside the one returned
+(BFF-LOG-001, D-194, D-195); a fault that the push, the exchange or the authorization
+response answered adds, beside the fault's own entry, one entry at Error carrying the
+status the push or the exchange read and the `error` any of them read, and nothing else
+they carried (D-195).
 
 **403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`; the
 browser is sent nowhere
 
-*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194*
+*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195*
 
 ---
 

@@ -144,7 +144,8 @@ applications SHALL re-establish silently through the authentication application
 AUTH-OIDC-006), acting as a **confidential client** of the library's provider, and SHALL
 retain no token afterwards.
 
-*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194*
+*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
+D-195*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -173,8 +174,16 @@ fault stays a fault: where no pre-authentication session can be issued, or where
 or an exchange cannot reach the authentication application, is answered a 5xx, or reads
 no answer in its protocol's shape (BFF-ERR-002, D-193); every error the push reads,
 every error of the exchange but a 400 `invalid_grant`, and an authorization response's
-`server_error` or `temporarily_unavailable` are faults too (D-194); a start from a
-browser with no pre-authentication session issues one (BFF-CSRF-005a, D-192).
+`server_error` or `temporarily_unavailable` are faults too (D-194), and so are the
+application's client in no registry, its secret that cannot be read, an identity token
+from the authentication application that does not hold up (its signature under that
+application's published keys, its issuer, its audience or its expiry), that
+application's published keys that cannot be read, and a derivation code whose row names
+a fault or that no row names; a return carrying neither `code` nor `error`, and a token
+whose session has ended, are refusals (D-195); a refusal is logged once, and a fault the
+push, the exchange or the authorization response answered logs, at Error, the status and
+`error` read (D-195); a start from a browser with no pre-authentication session issues
+one (BFF-CSRF-005a, D-192).
 
 **Values (D-166).** The client is the one the host declares for this application
 (`SignOnClient`, LIB-HOST-001). Its secret is the one the library generated for that
@@ -637,7 +646,7 @@ structured data and a correlation identifier. Rendered prose SHALL NOT cross it,
 the BFF SHALL NOT return HTML intended for a person to read — including framework
 default error pages.
 
-*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194*
+*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194, D-195*
 
 A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
 trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
@@ -661,10 +670,18 @@ refusal carried inside, its provider being the library's own (BFF-SESS-006, D-19
 5. A fault on a navigation route answers 500 `system.fault`, never `error`. At the
    sign-on every error the push reads, every error of the exchange but a 400
    `invalid_grant`, and an authorization response's `server_error` or
-   `temporarily_unavailable` are faults; a 400 `invalid_grant`, an authorization
-   response's other `error` but `login_required`, and a derivation the library refuses
-   return `error` `auth.session.expired`, the code carried inside logged at Information
-   beside it.
+   `temporarily_unavailable` are faults, each adding, beside the fault's own entry, one
+   entry at Error carrying the status the push or the exchange read and the `error` it
+   read, and nothing else it carried, and so are the application's client in no
+   registry, its secret that cannot be read, an identity token from the authentication
+   application that does not hold up (its signature under that application's published
+   keys, its issuer, its audience or its expiry), that application's published keys that
+   cannot be read, and a derivation code whose row names a fault or that no row names; a
+   400 `invalid_grant`, an authorization response's other `error` but `login_required`,
+   a return carrying neither `code` nor `error`, a token whose session has ended, and
+   any other derivation the library refuses return `error` `auth.session.expired`, the
+   code carried inside (`api.request.malformed` for a return carrying neither,
+   `auth.session.expired` for an ended session) logged once at Information beside it.
 
 ---
 

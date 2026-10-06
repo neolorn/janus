@@ -15096,6 +15096,8 @@ BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7
 
 ## D-194 — Corrections-4 questions 229 to 235: the answers after D-193 was built
 
+> **Amended.** Question 229: `required` after a second step accepted first is a presenting call's alone, an ask being before a first factor until one is accepted; 233 and 234: the client in no registry, its unreadable secret, a token that does not hold up, unreadable keys and a derivation code that is a fault's are faults, a return with neither `code` nor `error` and a token whose session ended are refusals, a refusal is logged once and a fault logs the status and `error` it read (D-195).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-193 (question 221, a link's return after the session ended; questions 225 and 226, which answers at the sign-on's push and exchange are refusals), D-192 (question 212, a redirect's `error` carries only codes its route declares, and a link's return whose session has ended is answered 403)
 
 **TL;DR.** Building D-193 raised seven questions, each answered narrowly; one corrects a
@@ -15189,6 +15191,82 @@ branch; nothing anyone holds was rewritten, and it stands.
 `GET /auth/providers/{provider}` (the codes `error` carries, the 403); `10`
 `auth.session.expired`, `auth.session.csrfinvalid`; `11` section 7.5 (new); `17`
 BFF-SESS-006 (body), BFF-ERR-001 (body, criterion 5).
+
+---
+
+## D-195 — Corrections-4 questions 236 to 242: the answers after D-194 was built
+
+**Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-194 (question 229, `required` after a second step accepted first applies to a presenting call alone; questions 233 and 234, the sign-on's remaining failures and what a refusal and a fault log)
+
+**TL;DR.** Building D-194 raised seven questions, each answered narrowly. At a sign-in, an
+ask for a text code is "before a first factor" until a first factor is accepted, whatever
+second step was: it sends nothing and is answered 202, so no text goes out before a
+password (236), and 238 falls with it. At the sign-on, the failures D-194 did not name are
+placed: the deployment's own state (a client in no registry, a secret that cannot be read,
+an identity token from its own provider that does not hold up, keys that cannot be read)
+is a fault, and a return carrying neither `code` nor `error`, or a token whose session has
+ended, is a refusal (239); a derivation code that is a fault's is a fault (240). A fault
+logs the status and `error` it read (241), and each refusal is logged once (242). 237
+stands as built.
+
+**The questions.** Questions 236 to 242 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names its question; the chapters
+carry the full rule.
+
+**Second steps (questions 236 to 238).**
+
+- **236. A `phoneCode` ask after a second step and before any first factor.** It is an ask
+  before a first factor: at a sign-in an ask is before a first factor while no first
+  factor has been accepted on its challenge, a second step accepted on it or not, so it
+  sends nothing and is answered 202, as AUTH-FACT-002 and `09` say, the code to be texted
+  only once a password or another first factor has been accepted. The rule of question 229
+  for `required` after a second step accepted first therefore applies to a presenting call
+  alone; the ask's branch built for it, and its two tests, are removed, and AUTH-FACT-002
+  criterion 8 holds the rule. *Rejected:* "before a first factor" read as "before any
+  factor" (a text would go out, at the deployment's cost, to whoever holds one second step
+  and no password).
+- **237. `available` read at the later call.** As built: the policy in force at the call
+  decides what can be presented then, a factor it no longer permits being refused anyway;
+  the challenge need not hold the list it was begun with.
+- **238. Restricted first factors in `required`.** Falls with question 236: no ask before
+  a first factor reaches the phone signal, so `required` after a second step accepted
+  first is never read after a `risk`, and a presenting call's `required` names the first
+  factors of `available` as built.
+
+**The sign-on (questions 239 to 242).**
+
+- **239. The failures criterion 5 did not name.** The deployment's own state is a fault,
+  answered 500 `system.fault`: the application's client in no registry, its secret that
+  cannot be read, an identity token from the authentication application that does not hold
+  up (its signature under that application's published keys, its issuer, its audience or
+  its expiry), and that application's published keys that cannot be read. A return
+  carrying neither `code` nor `error` is a refusal, logged with `api.request.malformed` as
+  its inside code, and so is an identity token whose session has ended since, logged with
+  `auth.session.expired` (BFF-SESS-006, BFF-ERR-001 criterion 5, `09`). *Rejected:* every
+  one a refusal (a broken deployment would send every person round "sign in again", the
+  loop D-194 removed).
+- **240. A derivation failing with a code that is a fault's.** A fault: a code whose `10`
+  row names a fault, or that no row names (`10` section 6; `system.fault`,
+  `authz.policy.unregistered` and `authz.derivation.sourcesmissing` among them), is
+  answered 500 at the sign-on as everywhere. *Rejected:* a refusal (it would hide a fault
+  behind "sign in again").
+- **241. What a sign-on fault logs.** Beside the fault, an entry at Error carrying the
+  status and the `error` the push, the exchange or the authorization response read, never
+  its description or anything else it carried, so an operator can tell `invalid_client`
+  from `server_error` (`11` section 7.5). The fault itself stays logged by type and frames
+  (CONV-LOG-003). *Rejected:* nothing by name (the runbook's step would have nothing to
+  read).
+- **242. One entry per refusal.** A refusal is logged once, at Information, by the code it
+  returns and the one it carried inside (BFF-LOG-001 criterion 2): the entry D-194 added
+  takes the place of the ones a refused authorization response and a refused exchange
+  wrote before. *Rejected:* both entries (one refusal logged twice, once at Warning).
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `02` AUTH-FACT-002 (values, new criterion 8); `09` `POST /auth/factor`
+(`required`, second-step codes), `GET /auth/signon` · `GET /auth/signon/return`; `10`
+`auth.session.expired`; `11` section 7.5; `17` BFF-SESS-006 (body), BFF-ERR-001 (criterion
+5).
 
 ---
 
@@ -15396,6 +15474,7 @@ BFF-SESS-006 (body), BFF-ERR-001 (body, criterion 5).
 | Corrections-4 questions 211 to 217 and the truth-table ruling after D-191 | D-192 |
 | Corrections-4 questions 218 to 228: the answers after D-192 was built | D-193 |
 | Corrections-4 questions 229 to 235: the answers after D-193 was built | D-194 |
+| Corrections-4 questions 236 to 242: the answers after D-194 was built | D-195 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
