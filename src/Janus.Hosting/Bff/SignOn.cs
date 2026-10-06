@@ -198,8 +198,6 @@ internal sealed class SignOn(
 
         if (error is { Length: > 0 } refused)
         {
-            BrowserProfileLog.SignOnRefused(log, context.TraceIdentifier, refused);
-
             return Refused(context, attempt.ReturnTo, refused);
         }
 
@@ -344,6 +342,7 @@ internal sealed class SignOn(
     // BFF-ERR-001 AC5, BFF-LOG-001 AC2: a refusal returns the browser with the code of
     // a session that is not there, and what it carried inside, the provider's error or
     // the library's own code, is recorded beside it and never carried to the browser.
+    // The one entry is the refusal's whole record: no other entry is written for it.
     private IResult Refused(HttpContext context, string returnTo, string inside)
     {
         BrowserProfileLog.SignOnReturned(log, context.TraceIdentifier, ErrorCodes.SessionExpired, inside);
@@ -378,8 +377,6 @@ internal sealed class SignOn(
 
         if (identity is null)
         {
-            BrowserProfileLog.SignOnExchangeRejected(log, context.TraceIdentifier);
-
             return Refused(context, attempt.ReturnTo, CodeRefused);
         }
 

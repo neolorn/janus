@@ -140,8 +140,10 @@ internal static partial class BrowserProfileLog
     public static partial void SignOnRefused(ILogger log, string correlationId, string code);
 
     /// <summary>
-    /// An exchange the provider would not carry out, or whose identity token did not
-    /// hold up (BFF-SESS-006 AC3).
+    /// An exchange that could not be made or judged, the client's secret or the
+    /// provider's published keys not being read, or whose identity token did not hold
+    /// up or named no session (BFF-SESS-006 AC3). An exchange the provider refused is
+    /// recorded once, where the browser is returned (BFF-LOG-001 AC2).
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="correlationId">What resolves the request.</param>

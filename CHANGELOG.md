@@ -17,6 +17,12 @@ against the public contract of LIB-API-001.
   after it and answered 200, the number's signal having withheld the code, names the
   same first factors, where it named the second steps not yet accepted or was refused
   422 `auth.factor.rejected` once none of those was left.
+- A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
+  Information, by the code the browser is returned with and the one the refusal
+  carried inside. A refused authorization response no longer writes event 10 as
+  well, nor a 400 `invalid_grant` at the exchange event 11, each at Warning. Event 10
+  is written by nothing now; event 11 stays for an exchange that could not be made
+  or whose identity token could not be relied on.
 - A fault of the sign-on that the authentication application answered adds, beside
   the fault's own entry, a new entry of the browser profile's log (event 27, Error)
   carrying the status the push or the exchange was answered with and the `error` the

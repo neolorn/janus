@@ -1087,6 +1087,58 @@ public sealed class SignOnTests
     }
 
     /// <summary>
+    /// BFF-LOG-001 AC2 and BFF-ERR-001 AC5: a refused authorization response is logged
+    /// once, at Information, by the code it returns and the one it carried inside, and
+    /// by no other entry.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_LOG_001_AC2_ARefusedAuthorizationResponseIsLoggedOnceAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        var arriving = new Browser(deployment);
+
+        _ = await arriving.SendAsync("GET", Start);
+
+        Answer refused = await arriving.SendAsync("GET", Returned(deployment, "error=access_denied"));
+
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, "access_denied");
+    }
+
+    /// <summary>
+    /// BFF-LOG-001 AC2 and BFF-ERR-001 AC5: a refused exchange is logged once, at
+    /// Information, by the code it returns and the one it carried inside, and by no
+    /// other entry.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_LOG_001_AC2_ARefusedExchangeIsLoggedOnceAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", Start);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+
+        deployment.Provider.Answers["/oidc/token"] =
+            (HttpStatusCode.BadRequest, """{"error":"invalid_grant"}""");
+
+        Answer refused = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Equal(Page + "?error=" + ErrorCodes.SessionExpired, refused.Location);
+        Assert.Equal([Inside], deployment.SignOnLog.Entries);
+        Logged(deployment, "invalid_grant");
+    }
+
+    /// <summary>
     /// BFF-ERR-001 AC5 and chapter 09: a fault the push answered adds, beside the
     /// fault's own entry, one entry at Error carrying the status the push read and the
     /// <c>error</c> it read, where it read one, and nothing else of the answer, never
@@ -1236,6 +1288,7 @@ public sealed class SignOnTests
         Assert.Equal(ErrorCodes.SessionExpired.ToString(), deployment.SignOnLog.Carried[at]["Returned"]);
         Assert.Equal(inside, deployment.SignOnLog.Carried[at]["Code"]);
         Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
+        Assert.DoesNotContain(deployment.SignOnLog.Entries, entry => entry.EventId is 10 or 11);
     }
 
     // BFF-ERR-001 AC5: one entry at Error carries the status and the error a fault
