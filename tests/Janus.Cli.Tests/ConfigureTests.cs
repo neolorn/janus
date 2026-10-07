@@ -71,14 +71,30 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     {
         string key = Settings.WebAuthnRelyingPartyId.Key.ToString();
 
-        Invocation taken = await ConfiguredAsync("--" + Settings.ExfiltrationExportAuditing.Key, "true", "--reason", Reason);
-        Invocation refused = await ConfiguredAsync("--" + key, "report.example.org", "--reason", Reason);
+        string taking = Settings.ExfiltrationExportAuditing.Key.ToString();
 
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        Reported.Success(taken);
-        Assert.Equal("model.startup.rpid", Reported.Refusal(refused));
-        Assert.Null(await ValueAsync(connection, key));
+        try
+        {
+            Invocation taken = await ConfiguredAsync("--" + taking, "true", "--reason", Reason);
+            Invocation refused = await ConfiguredAsync("--" + key, "report.example.org", "--reason", Reason);
+
+            Reported.Success(taken);
+            Assert.Equal("model.startup.rpid", Reported.Refusal(refused));
+            Assert.Null(await ValueAsync(connection, key));
+        }
+        finally
+        {
+            // Another case of the class relies on finding the key unset and nothing
+            // raised for it.
+            await connection.ExecuteAsync(
+                """
+                DELETE FROM identity.settings WHERE key = @Key;
+                DELETE FROM identity.raised_alerts WHERE details->>'key' = @Key;
+                """,
+                new { Key = taking });
+        }
     }
 
     /// <summary>
