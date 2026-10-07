@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Text;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Janus.Authentication;
@@ -15,7 +16,8 @@ namespace Janus.Hosting.Tests.Bff;
 
 /// <summary>
 /// What the browser is given for a session: two opaque values under attributes no
-/// deployment can weaken (BFF-SESS-001 to BFF-SESS-005, BFF-CSRF-005, BFF-CSRF-006).
+/// deployment can weaken (BFF-SESS-001 to BFF-SESS-005, BFF-CSRF-005, BFF-CSRF-006,
+/// BFF-OWN-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class BrowserCookieTests : IDisposable
@@ -161,6 +163,33 @@ public sealed class BrowserCookieTests : IDisposable
         written => Assert.DoesNotContain("samesite=none", written, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
+    /// BFF-OWN-001 AC4: which application a process serves is an argument of the
+    /// registration and of no call that mounts the library, and the value a host that
+    /// set none is left with issues both cookies <c>SameSite=Strict</c>.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_001_AC4_TheKindIsGivenAtRegistrationAndUnsetIssuesStrictCookies()
+    {
+        MethodInfo[] registering = Extensions(typeof(HostingRegistration));
+        MethodInfo[] mounting = [.. Extensions(typeof(PipelineProfiles)), .. Extensions(typeof(IdentityEndpoints))];
+
+        string[] unset = Both(default);
+
+        Assert.Equal([nameof(HostingRegistration.AddJanus)], registering.Select(method => method.Name));
+        Assert.Contains(
+            registering[0].GetParameters(),
+            parameter => parameter.ParameterType == typeof(ApplicationKind));
+        Assert.NotEmpty(mounting);
+        Assert.DoesNotContain(
+            mounting.SelectMany(method => method.GetParameters()),
+            parameter => parameter.ParameterType == typeof(ApplicationKind));
+        Assert.Equal(2, unset.Length);
+        Assert.All(
+            unset,
+            written => Assert.Contains("samesite=strict", written, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// BFF-CSRF-006 AC1: the token is set beside the session cookie and is the one
     /// value the first-party frontend reads, so obtaining it costs no round trip.
     /// </summary>
@@ -268,4 +297,7 @@ public sealed class BrowserCookieTests : IDisposable
     private string Written(ApplicationKind application, string name) => Assert.Single(
         Both(application),
         header => header.StartsWith(name + "=", StringComparison.Ordinal));
+
+    private static MethodInfo[] Extensions(Type type) =>
+        type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 }

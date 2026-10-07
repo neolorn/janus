@@ -30,6 +30,9 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Callbacks;
+using Janus.Hosting.Tests.Authorization;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +44,7 @@ namespace Janus.Hosting.Tests.Bff;
 /// <summary>
 /// The browser profile: what the pipeline refuses before an endpoint sees it, and
 /// what it lets through (BFF-CSRF-001 to BFF-CSRF-004, BFF-CSRF-006, BFF-CSRF-007,
-/// BFF-OWN-001, BFF-OWN-003, BFF-MACH-001).
+/// BFF-OWN-001 to BFF-OWN-003, BFF-MACH-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class BrowserProfileTests : IDisposable
@@ -398,6 +401,129 @@ public sealed class BrowserProfileTests : IDisposable
             Assert.Equal(typeof(PathString), parameters[1].ParameterType);
             Assert.Contains(parameters[2].ParameterType, callbacks);
         }
+    }
+
+    /// <summary>
+    /// BFF-OWN-001 AC2: nothing a host hangs on one of its endpoints takes it out of
+    /// the enforcement. An endpoint marked as needing no antiforgery token and as open
+    /// to anyone is refused a state change without the session's token like every
+    /// other, and is not reached.
+    /// </summary>
+    [Fact]
+    public async Task BFF_OWN_001_AC2_AnEndpointMarkedToOptOutIsRefusedWithoutTheTokenAsync()
+    {
+        RequestDelegate pipeline = Mounted();
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext context = Arriving(
+            "POST",
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target),
+            ("Sec-Fetch-Site", "same-origin"));
+
+        Carrying(context, secret);
+        context.SetEndpoint(new Endpoint(
+            Endpoint,
+            new EndpointMetadataCollection(
+                new RequireAntiforgeryTokenAttribute(required: false),
+                new AllowAnonymousAttribute()),
+            "opted out"));
+
+        await pipeline(context);
+
+        await AssertRefusedAsync(context);
+        Assert.False(_reached);
+    }
+
+    /// <summary>
+    /// BFF-OWN-001 AC3: every application mounts the one implementation. One method
+    /// mounts the browser profile, and the kind of application is read where the
+    /// library is registered and where a cookie's attributes are written and nowhere
+    /// else, so no stage runs differently for one application than for another.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_001_AC3_EveryKindOfApplicationMountsTheOneImplementation()
+    {
+        MethodInfo[] mounting =
+        [
+            .. typeof(PipelineProfiles)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(mount => mount.Name is nameof(PipelineProfiles.UseBrowserProfile)),
+        ];
+
+        string[] reading =
+        [
+            .. Shipped()
+                .Where(file => File.ReadAllText(file).Contains(nameof(ApplicationKind), StringComparison.Ordinal))
+                .Select(file => Path.GetFileName(file))
+                .Order(StringComparer.Ordinal),
+        ];
+
+        _ = Assert.Single(mounting);
+        Assert.Equal(
+            [
+                "ApplicationKind.cs",
+                "BrowserCookies.cs",
+                "BrowserSessionCookies.cs",
+                "ConformanceSuite.cs",
+                "HostingRegistration.cs",
+            ],
+            reading);
+    }
+
+    /// <summary>
+    /// BFF-OWN-002 AC1: the types of a host's domain are the host's, and no file the
+    /// library ships names one of those this host declares.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_002_AC1_NoShippedSourceNamesAHostDomainType()
+    {
+        string[] domain =
+        [
+            nameof(HostDocument),
+            nameof(HostNote),
+            nameof(HostReport),
+            nameof(HostReviewer),
+            nameof(HostWorkspace),
+        ];
+
+        string[] shipped = Shipped();
+
+        Assert.NotEmpty(shipped);
+        Assert.All(
+            shipped,
+            file => Assert.DoesNotMatch("\\b(" + string.Join('|', domain) + ")\\b", File.ReadAllText(file)));
+    }
+
+    /// <summary>
+    /// BFF-OWN-002 AC2: a host has nothing to set the session cookie with and nothing
+    /// to validate the token with, the types that write the cookies and compare the
+    /// token being out of its reach, and the host these tests stand up names neither
+    /// a cookie nor the token.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_002_AC2_NoHostCodeSetsTheSessionCookieOrValidatesTheToken()
+    {
+        Type[] owned =
+        [
+            typeof(BrowserCookies),
+            typeof(BrowserSessionCookies),
+            typeof(SynchronizerToken),
+            typeof(SynchronizerTokens),
+        ];
+
+        string[] host = Directory.GetFiles(
+            Path.Combine(
+                Repository.Root(),
+                "tests",
+                typeof(HostDocument).Assembly.GetName().Name!,
+                "Authorization"),
+            "Host*.cs");
+
+        Assert.All(owned, type => Assert.False(type.IsVisible));
+        Assert.NotEmpty(host);
+        Assert.All(
+            host,
+            file => Assert.DoesNotMatch("(?i)cookie|csrf|synchronizer", File.ReadAllText(file)));
     }
 
     /// <summary>
@@ -1105,6 +1231,14 @@ public sealed class BrowserProfileTests : IDisposable
                 what.Any(named => line.Contains(named, StringComparison.Ordinal))))
             .Select(file => Path.GetFileName(file)!)
             .Order(StringComparer.Ordinal),
+    ];
+
+    // Every source file of every project the library ships.
+    private static string[] Shipped() =>
+    [
+        .. Directory
+            .GetDirectories(Path.Combine(Repository.Root(), "src"))
+            .SelectMany(project => Repository.Project(Path.GetFileName(project))),
     ];
 
     private SynchronizerTokens Tokens() => new(_sessions, _contacts, _clock);
