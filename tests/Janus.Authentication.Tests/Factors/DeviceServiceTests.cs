@@ -351,13 +351,13 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-002 AC3, AUTH-FACT-015, D-166: one account removes none of another's
+    /// CONV-DESIGN-002 AC4, AUTH-FACT-015, D-166: one account removes none of another's
     /// browsers, and another account's browser is answered as one that does not exist,
     /// with the same code and no details, and the trust stands.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task CONV_DESIGN_002_AC3_AnotherAccountsBrowserIsAnsweredAsNoneAsync()
+    public async Task CONV_DESIGN_002_AC4_AnotherAccountsBrowserIsAnsweredAsNoneAsync()
     {
         SubjectId subject = Subject();
         OpaqueToken trust = await TrustedAsync(subject);
@@ -392,13 +392,13 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-002 AC3: removing a browser asks first whose account is asking, so a
+    /// CONV-DESIGN-002 AC4: removing a browser asks first whose account is asking, so a
     /// context naming no account is refused before any browser is read, and the one it
     /// named still stands.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task CONV_DESIGN_002_AC3_ARemovalForNoAccountReadsNoBrowserAsync()
+    public async Task CONV_DESIGN_002_AC4_ARemovalForNoAccountReadsNoBrowserAsync()
     {
         SubjectId subject = Subject();
         OpaqueToken trust = await TrustedAsync(subject);
