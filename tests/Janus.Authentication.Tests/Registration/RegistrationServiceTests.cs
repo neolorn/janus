@@ -762,11 +762,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 (D-166, message kinds (1)): the message that verifies an address
-    /// being registered is the one worded with a code and a link, and carries both.
+    /// REG-SESS-003 AC5 (D-166, message kinds (1)): the message that verifies an
+    /// address being registered is the one worded with a code and a link, and carries
+    /// both.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_ARegistrationMessageCarriesItsCodeAndItsLinkAsync()
+    public async Task REG_SESS_003_AC5_ARegistrationMessageCarriesItsCodeAndItsLinkAsync()
     {
         _ = await AwaitingAsync();
 
@@ -1840,7 +1841,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     /// and the step with both completes it.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_007_AC2_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync()
+    public async Task REG_SESS_007_AC5_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync()
     {
         RegistrationSessionId session = await SecuredAsync();
 
@@ -2649,12 +2650,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-INV-002: an email the invitation binds that an account holds already is
-    /// refused, so its holder accepts by signing in; the invitation is not spent and
-    /// no registration is opened.
+    /// REG-INV-001 AC5, REG-INV-002: an email the invitation binds that an account
+    /// holds already is refused, so its holder accepts by signing in; the invitation
+    /// is not spent and no registration is opened.
     /// </summary>
     [Fact]
-    public async Task REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
+    public async Task REG_INV_001_AC5_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
     {
         _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
 
@@ -2683,12 +2684,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-002 and chapter 09 <c>POST /register</c>: a browser signed in already is
-    /// refused, and no registration session is created for it.
+    /// REG-SESS-002 AC4 and chapter 09 <c>POST /register</c>: a browser signed in
+    /// already is refused, and no registration session is created for it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_SESS_002_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync()
+    public async Task REG_SESS_002_AC4_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync()
     {
         Assert.Equal(
             ErrorCodes.RegistrationSignedIn,
