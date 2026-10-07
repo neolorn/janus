@@ -94,6 +94,7 @@ public sealed class RestrictionSetSettingTests
 
         Assert.Equal(RestrictionChannel.Sms, shipped["sms.destination"]);
         Assert.Equal(RestrictionChannel.Sms, shipped["sms.source"]);
+        Assert.Equal(RestrictionChannel.Sms, shipped["sms.resend"]);
         Assert.Equal(RestrictionChannel.Email, shipped["email.destination"]);
         Assert.Equal(RestrictionChannel.Any, shipped["notification.destination"]);
 

@@ -20,7 +20,7 @@ namespace Janus.Core.Configuration;
 /// </remarks>
 public static class Settings
 {
-    // The four restrictions the library ships, from section 4.5. A host edits them
+    // The five restrictions the library ships, from section 4.5. A host edits them
     // through the restriction operations; it does not replace this list wholesale.
     private static IReadOnlyList<Restriction> ShippedRestrictions { get; } =
     [
@@ -41,6 +41,16 @@ public static class Settings
             [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)])
         {
             Channel = RestrictionChannel.Sms,
+        },
+        new(
+            "sms.resend",
+            RestrictionKeyKind.Destination,
+            HostKeyName: null,
+            RestrictionPurpose.Any,
+            [new Bucket(1, TimeSpan.FromMinutes(3), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+            Resend = true,
         },
         new(
             "email.destination",

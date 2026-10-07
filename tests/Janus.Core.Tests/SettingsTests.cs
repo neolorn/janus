@@ -320,17 +320,18 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC1: the four restrictions the library ships are the ones
-    /// chapter 10 section 4.5 names, with the buckets it gives them, because every
-    /// send is decided against these until a deployment edits them.
+    /// AUTH-ABUSE-004 AC1, AC20: the five restrictions the library ships are the ones
+    /// chapter 10 section 4.5 names, in its order, with the buckets it gives them and
+    /// the mark <c>resend</c> on <c>sms.resend</c> alone, because every send is decided
+    /// against these until a deployment edits them.
     /// </summary>
     [Fact]
-    public void AUTH_ABUSE_004_AC1_TheShippedRestrictionsAreTheNamedFour()
+    public void AUTH_ABUSE_004_AC1_TheShippedRestrictionsAreTheNamedFive()
     {
         IReadOnlyList<Restriction> shipped = Settings.Restrictions.Default;
 
         Assert.Equal(
-            ["sms.destination", "sms.source", "email.destination", "notification.destination"],
+            ["sms.destination", "sms.source", "sms.resend", "email.destination", "notification.destination"],
             shipped.Select(restriction => restriction.Name));
 
         Assert.All(shipped, restriction => Assert.Null(restriction.HostKeyName));
@@ -341,6 +342,7 @@ public sealed class SettingsTests
                 RestrictionKeyKind.Source,
                 RestrictionKeyKind.Destination,
                 RestrictionKeyKind.Destination,
+                RestrictionKeyKind.Destination,
             ],
             shipped.Select(restriction => restriction.Key));
 
@@ -349,9 +351,18 @@ public sealed class SettingsTests
                 RestrictionPurpose.Any,
                 RestrictionPurpose.Any,
                 RestrictionPurpose.Any,
+                RestrictionPurpose.Any,
                 RestrictionPurpose.Notification,
             ],
             shipped.Select(restriction => restriction.Purpose));
+
+        Assert.Equal(
+            ["sms.resend"],
+            shipped.Where(restriction => restriction.Resend).Select(restriction => restriction.Name));
+
+        Assert.Equal(
+            [new Bucket(1, TimeSpan.FromMinutes(3), BucketWindow.Sliding)],
+            Named(shipped, "sms.resend").Buckets);
 
         Assert.Equal(
             [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)],

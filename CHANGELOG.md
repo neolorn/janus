@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library ships a fifth restriction, `sms.resend`: key `destination`, purpose
+  `any`, channel `sms`, one send per 3 minutes sliding, marked `resend`. A second text
+  message to one number inside 3 minutes is refused with `auth.restriction.exceeded`
+  and a `retryAt` 3 minutes after the first send's admission, unless the first failed
+  for good, was a `secondfactor` send reported delivered, or had its code presented
+  right or its link pressed. A deployment that has edited its restrictions keeps the
+  set it stored.
 - A send is admitted at the instant its refusal named in `retryAt`: a sliding bucket
   counts what was sent less than its interval ago, where it counted a send exactly one
   interval old as well and so refused at that instant, naming it again.

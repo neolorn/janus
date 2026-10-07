@@ -177,7 +177,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         for (int sent = 0; sent < 3; sent++)
         {
             await SentAsync(Texted());
-            _clock.Advance(TimeSpan.FromMinutes(1));
+            _clock.Advance(TimeSpan.FromMinutes(3));
         }
 
         Result<SendReference> fourth = await SendAsync(
@@ -212,6 +212,133 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _ = await SentAsync(Texted());
 
         Assert.Equal(2, _sms.Taken.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: under the restrictions as shipped, a second text message to
+    /// one number inside three minutes is refused by <c>sms.resend</c>, with the instant
+    /// three minutes after the first send's admission, and is admitted at that instant.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ASecondTextInsideThreeMinutesIsRefusedWithTheLiftAsync()
+    {
+        await SentAsync(Texted());
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Result<SendReference> second = await SendAsync(Texted(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3), RetryAt(second));
+        Assert.Single(_sms.Taken);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        _ = await SentAsync(Texted());
+
+        Assert.Equal(2, _sms.Taken.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, INT-SMS-005 AC3: under the restrictions as shipped, a failure
+    /// report of the first text admits the second at once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_AFailureReportOfTheFirstTextAdmitsTheSecondAtOnceAsync()
+    {
+        SendReference first = await SentAsync(Texted());
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
+
+        await ReportedAsync(first.Value, delivered: false);
+
+        _ = await SentAsync(Texted());
+
+        Assert.Equal(2, _sms.Taken.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, INT-SMS-005 AC3: under the restrictions as shipped, a
+    /// delivery report of the first text admits the second at once where the first was a
+    /// send of purpose <c>secondfactor</c>, and changes nothing otherwise: the second is
+    /// refused until three minutes after the first's admission.
+    /// </summary>
+    /// <param name="message">The message.</param>
+    /// <param name="purpose">The purpose it is undertaken under.</param>
+    /// <param name="admitted">Whether the report admits the second text at once.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(MessageKind.SecondStepCode, RestrictionPurpose.SecondFactor, true)]
+    [InlineData(MessageKind.SignInLink, RestrictionPurpose.SignIn, false)]
+    [InlineData(MessageKind.RecoveryLink, RestrictionPurpose.SignIn, false)]
+    [InlineData(MessageKind.VerificationLink, RestrictionPurpose.Verification, false)]
+    public async Task AUTH_ABUSE_004_AC20_ADeliveryReportAdmitsTheSecondTextOfASecondFactorSendAloneAsync(
+        MessageKind message,
+        RestrictionPurpose purpose,
+        bool admitted)
+    {
+        OutboundMessage text = Texted() with { Message = message, Purpose = purpose };
+        SendReference first = await SentAsync(text);
+
+        await ReportedAsync(first.Value, delivered: true);
+
+        Result<SendReference> second = await SendAsync(text, TestContext.Current.CancellationToken);
+
+        Assert.Equal(admitted, second.Match(_ => true, _ => false));
+
+        if (!admitted)
+        {
+            Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
+            Assert.Equal(Noon + TimeSpan.FromMinutes(3), RetryAt(second));
+        }
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: under the restrictions as shipped, the first text's code
+    /// presented right, or its link pressed, admits the second at once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_TheFirstTextsCodeOrLinkAnsweredAdmitsTheSecondAtOnceAsync()
+    {
+        byte[] answer = RandomNumberGenerator.GetBytes(32);
+
+        Begun(await _work.BeginAsync(TestContext.Current.CancellationToken));
+
+        SendReference first = (await Path.Send.UndertakeAsync(Texted(), TestContext.Current.CancellationToken))
+            .Match(reference => reference, error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
+
+        await Path.Send.CarriesAsync(first, answer, TestContext.Current.CancellationToken);
+
+        Begun(await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
+
+        await AnsweredAsync(answer);
+
+        _ = await SentAsync(Texted());
+
+        Assert.Equal(2, _sms.Taken.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, AC1: under the restrictions as shipped, a text message owed
+    /// in two declared languages counts each against <c>sms.destination</c> and the send
+    /// once against <c>sms.resend</c>, which does not refuse the send its second text.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ASendInTwoLanguagesCountsOnceAgainstTheShippedResendRestrictionAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+
+        _ = await SentAsync(Texted() with { Language = null });
+
+        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon], _ledger.Sends(Once));
     }
 
     /// <summary>
@@ -326,7 +453,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Single(_sms.Taken);
         Assert.DoesNotContain(_ledger.Keys, key => key.Restriction == "sms.source");
-        Assert.Equal([new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)], _ledger.Keys);
+        Assert.Equal([Each, Once], _ledger.Keys.OrderBy(key => key.Restriction, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -1308,14 +1435,14 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         for (int sent = 0; sent < 3; sent++)
         {
-            _clock.Advance(TimeSpan.FromMinutes(1));
+            _clock.Advance(TimeSpan.FromMinutes(3));
             _ = await SentAsync(Texted());
         }
 
         Result<SendReference> fourth = await SendAsync(Texted(), TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(fourth));
-        Assert.Equal(Noon + TimeSpan.FromMinutes(1) + TimeSpan.FromHours(24), RetryAt(fourth));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3) + TimeSpan.FromHours(24), RetryAt(fourth));
         Assert.Equal(3, replaced.Asked);
         Assert.Equal(3, replaced.Taken.Select(taken => taken.Reference.Value).Distinct(StringComparer.Ordinal).Count());
         Assert.All(replaced.Taken, taken => Assert.Equal(Phone.Value, taken.Destination.Canonical));
