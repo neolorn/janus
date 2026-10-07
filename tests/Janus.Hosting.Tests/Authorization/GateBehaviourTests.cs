@@ -1112,7 +1112,19 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_CAP_001_AC1_AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync()
+    public Task BFF_CAP_001_AC1_AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync() =>
+        AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync();
+
+    /// <summary>
+    /// API-CAP-001 AC1: a list of fifty records returns the capabilities of each with
+    /// no query beside the one that reads the page.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public Task API_CAP_001_AC1_AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync() =>
+        AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync();
+
+    private async Task AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync()
     {
         Nested nested = await NestAsync();
         IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 50);
@@ -1131,7 +1143,19 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_CAP_001_AC2_ACapabilityWithAnEmptyRequiresPassesTheCheckAsync()
+    public Task BFF_CAP_001_AC2_ACapabilityWithAnEmptyRequiresPassesTheCheckAsync() =>
+        ACapabilityWithAnEmptyRequiresPassesTheCheckAsync();
+
+    /// <summary>
+    /// API-CAP-001 AC2: a capability whose <c>requires</c> is empty always succeeds,
+    /// the check admitting every permission it names.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public Task API_CAP_001_AC2_ACapabilityWithAnEmptyRequiresPassesTheCheckAsync() =>
+        ACapabilityWithAnEmptyRequiresPassesTheCheckAsync();
+
+    private async Task ACapabilityWithAnEmptyRequiresPassesTheCheckAsync()
     {
         Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
         IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 1);

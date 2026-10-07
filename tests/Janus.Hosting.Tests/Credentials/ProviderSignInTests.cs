@@ -253,18 +253,20 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-012 and REG-IDENT-008: an identity token is believed only where it holds
-    /// up: the nonce this browser was sent with, the deployment's own client, a lifetime
-    /// that has not ended and the provider's own key.
+    /// IDN-LIFE-012 AC4 and REG-IDENT-008: an identity token is believed only where it
+    /// holds up: the provider's own issuer, the nonce this browser was sent with, the
+    /// deployment's own client, a lifetime that has not ended and the provider's own key.
+    /// One that does not signs nobody in.
     /// </summary>
     /// <param name="wrong">What is wrong with the token.</param>
     /// <returns>The work of the test.</returns>
     [Theory]
+    [InlineData("issuer")]
     [InlineData("nonce")]
     [InlineData("audience")]
     [InlineData("expired")]
     [InlineData("forged")]
-    public async Task IDN_LIFE_012_AnIdentityTokenThatDoesNotHoldUpSignsNobodyInAsync(string wrong)
+    public async Task IDN_LIFE_012_AC4_AnIdentityTokenThatDoesNotHoldUpSignsNobodyInAsync(string wrong)
     {
         SubjectId subject = await RegisteredAsync();
 
@@ -274,20 +276,37 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         var browser = new Browser(_deployment);
         string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
 
+        Answer landed = await ReturnedAsync(browser, "google", authorization, NotHoldingUp(person, wrong));
+
+        Assert.Equal(Page + "?error=" + ErrorCodes.FactorRejected, landed.Location);
+        Assert.Equal(StatusCodes.Status401Unauthorized, (await browser.SendAsync("GET", "/auth/session")).Status);
+        Assert.Contains((LogLevel.Warning, 20), _deployment.ProviderLog.Entries);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012 AC4: at a link the identity token is believed as it is at a sign-in,
+    /// so one that does not hold up links nothing to the account that asked.
+    /// </summary>
+    /// <param name="wrong">What is wrong with the token.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("issuer")]
+    [InlineData("nonce")]
+    [InlineData("audience")]
+    [InlineData("forged")]
+    public async Task IDN_LIFE_012_AC4_AnIdentityTokenThatDoesNotHoldUpLinksNothingAsync(string wrong)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "link")));
+
         Answer landed = await ReturnedAsync(
             browser,
             "google",
             authorization,
-            wrong switch
-            {
-                "nonce" => person with { Nonce = "a-nonce-this-browser-was-not-sent" },
-                "audience" => person with { Audience = "another-client.apps.google.test" },
-                "expired" => person with { Expired = true },
-                _ => person with { Forged = true },
-            });
+            NotHoldingUp(new ProviderPerson(GoogleSubject), wrong));
 
         Assert.Equal(Page + "?error=" + ErrorCodes.FactorRejected, landed.Location);
-        Assert.Equal(StatusCodes.Status401Unauthorized, (await browser.SendAsync("GET", "/auth/session")).Status);
+        Assert.Null(await _deployment.Authenticators.ByProviderAsync(Factor.Google, GoogleSubject, CancellationToken.None));
         Assert.Contains((LogLevel.Warning, 20), _deployment.ProviderLog.Entries);
     }
 
@@ -1486,6 +1505,17 @@ public sealed class ProviderSignInTests : IAsyncDisposable
                 Assert.Equal(part, alert.Raised.Details["part"].GetString());
             });
     }
+
+    // The person as a token that does not hold up names them, wrong in the one way named.
+    private static ProviderPerson NotHoldingUp(ProviderPerson person, string wrong) =>
+        wrong switch
+        {
+            "issuer" => person with { Issuer = "https://accounts.another.test/" },
+            "nonce" => person with { Nonce = "a-nonce-this-browser-was-not-sent" },
+            "audience" => person with { Audience = "another-client.apps.google.test" },
+            "expired" => person with { Expired = true },
+            _ => person with { Forged = true },
+        };
 
     // The system's policy with Google taken out of the factors it permits.
     private static Policy WithoutGoogle() =>

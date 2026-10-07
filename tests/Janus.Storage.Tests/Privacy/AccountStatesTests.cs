@@ -99,7 +99,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     /// active and its sessions live, and one that does leaves it restricted with none.
     /// </summary>
     [Fact]
-    public async Task AUTH_SESS_010_RestrictingAnAccountEndsItsSessionsAsync()
+    public async Task AUTH_SESS_010_AC4_RestrictingAnAccountEndsItsSessionsAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 

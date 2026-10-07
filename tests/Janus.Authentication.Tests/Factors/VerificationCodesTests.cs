@@ -92,11 +92,11 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-004 AC3: the right code is spent by the try that answered it, so the
+    /// AUTH-FACT-004 AC5: the right code is spent by the try that answered it, so the
     /// same digits never answer twice.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_004_AC3_TheRightCodeIsSpentOnceAsync()
+    public async Task AUTH_FACT_004_AC5_TheRightCodeIsSpentOnceAsync()
     {
         string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
 

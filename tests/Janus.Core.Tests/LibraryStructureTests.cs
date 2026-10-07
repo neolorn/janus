@@ -462,7 +462,7 @@ public sealed class LibraryStructureTests
     /// drawn from, and the date the list itself carries.
     /// </summary>
     [Fact]
-    public void AUTH_PASS_004_TheNoticeNamesTheLeakedListsSource()
+    public void AUTH_PASS_004_AC6_TheNoticeNamesTheLeakedListsSource()
     {
         string notice = string.Join(
             ' ',

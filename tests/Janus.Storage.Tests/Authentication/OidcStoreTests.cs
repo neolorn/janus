@@ -239,7 +239,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     /// is readable again only through the store.
     /// </summary>
     [Fact]
-    public async Task AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync()
+    public async Task AUTH_KEY_002_AC4_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync()
     {
         using var created = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

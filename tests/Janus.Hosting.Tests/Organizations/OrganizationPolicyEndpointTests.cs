@@ -334,6 +334,52 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-005b AC4: a replacement of the administrative organization's policy
+    /// that states <c>aal1</c>, or states no assurance while the system policy's is
+    /// <c>aal1</c>, is refused with <c>config.value.belowfloor</c> naming the field,
+    /// before any step-up is asked, and neither the policy nor the record of changes
+    /// is touched.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_005b_AC4_AReplacementBelowTheAdministrativeFloorIsRefusedAndChangesNothingAsync()
+    {
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal1 });
+
+        Browser administrator = await AuthorisedAsync();
+        PolicyOverride before = await OverrideAsync(Administration);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer[] refused =
+        [
+            await administrator.SendAsync(
+                "PUT",
+                PathOf(Administration),
+                """{"requiredAssurance":"aal1","selfServiceRecovery":false,"reason":"No self-service for staff."}"""),
+            await administrator.SendAsync(
+                "PUT",
+                PathOf(Administration),
+                """{"selfServiceRecovery":false,"reason":"No self-service for staff."}"""),
+        ];
+
+        Assert.All(refused, answer =>
+        {
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+            Assert.Equal(ErrorCodes.ConfigurationValueBelowFloor.ToString(), answer.Text("code"));
+            Assert.Equal("requiredAssurance", answer.Json().GetProperty("details").GetProperty("field").GetString());
+        });
+
+        PolicyOverride after = await OverrideAsync(Administration);
+
+        Assert.Equal(before.RequiredAssurance, after.RequiredAssurance);
+        Assert.Equal(before.SelfServiceRecovery, after.SelfServiceRecovery);
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
     /// Chapter 10 section 4.1a, API-CONV-002 and 09 section 8a: a replacement names only
     /// the fields of the policy object, never the domain lock, with values the object
     /// takes and a reason; anything else is refused, naming the member where it is the

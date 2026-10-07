@@ -177,13 +177,20 @@ public sealed class StepUpGuardTests : IAsyncDisposable
         (await Guard.ChallengeAsync(_person, session, gate, TestContext.Current.CancellationToken))
         .Match(challenge => challenge, error => throw new XunitException(error.Code.ToString()));
 
-    // A gate a password and any second step reach, which is what a text code is.
+    // A gate a password and any second step reach, which is what a text code is, under
+    // a policy that permits the text code (AUTH-FACT-002a, AUTH-STEP-002 AC9).
     private void TwoStep()
     {
         var gates = Core.Policies.SystemDefault.Gates.ToDictionary();
         gates[StepUpAction.AccountSuspend] = new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5));
 
-        _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault with { Gates = gates });
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Core.Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+                Gates = gates,
+            });
 
         IdentifierId number = _identifiers.Verified(_person, IdentifierKind.Phone, "+441632960011");
 

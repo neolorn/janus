@@ -571,6 +571,59 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC11: a right code refused for a cause other than the code, here
+    /// a value another account has come to hold since the add, is counted against
+    /// nothing, neither the request's source nor the identifier.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC11_ARightCodeRefusedForAnotherCauseCountsNothingAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        await AddedAsync(Fourth);
+
+        IdentifierId mine = Assert.Single(_pending.All).Identifier;
+
+        Accepted(await Service.AddAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            IdentifierKind.Email,
+            Fourth,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId theirs = _pending.All.Single(pending => pending.Subject == other).Identifier;
+
+        Accepted(await Service.VerifyAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            theirs,
+            Code(theirs),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        int attempts = Outstanding(mine).Attempts;
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                mine,
+                Code(mine),
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_throttle.Failures);
+        Assert.Equal(attempts, Outstanding(mine).Attempts);
+    }
+
+    /// <summary>
     /// REG-IDENT-004: a press of the add's link from the browser that staged it judges
     /// the value again as the right code does, so a value held since writes nothing and
     /// is answered <c>auth.code.expired</c>.
@@ -4040,12 +4093,12 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 AC6, AUTH-ABUSE-001 (D-189): a code presented past its attempt cap
+    /// AUTH-ABUSE-001 AC11 (D-189): a code presented past its attempt cap
     /// is counted against the source alone, so the identifier is counted for the wrong
     /// codes that reached the cap and for nothing after them.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_AC6_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync()
+    public async Task AUTH_ABUSE_001_AC11_ACodePastItsAttemptCapIsCountedAgainstItsSourceAloneAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         await AddedAsync(Second);
@@ -4152,7 +4205,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// identifier, so the same code presented again is answered as a wrong one.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_004_TheCodeThatVerifiesAnIdentifierIsSpentAsync()
+    public async Task AUTH_FACT_004_AC5_TheCodeThatVerifiesAnIdentifierIsSpentAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         await AddedAsync(Second);
@@ -4806,13 +4859,13 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 AC6, AUTH-ABUSE-001: the codes of an account's identifier are counted
+    /// AUTH-ABUSE-001 AC11: the codes of an account's identifier are counted
     /// and throttled as a registration's are. A refused code is counted against the
     /// source and the identifier, and while the delay stands a further code is refused
     /// with the instant it lifts, before its unit of work begins.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_AC6_ARefusedCodeOfAnIdentifierIsCountedAgainstTheSourceAndTheIdentifierAsync()
+    public async Task AUTH_ABUSE_001_AC11_ARefusedCodeOfAnIdentifierIsCountedAgainstTheSourceAndTheIdentifierAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         await AddedAsync(Second);
@@ -4857,14 +4910,14 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 AC6 (D-189): a code that names no verification of the account's
+    /// AUTH-ABUSE-001 AC11 (D-189): a code that names no verification of the account's
     /// names no identifier: it is answered <c>auth.code.invalid</c> and counted against
     /// the source alone, as a registration counts a code for an identifier its session
     /// does not hold, that count the one write the refusal commits; while that source's
     /// delay stands a further code is refused with the instant it lifts.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_AC6_ACodeThatNamesNoVerificationOfTheAccountIsCountedAgainstItsSourceAsync()
+    public async Task AUTH_ABUSE_001_AC11_ACodeThatNamesNoVerificationOfTheAccountIsCountedAgainstItsSourceAsync()
     {
         IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
         SessionId browser = Stepped();
@@ -4894,12 +4947,12 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 AC6 (D-189): a code that names another account's pending
+    /// AUTH-ABUSE-001 AC11 (D-189): a code that names another account's pending
     /// verification names none of the account's: it is answered and counted as one that
     /// names nothing, and the other account's verification is left as it stood.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_AC6_ACodeForAnotherAccountsVerificationIsCountedAgainstItsSourceAsync()
+    public async Task AUTH_ABUSE_001_AC11_ACodeForAnotherAccountsVerificationIsCountedAgainstItsSourceAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         await AddedAsync(Second);
@@ -5003,11 +5056,11 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003: every press is first held to the delay of its source, the press of
+    /// AUTH-ABUSE-001 AC11: every press is first held to the delay of its source, the press of
     /// a link that would verify included, and a link merely opened is held to none.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_APressThatWouldVerifyIsHeldToItsSourcesDelayAsync()
+    public async Task AUTH_ABUSE_001_AC11_APressThatWouldVerifyIsHeldToItsSourcesDelayAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         SessionId browser = Stepped();

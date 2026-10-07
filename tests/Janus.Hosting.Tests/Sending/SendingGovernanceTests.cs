@@ -396,7 +396,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_004_ARestrictionGovernsOnlyItsChannelAsync()
+    public async Task AUTH_ABUSE_004_AC10_ARestrictionGovernsOnlyItsChannelAsync()
     {
         var textedMailbox = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Mailbox.Value);
         var mailedPhone = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Phone.Value);
@@ -419,13 +419,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC5: a security notice to a number its owner holds answers to the
+    /// AUTH-ABUSE-004 AC11: a security notice to a number its owner holds answers to the
     /// restrictions whose purpose is <c>notification</c> alone, so a spent
     /// <c>sms.source</c> neither refuses it nor counts it (D-166, 342).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_004_AC5_ANoticeToAHolderIsNotCountedBySmsSourceAsync()
+    public async Task AUTH_ABUSE_004_AC11_ANoticeToAHolderIsNotCountedBySmsSourceAsync()
     {
         var subject = SubjectId.New(_randomness);
         var source = new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7");
@@ -447,7 +447,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_004_ASendNoRequestAskedForIsCountedUnderNoSourceAsync()
+    public async Task AUTH_ABUSE_004_AC12_ASendNoRequestAskedForIsCountedUnderNoSourceAsync()
     {
         _ = await SentAsync(Texted() with { Source = null });
 
@@ -1176,13 +1176,25 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-003 AC5 and AUTH-ABUSE-004: an alert is outside every restriction, so it is
+    /// OPS-ALERT-003 AC5: an alert is outside every restriction, so it is
     /// carried with every bucket of every restriction that could count it full, and
     /// counts under none (D-166, 342).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_003_AC5_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
+    public Task OPS_ALERT_003_AC5_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync() =>
+        AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync();
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC13: an alert is sent whatever the buckets of every restriction
+    /// hold, and is counted under none of them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public Task AUTH_ABUSE_004_AC13_AnAlertIsSentWhateverTheBucketsOfEveryRestrictionHoldAsync() =>
+        AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync();
+
+    private async Task AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
     {
         _configuration.Set(
             Settings.Restrictions,

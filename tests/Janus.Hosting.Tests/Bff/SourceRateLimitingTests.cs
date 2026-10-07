@@ -245,7 +245,7 @@ public sealed class SourceRateLimitingTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_SESS_013_TheSessionRecordsTheWholeAddressAsync()
+    public async Task AUTH_SESS_013_AC6_TheSessionRecordsTheWholeAddressAsync()
     {
         await using var deployment = new Deployment();
         var whole = IPAddress.Parse("2001:db8:1:1::7");

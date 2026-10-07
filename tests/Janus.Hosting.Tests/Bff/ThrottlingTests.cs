@@ -107,7 +107,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_001_TwoAddressesOfOneIpv6SubnetShareTheSourceDelayAsync()
+    public async Task AUTH_ABUSE_001_AC13_TwoAddressesOfOneIpv6SubnetShareTheSourceDelayAsync()
     {
         await RegisteredAsync();
 
