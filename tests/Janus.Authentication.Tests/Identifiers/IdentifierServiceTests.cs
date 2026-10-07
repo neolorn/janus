@@ -571,6 +571,59 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC11: a right code refused for a cause other than the code, here
+    /// a value another account has come to hold since the add, is counted against
+    /// nothing, neither the request's source nor the identifier.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC11_ARightCodeRefusedForAnotherCauseCountsNothingAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        await AddedAsync(Fourth);
+
+        IdentifierId mine = Assert.Single(_pending.All).Identifier;
+
+        Accepted(await Service.AddAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            IdentifierKind.Email,
+            Fourth,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId theirs = _pending.All.Single(pending => pending.Subject == other).Identifier;
+
+        Accepted(await Service.VerifyAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            theirs,
+            Code(theirs),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        int attempts = Outstanding(mine).Attempts;
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                mine,
+                Code(mine),
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_throttle.Failures);
+        Assert.Equal(attempts, Outstanding(mine).Attempts);
+    }
+
+    /// <summary>
     /// REG-IDENT-004: a press of the add's link from the browser that staged it judges
     /// the value again as the right code does, so a value held since writes nothing and
     /// is answered <c>auth.code.expired</c>.

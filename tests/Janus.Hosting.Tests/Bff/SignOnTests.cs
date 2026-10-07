@@ -167,7 +167,19 @@ public sealed class SignOnTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_SESS_006_AC4_NothingButThePerApplicationSessionIsHeldAfterwardsAsync()
+    public Task BFF_SESS_006_AC4_NothingButThePerApplicationSessionIsHeldAfterwardsAsync() =>
+        NothingButThePerApplicationSessionIsHeldAfterwardsAsync();
+
+    /// <summary>
+    /// AUTH-OIDC-002 AC2: past the code exchange the BFF holds its session record and
+    /// no access, ID or refresh token.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public Task AUTH_OIDC_002_AC2_NoTokenIsHeldBeyondTheCodeExchangeAsync() =>
+        NothingButThePerApplicationSessionIsHeldAfterwardsAsync();
+
+    private static async Task NothingButThePerApplicationSessionIsHeldAfterwardsAsync()
     {
         await using var deployment = new Deployment();
 

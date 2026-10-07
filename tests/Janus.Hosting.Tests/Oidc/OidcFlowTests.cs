@@ -754,13 +754,13 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-002 AC1 and AC2, chapter 09 section 9: a browser application's own
+    /// AUTH-OIDC-002 AC3, chapter 09 section 9: a browser application's own
     /// layer that asks to be given something to hold is refused where it asks, and is
     /// never quietly handed a code that would carry it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_002_AC1_ABrowserApplicationAskingToHoldOneIsRefusedAsync()
+    public async Task AUTH_OIDC_002_AC3_ABrowserApplicationAskingToHoldOneIsRefusedAsync()
     {
         await using var deployment = new Deployment();
 
@@ -775,6 +775,7 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
         Assert.Null(answered.Location);
+        Assert.Equal("invalid_request", answered.Text("error"));
         Assert.False(answered.Json().TryGetProperty("request_uri", out _));
         Assert.Empty(deployment.Tokens.All);
     }

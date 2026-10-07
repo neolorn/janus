@@ -16,6 +16,8 @@ using Janus.Privacy.SubjectKeys;
 using Janus.Privacy.Tests.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace Janus.Hosting.Tests;
@@ -28,6 +30,8 @@ namespace Janus.Hosting.Tests;
 public sealed class KeyMaterialTests
 {
     private const string Connection = "Host=nowhere;Database=identity";
+
+    private const string Issuer = "https://identity.example.test";
 
     // The head every library assembly's name carries, read from the core's
     // namespace so no string spells the product name (CONV-NAME-001).
@@ -262,6 +266,90 @@ public sealed class KeyMaterialTests
             [Derived(current), Derived(previous)],
             TokenProtection.Keys(ring).Select(key => key.Key));
     }
+
+    /// <summary>
+    /// AUTH-KEY-002 AC3: what a start encrypts under the current version is read by a
+    /// later start that holds that version beside a newer current one, and is read by
+    /// none once the version is retired. The server's refresh tokens are encrypted
+    /// under these keys and by this key wrap and content encryption.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_KEY_002_AC3_ATokenEncryptedBeforeARotationIsReadAcrossStartsUntilItsVersionIsRetiredAsync()
+    {
+        byte[] first = [.. Enumerable.Repeat((byte)1, 32)];
+        byte[] second = [.. Enumerable.Repeat((byte)2, 32)];
+
+        IReadOnlyList<SymmetricSecurityKey> issuing = await StartedAsync(
+            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = first }));
+        string token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = Issuer,
+            Audience = Issuer,
+            Expires = TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(1),
+            EncryptingCredentials = new EncryptingCredentials(
+                issuing[0],
+                SecurityAlgorithms.Aes256KW,
+                SecurityAlgorithms.Aes256CbcHmacSha512),
+        });
+
+        IReadOnlyList<SymmetricSecurityKey> rotated = await StartedAsync(
+            new KeyEncryptionKeys(2, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = first, [2] = second }));
+        IReadOnlyList<SymmetricSecurityKey> retired = await StartedAsync(
+            new KeyEncryptionKeys(2, new Dictionary<int, ReadOnlyMemory<byte>> { [2] = second }));
+
+        Assert.True(await ReadAsync(token, issuing));
+        Assert.True(await ReadAsync(token, rotated));
+        Assert.False(await ReadAsync(token, retired));
+    }
+
+    /// <summary>
+    /// AUTH-KEY-002 AC4: the entry point takes the services, the connection string, the
+    /// authorization declaration and the kind of application, and nothing else, so no
+    /// secret reaches the library as an argument of it.
+    /// </summary>
+    [Fact]
+    public void AUTH_KEY_002_AC4_TheEntryPointTakesNoSecret()
+    {
+        MethodInfo entry = Assert.Single(
+            typeof(HostingRegistration).GetMethods(BindingFlags.Public | BindingFlags.Static),
+            method => string.Equals(method.Name, nameof(HostingRegistration.AddJanus), StringComparison.Ordinal));
+
+        Assert.Equal(
+            [
+                ("services", typeof(IServiceCollection)),
+                ("connectionString", typeof(string)),
+                ("declaration", typeof(AuthorizationDeclaration)),
+                ("application", typeof(ApplicationKind)),
+            ],
+            entry.GetParameters().Select(parameter => (parameter.Name!, parameter.ParameterType)));
+    }
+
+    // The keys a start that reads these versions encrypts and decrypts tokens with.
+    private static async Task<IReadOnlyList<SymmetricSecurityKey>> StartedAsync(KeyEncryptionKeys versions)
+    {
+        await using ServiceProvider deployed = Registered(new SecretSourceInMemory(None)
+        {
+            KeyEncryptionKeys = versions,
+        }).BuildServiceProvider();
+
+        await deployed.GetServices<IHostedService>().OfType<KeyRingService>().Single()
+            .StartingAsync(TestContext.Current.CancellationToken);
+
+        return TokenProtection.Keys(deployed.GetRequiredService<IKeyRing>());
+    }
+
+    // Whether a start holding these keys reads what a token encrypted carries.
+    private static async Task<bool> ReadAsync(string token, IReadOnlyList<SymmetricSecurityKey> keys) =>
+        (await new JsonWebTokenHandler().ValidateTokenAsync(
+            token,
+            new TokenValidationParameters
+            {
+                TokenDecryptionKeys = keys,
+                RequireSignedTokens = false,
+                ValidIssuer = Issuer,
+                ValidAudience = Issuer,
+            })).IsValid;
 
     // AUTH-KEY-002: what a version derives under the token-protection purpose.
     private static byte[] Derived(byte[] version) =>

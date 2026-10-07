@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Passwords;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
@@ -130,6 +131,42 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status200OK, reached.Status);
         Assert.Equal("complete", reached.Text("status"));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-005 AC4: the link the address received is the authentication
+    /// application's landing address carrying the recovery token in its fragment,
+    /// which no request carries, so the password stands as it stood until the token
+    /// is presented with the new one to <c>POST /recovery/complete</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_005_AC4_TheLinkLandsAtTheAuthenticationOriginAndChangesNothingUntilItsTokenIsPressedAsync()
+    {
+        _ = await RegisteredAsync();
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        PasswordHash held = await HashAsync(subject);
+        Browser browser = await ArrivedAsync();
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address))).Status);
+
+        string token = Token();
+
+        Assert.NotEmpty(token);
+        Assert.Equal("https://identity.example.test/link#recovery." + token, _deployment.Mail.Taken[^1].Body);
+        Assert.Same(held, await HashAsync(subject));
+
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/recovery/complete",
+            ("token", token),
+            ("password", NewPassword));
+
+        Assert.Equal(StatusCodes.Status204NoContent, completed.Status);
+        Assert.NotSame(held, await HashAsync(subject));
     }
 
     /// <summary>
@@ -501,6 +538,10 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
 
         return subject;
     }
+
+    // What the store holds of the account's password.
+    private async Task<PasswordHash> HashAsync(SubjectId subject) =>
+        (await _deployment.Passwords.FindAsync(subject, TestContext.Current.CancellationToken))!.Hash;
 
     // The account the tests recover, signed in, with the clock past the minute the
     // registration's own messages hold the address for (AUTH-ABUSE-004).

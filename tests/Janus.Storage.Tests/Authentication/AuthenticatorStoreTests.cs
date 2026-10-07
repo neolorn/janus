@@ -85,6 +85,29 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-FACT-006 AC2: the secret is held under the person's key, so destroying that
+    /// key leaves the row holding a secret nothing can read.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_006_AC2_TheSecretIsUnreadableOnceTheSubjectKeyIsDestroyedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await WrittenAsync(Authenticator.EnrollingTotp(id, subject, Label("this phone"), Secret(), Noon));
+        await _deployment.EraseAsync(subject);
+
+        await using StoreContext reading = database.Context();
+        AuthenticatorRecord stored = await reading.Authenticators
+            .SingleAsync(held => held.Id == id, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(stored.TotpSecret);
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-FACT-013: a credential is resolved by what the browser returns, which is
     /// how a discoverable credential names the account rather than the other way
     /// round.
