@@ -163,12 +163,12 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-CFG-007 AC1: a role manager without system administration can neither give a
+    /// OPS-CFG-007 AC3: a role manager without system administration can neither give a
     /// role the permission nor change a role that carries it, and one holding it can.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_CFG_007_AC1_ARoleCarryingSystemAdministrationNeedsItAsync()
+    public async Task OPS_CFG_007_AC3_ARoleCarryingSystemAdministrationNeedsItAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
 

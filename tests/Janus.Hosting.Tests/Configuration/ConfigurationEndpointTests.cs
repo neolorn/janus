@@ -173,12 +173,12 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-CFG-002 and chapter 10 section 2.1: a loosening is the holder of
+    /// OPS-CFG-002 AC5 and chapter 10 section 2.1: a loosening is the holder of
     /// <c>system:administer</c>'s, so <c>config:manage</c> alone is refused it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_CFG_002_ALooseningRequiresSystemAdministerAsync()
+    public async Task OPS_CFG_002_AC5_ALooseningRequiresSystemAdministerAsync()
     {
         Browser administrator = await AuthorisedAsync(Permissions.ConfigurationManage);
 
