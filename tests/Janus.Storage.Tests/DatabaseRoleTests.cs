@@ -372,6 +372,36 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// AUTHZ-MODEL-005 AC3: a right granted to the maintenance credential, taken from
+    /// it or widened from a column to its table, as a migration would, the listing
+    /// unchanged, leaves the credential holding other than what the serialized model
+    /// lists, which is the comparison that fails. Each change is rolled back.
+    /// </summary>
+    /// <param name="change">What the migration would run.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("GRANT SELECT ON identity.grants TO identity_maintenance")]
+    [InlineData("REVOKE UPDATE ON identity.subject_keys FROM identity_maintenance")]
+    [InlineData("GRANT SELECT ON identity.identifiers TO identity_maintenance")]
+    public async Task AUTHZ_MODEL_005_AC3_ARightChangedWithoutTheListingNoLongerMatchesItAsync(string change)
+    {
+        List<string> listed = [.. Listed().Order(StringComparer.Ordinal)];
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+        await using NpgsqlTransaction migration = await connection.BeginTransactionAsync(
+            TestContext.Current.CancellationToken);
+
+        List<string> before = await HeldAsync(connection, migration);
+        await connection.ExecuteAsync(change, transaction: migration);
+        List<string> after = await HeldAsync(connection, migration);
+        await migration.RollbackAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(listed, before);
+        Assert.NotEqual(listed, after);
+        Assert.Equal(listed, await HeldAsync(connection, within: null));
+    }
+
+    /// <summary>
     /// OPS-MIG-003a AC5, D-183: in every other schema of the database the maintenance
     /// credential holds exactly what a role granted nothing holds, <c>USAGE</c> on
     /// <c>public</c> among it, which is the database's and the host's and which the
@@ -504,6 +534,14 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             await connection.ExecuteScalarAsync<int>(
                 "SELECT identity.audit_drop_expired_partitions(" + arguments + ")"));
     }
+
+    // What the maintenance credential holds in the library's schema, read on the
+    // connection, and so inside the transaction, the change was made in.
+    private static async Task<List<string>> HeldAsync(NpgsqlConnection connection, NpgsqlTransaction? within) =>
+        [.. (await connection.QueryAsync<string>(
+            "SELECT held FROM (" + Privileges + ") AS privileges WHERE library AND maintenance",
+            new { maintenance = "identity_maintenance", control = "identity_maintenance" },
+            within)).Order(StringComparer.Ordinal)];
 
     private static async Task<int> PartitionsAsync(NpgsqlConnection connection) =>
         await connection.ExecuteScalarAsync<int>(

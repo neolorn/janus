@@ -85,7 +85,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// AUTHZ-GATE-004 AC2, AUTHZ-DERIVE-001, AUTHZ-DERIVE-005 (D-162): an explanation
+    /// AUTHZ-GATE-004 AC5, AUTHZ-DERIVE-001, AUTHZ-DERIVE-005 (D-162): an explanation
     /// asked with the rows the derivation is evaluated over names the grant the fact
     /// produced. It carries no identifier, because no row holds it; it says it is
     /// derived; and it names the role the derivation confers and the container the
@@ -93,7 +93,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GATE_004_AC2_AnApprovalNamesTheGrantAFactProducedAsync()
+    public async Task AUTHZ_GATE_004_AC5_AnApprovalNamesTheGrantAFactProducedAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Deployed deployed = await DeployAsync(granted: false);
@@ -128,6 +128,56 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal(Reviewer, grant.Role);
         Assert.False(grant.Deny);
         Assert.Equal(deployed.Container, grant.InheritedFrom);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004 AC5: where a deny on the record matches beside the fact that
+    /// would admit it, the explanation asked with the host's rows names the deny, the
+    /// row somebody wrote, and not the grant the fact produced.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC5_ADenyIsNamedInsteadOfTheGrantAFactProducedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+
+        await deployed.Deployment.NamedRoleAsync(
+            Reviewer,
+            [HostPermissions.ReadNote],
+            cancellationToken);
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Account, cancellationToken);
+
+        GrantId deny = await deployed.Deployment.GrantAsync(
+            GrantSubject.Of(deployed.Account),
+            deployed.Role,
+            deployed.Note,
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        AccessExplanation explanation = Explained(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ExplainAsync(
+                    AccessContext.Of(deployed.Account),
+                    HostPermissions.ReadNote,
+                    deployed.Note,
+                    Sources(reading),
+                    cancellationToken));
+
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+
+        ExplainedGrant grant = Assert.IsType<ExplainedGrant>(explanation.Grant);
+
+        Assert.Equal(deny, grant.Id);
+        Assert.Equal(GrantKind.Stored, grant.Kind);
+        Assert.Equal(deployed.Role, grant.Role);
+        Assert.True(grant.Deny);
+        Assert.Null(grant.InheritedFrom);
     }
 
     /// <summary>

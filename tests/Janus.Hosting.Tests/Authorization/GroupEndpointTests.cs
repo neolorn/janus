@@ -284,7 +284,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GROUP_001_OnlyAGroupNothingNamesIsRemovedAsync()
+    public async Task AUTHZ_GROUP_001_AC6_OnlyAGroupNothingNamesIsRemovedAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId department = Id(await CreatedAsync(administrator, "Department"));
@@ -402,7 +402,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_STEP_001_AChangeOfMembersIsAStepUpActionAsync()
+    public async Task AUTHZ_GROUP_001_AC4_AChangeOfMembersIsAStepUpActionAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
@@ -429,7 +429,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GROUP_001_AChangeThatChangesNothingRecordsNothingAsync()
+    public async Task AUTHZ_GROUP_001_AC5_AChangeThatChangesNothingRecordsNothingAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
@@ -448,6 +448,49 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal([User], await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
         Assert.False(_deployment.Work.Open);
         Assert.Equal(2, _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-001 AC3: creating a group, removing one, adding a member and taking
+    /// one out, each without a reason or with one blank after trimming, is refused
+    /// naming the reason to a caller who may make the change, and the groups, their
+    /// members and the record of changes stand as they were.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AC3_AChangeWithoutAReasonChangesNothingAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        Group tellers = await HeldAsync(Branch, "Tellers");
+        Group empty = await HeldAsync(Branch, "Empty");
+        string members = "/admin/groups/" + tellers.Id + "/members";
+        var joining = GrantSubject.Of(new SubjectId(Guid.NewGuid()));
+
+        await _deployment.Groups.AddMemberAsync(tellers.Id, User, CancellationToken.None);
+
+        Answer[] refusals =
+        [
+            await administrator.SendAsync("POST", "/admin/groups", ("organization", Branch.Value), ("name", "Cashiers")),
+            await CreatedAsync(administrator, "Cashiers", reason: " "),
+            await administrator.SendAsync("DELETE", "/admin/groups/" + empty.Id, "{}"),
+            await administrator.SendAsync("DELETE", "/admin/groups/" + empty.Id, ("reason", " ")),
+            await administrator.SendAsync("POST", members, ("subjectType", "user"), ("subjectId", joining.Value)),
+            await AddedAsync(administrator, tellers.Id, joining, reason: " "),
+            await administrator.SendAsync("DELETE", members, ("subjectType", "user"), ("subjectId", Holder)),
+            await administrator.SendAsync(
+                "DELETE",
+                members,
+                ("subjectType", "user"),
+                ("subjectId", Holder),
+                ("reason", " ")),
+        ];
+
+        Assert.All(refusals, refused => Assert.Equal("reason", Member(refused)));
+        Assert.Equal(
+            new[] { empty.Id.Value, tellers.Id.Value }.Order(),
+            (await _deployment.Groups.InAsync(Branch, CancellationToken.None)).Select(group => group.Id.Value).Order());
+        Assert.Equal([User], await _deployment.Groups.MembersAsync(tellers.Id, CancellationToken.None));
+        Assert.Empty(_deployment.GroupChanges.Changes);
     }
 
     /// <summary>

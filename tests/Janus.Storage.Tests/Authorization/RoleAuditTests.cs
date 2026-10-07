@@ -35,7 +35,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ADefinitionRecordsWhatTheRoleWasAndBecameAsync()
+    public async Task AUTHZ_GRANT_004_AC4_ADefinitionRecordsWhatTheRoleWasAndBecameAsync()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         SubjectId actor = await _deployment.AccountAsync(now);
@@ -73,7 +73,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARemovalRecordsWhatTheRolePermittedAsync()
+    public async Task AUTHZ_GRANT_004_AC4_ARemovalRecordsWhatTheRolePermittedAsync()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         SubjectId actor = await _deployment.AccountAsync(now);

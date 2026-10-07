@@ -122,7 +122,7 @@ public sealed class AccessEndpointTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_DERIVE_007_AnUnregisteredRecordReadsAsARefusalAsync()
+    public async Task AUTHZ_DERIVE_007_AC3_AnUnregisteredRecordReadsAsARefusalAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 

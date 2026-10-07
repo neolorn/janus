@@ -176,6 +176,43 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-001 AC4: on a type no non-materialised derivation reaches, a check, a
+    /// capability page and an explanation asked without the host's rows are answered
+    /// from the materialised grants, and none of them is a fault.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_001_AC4_AMaterialisedGrantAnswersWithoutTheHostsRowsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+        var caller = AccessContext.Of(reviewed.Account);
+
+        await using ServiceProvider deployment = Materialised();
+        await RefreshAsync(deployment, reviewed);
+
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result checking = await gate.RequireAsync(caller, HostPermissions.Read, reviewed.Record, cancellationToken);
+        IReadOnlyList<Capability> page = Rendered(await gate.CapabilitiesAsync(
+            caller,
+            Document,
+            [reviewed.Record.Id],
+            [HostPermissions.Read],
+            cancellationToken));
+        AccessExplanation explained = Rendered(await gate.ExplainAsync(
+            caller,
+            HostPermissions.ReadNote,
+            reviewed.Note,
+            cancellationToken));
+
+        Assert.True(checking.Match(() => true, _ => false));
+        Assert.Equal([HostPermissions.Read], Assert.Single(page).Can);
+        Assert.Equal(AccessOutcome.Allowed, explained.Outcome);
+    }
+
+    /// <summary>
     /// AUTHZ-DERIVE-007: a materialised derivation's grants are rows, so who can access a
     /// record is answered without the host's rows and reports them as materialised,
     /// each with its identifier and the container the relationship is declared on.
@@ -419,6 +456,25 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         Assert.Equal(
             new Written(Guid.Empty, "AUTHZ-DERIVE-005", RevokedBy: null, RevocationReason: null),
             await WrittenAsync(reviewed));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC4: a grant the drift check materialises records the nil subject
+    /// as its granter and the reason <c>AUTHZ-DERIVE-005</c>, never its holder.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC4_AGrantTheDriftCheckMaterialisesNamesNoPersonAsItsGranterAsync()
+    {
+        Reviewed unwritten = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        await DriftCheckedAsync(deployment);
+
+        Assert.Equal(
+            new Written(Guid.Empty, "AUTHZ-DERIVE-005", RevokedBy: null, RevocationReason: null),
+            await WrittenAsync(unwritten));
     }
 
     /// <summary>
