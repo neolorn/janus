@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A send is admitted at the instant its refusal named in `retryAt`: a sliding bucket
+  counts what was sent less than its interval ago, where it counted a send exactly one
+  interval old as well and so refused at that instant, naming it again.
 - The one count of a send against a restriction marked `resend` is also released when
   the code the send carries is presented right or the link it carries is pressed: a
   registration's or a held value's code or link, the link that asks a displaced

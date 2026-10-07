@@ -190,6 +190,31 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC1: the instant a refusal names is one at which the sliding bucket
+    /// it exceeded has room, so the send refused a moment before it is admitted at it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC1_ASendIsAdmittedAtTheInstantItsRefusalNamedAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+
+        _ = await SentAsync(Texted());
+
+        _clock.Advance(TimeSpan.FromMinutes(3) - TimeSpan.FromTicks(1));
+
+        Result<SendReference> early = await SendAsync(Texted(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(early));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3), RetryAt(early));
+
+        _clock.Advance(TimeSpan.FromTicks(1));
+
+        _ = await SentAsync(Texted());
+
+        Assert.Equal(2, _sms.Taken.Count);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC1: a second mail to one address inside sixty seconds is
     /// refused likewise, by the fixed bucket that turns over on the minute.
     /// </summary>
