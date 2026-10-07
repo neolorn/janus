@@ -88,6 +88,35 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-008 AC2: the endpoint puts nothing between the subject and the
+    /// withdrawal. The first request, carrying no body and no confirmation, is answered
+    /// with no content, no redirect and nothing to answer in turn, and the consent is
+    /// withdrawn by the time it returns.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC2_TheFirstWithdrawalRequestWithdrawsAndAsksNothingFurtherAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _ = await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant");
+
+        Answer withdrawn = await browser.SendAsync(
+            "POST",
+            "/privacy/consents/" + Marketing + "/withdraw");
+
+        ConsentRecord held = Assert.Single(
+            await _deployment.Consents.ConsentsAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal(StatusCodes.Status204NoContent, withdrawn.Status);
+        Assert.Empty(withdrawn.Body);
+        Assert.Null(withdrawn.Location);
+        Assert.False(held.Live);
+        Assert.NotNull(held.WithdrawnAt);
+    }
+
+    /// <summary>
     /// PRIV-CONS-003 AC2: a registration that said nothing of any purpose, followed by
     /// an hour of using the account, leaves the subject with no consent recorded, in
     /// the dashboard or in the store.

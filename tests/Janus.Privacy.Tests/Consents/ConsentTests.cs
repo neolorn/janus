@@ -207,6 +207,39 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-008 AC3: the subject's own call is the whole of a withdrawal. When it
+    /// returns the record is no longer live and carries the instant of the call, the
+    /// change is announced and committed in the call's one transaction, and the trail
+    /// names the subject as the one who acted, nobody having approved anything.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC3_AWithdrawalIsInForceWhenTheSubjectsOwnCallReturnsAsync()
+    {
+        await GrantAsync(Marketing);
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        int committed = _work.Committed;
+        int announced = _events.Of<ConsentChanged>().Count;
+
+        Assert.True(await WithdrawAsync(Marketing));
+
+        ConsentRecord held = Assert.Single(await HeldAsync());
+        PrivacyAuditEntry recorded = Assert.Single(
+            _audit.Entries,
+            entry => entry.Action.Equals(AuditActions.ConsentWithdrawn));
+
+        Assert.False(held.Live);
+        Assert.Equal(Noon.AddMinutes(5), held.WithdrawnAt);
+        Assert.Equal((committed + 1, false), (_work.Committed, _work.Open));
+        Assert.Equal(announced + 1, _events.Of<ConsentChanged>().Count);
+        Assert.Equal(ConsentChange.Withdrawn, _events.Of<ConsentChanged>()[^1].Change);
+        Assert.Equal((Ahmed, Ahmed, Noon.AddMinutes(5)), (recorded.Acting, recorded.Subject, recorded.At));
+        Assert.Null(recorded.Principal);
+    }
+
+    /// <summary>
     /// PRIV-CONS-008 AC5, CONV-DESIGN-003: a consent withdrawn while this withdrawal
     /// waited for the subject's records is withdrawn already, so this one announces and
     /// records nothing.
