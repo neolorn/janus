@@ -247,6 +247,10 @@ internal static class StorageRegistration
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>(),
             provider.GetRequiredService<DataConnections>()));
+        services.AddScoped<IPendingEnrolmentStore>(provider => new PendingEnrolmentStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<IKeyRing>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IPolicyRaiseStore, PolicyRaiseStore>();
         services.AddScoped<IRecoveryLinkStore, RecoveryLinkStore>();
         services.AddScoped<IRecoveryApprovalStore>(provider => new RecoveryApprovalStore(

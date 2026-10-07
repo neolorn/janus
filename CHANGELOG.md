@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `phoneCode` credential is enrolled by `POST /account/factors/phonecode/begin`, which
+  names a verified number of the account by its id and texts it a code, and
+  `POST /account/factors/phonecode/confirm`, which makes the credential active, bound to
+  that number, retires every other `phoneCode` credential of the account and answers the
+  credential with the recovery codes it brought. `begin` asks the number's signal first
+  and at a risk sends nothing and is refused `auth.factor.notpermitted`; it is refused
+  `identity.identifier.invalid` where the identifier no longer holds, verified, the
+  number it read. A wrong code at `confirm` is `auth.code.invalid` and counts against
+  the enrolment's own `code.signin.attempts`. A new `begin` replaces the pending
+  enrolment. `ICredentials` gains `BeginTextCodeAsync` and `ConfirmTextCodeAsync`, with
+  the record `TextCodeEnrolment`; the pending enrolment is held in the new table
+  `pending_enrolments` (migration `AddPendingEnrolments`), swept with the other expired
+  rows.
 - A `phoneCode` credential is bound to one number, held under the account's key in the
   new column `authenticators.enc_number` (migration `BindATextedSecondStepToItsNumber`,
   with `ck_authenticators_number`), and its code is texted to that number, where it

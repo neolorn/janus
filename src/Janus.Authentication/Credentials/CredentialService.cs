@@ -28,6 +28,7 @@ namespace Janus.Authentication.Credentials;
 /// <param name="accounts">Where the display name a ceremony carries is read.</param>
 /// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="generators">What enrols a code generator.</param>
+/// <param name="enrolling">What enrols a second step the library texts.</param>
 /// <param name="codes">What issues a set of single-use codes.</param>
 /// <param name="passwords">What sets a password.</param>
 /// <param name="losses">What suspends a credential for a notified window.</param>
@@ -47,7 +48,7 @@ namespace Janus.Authentication.Credentials;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-007,
+/// Implements LIB-API-005, AUTH-FACT-001, AUTH-FACT-002, AUTH-FACT-002b, AUTH-FACT-007,
 /// AUTH-FACT-008, AUTH-STEP-007, AUTH-RECOV-001 and AUTH-RECOV-006. Two authorities
 /// reach the same operations: a session, which every gate applies to, and the
 /// enrolment session an approved recovery opened, which stands in for the gates
@@ -61,6 +62,7 @@ internal sealed class CredentialService(
     IAccountDirectory accounts,
     ISettingsRestriction restriction,
     TotpService generators,
+    TextedEnrolments enrolling,
     RecoveryCodeService codes,
     PasswordService passwords,
     LossReports losses,
@@ -559,6 +561,207 @@ internal sealed class CredentialService(
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> BeginTextCodeAsync(
+        CredentialAuthority authority,
+        IdentifierId identifier,
+        string label,
+        string source,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authority);
+        ArgumentNullException.ThrowIfNull(label);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(language);
+
+        Error? failure = null;
+
+        Acting acting = (await HoldingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Acting>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        // AUTH-FACT-002: the label is judged as a label alone. The one credential of
+        // the entry the account may hold is the one the confirmation retires, so no
+        // credential is left for the label to be held by.
+        if (!CredentialLabel.TryParse(label, out CredentialLabel named))
+        {
+            return Result.Failure(Error.From(ErrorCodes.CredentialLabelInvalid));
+        }
+
+        Factor texted = TextedEnrolments.Entry;
+
+        if (await AdmitsAsync(acting.Subject, texted, cancellationToken).ConfigureAwait(false) is Error refusal)
+        {
+            return Result.Failure(refusal);
+        }
+
+        if (await GateAsync(acting, StepUpAction.FactorEnrol, texted, cancellationToken).ConfigureAwait(false)
+            is Error gate)
+        {
+            return Result.Failure(gate);
+        }
+
+        // AUTH-FACT-002b AC6: the signal of the number is asked before the unit of
+        // work begins, and a risk refuses the enrolment whatever the identifier holds
+        // by the time the lock is taken.
+        string number = (await enrolling
+                .ConsideredAsync(acting.Subject, identifier, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again with the account's row
+        // held before any other lock, so one committed since the gate step refuses the
+        // enrolment before anything is written or sent.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        if ((await enrolling
+                .StageAsync(acting.Subject, identifier, number, named, source, language, cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unstaged)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unstaged);
+        }
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<TextCodeEnrolment>> ConfirmTextCodeAsync(
+        CredentialAuthority authority,
+        [NeverLogged] string code,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authority);
+        ArgumentNullException.ThrowIfNull(code);
+        ArgumentNullException.ThrowIfNull(source);
+
+        Error? failure = null;
+
+        Acting acting = (await HoldingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Acting>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<TextCodeEnrolment>(failure);
+        }
+
+        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<TextCodeEnrolment>(failure);
+        }
+
+        Factor texted = TextedEnrolments.Entry;
+
+        if (await AdmitsAsync(acting.Subject, texted, cancellationToken).ConfigureAwait(false) is Error refusal)
+        {
+            return Result.Failure<TextCodeEnrolment>(refusal);
+        }
+
+        if (await GateAsync(acting, StepUpAction.FactorEnrol, texted, cancellationToken).ConfigureAwait(false)
+            is Error gate)
+        {
+            return Result.Failure<TextCodeEnrolment>(gate);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<TextCodeEnrolment>(notBegun);
+        }
+
+        // D-166 X3: a second step is enrolled under the lock on the account's row, which
+        // the invalidation of a reported credential holds while it judges what is left.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<TextCodeEnrolment>(since);
+        }
+
+        TextedConfirmation confirmed = await enrolling
+            .ConfirmAsync(acting.Subject, code, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (confirmed.Refusal is Error unconfirmed || confirmed.Enrolled is not AuthenticatorId enrolled)
+        {
+            Error refused = confirmed.Refusal ?? Error.From(ErrorCodes.CodeExpired);
+
+            // CONV-DESIGN-003: a wrong try's count is the one write a refusal keeps.
+            if (!confirmed.Kept)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<TextCodeEnrolment>(refused);
+            }
+
+            return Result.Failure<TextCodeEnrolment>(
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Match(() => refused, error => error));
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        foreach (AuthenticatorId retired in confirmed.Retired)
+        {
+            await audit
+                .RecordedAsync(Removed, acting.Subject, retired, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        EnrolledCredential settled = (await SettledAsync(acting, enrolled, texted, policy, source, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<EnrolledCredential>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<TextCodeEnrolment>(failure);
+        }
+
+        // Chapter 09: the answer is the credential as the account lists it, with the
+        // codes the enrolment brought, shown this once.
+        IReadOnlyList<Authenticator> standing = await authenticators
+            .OfAsync(acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(new TextCodeEnrolment(
+            CredentialSummaries.Of(
+                standing.First(credential => credential.Id == enrolled),
+                SecondStep.Preferred(standing)?.Id == enrolled),
+            settled.RecoveryCodes is null
+                ? null
+                : new GeneratedRecoveryCodes(settled.RecoveryCodes, time.GetUtcNow())));
     }
 
     /// <inheritdoc/>

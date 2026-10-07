@@ -406,6 +406,11 @@ internal sealed class Deployment : IAsyncDisposable
     public AuthenticatorStoreInMemory Authenticators { get; } = new();
 
     /// <summary>
+    /// The enrolments a texted code has yet to confirm.
+    /// </summary>
+    public PendingEnrolmentStoreInMemory Enrolments { get; } = new();
+
+    /// <summary>
     /// The passwords the accounts hold.
     /// </summary>
     public PasswordStoreInMemory Passwords { get; } = new();
@@ -896,6 +901,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton<IVerificationCodeStore>(codes);
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
+        _ = services.AddSingleton<IPendingEnrolmentStore>(Enrolments);
         _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<ISettingsRestriction>(Restriction);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
@@ -1044,6 +1050,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         _ = services.AddScoped<IAccounts, AccountAdministration>();
         _ = services.AddScoped<TotpService>();
+        _ = services.AddScoped<TextedEnrolments>();
         _ = services.AddScoped<WebAuthnService>();
         _ = services.AddScoped<SignInLinks>();
         _ = services.AddScoped<VerificationCodes>();

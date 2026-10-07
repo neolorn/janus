@@ -144,6 +144,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();
+        services.AddScoped<TextedEnrolments>();
         services.AddScoped<WebAuthnService>();
         services.AddScoped<RecoveryCodeService>();
         services.AddScoped<RecoveryCodeReminders>();

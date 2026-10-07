@@ -89,6 +89,24 @@ internal interface IIdentifierDirectory
     ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds the row of one identifier under a lock until the operation's transaction
+    /// ends, and answers the identifier as committed when the lock was taken. What is
+    /// bound to the value an identifier holds (a credential, a pending enrolment, a
+    /// code about to be issued) is read only after this lock, by the operation that
+    /// takes the value away and by the one that leans on it alike (AUTH-FACT-002,
+    /// CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose identifier.</param>
+    /// <param name="identifier">Which identifier.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The identifier, or nothing where the account no longer holds it.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<HeldIdentifier?> LockAsync(
+        SubjectId subject,
+        IdentifierId identifier,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes the lock on each value, held until the operation's transaction ends: every
     /// operation that writes a value to an account or reserves one takes it before it
     /// judges or writes, after its own row locks and before any send's counters, every

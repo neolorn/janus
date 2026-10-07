@@ -148,6 +148,38 @@ GET /account/explanations/{correlationId}
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
+POST /account/factors/phonecode/begin
+  request application/json
+    identifier: string
+    label: string
+  202
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+  422 auth.credential.labelinvalid auth.factor.notpermitted identity.identifier.invalid
+  429 auth.restriction.exceeded
+POST /account/factors/phonecode/confirm
+  request application/json
+    code: string
+  200
+    application/json
+      id: string
+      kind: Factor
+      label: string
+      state: AuthenticatorState
+      invalidatesAt: DateTimeOffset?
+      backupEligible: boolean?
+      backupState: boolean?
+      addedAt: DateTimeOffset
+      lastUsedAt: DateTimeOffset?
+      recoveryCodes.codes[]: string
+      recoveryCodes.generatedAt: DateTimeOffset
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
+  409 auth.factor.passwordrequired
+  422 auth.code.expired auth.code.invalid auth.factor.notpermitted
 POST /account/factors/totp/begin
   request application/json
     label: string

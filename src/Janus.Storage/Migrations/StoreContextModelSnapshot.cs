@@ -336,6 +336,68 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Credentials.PendingEnrolmentRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("Factor")
+                    .HasColumnType("text")
+                    .HasColumnName("factor");
+
+                b.Property<byte[]>("Code")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_code");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<DateTimeOffset>("IssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("issued_at");
+
+                b.Property<string>("Label")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("label");
+
+                b.Property<byte[]>("Number")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_number");
+
+                b.Property<byte[]>("Send")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("send");
+
+                b.Property<int>("WrongAttempts")
+                    .HasColumnType("integer")
+                    .HasColumnName("wrong_attempts");
+
+                b.HasKey("Subject", "Factor")
+                    .HasName("pk_pending_enrolments");
+
+                b.HasIndex("ExpiresAt")
+                    .HasDatabaseName("ix_pending_enrolments_expires_at");
+
+                b.ToTable("pending_enrolments", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_pending_enrolments_factor", "factor IN ('phoneCode')");
+
+                        t.HasCheckConstraint("ck_pending_enrolments_send", "octet_length(send) = 32");
+
+                        t.HasCheckConstraint("ck_pending_enrolments_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_pending_enrolments_wrong_attempts", "wrong_attempts >= 0");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Credentials.ProviderAttemptRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -4142,6 +4204,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasForeignKey("Upgrading")
                     .OnDelete(DeleteBehavior.Cascade)
                     .HasConstraintName("fk_key_ceremonies_upgrading");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Credentials.PendingEnrolmentRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_pending_enrolments_subject");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Credentials.ProviderAttemptRecord", b =>

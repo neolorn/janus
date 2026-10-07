@@ -410,6 +410,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
 
     /// <summary>
+    /// The enrolments a texted code has yet to confirm.
+    /// </summary>
+    public DbSet<PendingEnrolmentRecord> PendingEnrolments => Set<PendingEnrolmentRecord>();
+
+    /// <summary>
     /// The links the deactivation and deletion notices carried.
     /// </summary>
     public DbSet<LifecycleLinkRecord> LifecycleLinks => Set<LifecycleLinkRecord>();
@@ -582,6 +587,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
         modelBuilder.ApplyConfiguration(new ProviderAttemptConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingEnrolmentConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
         modelBuilder.ApplyConfiguration(new LockedDomainConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxConfiguration());

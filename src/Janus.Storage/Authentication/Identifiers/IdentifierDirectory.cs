@@ -103,6 +103,18 @@ internal sealed class IdentifierDirectory(
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<HeldIdentifier?> LockAsync(
+        SubjectId subject,
+        IdentifierId identifier,
+        CancellationToken cancellationToken)
+    {
+        await identifiers.LockAsync(subject, identifier, cancellationToken).ConfigureAwait(false);
+
+        return (await HeldAsync(subject, cancellationToken).ConfigureAwait(false)).Find(identifier);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     public ValueTask LockValuesAsync(
         IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
         CancellationToken cancellationToken) =>

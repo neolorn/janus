@@ -619,6 +619,18 @@ public sealed class ModelTests
             "passwords.set_at",
             "passwords.subject",
 
+            // Credentials: a text code's enrolment its code has yet to confirm, with
+            // the number it would be bound to and the code under the key (AUTH-FACT-002).
+            "pending_enrolments.enc_code",
+            "pending_enrolments.enc_number",
+            "pending_enrolments.expires_at",
+            "pending_enrolments.factor",
+            "pending_enrolments.issued_at",
+            "pending_enrolments.label",
+            "pending_enrolments.send",
+            "pending_enrolments.subject",
+            "pending_enrolments.wrong_attempts",
+
             // Not an account field: a requirement a scope's policy raised and when the
             // run-up to it began, one row per scope per field, which a sign-in that does
             // not yet meet it is told of (AUTH-FACT-017).

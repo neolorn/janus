@@ -53,6 +53,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private const string Source = "198.51.100.7";
     private const string Address = "person@example.test";
     private const string Number = "+441632960011";
+    private const string Elsewhere = "+441632960055";
     private const string Secret = "orangemarmaladeandtoast";
     private const string Another = "quincejellyonasaucer";
     private const string Origin = "https://app.example.com";
@@ -94,11 +95,14 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
+    private readonly PendingEnrolmentStoreInMemory _enrolments = new();
+    private readonly PhoneSignalAuditInMemory _considered = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private IEvents? _outbox;
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A deployment that can send the notice every enrolment carries, over origins the
@@ -1698,6 +1702,577 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
     }
 
+    /// <summary>
+    /// AUTH-FACT-002 AC9: a text code is enrolled by a begin naming a verified number
+    /// of the account, which texts that number a code as <c>secondstep-code</c> under
+    /// the purpose <c>secondfactor</c> and stages no credential, and a confirm
+    /// presenting the code, which makes the credential active, bound to that number.
+    /// The send is named by the enrolment, and its one count is released when the code
+    /// is presented right (AUTH-ABUSE-004).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC9_ABeginTextsTheNamedNumberAndAConfirmMakesTheCredentialActiveBoundToItAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        OutboundMessage texted = Assert.Single(_notifications.Texts);
+        PendingEnrolment staged = Assert.Single(_enrolments.All);
+
+        Assert.Equal(
+            (MessageKind.SecondStepCode, RestrictionPurpose.SecondFactor, Number, (SubjectId?)subject),
+            (texted.Message, texted.Purpose, texted.Destination.Canonical, texted.Subject));
+        Assert.Equal((subject, TextedEnrolments.Entry, Number), (staged.Subject, staged.Factor, staged.Number));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(10), staged.ExpiresAt);
+        Assert.Equal(staged.Send, Assert.Single(_restrictions.Carried).Answer);
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
+
+        TextCodeEnrolment enrolled = Value(await Service.ConfirmTextCodeAsync(
+            Authority(subject, session),
+            texted.Values["code"],
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((enrolled.Credential.Id, Number, true), (held.Id, held.Number, held.IsUsable));
+        Assert.Equal(
+            (TextedEnrolments.Entry, "My phone", AuthenticatorState.Active),
+            (enrolled.Credential.Kind, enrolled.Credential.Label, enrolled.Credential.State));
+        Assert.Equal(Noon, enrolled.Credential.AddedAt);
+        Assert.NotNull(enrolled.RecoveryCodes);
+        Assert.NotEmpty(enrolled.RecoveryCodes.Codes);
+        Assert.Empty(_enrolments.All);
+        Assert.Equal(staged.Send, Assert.Single(_restrictions.Answered));
+        Assert.Contains((AuditActions.CredentialEnrolled, subject, held.Id), _credentials.Records);
+        Assert.Contains(_events.Of<CredentialEnrolled>(), announced => announced.Credential == held.Id);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007 AC1 and chapter 09: the enrolment of a text code is told to every
+    /// recorded channel of the account.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_AC1_AConfirmedTextCodeIsToldToEveryRecordedChannelAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+
+        _notifications.Sent.Clear();
+
+        _ = Value(await Service.ConfirmTextCodeAsync(
+            Authority(subject, session),
+            code,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.NotEmpty(_notifications.Sent);
+        Assert.All(_notifications.Sent, told => Assert.Equal(MessageKind.CredentialEnrolled, told.Message));
+        Assert.Equal(
+            (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).NoticeSet.Count,
+            _notifications.Sent.Count);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC9 and AUTH-FACT-001: a right code retires every other text-code
+    /// credential of the account in the unit of work that makes the new one active, the
+    /// report running against a suspended one with it, and the label is judged without
+    /// them, so the label of the one retired is free.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC9_ARightCodeRetiresEveryOtherTextCodeCredentialAndTheirLabelIsFreeAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Authenticator active = Bound(subject, "My phone");
+        Authenticator suspended = Bound(subject, "Old phone");
+
+        suspended.Suspend(Noon + TimeSpan.FromDays(7));
+        await _reports.AddAsync(
+            LossReport.Open(suspended.Id, subject, OpaqueToken.Draw(_randomness), Noon, TimeSpan.FromDays(7)),
+            TestContext.Current.CancellationToken);
+        await PresentedAsync(subject, session);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        int committed = _work.OutermostCommitted;
+
+        TextCodeEnrolment enrolled = Value(await Service.ConfirmTextCodeAsync(
+            Authority(subject, session),
+            Assert.Single(_notifications.Texts).Values["code"],
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(
+            await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken),
+            credential => credential.Factor == TextedEnrolments.Entry);
+
+        Assert.Equal((enrolled.Credential.Id, "My phone"), (held.Id, held.Label.Value));
+        Assert.NotEqual(active.Id, held.Id);
+        Assert.Null(await _reports.FindAsync(suspended.Id, TestContext.Current.CancellationToken));
+        Assert.Contains((AuditActions.CredentialRemoved, subject, active.Id), _credentials.Records);
+        Assert.Contains((AuditActions.CredentialRemoved, subject, suspended.Id), _credentials.Records);
+        Assert.Equal(committed + 1, _work.OutermostCommitted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC9 and AUTH-FACT-002b AC6: a begin whose number's signal answers
+    /// a risk sends nothing, stages nothing, records the consideration and is refused
+    /// <c>auth.factor.notpermitted</c>, whatever the identifier holds by then.
+    /// </summary>
+    /// <param name="gone">Whether the number has left the account by the time it would be locked.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_FACT_002_AC9_ABeginWhoseSignalAnswersARiskSendsNothingAndIsNotPermittedAsync(bool gone)
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        _provider = new PhoneSignalProvider(async (_, cancellationToken) =>
+        {
+            if (gone)
+            {
+                await _identifiers.DiscardAsync(subject, number, cancellationToken);
+            }
+
+            return PhoneSignal.Risk;
+        });
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(await BegunAsync(subject, session, number)));
+
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_enrolments.All);
+        Assert.Empty(_identifiers.RowsLocked);
+        Assert.Equal([(TextedEnrolments.Entry, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC9: a begin whose number's signal did not answer a risk and
+    /// whose identifier, once its row is locked in the unit of work, no longer holds,
+    /// verified, the number read before sends nothing, stages nothing and is refused
+    /// <c>identity.identifier.invalid</c>: the identifier removed, or its value
+    /// replaced, while the begin waited for the lock.
+    /// </summary>
+    /// <param name="replaced">Whether the value was replaced rather than the identifier removed.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_FACT_002_AC9_ABeginWhoseIdentifierNoLongerHoldsTheNumberUnderItsLockSendsNothingAsync(bool replaced)
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Clear));
+        _identifiers.LockingRow = async (holder, locked) =>
+        {
+            if (replaced)
+            {
+                await _identifiers.ReplaceAsync(
+                    holder,
+                    locked,
+                    Elsewhere,
+                    Elsewhere,
+                    Noon,
+                    Noon + TimeSpan.FromDays(7),
+                    [1],
+                    TestContext.Current.CancellationToken);
+            }
+            else
+            {
+                await _identifiers.DiscardAsync(holder, locked, TestContext.Current.CancellationToken);
+            }
+        };
+
+        int rolledBack = _work.RolledBack;
+
+        Assert.Equal(ErrorCodes.IdentifierInvalid, Refused(await BegunAsync(subject, session, number)));
+
+        Assert.Equal([number], _identifiers.RowsLocked);
+        Assert.Equal(0, _enrolments.Locks);
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_enrolments.All);
+        Assert.Empty(_restrictions.Carried);
+        Assert.Equal(rolledBack + 1, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC9 and chapter 09: a begin naming no verified phone identifier of
+    /// the account (an address, an identifier of another account, one the account does
+    /// not hold) is refused <c>identity.identifier.invalid</c> before any signal is
+    /// asked or anything sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC9_ABeginNamingNoVerifiedNumberOfTheAccountIsRefusedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await TextableAsync(subject);
+
+        SubjectId other = new(Guid.NewGuid());
+        IdentifierId theirs = _identifiers.Verified(other, IdentifierKind.Phone, Elsewhere);
+        IdentifierId address = (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All
+            .First(identifier => identifier.Kind is IdentifierKind.Email).Id;
+        int asked = 0;
+
+        _provider = new PhoneSignalProvider((_, _) =>
+        {
+            asked++;
+
+            return ValueTask.FromResult(PhoneSignal.Clear);
+        });
+
+        foreach (IdentifierId named in new[] { theirs, address, new IdentifierId(Guid.NewGuid()) })
+        {
+            Assert.Equal(ErrorCodes.IdentifierInvalid, Refused(await BegunAsync(subject, session, named)));
+        }
+
+        Assert.Equal(0, asked);
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_enrolments.All);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002: a new begin replaces a pending enrolment, whose code then
+    /// confirms nothing: presented, it is a wrong code of the enrolment that stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_ANewBeginReplacesAPendingEnrolmentWhoseCodeThenConfirmsNothingAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Accepted(await BegunAsync(subject, session, number));
+        Accepted(await BegunAsync(subject, session, number, "Second"));
+
+        string first = _notifications.Texts[0].Values["code"];
+        string second = _notifications.Texts[1].Values["code"];
+
+        Assert.Equal("Second", Assert.Single(_enrolments.All).Label.Value);
+
+        if (!string.Equals(first, second, StringComparison.Ordinal))
+        {
+            Assert.Equal(ErrorCodes.CodeInvalid, await ConfirmedAsync(subject, session, first));
+            Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+        }
+
+        Assert.Equal(default, await ConfirmedAsync(subject, session, second));
+        Assert.Equal(
+            "Second",
+            Assert.Single(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken)).Label.Value);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 and AUTH-FACT-004: a wrong confirm code is refused
+    /// <c>auth.code.invalid</c> and counts against the code's own
+    /// <c>code.signin.attempts</c> and nothing else: the count is committed, no delay is
+    /// counted and no credential record written, and once the tries are spent the
+    /// enrolment is gone, so the right code answers <c>auth.code.expired</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AWrongConfirmCodeCountsAgainstItsOwnAttemptsAndNothingElseAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        _configuration.Set(Settings.CodeSigninAttempts, 2);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        string wrong = code == "000000" ? "111111" : "000000";
+        int committed = _work.OutermostCommitted;
+        int recorded = _credentials.Records.Count;
+
+        Assert.Equal(ErrorCodes.CodeInvalid, await ConfirmedAsync(subject, session, wrong));
+
+        Assert.Equal(1, Assert.Single(_enrolments.All).WrongAttempts);
+        Assert.Equal(committed + 1, _work.OutermostCommitted);
+        Assert.Empty(_throttle.Failures);
+        Assert.Equal(recorded, _credentials.Records.Count);
+        Assert.Empty(_restrictions.Answered);
+
+        Assert.Equal(ErrorCodes.CodeInvalid, await ConfirmedAsync(subject, session, wrong));
+
+        Assert.Empty(_enrolments.All);
+        Assert.Equal(ErrorCodes.CodeExpired, await ConfirmedAsync(subject, session, code));
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// Chapter 09 and AUTH-FACT-004 AC3: a confirm with no enrolment pending, or with
+    /// one past its lifetime, is refused <c>auth.code.expired</c>, the right code
+    /// included, and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AConfirmWithNoEnrolmentPendingOrOnePastItsLifetimeIsExpiredAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Assert.Equal(ErrorCodes.CodeExpired, await ConfirmedAsync(subject, session, "123456"));
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        _clock.Advance(TimeSpan.FromMinutes(10));
+
+        int committed = _work.OutermostCommitted;
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            await ConfirmedAsync(subject, session, Assert.Single(_notifications.Texts).Values["code"]));
+        Assert.Equal(0, Assert.Single(_enrolments.All).WrongAttempts);
+        Assert.Equal(committed, _work.OutermostCommitted);
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10: a confirm whose number left the account while it waited for
+    /// the lock on the identifier's row is answered <c>auth.code.expired</c>, the right
+    /// code included, and enrols nothing; the row is locked before the enrolment and
+    /// the credentials are.
+    /// </summary>
+    /// <param name="replaced">Whether the value was replaced rather than the identifier removed.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_FACT_002_AC10_AConfirmWhoseNumberLeftBeforeItsLockIsExpiredAndEnrolsNothingAsync(bool replaced)
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        int locks = _enrolments.Locks;
+
+        _identifiers.LockingRow = async (holder, locked) =>
+        {
+            if (replaced)
+            {
+                await _identifiers.ReplaceAsync(
+                    holder,
+                    locked,
+                    Elsewhere,
+                    Elsewhere,
+                    Noon,
+                    Noon + TimeSpan.FromDays(7),
+                    [1],
+                    TestContext.Current.CancellationToken);
+            }
+            else
+            {
+                await _identifiers.DiscardAsync(holder, locked, TestContext.Current.CancellationToken);
+            }
+        };
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            await ConfirmedAsync(subject, session, Assert.Single(_notifications.Texts).Values["code"]));
+
+        Assert.Equal(locks, _enrolments.Locks);
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Empty(_restrictions.Answered);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002, CONV-DESIGN-003: a begin and a confirm each lock the identifier's
+    /// row before the pending enrolment's, and a confirm locks the credentials after
+    /// both.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_ABeginAndAConfirmLockTheIdentifiersRowBeforeTheEnrolmentAndTheCredentialsAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+        var order = new List<string>();
+
+        _ = Bound(subject, "Old phone");
+        await PresentedAsync(subject, session);
+
+        _identifiers.LockingRow = (_, _) =>
+        {
+            order.Add("identifier");
+
+            return ValueTask.CompletedTask;
+        };
+        _enrolments.Locking = _ =>
+        {
+            order.Add("enrolment");
+
+            return ValueTask.CompletedTask;
+        };
+        _authenticators.Locking = _ => order.Add("credential");
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        Assert.Equal(["identifier", "enrolment"], order);
+
+        order.Clear();
+
+        Assert.Equal(
+            default,
+            await ConfirmedAsync(subject, session, Assert.Single(_notifications.Texts).Values["code"]));
+        Assert.Equal(["identifier", "enrolment", "credential"], order);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC1 and chapter 09: <c>phoneCode</c> is off by default in
+    /// <c>loginFactors</c>, and where the policy in force does not permit it neither a
+    /// begin nor a confirm is: each is refused <c>auth.factor.notpermitted</c> and
+    /// nothing is sent or enrolled.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC1_ATextCodeIsNotEnrolledWhereThePolicyDoesNotPermitItAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+
+        _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault);
+
+        Assert.DoesNotContain(TextedEnrolments.Entry, Core.Policies.SystemDefault.LoginFactors);
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(await BegunAsync(subject, session, number)));
+        Assert.Equal(ErrorCodes.FactorNotPermitted, await ConfirmedAsync(subject, session, code));
+        _ = Assert.Single(_notifications.Texts);
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Chapter 09 and AUTH-STEP-007: the enrolment of a text code is gated at
+    /// <c>factor:enrol</c>, refused to a restricted account, to an account with no
+    /// password, to the enrolment session an approved recovery opened and to the
+    /// registration session's security step, and a label that is none is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_ATextCodesEnrolmentIsGatedAndRefusedAsItsRouteStatesAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Assert.Equal(
+            ErrorCodes.CredentialLabelInvalid,
+            Refused(await BegunAsync(subject, session, number, new string('a', 65))));
+
+        var recovering = CredentialAuthority.Of((await OpenedAsync(subject)).Id);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.BeginTextCodeAsync(recovering, number, "My phone", Source, Language, cancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.ConfirmTextCodeAsync(recovering, "123456", Source, cancellationToken)));
+
+        var registering = CredentialAuthority.Of(new RegistrationSessionId(Guid.NewGuid()));
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.BeginTextCodeAsync(registering, number, "My phone", Source, Language, cancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.ConfirmTextCodeAsync(registering, "123456", Source, cancellationToken)));
+
+        _restriction.Restrict(subject);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await BegunAsync(subject, session, number)));
+        Assert.Equal(ErrorCodes.Restricted, await ConfirmedAsync(subject, session, "123456"));
+
+        _restriction.Lift(subject);
+
+        // A second step held and not presented under the session: the gate asks for it.
+        _ = await ConfirmedAsync(subject, session);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await BegunAsync(subject, session, number)));
+        Assert.Equal(ErrorCodes.StepUpRequired, await ConfirmedAsync(subject, session, "123456"));
+
+        (SubjectId passwordless, SessionId other) = await SignedInAsync(password: false);
+        IdentifierId theirs = (await _identifiers.HeldAsync(passwordless, cancellationToken)).All
+            .First(identifier => identifier.Kind is IdentifierKind.Phone).Id;
+
+        Assert.Equal(ErrorCodes.FactorPasswordRequired, Refused(await BegunAsync(passwordless, other, theirs)));
+        Assert.Equal(ErrorCodes.FactorPasswordRequired, await ConfirmedAsync(passwordless, other, "123456"));
+
+        Assert.DoesNotContain(_notifications.Texts, texted => texted.Message is MessageKind.SecondStepCode);
+        Assert.Empty(_enrolments.All);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step of a begin or a
+    /// confirm refuses it inside its unit of work, before anything is sent or enrolled.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ATextCodesEnrolmentIsRefusedByARestrictionCommittedSinceItsGateStepAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await BegunAsync(subject, session, number)));
+
+        Assert.Empty(_notifications.Texts);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+
+        await RestrictedSinceTheGateStepAsync(subject, async () => await ConfirmedAsync(subject, session, code));
+
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Chapter 09 and AUTH-ABUSE-004: where a restriction refuses the text, the begin
+    /// is refused <c>auth.restriction.exceeded</c> and stages nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ABeginWhoseTextARestrictionRefusesStagesNothingAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refused(await BegunAsync(subject, session, number)));
+
+        Assert.Empty(_enrolments.All);
+        Assert.Empty(_restrictions.Carried);
+        Assert.False(_work.Open);
+    }
+
     // AUTHZ-GATE-006 AC3: the change made with the account restricted in the moment
     // before the next unit of work begins, which is after the change's gate step. It is
     // refused as the gate refuses, the unit of work it began is rolled back and none is
@@ -1717,12 +2292,84 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.False(_work.Open);
     }
 
+    // AUTH-FACT-002: the policy in force permits the text code, and the account's
+    // verified number is the one an enrolment names.
+    private async ValueTask<IdentifierId> TextableAsync(SubjectId subject)
+    {
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    [.. Core.Policies.SystemDefault.LoginFactors, TextedEnrolments.Entry]),
+            });
+
+        return (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All
+            .First(identifier => identifier.Kind is IdentifierKind.Phone).Id;
+    }
+
+    private ValueTask<Result> BegunAsync(
+        SubjectId subject,
+        SessionId session,
+        IdentifierId number,
+        string label = "My phone") =>
+        Service.BeginTextCodeAsync(
+            Authority(subject, session),
+            number,
+            label,
+            Source,
+            Language,
+            TestContext.Current.CancellationToken);
+
+    // What a confirm of a text code's enrolment was refused with, or nothing where it
+    // enrolled the credential.
+    private async ValueTask<ErrorCode> ConfirmedAsync(SubjectId subject, SessionId session, string code) =>
+        Refused(await Service.ConfirmTextCodeAsync(
+            Authority(subject, session),
+            code,
+            Source,
+            TestContext.Current.CancellationToken));
+
+    // A text code's credential the account already holds, bound to its number.
+    private Authenticator Bound(SubjectId subject, string label)
+    {
+        var bound = Authenticator.Bound(
+            AuthenticatorId.New(_clock),
+            subject,
+            TextedEnrolments.Entry,
+            Label(label),
+            Number,
+            _clock.GetUtcNow());
+
+        _authenticators.Hold(bound);
+
+        return bound;
+    }
+
+    // AUTH-FACT-002b: the signal of the number an enrolment names, asked before its
+    // unit of work, as the deployment registered it.
+    private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
+
+    private TextedEnrolments Texted =>
+        new(
+            _enrolments,
+            _authenticators,
+            _reports,
+            _identifiers,
+            Signals,
+            _notifications,
+            _restrictions,
+            _configuration,
+            _clock,
+            _randomness);
+
     private CredentialService Service =>
         new(
             Keys,
             _accounts,
             _restriction,
             Totp,
+            Texted,
             Codes,
             Passwords,
             Losses,
