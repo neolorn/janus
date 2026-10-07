@@ -170,11 +170,11 @@ public sealed class ScreeningTests : IDisposable
     }
 
     /// <summary>
-    /// INT-PWD-003 AC1: naming the self-hosted corpus and where it answers is the
+    /// INT-PWD-003 AC2: naming the self-hosted corpus and where it answers is the
     /// whole switch, and the deployment's own corpus is what is asked afterwards.
     /// </summary>
     [Fact]
-    public async Task INT_PWD_003_AC1_SwitchingToTheSelfHostedCorpusIsConfigurationOnlyAsync()
+    public async Task INT_PWD_003_AC2_ThePrefixGoesToTheSelfHostedAddressAndNowhereElseAsync()
     {
         _service.Holds(Prefix(Password), Suffix(Password) + ":3");
         _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
