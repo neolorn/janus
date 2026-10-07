@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Bootstrap;
@@ -308,6 +309,30 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         }
     }
 
+    /// <summary>
+    /// DR-008 AC3: a worker that stops while a restore is under way abandons the test,
+    /// and the teardown of the instance it began is still asked, once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_008_AC3_AStoppingWorkerStillAsksForTheTeardownAsync()
+    {
+        DateTimeOffset at = Noon.AddDays(11);
+        var stalled = new StalledRestore();
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        _ = await CanaryAsync(at);
+
+        Task<Result> run = RunAsync(at, stalled, Live, Fingerprinted, stopping: stopping.Token);
+
+        await stalled.Started.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await stopping.CancelAsync();
+
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await run.WaitAsync(Bound, TestContext.Current.CancellationToken));
+        Assert.Equal(1, stalled.TornDown);
+    }
+
     private static KeyEncryptionKeys KeyEncryptionKeysOf(byte fill) =>
         new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Enumerable.Repeat(fill, 32).ToArray() });
 
@@ -443,7 +468,8 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         IRestoreTestInstance? instance,
         KeyEncryptionKeys keys,
         FingerprintKeys fingerprints,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        CancellationToken? stopping = null)
     {
         await using ServiceProvider services = Deployed(at, instance, keys, fingerprints, time);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
@@ -453,6 +479,6 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         return await test.RunAsync(
             scope.ServiceProvider,
             AccessContext.Of(test.Principal),
-            TestContext.Current.CancellationToken);
+            stopping ?? TestContext.Current.CancellationToken);
     }
 }
