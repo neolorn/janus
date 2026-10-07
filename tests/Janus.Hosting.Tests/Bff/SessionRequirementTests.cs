@@ -216,7 +216,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_ORDER_001_AnEndedSessionDoesNotRefuseAnEndpointThatNeedsNoneAsync()
+    public async Task BFF_ORDER_001_AC4_AnEndedSessionDoesNotRefuseAnEndpointThatNeedsNoneAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 

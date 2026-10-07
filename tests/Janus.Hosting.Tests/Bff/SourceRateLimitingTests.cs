@@ -133,7 +133,7 @@ public sealed class SourceRateLimitingTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_ORDER_001_AC3_AddressesInOneIpv6SubnetAreOneSourceAsync()
+    public async Task BFF_ORDER_001_AC6_AddressesInOneIpv6SubnetAreOneSourceAsync()
     {
         await using var deployment = new Deployment();
         var browser = new Browser(deployment);
@@ -157,7 +157,7 @@ public sealed class SourceRateLimitingTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_ORDER_001_AC3_AnotherSubnetOfTheSiteIsAdmittedUntilTheSiteLimitAsync()
+    public async Task BFF_ORDER_001_AC7_AnotherSubnetOfTheSiteIsAdmittedUntilTheSiteLimitAsync()
     {
         await using var deployment = new Deployment();
         var browser = new Browser(deployment);
@@ -185,7 +185,7 @@ public sealed class SourceRateLimitingTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_ORDER_001_AC3_AnIpv4MappedAddressIsItsIpv4SourceAsync()
+    public async Task BFF_ORDER_001_AC6_AnIpv4MappedAddressIsItsIpv4SourceAsync()
     {
         await using var deployment = new Deployment();
         var browser = new Browser(deployment);
