@@ -416,6 +416,38 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-003 AC3: a path naming a request the deployment does not hold answers
+    /// 404 with the request's own code, a well-formed entry naming a subject it does not
+    /// hold answers 422 naming the member, and neither answers as a malformed request.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_003_AC3_ARecordThePathNamesIsNotFoundAndOneTheBodyNamesIsInvalidAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/" + Guid.NewGuid().ToString() + "/refuse",
+            ("reason", "the request was withdrawn by letter"));
+        Answer entered = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", Guid.NewGuid().ToString()),
+            ("type", "erasure"),
+            ("receivedAt", "2026-02-27"),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status404NotFound, refused.Status);
+        Assert.Equal("privacy.request.notfound", refused.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, entered.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), entered.Text("code"));
+        Assert.Equal("subject", entered.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001 AC5, 09 section 8a: a fulfilment on a session whose proof is no
     /// longer recent is refused 403 <c>auth.stepup.required</c> and the request stays
     /// open; refusing one on the same session is not gated.

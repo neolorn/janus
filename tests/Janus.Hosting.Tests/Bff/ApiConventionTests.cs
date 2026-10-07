@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,6 +12,8 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -26,6 +29,9 @@ public sealed class ApiConventionTests
     private const string Prefix = "/identity/v1";
     private const string Elsewhere = "unknown@example.test";
     private const string Another = "somebody@example.test";
+
+    // The methods a browser asks an endpoint under.
+    private static readonly string[] Methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
     // Subjects that stand for accounts no test of this class looks at again.
     private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
@@ -453,6 +459,81 @@ public sealed class ApiConventionTests
             }
         }
     }
+
+    /// <summary>
+    /// API-CONV-003 AC4: every path the library serves, asked under a method it does
+    /// not take, answers 404 <c>authz.resource.notfound</c> as a path nothing serves
+    /// does; none answers 405 and none names the methods it takes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_003_AC4_AMethodAServedPathDoesNotTakeIsAnsweredAsNoPathAsync()
+    {
+        await using var deployment = new Deployment();
+        var browser = new Browser(deployment);
+
+        // The first answer sets the token every state-changing request then carries.
+        _ = await browser.SendAsync("GET", "/register");
+
+        RouteEndpoint[] routes = [.. deployment.Endpoints.OfType<RouteEndpoint>()];
+        int asked = 0;
+
+        foreach (string path in routes.Select(route => Concrete(route.RoutePattern)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var taken = new HashSet<string>(
+                routes.Where(route => Serves(route.RoutePattern, path)).SelectMany(Taken),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (string method in Methods.Where(method => !taken.Contains(method)))
+            {
+                // Each request comes from an address of its own, so the limit on a source
+                // (BFF-ORDER-001) refuses none of them before its path is looked at.
+                var source = new IPAddress([198, 18, (byte)(asked >> 8), (byte)asked]);
+                Answer answered = await browser.SendAsync(
+                    method,
+                    path,
+                    method is "GET" or "DELETE" ? null : "{}",
+                    source: source);
+
+                Assert.Equal(
+                    (method, path, StatusCodes.Status404NotFound, ErrorCodes.ResourceNotFound.ToString()),
+                    (method, path, answered.Status, answered.Text("code")));
+                Assert.Null(answered.Header(HeaderNames.Allow));
+
+                asked++;
+            }
+        }
+
+        Assert.NotEqual(0, asked);
+    }
+
+    // A path the pattern serves, every parameter filled with one identifier.
+    private static string Concrete(RoutePattern pattern) =>
+        "/" + string.Join(
+            '/',
+            pattern.PathSegments.Select(segment => string.Concat(segment.Parts.Select(part => part switch
+            {
+                RoutePatternLiteralPart literal => literal.Content,
+                RoutePatternSeparatorPart separator => separator.Content,
+                _ => "0198c5a2-7d3e-7b61-9c4f-5e2a1b3c4d5e",
+            }))));
+
+    // Whether the pattern serves the path: segment for segment, a literal as written
+    // and a parameter whatever is there.
+    private static bool Serves(RoutePattern pattern, string path)
+    {
+        string[] segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        return pattern.PathSegments.Count == segments.Length
+            && pattern.PathSegments
+                .Zip(segments)
+                .All(pair => pair.First is not { IsSimple: true, Parts: [RoutePatternLiteralPart literal] }
+                    || string.Equals(literal.Content, pair.Second, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // The methods a route takes: the ones it names, or every one where it names none.
+    private static IEnumerable<string> Taken(RouteEndpoint route) =>
+        route.Metadata.GetMetadata<HttpMethodMetadata>() is { HttpMethods.Count: > 0 } named ? named.HttpMethods : Methods;
 
     // Whether a route or handler parameter is named for a link token.
     private static bool Carries(string named) =>
