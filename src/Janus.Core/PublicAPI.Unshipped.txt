@@ -2706,6 +2706,8 @@ Janus.Core.SignInProgress.Status.get -> Janus.Core.SignInStatus
 Janus.Core.SignInProgress.Status.init -> void
 Janus.Core.SignInProgress.TrustDeviceOffered.get -> bool
 Janus.Core.SignInProgress.TrustDeviceOffered.init -> void
+Janus.Core.SignInProgress.WebAuthn.get -> Janus.Core.WebAuthnRequestOptions?
+Janus.Core.SignInProgress.WebAuthn.init -> void
 Janus.Core.SignInStatus
 Janus.Core.SignInStatus.Complete = 0 -> Janus.Core.SignInStatus
 Janus.Core.SignInStatus.DeviceVerificationRequired = 2 -> Janus.Core.SignInStatus
@@ -2929,6 +2931,27 @@ Janus.Core.WebAuthnChallenge.Equals(Janus.Core.WebAuthnChallenge? other) -> bool
 Janus.Core.WebAuthnChallenge.RelyingPartyId.get -> string!
 Janus.Core.WebAuthnChallenge.RelyingPartyId.init -> void
 Janus.Core.WebAuthnChallenge.WebAuthnChallenge(string! RelyingPartyId, string! Challenge) -> void
+Janus.Core.WebAuthnCredentialDescriptor
+Janus.Core.WebAuthnCredentialDescriptor.<Clone>$() -> Janus.Core.WebAuthnCredentialDescriptor!
+Janus.Core.WebAuthnCredentialDescriptor.Deconstruct(out string! Id, out System.Collections.Generic.IReadOnlyList<string!>! Transports) -> void
+Janus.Core.WebAuthnCredentialDescriptor.Equals(Janus.Core.WebAuthnCredentialDescriptor? other) -> bool
+Janus.Core.WebAuthnCredentialDescriptor.Id.get -> string!
+Janus.Core.WebAuthnCredentialDescriptor.Id.init -> void
+Janus.Core.WebAuthnCredentialDescriptor.Transports.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.WebAuthnCredentialDescriptor.Transports.init -> void
+Janus.Core.WebAuthnCredentialDescriptor.WebAuthnCredentialDescriptor(string! Id, System.Collections.Generic.IReadOnlyList<string!>! Transports) -> void
+Janus.Core.WebAuthnRequestOptions
+Janus.Core.WebAuthnRequestOptions.<Clone>$() -> Janus.Core.WebAuthnRequestOptions!
+Janus.Core.WebAuthnRequestOptions.AllowCredentials.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.WebAuthnCredentialDescriptor!>!
+Janus.Core.WebAuthnRequestOptions.AllowCredentials.init -> void
+Janus.Core.WebAuthnRequestOptions.Challenge.get -> string!
+Janus.Core.WebAuthnRequestOptions.Challenge.init -> void
+Janus.Core.WebAuthnRequestOptions.Deconstruct(out string! RelyingPartyId, out string! Challenge, out System.Collections.Generic.IReadOnlyList<Janus.Core.WebAuthnCredentialDescriptor!>! AllowCredentials) -> void
+Janus.Core.WebAuthnRequestOptions.Equals(Janus.Core.WebAuthnRequestOptions? other) -> bool
+Janus.Core.WebAuthnRequestOptions.RelyingPartyId.get -> string!
+Janus.Core.WebAuthnRequestOptions.RelyingPartyId.init -> void
+Janus.Core.WebAuthnRequestOptions.UserVerification.get -> string!
+Janus.Core.WebAuthnRequestOptions.WebAuthnRequestOptions(string! RelyingPartyId, string! Challenge, System.Collections.Generic.IReadOnlyList<Janus.Core.WebAuthnCredentialDescriptor!>! AllowCredentials) -> void
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 abstract Janus.Core.DomainEvent.<Clone>$() -> Janus.Core.DomainEvent!
 const Janus.Core.CredentialLabel.MaximumLength = 64 -> int
@@ -3522,6 +3545,12 @@ override Janus.Core.Username.ToString() -> string!
 override Janus.Core.WebAuthnChallenge.Equals(object? obj) -> bool
 override Janus.Core.WebAuthnChallenge.GetHashCode() -> int
 override Janus.Core.WebAuthnChallenge.ToString() -> string!
+override Janus.Core.WebAuthnCredentialDescriptor.Equals(object? obj) -> bool
+override Janus.Core.WebAuthnCredentialDescriptor.GetHashCode() -> int
+override Janus.Core.WebAuthnCredentialDescriptor.ToString() -> string!
+override Janus.Core.WebAuthnRequestOptions.Equals(object? obj) -> bool
+override Janus.Core.WebAuthnRequestOptions.GetHashCode() -> int
+override Janus.Core.WebAuthnRequestOptions.ToString() -> string!
 override abstract Janus.Core.SubjectEvent.<Clone>$() -> Janus.Core.SubjectEvent!
 override sealed Janus.Core.AccountDeletionCancelled.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.AccountDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4459,6 +4488,10 @@ static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.User
 static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.Username right) -> bool
 static Janus.Core.WebAuthnChallenge.operator !=(Janus.Core.WebAuthnChallenge? left, Janus.Core.WebAuthnChallenge? right) -> bool
 static Janus.Core.WebAuthnChallenge.operator ==(Janus.Core.WebAuthnChallenge? left, Janus.Core.WebAuthnChallenge? right) -> bool
+static Janus.Core.WebAuthnCredentialDescriptor.operator !=(Janus.Core.WebAuthnCredentialDescriptor? left, Janus.Core.WebAuthnCredentialDescriptor? right) -> bool
+static Janus.Core.WebAuthnCredentialDescriptor.operator ==(Janus.Core.WebAuthnCredentialDescriptor? left, Janus.Core.WebAuthnCredentialDescriptor? right) -> bool
+static Janus.Core.WebAuthnRequestOptions.operator !=(Janus.Core.WebAuthnRequestOptions? left, Janus.Core.WebAuthnRequestOptions? right) -> bool
+static Janus.Core.WebAuthnRequestOptions.operator ==(Janus.Core.WebAuthnRequestOptions? left, Janus.Core.WebAuthnRequestOptions? right) -> bool
 virtual Janus.Core.Configuration.Setting<TValue>.Loosens(TValue before, TValue after) -> bool
 virtual Janus.Core.DomainEvent.EqualityContract.get -> System.Type!
 virtual Janus.Core.DomainEvent.Equals(Janus.Core.DomainEvent? other) -> bool

@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A security key held as a second step is asked for by name. A `factorRequired` answer
+  of `POST /auth/factor` or `POST /auth/step-up` whose `required` names `securityKey`
+  carries `webauthn`, the request options for the challenge: `relyingPartyId`,
+  `challenge`, `userVerification` `required`, and `allowCredentials` naming each
+  active second-factor security key of the account by `id` and `transports` and, at a
+  step-up that also offers `passkey`, each of its active passkeys. A sign-in carries
+  it once a first factor is accepted, a step-up once a factor has been presented on
+  its challenge, and every other answer leaves the member out; `POST /auth/begin`
+  names no credential. `SignInProgress.WebAuthn` carries the same to a caller in
+  process, as `WebAuthnRequestOptions` and `WebAuthnCredentialDescriptor`
+  (AUTH-FACT-002b).
 - The library ships a fifth restriction, `sms.resend`: key `destination`, purpose
   `any`, channel `sms`, one send per 3 minutes sliding, marked `resend`. A second text
   message to one number inside 3 minutes is refused with `auth.restriction.exceeded`

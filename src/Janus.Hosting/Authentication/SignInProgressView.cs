@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using Janus.Core;
 
 namespace Janus.Hosting.Authentication;
@@ -11,6 +12,11 @@ namespace Janus.Hosting.Authentication;
 /// <param name="AssuranceLevel">What it has reached.</param>
 /// <param name="PhishingResistant">Whether what was presented resists phishing.</param>
 /// <param name="Required">What is still wanted.</param>
+/// <param name="WebAuthn">
+/// The request options for the challenge, written as <c>webauthn</c> where
+/// <c>required</c> names the second-factor security key and left out everywhere else
+/// (AUTH-FACT-002b).
+/// </param>
 /// <param name="TrustDeviceOffered">Whether the policy permits trusting this browser.</param>
 /// <param name="PolicyRequirement">
 /// The raised requirement and the instant its run-up ends, where one stands.
@@ -19,15 +25,18 @@ namespace Janus.Hosting.Authentication;
 /// Whether the password has to be changed before anything else.
 /// </param>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-016, AUTH-FACT-017 and AUTH-SESS-002. The
-/// properties reached are reported and never which entry produced them; the session
-/// crosses as a cookie and never as a field.
+/// Implements AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-016, AUTH-FACT-017 and
+/// AUTH-SESS-002. The properties reached are reported and never which entry produced
+/// them; the session crosses as a cookie and never as a field.
 /// </remarks>
 internal sealed record SignInProgressView(
     SignInStatus Status,
     AssuranceLevel AssuranceLevel,
     bool PhishingResistant,
     IReadOnlyList<Factor> Required,
+    [property: JsonPropertyName("webauthn")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    WebAuthnRequestOptions? WebAuthn,
     bool TrustDeviceOffered,
     PolicyRequirement? PolicyRequirement,
     bool PasswordChangeRequired)
@@ -47,6 +56,7 @@ internal sealed record SignInProgressView(
             progress.AssuranceLevel,
             progress.PhishingResistant,
             progress.Required,
+            progress.WebAuthn,
             progress.TrustDeviceOffered,
             progress.Requirement,
             progress.PasswordChangeRequired);

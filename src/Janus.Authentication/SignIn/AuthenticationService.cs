@@ -364,7 +364,7 @@ internal sealed class AuthenticationService(
 
         if (stepping is not null)
         {
-            return await WithoutTextsAsync(subject, session, open.Presented, cancellationToken)
+            return await WithoutTextsAsync(subject, session, open, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -385,7 +385,11 @@ internal sealed class AuthenticationService(
 
         return wanted.Count is 0
             ? Result.Failure<SignInProgress?>(Error.From(ErrorCodes.FactorRejected))
-            : Result.Success<SignInProgress?>(Left(reached, wanted, changeRequired: false));
+            : Result.Success<SignInProgress?>(Left(reached, wanted, changeRequired: false) with
+            {
+                WebAuthn = await NamedAsync(open, subject, wanted, FirstAccepted(open), cancellationToken)
+                    .ConfigureAwait(false),
+            });
     }
 
     /// <inheritdoc/>
@@ -1008,7 +1012,16 @@ internal sealed class AuthenticationService(
                 TrustDeviceOffered: false,
                 raised.Id,
                 Requirement: null,
-                PasswordChangeRequired: false),
+                PasswordChangeRequired: false)
+            {
+                WebAuthn = await NamedAsync(
+                        holding,
+                        asking,
+                        required,
+                        holding.Presented.Count > 0,
+                        cancellationToken)
+                    .ConfigureAwait(false),
+            },
             raised,
             Remembered: null,
             Trusted: null));
@@ -1168,9 +1181,11 @@ internal sealed class AuthenticationService(
     private async ValueTask<Result<SignInProgress?>> WithoutTextsAsync(
         SubjectId subject,
         SessionId? session,
-        IReadOnlyCollection<Factor> accepted,
+        Challenge open,
         CancellationToken cancellationToken)
     {
+        IReadOnlyList<Factor> accepted = open.Presented;
+
         if (session is not SessionId raising
             || await sessionStore.FindAsync(raising, cancellationToken).ConfigureAwait(false) is not Session live
             || live.Subject != subject)
@@ -1213,8 +1228,29 @@ internal sealed class AuthenticationService(
             TrustDeviceOffered: false,
             Session: null,
             Requirement: null,
-            PasswordChangeRequired: false));
+            PasswordChangeRequired: false)
+        {
+            WebAuthn = await NamedAsync(open, subject, required, accepted.Count > 0, cancellationToken)
+                .ConfigureAwait(false),
+        });
     }
+
+    // AUTH-FACT-002b AC8 (D-197): an answer that offers the second-factor security key
+    // carries the request options for the challenge, which name the credentials that
+    // may answer it, since a credential its authenticator does not keep answers only a
+    // request that names it. They are carried only where a factor stands on the
+    // challenge already: at a sign-in a first factor accepted, at a step-up any factor
+    // presented, so that no answer before a first factor names a credential
+    // (AUTH-ABUSE-003).
+    private async ValueTask<WebAuthnRequestOptions?> NamedAsync(
+        Challenge open,
+        SubjectId subject,
+        IReadOnlyCollection<Factor> required,
+        bool preceded,
+        CancellationToken cancellationToken) =>
+        preceded
+            ? await webAuthn.RequestAsync(subject, open.WebAuthn, required, cancellationToken).ConfigureAwait(false)
+            : null;
 
     // The account an identifier opens a sign-in for, the identifier itself where it is
     // an email address, which is what a domain lock is later judged on, and what the
@@ -1784,7 +1820,11 @@ internal sealed class AuthenticationService(
         if (wanted.Count > 0)
         {
             return Result.Success(new SignInOutcome(
-                Left(reached, wanted, changeRequired),
+                Left(reached, wanted, changeRequired) with
+                {
+                    WebAuthn = await NamedAsync(open, subject, wanted, FirstAccepted(open), cancellationToken)
+                        .ConfigureAwait(false),
+                },
                 Session: null,
                 Remembered: null,
                 Trusted: null));

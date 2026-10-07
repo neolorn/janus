@@ -1204,6 +1204,11 @@ POST /auth/device/verify
       assuranceLevel: AssuranceLevel
       phishingResistant: boolean
       required[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
       trustDeviceOffered: boolean
       policyRequirement.field: PolicyField
       policyRequirement.value: string
@@ -1234,6 +1239,11 @@ POST /auth/factor
       assuranceLevel: AssuranceLevel
       phishingResistant: boolean
       required[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
       trustDeviceOffered: boolean
       policyRequirement.field: PolicyField
       policyRequirement.value: string
@@ -1313,6 +1323,11 @@ POST /auth/step-up
       assuranceLevel: AssuranceLevel
       phishingResistant: boolean
       required[]: Factor
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
+      webauthn.allowCredentials[].id: string
+      webauthn.allowCredentials[].transports[]: string
+      webauthn.userVerification: string
       trustDeviceOffered: boolean
       policyRequirement.field: PolicyField
       policyRequirement.value: string
