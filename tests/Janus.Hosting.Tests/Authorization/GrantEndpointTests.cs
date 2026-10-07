@@ -226,12 +226,12 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// API-CONV-002: a reason is at most 1024 characters after trimming, and a longer
+    /// API-CONV-002 AC3: a reason is at most 1024 characters after trimming, and a longer
     /// one is a request the boundary does not read.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_CONV_002_AReasonPastTheLimitIsMalformedAsync()
+    public async Task API_CONV_002_AC3_AReasonPastTheLimitIsMalformedAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
 
@@ -241,6 +241,31 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status201Created, longest.Status);
         Assert.Equal(StatusCodes.Status400BadRequest, longer.Status);
         Assert.Equal("reason", Member(longer));
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3: a required reason that is blank is refused with the reason's
+    /// own code, and one longer than 1024 characters after trimming is refused 400
+    /// <c>api.request.malformed</c> naming it; neither writes a grant.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AC3_ABlankRequiredReasonIsRefusedWithItsOwnCodeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer blank = await GrantedAsync(administrator, "document", "d-1", reason: "   ");
+        Answer longer = await GrantedAsync(
+            administrator,
+            "document",
+            "d-1",
+            reason: " " + new string('r', 1025) + " ");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, blank.Status);
+        Assert.Equal(ErrorCodes.GrantReasonRequired.ToString(), blank.Text("code"));
+        Assert.Equal("reason", Member(longer));
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), longer.Text("code"));
+        Assert.Empty(await HeldAsync(Branch));
     }
 
     /// <summary>
