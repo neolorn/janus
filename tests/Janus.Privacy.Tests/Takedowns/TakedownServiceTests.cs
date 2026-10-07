@@ -798,6 +798,61 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         Assert.Equal((context.Acting, context.Effective), (reversed.Actor, reversed.Effective));
     }
 
+    /// <summary>
+    /// PRIV-MINOR-002 AC2: one takedown runs through its four parts apart, each leaving
+    /// its mark. The trigger's transaction suspends the account into its window, writes
+    /// the delivery the hosts' <c>TakedownExecuted</c> work answers and records the
+    /// reason; each subscriber's completion shows as it confirms; and the erasure runs
+    /// when the window ends, in a transaction of its own, with its own delivery and its
+    /// own record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_002_AC2_ATakedownRunsItsPartsApartWithEachSubscribersCompletionVisibleAsync()
+    {
+        var eraser = new SubjectEraserInMemory();
+        var sweep = new DeletionSweep(_accounts, eraser, _outbox, _audit, _configuration, _work, _clock);
+
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+        Delivery executed = Assert.Single(_outbox.Deliveries);
+
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
+        Assert.Equal((Ahmed, SubjectEventKind.TakedownExecuted), (executed.Subject, executed.Kind));
+        Assert.Equal(AuditActions.TakedownExecuted, Assert.Single(_audit.Entries).Action);
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+        Assert.Empty(eraser.Erased);
+
+        _outbox.Confirms(executed, "records", Noon + TimeSpan.FromMinutes(5));
+
+        TakedownProgress progress = Held(await ReadAsync(Mona));
+
+        Assert.Equal(
+            [
+                new SubscriberConfirmation("records", true, Noon + TimeSpan.FromMinutes(5)),
+                new SubscriberConfirmation("newsletter", false, null),
+            ],
+            progress.Subscribers);
+
+        _clock.Advance(takedown.ErasureDue - Noon);
+
+        Assert.Equal(
+            1,
+            await sweep.SweepAsync(
+                AccessContext.Of(
+                    SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep)),
+                TestContext.Current.CancellationToken));
+
+        Erasure erased = Assert.Single(eraser.Erased);
+
+        Assert.Equal((Ahmed, ErasureReason.MinorTakedown), (erased.Subject, erased.Reason));
+        Assert.Equal((2, 2), (_work.Opened, _work.Committed));
+        Assert.Equal(
+            [SubjectEventKind.TakedownExecuted, SubjectEventKind.ErasureRequested],
+            _outbox.Deliveries.Select(delivery => delivery.Kind));
+        Assert.Equal(
+            [AuditActions.TakedownExecuted, AuditActions.ErasureExecuted],
+            _audit.Entries.Select(entry => entry.Action));
+    }
 
     private static TValue Held<TValue>(Result<TValue> outcome) =>
         outcome.Match(
