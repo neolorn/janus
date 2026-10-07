@@ -1645,21 +1645,32 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-005 AC6: an organization whose policy asks for the higher tier gets
-    /// the shorter pair of lifetimes, and a principal outside it keeps the longer.
+    /// AUTH-SESS-005 AC6: a session lifetime key the deployment sets shorter than its
+    /// default is applied, the higher tier's pair to every principal whose policy
+    /// requires it, whichever organization that policy is, and the system policy's pair
+    /// to a principal outside them.
     /// </summary>
     [Fact]
-    public async Task AUTH_SESS_005_AC6_AnOrganizationsShorterTimeoutAppliesAsync()
+    public async Task AUTH_SESS_005_AC6_ALifetimeKeySetShorterThanItsDefaultIsAppliedAsync()
     {
-        IssuedSession shorter = await BegunAsync(Staff(), [Factor.Passkey]);
-        IssuedSession longer = await BegunAsync(Subject(), [Factor.Passkey]);
+        _configuration.Set(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(20));
+        _configuration.Set(Settings.SessionAal2Absolute, TimeSpan.FromHours(8));
+        _configuration.Set(Settings.SessionDefaultInactivity, TimeSpan.FromDays(30));
+        _configuration.Set(Settings.SessionDefaultAbsolute, TimeSpan.FromDays(180));
+
+        Session staff = _sessions.Behind((await BegunAsync(Staff(), [Factor.Passkey])).Secret)!;
+        Session elsewhere = _sessions.Behind((await BegunAsync(Staff(), [Factor.Passkey])).Secret)!;
+        Session customer = _sessions.Behind((await BegunAsync(Subject(), [Factor.Passkey])).Secret)!;
 
         Assert.Equal(
-            Noon + Settings.SessionAal2Inactivity.Default,
-            _sessions.Behind(shorter.Secret)!.IdleExpiry);
+            (Noon + TimeSpan.FromMinutes(20), Noon + TimeSpan.FromHours(8)),
+            (staff.IdleExpiry, staff.AbsoluteExpiry));
         Assert.Equal(
-            Noon + Settings.SessionDefaultInactivity.Default,
-            _sessions.Behind(longer.Secret)!.IdleExpiry);
+            (Noon + TimeSpan.FromMinutes(20), Noon + TimeSpan.FromHours(8)),
+            (elsewhere.IdleExpiry, elsewhere.AbsoluteExpiry));
+        Assert.Equal(
+            (Noon + TimeSpan.FromDays(30), Noon + TimeSpan.FromDays(180)),
+            (customer.IdleExpiry, customer.AbsoluteExpiry));
     }
 
     /// <summary>
