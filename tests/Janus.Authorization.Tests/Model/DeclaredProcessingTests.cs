@@ -285,6 +285,53 @@ public sealed class DeclaredProcessingTests
                     .Purpose("collaboration", "contract", data: ["identity"]))));
     }
 
+    /// <summary>
+    /// PRIV-SENS-001 AC3: the categories in force are the ones the host declared and no
+    /// other. A host that declares none has none, so every category of the shipped
+    /// list is refused on a type; a host that declares a list of its own has that
+    /// list, and the model it builds carries no shipped category it left out.
+    /// </summary>
+    [Fact]
+    public void PRIV_SENS_001_AC3_NoCategoryTheHostDidNotDeclareIsApplied()
+    {
+        Assert.All(
+            SensitiveCategories.Default,
+            shipped => Assert.Throws<StartupException>(
+                () => AuthorizationModel.Of(Listing([], shipped))));
+
+        var model = AuthorizationModel.Of(Listing(["trade-union"], "trade-union"));
+        string serialized = model.Serialize();
+
+        Assert.Equal(
+            ["trade-union"],
+            model.Find(ResourceType.Parse("article"))!.SensitiveCategories);
+        Assert.Contains("\"trade-union\"", serialized, StringComparison.Ordinal);
+        Assert.All(
+            SensitiveCategories.Default,
+            shipped => Assert.DoesNotContain('"' + shipped + '"', serialized, StringComparison.Ordinal));
+    }
+
+    // One type declared sensitive in a category, over the list the host declares and
+    // nothing the library ships.
+    private static AuthorizationDeclaration Listing(IReadOnlyList<string> declared, string carried)
+    {
+        AuthorizationDeclarationBuilder builder = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false));
+
+        foreach (string category in declared)
+        {
+            _ = builder.SensitiveCategory(category);
+        }
+
+        return builder
+            .Resource<HostDomain.Article>("article", article => article
+                .BelongsToOrganization()
+                .Sensitive(carried)
+                .Purpose("collaboration", "contract", data: ["identity"]))
+            .Build();
+    }
+
     // The wire name chapter 10 gives a residual, read from where the library declares
     // it rather than from a second copy of the list.
     private static string Wire(CapabilityResidual residual) =>
