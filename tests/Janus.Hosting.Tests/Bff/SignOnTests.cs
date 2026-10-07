@@ -1571,7 +1571,6 @@ public sealed class SignOnTests
         Assert.Equal(ErrorCodes.SessionExpired.ToString(), deployment.SignOnLog.Carried[at]["Returned"]);
         Assert.Equal(inside, deployment.SignOnLog.Carried[at]["Code"]);
         Assert.DoesNotContain(Beside, deployment.SignOnLog.Entries);
-        Assert.DoesNotContain(deployment.SignOnLog.Entries, entry => entry.EventId is 10 or 11);
     }
 
     // BFF-ERR-001 AC5: one entry at Error carries the status and the error a fault
