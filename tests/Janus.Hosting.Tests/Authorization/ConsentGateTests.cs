@@ -427,6 +427,104 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// PRIV-SENS-002 AC5: the list for a consent-bound action, as the expression and as
+    /// the fragment alike, holds the record only while its data subject's consent is
+    /// live, of the written kind the sensitive type asks for, and recorded against the
+    /// document the purpose names. No consent, an ordinary one, a superseded one, a
+    /// withdrawn one and a live one against another document each admit nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002_AC5_AListAdmitsOnlyALiveConsentOfTheKindAgainstTheNamedDocumentAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        await using ServiceProvider redeclared = Redeclared("recommendation-terms");
+
+        Assert.Equal((false, false), await ListedBothWaysAsync(granted, host.Services));
+
+        await RecordAsync(granted.Account, Held(ConsentKind.Ordinary));
+
+        Assert.Equal((false, false), await ListedBothWaysAsync(granted, host.Services));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { GrantedAt = Deployment.Noon.AddDays(1) });
+
+        Assert.Equal((true, true), await ListedBothWaysAsync(granted, host.Services));
+        Assert.Equal((false, false), await ListedBothWaysAsync(granted, redeclared));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with
+            {
+                GrantedAt = Deployment.Noon.AddDays(2),
+                SupersededAt = Deployment.Noon.AddDays(3),
+            });
+
+        Assert.Equal((false, false), await ListedBothWaysAsync(granted, host.Services));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { GrantedAt = Deployment.Noon.AddDays(4) });
+
+        Assert.Equal((true, true), await ListedBothWaysAsync(granted, host.Services));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with
+            {
+                GrantedAt = Deployment.Noon.AddDays(5),
+                WithdrawnAt = Deployment.Noon.AddDays(6),
+            });
+
+        Assert.Equal((false, false), await ListedBothWaysAsync(granted, host.Services));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002 AC6: a consent-based purpose is admitted on a data subject's
+    /// consent and on nothing else, so a check that names no record, asked by an
+    /// account holding the permission over the whole organization and a written
+    /// consent of its own, is refused as a check on a record with no subject is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002_AC6_ACheckNamingNoRecordOrARecordWithNoSubjectIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            role,
+            on: null,
+            false,
+            null,
+            null,
+            cancellationToken);
+        await RecordAsync(account, Held(ConsentKind.Written));
+
+        var acting = new Granted(account, record, deployment.Organization);
+
+        Assert.Equal(
+            ErrorCodes.ConsentRequired,
+            await RefusalAsync(account, HostPermissions.Recommend, deployment.Organization));
+        Assert.Null(await RefusalAsync(account, HostPermissions.Read, deployment.Organization));
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(acting));
+        Assert.Null(await RefusalAsync(acting, HostPermissions.Read));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: a page whose records belong to twelve
     /// data subjects reads their consents in one query, so it costs the statements a
     /// page of one record costs, and each record still carries the residual its own
@@ -585,6 +683,25 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
     }
 
+    // The check that names no record: whether the account may do this at all within
+    // the organization.
+    private async Task<ErrorCode?> RefusalAsync(
+        SubjectId account,
+        Permission permission,
+        OrganizationId organization)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(account),
+                permission,
+                organization,
+                TestContext.Current.CancellationToken);
+
+        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
     private async Task<IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>>
         RequiredAsync(Granted granted)
     {
@@ -670,6 +787,12 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 document => document.Id == granted.Record.Id.ToString(),
                 TestContext.Current.CancellationToken);
     }
+
+    // Both renderings of the one list, the expression first.
+    private async Task<(bool Filter, bool Fragment)> ListedBothWaysAsync(
+        Granted granted,
+        IServiceProvider deployment) =>
+        (await ListedAsync(granted, deployment), await ListedByFragmentAsync(granted, deployment));
 
     // The same through the fragment, composed into a hand-written query.
     private async Task<bool> ListedByFragmentAsync(Granted granted, IServiceProvider deployment)
