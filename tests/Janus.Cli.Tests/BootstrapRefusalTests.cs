@@ -215,6 +215,46 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
+    /// OPS-SEC-001 AC4: what is piped in and is not JSON is a command's input that does
+    /// not read, refused as malformed naming the input, and nothing of it is repeated.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_AC4_TheCommandRefusesADocumentThatIsNotJsonAsMalformedAsync()
+    {
+        Invocation run = await Invocation.WrittenAsync(
+            Invocation.Bootstrap(),
+            "connection=" + Nowhere + ";Password=the database credential");
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "member"));
+        Assert.DoesNotContain("the database credential", run.Error, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// OPS-SEC-001 AC4: a document longer than 64 KiB is refused as malformed naming the
+    /// input, though every member of it reads.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_AC4_TheCommandRefusesADocumentOver64KiBAsMalformedAsync()
+    {
+        string document = Invocation.Keys(Nowhere).ToJsonString();
+
+        Invocation run = await Invocation.WrittenAsync(
+            Invocation.Bootstrap(),
+            document + new string(' ', (64 * 1024) + 1 - document.Length));
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "member"));
+        Assert.DoesNotContain(Invocation.KeyEncryptionKey, run.Error, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// OPS-SEC-001 AC2: a document that does not carry a usable key-encryption key or
     /// fingerprint key is refused with the error that names which.
     /// </summary>
