@@ -575,7 +575,7 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(
             new SecurityTokenDescriptor
             {
-                Issuer = google ? GoogleIssuer : AppleIssuer,
+                Issuer = person.Issuer ?? (google ? GoogleIssuer : AppleIssuer),
                 Audience = person.Audience ?? (google ? GoogleClient : AppleClient),
                 Claims = claims,
                 SigningCredentials = new SigningCredentials(

@@ -22,6 +22,11 @@ internal sealed record ProviderPerson(
     public string? Nonce { get; init; }
 
     /// <summary>
+    /// The issuer the token names in place of the provider's own.
+    /// </summary>
+    public string? Issuer { get; init; }
+
+    /// <summary>
     /// The client the token is addressed to in place of the deployment's.
     /// </summary>
     public string? Audience { get; init; }
