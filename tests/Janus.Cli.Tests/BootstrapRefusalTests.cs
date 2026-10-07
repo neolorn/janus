@@ -104,14 +104,14 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
-    /// AUTH-FACT-010 AC1 and OPS-BOOT-001: the relying party is settled from the named
+    /// OPS-BOOT-001 AC5 and AUTH-FACT-010 AC1: the relying party is settled from the named
     /// origins by the rule the start applies, before the database is reached, so origins
     /// that share no registrable domain, and an origin that is not an absolute origin,
     /// are each refused with the start's <c>model.startup.rpid</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_FACT_010_AC1_BootstrapRefusesAnIdentifierNoOriginSharesAsync()
+    public async Task OPS_BOOT_001_AC5_BootstrapRefusesAnIdentifierNoOriginSharesAsync()
     {
         string key = Settings.WebAuthnOrigins.Key.ToString();
 

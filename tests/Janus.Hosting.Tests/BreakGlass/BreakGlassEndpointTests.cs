@@ -969,7 +969,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync()
+    public async Task OPS_BOOT_002_AC9_NoSignInMethodIsGivenToTheReservedAccountAsync()
     {
         _deployment.Configuration.Set(Settings.IdentifiersUsernameEnabled, true);
         await ApplicationRegisteredAsync();

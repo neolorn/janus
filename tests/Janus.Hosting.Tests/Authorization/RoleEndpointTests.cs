@@ -293,14 +293,14 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002, D-166: the role the reserved account holds keeps every permission
+    /// OPS-BOOT-002 AC7, D-166: the role the reserved account holds keeps every permission
     /// the library declares, so a stepped-up system administrator taking one out is
     /// refused and nothing changes; adding a permission the host declares stays
     /// allowed, and a role the reserved account does not hold is narrowed as before.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountsRoleKeepsEveryLibraryPermissionAsync()
+    public async Task OPS_BOOT_002_AC7_TheReservedAccountsRoleKeepsEveryLibraryPermissionAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(
             Permissions.RoleManage,

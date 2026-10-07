@@ -537,13 +537,13 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002: the reserved account the break-glass session belongs to cannot be
+    /// OPS-BOOT-002 AC9: the reserved account the break-glass session belongs to cannot be
     /// granted anything further, a group's grants included, so it is made a member of
     /// no group and the refusal records nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountJoinsNoGroupAsync()
+    public async Task OPS_BOOT_002_AC9_TheReservedAccountJoinsNoGroupAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));

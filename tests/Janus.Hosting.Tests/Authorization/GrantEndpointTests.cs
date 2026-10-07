@@ -431,12 +431,12 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002: the reserved account the break-glass session belongs to cannot be
+    /// OPS-BOOT-002 AC9: the reserved account the break-glass session belongs to cannot be
     /// granted anything further, by whoever asks.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountIsGrantedNothingAsync()
+    public async Task OPS_BOOT_002_AC9_TheReservedAccountIsGrantedNothingAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(
             Administration,
@@ -453,13 +453,13 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002, D-166: the reserved account's <c>system-administrator</c> grant is
+    /// OPS-BOOT-002 AC7, D-166: the reserved account's <c>system-administrator</c> grant is
     /// what the break-glass session holds, so a system administrator stepped up is
     /// refused its revocation and the grant stands.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountsAdministrationIsNotRevokedAsync()
+    public async Task OPS_BOOT_002_AC7_TheReservedAccountsAdministrationIsNotRevokedAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(
             Administration,
