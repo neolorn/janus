@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A send a restriction refuses carries in `retryAt` the earliest instant at which every
+  bucket it exceeds has room for it: where it exceeds several, of one restriction or of
+  several, that is the latest of the instants they lift at.
 - A fault of the sign-on over the deployment's own state names what failed in the
   fault's log entry, read by its correlation identifier. A client secret or the
   authentication application's published keys that cannot be read make a fault

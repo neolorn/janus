@@ -138,7 +138,8 @@ internal static class Restrictions
     /// <param name="now">The clock.</param>
     /// <param name="weight">How many messages the send is, each of which counts.</param>
     /// <returns>
-    /// The earliest time an exceeded bucket lifts, or nothing where none is exceeded.
+    /// The earliest time every exceeded bucket has room, which is the latest of the times
+    /// they lift at, or nothing where none is exceeded.
     /// </returns>
     /// <exception cref="ArgumentNullException">The restriction or the times are absent.</exception>
     public static DateTimeOffset? Lift(
@@ -152,7 +153,7 @@ internal static class Restrictions
         return restriction.Buckets
             .Select(bucket => Lift(bucket, sends, now, weight))
             .Where(lift => lift is not null)
-            .Order()
+            .OrderDescending()
             .FirstOrDefault();
     }
 

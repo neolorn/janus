@@ -179,6 +179,33 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC1: where a send exceeds several buckets, of one restriction or
+    /// of several, the refusal names the earliest instant at which every one of them
+    /// has room for it, which is the latest of the instants each of them lifts at.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC1_TheRetryInstantIsWhenEveryExceededBucketHasRoomAsync()
+    {
+        var mailed = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
+        var texted = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value);
+        var source = new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7");
+
+        _ledger.Given(mailed, Noon.AddMinutes(-50), Noon.AddMinutes(-40), Noon.AddMinutes(-30), Noon.AddMinutes(-20), Noon);
+        _ledger.Given(texted, Noon.AddHours(-3), Noon.AddHours(-2), Noon.AddHours(-1));
+        _ledger.Given(source, [.. Enumerable.Range(1, 10).Select(sent => Noon.AddMinutes(-5 * sent)).Order()]);
+
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        Result<SendReference> mail = await SendAsync(Mailed(), TestContext.Current.CancellationToken);
+        Result<SendReference> text = await SendAsync(Texted(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(mail));
+        Assert.Equal(Noon.AddMinutes(-50) + TimeSpan.FromHours(1), RetryAt(mail));
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(text));
+        Assert.Equal(Noon.AddHours(-3) + TimeSpan.FromHours(24), RetryAt(text));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004: a restriction governs only the sends on its channel, so a mail
     /// passes a spent <c>sms.destination</c> and a text message a spent
     /// <c>email.destination</c>, and each is counted under its own channel's restriction

@@ -149,7 +149,9 @@ internal sealed class SendAdmission(
 
         if (lifts.Count > 0)
         {
-            return Result.Failure<IReadOnlyList<SendPlan>>(Exceeded(lifts.Min()));
+            // AUTH-ABUSE-002, AUTH-ABUSE-004: the refusal names the earliest instant at
+            // which every bucket the send exceeds has room for it.
+            return Result.Failure<IReadOnlyList<SendPlan>>(Exceeded(lifts.Max()));
         }
 
         var plans = new List<SendPlan>(weight);
