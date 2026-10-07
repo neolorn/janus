@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -899,6 +900,57 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005 AC8: the mailbox the subject holds and the one it last held, its
+    /// membership having ended, both lose their fingerprint to the neutralised value,
+    /// and both rows stay, still naming who held them. Another account's mailbox is
+    /// untouched.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC8_TheMailboxHeldAndTheOneLastHeldAreNeutralisedAndRemainAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await DeletingAccountAsync();
+        Mailbox held = Reserved("held");
+        Mailbox lastHeld = Reserved("last-held");
+        Mailbox kept = Reserved("kept");
+
+        held.Hold(subject);
+        lastHeld.Hold(subject);
+        lastHeld.Retire(Noon);
+        kept.Hold(other);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Mailboxes(writing).AddAsync(held, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(lastHeld, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(kept, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        List<MailboxRecord> rows = await reading.Mailboxes
+            .AsNoTracking()
+            .Where(row => row.Holder == subject)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        MailboxRecord untouched = await reading.Mailboxes
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == kept.Id.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { held.Id.Value, lastHeld.Id.Value }.Order(),
+            rows.Select(row => row.Id).Order());
+        Assert.All(rows, row => Assert.True(Fingerprint.IsNeutralised(row.Fingerprint)));
+        Assert.False(Fingerprint.IsNeutralised(untouched.Fingerprint));
+
+        // The class shares one database and reads every mailbox still standing for an
+        // address, so the one kept for comparison goes with its holder in turn.
+        await EraseAsync(other, ErasureReason.ErasureRequest);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a and PRIV-RIGHT-005c: the provider's subject identifier a linked
     /// identity is found by is the holder's, so its fingerprint is neutralised with the
     /// rest, the provider's events find the account no longer, and the identity can be
@@ -1481,6 +1533,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         return await new GrantStore(reading, new DataConnections(reading))
             .VersionAsync(subject, TestContext.Current.CancellationToken);
     }
+
+    // A mailbox reserved at an address no other test names.
+    private static Mailbox Reserved(string name) =>
+        Mailbox.Reserved(Parsed(name + "-" + Guid.NewGuid().ToString("N")[..12] + "@example.test"), Noon);
 
     private static EmailAddress Parsed(string value)
     {
