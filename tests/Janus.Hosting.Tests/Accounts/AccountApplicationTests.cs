@@ -360,6 +360,50 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-004 AC8 and chapter 09 (D-197): a repeated add naming the pending value
+    /// from another session of the account is a send the restrictions count, refused
+    /// 429 <c>auth.restriction.exceeded</c> inside the minute the first holds the
+    /// address for; past it the add is staged afresh for the asking session and
+    /// answers 202. The link sent before it then answers 422 <c>auth.code.expired</c>,
+    /// and a press of the new link shows the code in the browser that staged first and
+    /// verifies in the asking session's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_AC8_ARepeatedAddFromAnotherSessionIsStagedAfreshForItAsync()
+    {
+        Browser staging = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        _ = await staging.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second));
+        string adding = "/account/identifiers/" + Assert.Single(_deployment.Pending.All).Identifier.Value;
+        string before = Flow.Token(_deployment, IdentifierKind.Email);
+        Browser asking = await SignedInAgainAsync(subject);
+        Answer early = await asking.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Answer afresh = await asking.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second));
+
+        string sent = Flow.Token(_deployment, IdentifierKind.Email);
+        Answer elsewhere = await staging.SendAsync("POST", adding + "/verify", ("linkToken", sent), ("press", true));
+        string code = Flow.Code(_deployment, IdentifierKind.Email);
+        Answer spent = await staging.SendAsync("POST", adding + "/verify", ("linkToken", before), ("press", true));
+        Answer pressed = await asking.SendAsync("POST", adding + "/verify", ("linkToken", sent), ("press", true));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, early.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, afresh.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, spent.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), spent.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, elsewhere.Status);
+        Assert.Equal(code, elsewhere.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, pressed.Status);
+        Assert.Equal(subject, await _deployment.Identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// API-CONV-005 AC1, REG-SESS-005 AC5: an add of a value another account holds is
     /// answered in the bytes an add of a value no account holds is, is listed alike, and
     /// a code presented for it is answered <c>auth.code.invalid</c> as a wrong code is.

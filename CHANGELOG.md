@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A repeated `POST /account/identifiers` naming the value already pending is a resend
+  only from the session that staged it. From any other session of the account it
+  stages the add afresh for the asking session, under the identifier the add is listed
+  by: its code is a send the sending restrictions count, the code and the link sent
+  before it answer nothing, and a press of the new link verifies only in the asking
+  session's browser (REG-IDENT-004).
 - `token.signing.rotation`, the cadence of the signing keys and of every registered
   client's secret, has a floor of one day: a shorter value is refused with
   `config.value.belowfloor`. Lengthening it is the change that loosens (OPS-CFG-002).
