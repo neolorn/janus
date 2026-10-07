@@ -355,14 +355,14 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INF-BG-001 (D-166, 334): a run in progress holds no other job's turn. The worker
+    /// INF-BG-001 AC3 (D-166, 334): a run in progress holds no other job's turn. The worker
     /// starts it and goes on, keeps no second run of the job in flight however many
     /// rounds pass, judges the job's lapse after its own run, and waits for it when it
     /// stops.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INF_BG_001_ARunInProgressHoldsNoOtherJobsTurnAsync()
+    public async Task INF_BG_001_AC3_ARunInProgressHoldsNoOtherJobsTurnAsync()
     {
         var release = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
         int started = 0;
