@@ -652,6 +652,42 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// IDN-LIFE-012a AC5: the personal email a membership keeps is not dropped by a
+    /// provider's word, so naming it drops nothing and it reads back verified and
+    /// personal.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC5_TheKeptPersonalEmailIsNotUnvouchedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        IdentifierId corporate = await WriteAsync(subject, Fresh("Corporate"));
+
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(personal, Noon);
+            set.Verify(corporate, Noon);
+            set.MakePrimary(corporate);
+            set.KeepPersonal(personal);
+        });
+
+        await using (StoreContext writing = database.Context())
+        {
+            Assert.Null(await Directory(writing).UnverifyAsync(
+                subject,
+                Canonical,
+                TestContext.Current.CancellationToken));
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.True(read.Find(personal) is { IsVerified: true, IsPersonal: true });
+    }
+
+    /// <summary>
     /// A value the account changed replaces both stored forms and the fingerprint, so
     /// the old value belongs to nobody and the new one belongs to the account.
     /// </summary>
