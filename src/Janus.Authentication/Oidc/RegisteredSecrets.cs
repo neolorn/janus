@@ -89,7 +89,13 @@ internal sealed class RegisteredSecrets(
             return Result.Failure<byte[]>(failure);
         }
 
-        RegisteredSecret? held = await clients.SecretAsync(clientId, cancellationToken).ConfigureAwait(false);
+        RegisteredSecret? held = (await HeldAsync(clientId, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<RegisteredSecret?>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<byte[]>(failure);
+        }
 
         if (held is null)
         {
@@ -109,6 +115,66 @@ internal sealed class RegisteredSecrets(
         {
             Clear(held);
         }
+    }
+
+    /// <summary>
+    /// A registered client's secrets as they stand now: the current one and, while its
+    /// overlap runs, the one it replaced. A replaced secret whose overlap has ended is
+    /// first removed from the registry, with the end stored beside it, and is not
+    /// answered.
+    /// </summary>
+    /// <param name="clientId">Which client.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The secrets, which the caller clears, nothing where no such client is registered,
+    /// or the refusal where the removal's transaction could not be opened or committed.
+    /// </returns>
+    public async ValueTask<Result<RegisteredSecret?>> HeldAsync(string clientId, CancellationToken cancellationToken)
+    {
+        RegisteredSecret? held = await clients.SecretAsync(clientId, cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (held is not { PreviousUntil: DateTimeOffset until } || now < until)
+        {
+            return Result.Success(held);
+        }
+
+        // OPS-SEC-002 AC3 (D-197): the end stored at the replacement is the one judged,
+        // whatever the settings read now, and the first read at or after it removes the
+        // replaced secret, as a retired signing key's private key is removed.
+        if (held.Previous is byte[] previous)
+        {
+            CryptographicOperations.ZeroMemory(previous);
+        }
+
+        RegisteredSecret standing = held with { Previous = null, PreviousUntil = null };
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            Clear(standing);
+
+            return Result.Failure<RegisteredSecret?>(notBegun);
+        }
+
+        // CONV-DESIGN-003: where another process removed it first, nothing was written
+        // here, so the unit of work is rolled back.
+        if (!await clients.RemoveReplacedSecretAsync(clientId, now, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success<RegisteredSecret?>(standing);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            Clear(standing);
+
+            return Result.Failure<RegisteredSecret?>(notCommitted);
+        }
+
+        return Result.Success<RegisteredSecret?>(standing);
     }
 
     private static void Clear(RegisteredSecret secret)

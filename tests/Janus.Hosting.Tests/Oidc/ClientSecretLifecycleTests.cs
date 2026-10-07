@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
+using Janus.Authentication.Tests.Oidc;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -84,6 +85,44 @@ public sealed class ClientSecretLifecycleTests
     }
 
     /// <summary>
+    /// OPS-SEC-002 AC3 (D-197): the replaced secret stays in the registry while it is
+    /// taken, and the first read of the client's secrets after its overlap, here the
+    /// provider judging a secret presented, removes it and the end stored beside it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_002_AC3_TheReplacedSecretIsRemovedByTheFirstReadAfterItsOverlapAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RelyingParty.RegisteredAsync(deployment);
+
+        deployment.Clock.Advance(await SettingAsync(deployment, Settings.TokenSigningRotation));
+
+        string replacing = await CurrentAsync(deployment, TestContext.Current.CancellationToken);
+        TimeSpan overlap = await SettingAsync(deployment, Settings.OidcAccessTokenLifetime) + TimeSpan.FromMinutes(5);
+
+        deployment.Clock.Advance(overlap - TimeSpan.FromSeconds(1));
+
+        Answer within = await PushedAsync(deployment, RelyingParty.Secret);
+        RegisteredClient kept = Held(deployment);
+
+        deployment.Clock.Advance(TimeSpan.FromSeconds(1));
+
+        Answer after = await PushedAsync(deployment, RelyingParty.Secret);
+        RegisteredClient removed = Held(deployment);
+
+        Assert.Equal(StatusCodes.Status201Created, within.Status);
+        Assert.Equal(Encoding.UTF8.GetBytes(RelyingParty.Secret), kept.Previous);
+        Assert.NotNull(kept.PreviousUntil);
+        Assert.Equal(StatusCodes.Status401Unauthorized, after.Status);
+        Assert.Null(removed.Previous);
+        Assert.Null(removed.PreviousUntil);
+        Assert.Equal(replacing, Encoding.UTF8.GetString(removed.Secret));
+        Assert.Equal(StatusCodes.Status201Created, (await PushedAsync(deployment, replacing)).Status);
+    }
+
+    /// <summary>
     /// OPS-SEC-002, D-166 (340): of two processes that find the secret due together, one
     /// replaces it and the other reads what the first wrote, so both present one secret
     /// and it was replaced once.
@@ -124,6 +163,10 @@ public sealed class ClientSecretLifecycleTests
 
         return Encoding.UTF8.GetString(current);
     }
+
+    // The application as the registry holds it, with its secrets.
+    private static RegisteredClient Held(Deployment deployment) =>
+        Assert.Single(deployment.Clients.Registered, held => held.Client.ClientId == RelyingParty.Application);
 
     private static async Task<TimeSpan> SettingAsync(Deployment deployment, DurationSetting setting) =>
         (await deployment.Configuration.ReadAsync(setting, TestContext.Current.CancellationToken))

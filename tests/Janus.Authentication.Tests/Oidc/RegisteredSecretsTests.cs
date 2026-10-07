@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Xunit;
 
 namespace Janus.Authentication.Tests.Oidc;
@@ -17,8 +18,13 @@ namespace Janus.Authentication.Tests.Oidc;
 public sealed class RegisteredSecretsTests : IAsyncDisposable
 {
     private const string Client = "an-application";
+    private const string First = "the-secret-first-issued";
 
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
+    // AUTH-KEY-001: how long a replaced secret is taken, the access-token lifetime and
+    // five minutes, at the default the tests run under.
+    private static readonly TimeSpan Overlap = Settings.OidcAccessTokenLifetime.Default + TimeSpan.FromMinutes(5);
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly OidcClientStoreInMemory _clients = new();
@@ -78,6 +84,86 @@ public sealed class RegisteredSecretsTests : IAsyncDisposable
         Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
     }
 
+    /// <summary>
+    /// OPS-SEC-002 AC3 (D-197): the replaced secret and the end of its overlap stay
+    /// stored through the overlap, and the first read of the client's secrets at that
+    /// end removes both, in a unit of work that commits.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_002_AC3_TheReplacedSecretIsRemovedByTheFirstReadAfterItsOverlapAsync()
+    {
+        await RegisteredAsync();
+        string replacing = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+        _clock.Advance(Overlap - TimeSpan.FromSeconds(1));
+        _ = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+        RegisteredClient within = Assert.Single(_clients.Registered);
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _work.Reset();
+
+        string current = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+
+        RegisteredClient after = Assert.Single(_clients.Registered);
+        Assert.Equal(Encoding.UTF8.GetBytes(First), within.Previous);
+        Assert.Equal(Noon + Overlap, within.PreviousUntil);
+        Assert.Null(after.Previous);
+        Assert.Null(after.PreviousUntil);
+        Assert.Equal((replacing, replacing), (current, Encoding.UTF8.GetString(after.Secret)));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// OPS-SEC-002 (D-197): the end of a replaced secret's overlap is stored at the
+    /// replacement, and a change of the access-token lifetime made after it moves
+    /// neither the end stored nor the read that removes the secret.
+    /// </summary>
+    /// <param name="minutes">The access-token lifetime set after the replacement.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(60)]
+    public async Task OPS_SEC_002_AChangeOfASettingDoesNotMoveTheEndOfAnOverlapAsync(int minutes)
+    {
+        await RegisteredAsync();
+        _ = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+        _configuration.Set(Settings.OidcAccessTokenLifetime, TimeSpan.FromMinutes(minutes));
+        _clock.Advance(Overlap - TimeSpan.FromSeconds(1));
+        _ = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+        RegisteredClient within = Assert.Single(_clients.Registered);
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        _ = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Encoding.UTF8.GetBytes(First), within.Previous);
+        Assert.Equal(Noon + Overlap, within.PreviousUntil);
+        Assert.Null(Assert.Single(_clients.Registered).Previous);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, OPS-SEC-002 AC3: a removal another process made first
+    /// leaves this read nothing to write, so its unit of work is rolled back and the
+    /// current secret is answered all the same.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARemovalAnotherProcessMadeFirstIsRolledBackAsync()
+    {
+        await RegisteredAsync();
+        string replacing = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+        _clock.Advance(Overlap);
+        _work.Reset();
+        _clients.BeforeRemoval = async cancellationToken =>
+            _ = await _clients.RemoveReplacedSecretAsync(Client, _clock.GetUtcNow(), cancellationToken);
+
+        string current = Read(await Secrets.CurrentAsync(Client, TestContext.Current.CancellationToken));
+
+        Assert.Equal(replacing, current);
+        Assert.Null(Assert.Single(_clients.Registered).Previous);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
     private static string Read(Result<byte[]> current) =>
         Encoding.UTF8.GetString(current.Match(
             read => read,
@@ -88,7 +174,7 @@ public sealed class RegisteredSecretsTests : IAsyncDisposable
         _clients
             .AddAsync(
                 new OidcClient(Client, Client, OidcClientKind.BrowserApplication, "https://app.example.test/return", ["openid"]),
-                Encoding.UTF8.GetBytes("the-secret-first-issued"),
+                Encoding.UTF8.GetBytes(First),
                 DateTimeOffset.MinValue,
                 TestContext.Current.CancellationToken)
             .AsTask();

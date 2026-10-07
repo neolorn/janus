@@ -44,6 +44,13 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
     public Func<CancellationToken, ValueTask>? BeforeReplacement { get; set; }
 
     /// <summary>
+    /// What happens once, before the next removal of a replaced secret is attempted:
+    /// another process's work, run between this one's read of the secrets and its
+    /// removal.
+    /// </summary>
+    public Func<CancellationToken, ValueTask>? BeforeRemoval { get; set; }
+
+    /// <summary>
     /// Takes a client out of the registry, as a registry changed by hand loses one.
     /// </summary>
     /// <param name="clientId">Which client.</param>
@@ -150,6 +157,34 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
 
             _clients[clientId] = new RegisteredClient(held.Client, secret.ToArray(), now, held.Secret, replacedUntil);
             Replacements++;
+
+            return true;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> RemoveReplacedSecretAsync(
+        string clientId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (BeforeRemoval is Func<CancellationToken, ValueTask> first)
+        {
+            BeforeRemoval = null;
+
+            await first(cancellationToken);
+        }
+
+        lock (_gate)
+        {
+            if (!_clients.TryGetValue(clientId, out RegisteredClient? held)
+                || held.PreviousUntil is not DateTimeOffset until
+                || now < until)
+            {
+                return false;
+            }
+
+            _clients[clientId] = held with { Previous = null, PreviousUntil = null };
 
             return true;
         }

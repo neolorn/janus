@@ -915,7 +915,10 @@ against the public contract of LIB-API-001.
   that finds it due, while the deployment runs; of two instances that find it due
   together one replaces it and the other presents what the first wrote. The provider
   takes the secret it replaced for the access-token lifetime and five minutes, compared
-  in fixed time. No person chooses, carries or rotates a client secret. The migration
+  in fixed time. The end of that overlap is stored at the replacement, so no later
+  change of a setting moves it, and the first read of the client's secrets at or after
+  it removes the replaced secret and that end from the registry (OPS-SEC-002). No
+  person chooses, carries or rotates a client secret. The migration
   that moves the registry to held secrets refuses to run where a client is registered,
   since what a secret hashed to cannot become the secret.
 - The audit trail's monthly partitions are kept by a daily job, `audit-partitions`,
