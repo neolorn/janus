@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The analysers are built against the compiler of SDK 10.0.100, the first .NET 10
+  SDK (`Microsoft.CodeAnalysis.CSharp` 5.0.0), so a host's build loads them in every
+  .NET 10 SDK.
 - A fault of the sign-on over the deployment's own state names what failed in the
   fault's log entry, read by its correlation identifier. A client secret or the
   authentication application's published keys that cannot be read make a fault
