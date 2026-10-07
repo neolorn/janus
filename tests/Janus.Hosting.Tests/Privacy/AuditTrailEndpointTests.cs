@@ -133,6 +133,46 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-AUD-001 AC3: a record of background work about a subject is read over the
+    /// endpoint by that subject, with the nil subject as its acting and effective
+    /// identity and the principal's name and reason beside them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_AUD_001_AC3_ARecordOfBackgroundWorkIsReadWithItsPrincipalAndReasonAsync()
+    {
+        var erased = new SubjectId(Guid.NewGuid());
+
+        _deployment.Trail.Hold(new AuditEntry(
+            new AuditRecordId(Guid.CreateVersion7()),
+            AuditCategory.Security,
+            AuditActions.ErasureExecuted,
+            Noon,
+            default,
+            default,
+            Organization: null,
+            new Dictionary<string, JsonElement>(StringComparer.Ordinal),
+            BreakGlassReason: null,
+            Principal: "account-deletion",
+            PrincipalReason: "IDN-LIFE-014",
+            Subject: erased));
+
+        Browser browser = await AuthorisedAsync();
+
+        Answer read = await browser.SendAsync("GET", $"/admin/audit?subject={erased.Value}");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+
+        JsonElement entry = Assert.Single(read.Json().EnumerateArray());
+
+        Assert.Equal("account-deletion", entry.GetProperty("principal").GetString());
+        Assert.Equal("IDN-LIFE-014", entry.GetProperty("principalReason").GetString());
+        Assert.Equal(Guid.Empty, entry.GetProperty("acting").GetGuid());
+        Assert.Equal(Guid.Empty, entry.GetProperty("effective").GetGuid());
+        Assert.Equal(erased.Value, entry.GetProperty("subject").GetGuid());
+    }
+
+    /// <summary>
     /// API-CONV-002: a subject that is absent or not an identifier is a malformed
     /// request, naming the member.
     /// </summary>

@@ -702,7 +702,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// IDN-ORG-005 AC1, AC2: the audit records naming an organization are still there to
+    /// IDN-ORG-005 AC1: the audit records naming an organization are still there to
     /// be queried once a member is erased, with the personal details they carried no
     /// longer readable; an organization's own erasure erases no account (IDN-ORG-003).
     /// </summary>
@@ -752,6 +752,59 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(organization, read.Organization);
         Assert.Equal(suspended, read.Action);
         Assert.Empty(read.PersonalDetails);
+    }
+
+    /// <summary>
+    /// IDN-ORG-005 AC2: a personal detail in a record naming the organization is held
+    /// under its subject's key, so it reads while the subject stands and no longer reads
+    /// once that subject is erased, the record itself standing under the organization.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_005_AC2_APersonalDetailInTheOrganizationsRecordGoesWithItsSubjectAsync()
+    {
+        SubjectId member = await DeletingAccountAsync();
+        var organization = new OrganizationId(Guid.CreateVersion7());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    new AuditRecordId(Guid.CreateVersion7()),
+                    AuditCategory.Security,
+                    AuditAction.Parse("identity.account.suspended"),
+                    Noon.AddHours(-1),
+                    member,
+                    member,
+                    breakGlassReason: null,
+                    organization,
+                    personalDetails: new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                    {
+                        ["reason"] = JsonSerializer.SerializeToElement("ahmed@example.com"),
+                    }),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        AuditRecord before;
+
+        await using (StoreContext standing = database.Context())
+        {
+            before = Assert.Single(
+                await new AuditStore(standing, new DataConnections(standing), _deployment.Ring, _deployment.Randomness)
+                    .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
+        }
+
+        await EraseAsync(member, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuditRecord after = Assert.Single(
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
+                .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
+
+        Assert.Equal("ahmed@example.com", before.PersonalDetails["reason"].GetString());
+        Assert.Equal(organization, after.Organization);
+        Assert.Empty(after.PersonalDetails);
     }
 
     /// <summary>
@@ -1361,6 +1414,82 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             occurred.UtcDateTime,
             DateTime.SpecifyKind(at, DateTimeKind.Utc),
             TimeSpan.FromMilliseconds(1));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-003 AC2: an erased subject's identifier still resolves to its account,
+    /// which reads <c>deleted</c>, and no personal field of it reads: the profile under
+    /// its key fails to open rather than returning a value.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_003_AC2_AnErasedSubjectResolvesWithNoReadablePersonalFieldAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await using (StoreContext writing = database.Context())
+        {
+            Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+            profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
+
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        Account resolved = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((subject, AccountState.Deleted), (resolved.Subject, resolved.State));
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-003 AC3: an audit record referring to an erased subject is still read by
+    /// that subject, names it as it did, and the subject it names still resolves to an
+    /// account, so the record points at something.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_003_AC3_AnAuditRecordOfAnErasedSubjectStillResolvesAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        var suspended = AuditAction.Parse("identity.account.suspended");
+        var id = new AuditRecordId(Guid.CreateVersion7());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    id,
+                    AuditCategory.Security,
+                    suspended,
+                    Noon.AddHours(-3),
+                    subject,
+                    subject,
+                    breakGlassReason: null,
+                    organization: null),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuditRecord read = Assert.Single(
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((id, suspended, subject), (read.Id, read.Action, read.Subject));
+        Assert.NotNull(await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
     /// <summary>

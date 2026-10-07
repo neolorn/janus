@@ -113,13 +113,13 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// IDN-ORG-003, D-166 (155): the erasure leaves no domain of the organization
+    /// IDN-ORG-005 AC2, IDN-ORG-003, D-166 (155): the erasure leaves no domain of the organization
     /// readable. Each becomes the identifier; one still listed is removed at the
     /// erasure, one removed before keeps its instant, and another organization's
     /// domain of the same name is untouched.
     /// </summary>
     [Fact]
-    public async Task IDN_ORG_003_TheErasureLeavesNoDomainOfTheOrganizationAsync()
+    public async Task IDN_ORG_005_AC2_TheErasureLeavesNoDomainOfTheOrganizationAsync()
     {
         OrganizationId organization = await DeletingAsync(Noon);
         OrganizationId other = await CreateAsync();
