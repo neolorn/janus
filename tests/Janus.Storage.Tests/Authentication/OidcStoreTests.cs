@@ -39,13 +39,13 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
-    /// OPS-SEC-001, AUTH-OIDC-001 AC2: the registry holds a client's secret wrapped under
+    /// OPS-SEC-002 AC4, OPS-SEC-001, AUTH-OIDC-001 AC2: the registry holds a client's secret wrapped under
     /// the deployment's data key, neither in the clear nor as anything a search over
     /// the table could reach, and what the protocol server is handed is that same
     /// wrapped value, which authenticates nothing.
     /// </summary>
     [Fact]
-    public async Task OPS_SEC_001_NoClientSecretIsHeldInTheClearAsync()
+    public async Task OPS_SEC_002_AC4_NoClientSecretIsHeldInTheClearAsync()
     {
         await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 

@@ -182,13 +182,13 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
-    /// OPS-SEC-001 and INF-HOST-003: the keys are piped from the secrets manager, never
+    /// OPS-SEC-001 AC4 and INF-HOST-003: the keys are piped from the secrets manager, never
     /// typed, so a command whose standard input is a terminal is refused before it
     /// reads anything.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_001_TheCommandRefusesATerminalAsync()
+    public async Task OPS_SEC_001_AC4_TheCommandRefusesATerminalAsync()
     {
         Invocation run = await Invocation.TypedAsync(Invocation.Bootstrap());
 
@@ -287,12 +287,12 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
-    /// API-CONV-002 and CONV-CONTENT-001: a refusal names the member it concerns and
+    /// OPS-SEC-001 AC4, API-CONV-002 and CONV-CONTENT-001: a refusal names the member it concerns and
     /// nothing piped in: no key, and not the connection with its credential.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_001_ARefusalCarriesNoneOfTheDocumentAsync()
+    public async Task OPS_SEC_001_AC4_ARefusalCarriesNoneOfTheDocumentAsync()
     {
         JsonObject document = Invocation.Keys(Nowhere + ";Password=the database credential");
         Assert.True(document.Remove("fingerprintKeys"));

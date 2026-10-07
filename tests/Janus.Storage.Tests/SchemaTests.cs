@@ -119,11 +119,11 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
     }
 
     /// <summary>
-    /// OPS-DB-002 AC1: the collation is the library's, so it is created in the library's
+    /// OPS-DB-001 AC4: the collation is the library's, so it is created in the library's
     /// own schema and nowhere else. A column names it by that schema.
     /// </summary>
     [Fact]
-    public async Task OPS_DB_002_AC1_TheCollationLivesInTheLibrarysSchemaAsync()
+    public async Task OPS_DB_001_AC4_TheCollationLivesInTheLibrarysSchemaAsync()
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
 
