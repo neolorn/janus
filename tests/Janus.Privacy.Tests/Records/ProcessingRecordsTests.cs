@@ -212,13 +212,13 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-ROPA-001, PRIV-MINOR-001: a deployment that admits minors and declares no
+    /// PRIV-ROPA-001 AC4, PRIV-MINOR-001: a deployment that admits minors and declares no
     /// type as children's data is told so on the register, because a register showing
     /// no children's processing at all is what a regulator would object to.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_ADeploymentAdmittingMinorsAndDeclaringNoneIsFlaggedAsync()
+    public async Task PRIV_ROPA_001_AC4_ADeploymentAdmittingMinorsAndDeclaringNoneIsFlaggedAsync()
     {
         _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
 
@@ -232,13 +232,13 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-ROPA-001: the flag reports an absence, so a deployment admitting minors
+    /// PRIV-ROPA-001 AC4: the flag reports an absence, so a deployment admitting minors
     /// that does declare a children's type carries none, and so does one that admits
     /// no minors at all.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_ADeploymentThatDeclaredOneIsNotFlaggedAsync()
+    public async Task PRIV_ROPA_001_AC4_ADeploymentThatDeclaredOneIsNotFlaggedAsync()
     {
         _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
 
