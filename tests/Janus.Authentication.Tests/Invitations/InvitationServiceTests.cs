@@ -1720,6 +1720,30 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC5: the end of the membership is told once to each member of the
+    /// security-notice set as it stands after the change, the personal email that is
+    /// now the primary and the phone, and the retired corporate address is sent
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC5_TheSetAsItStandsAfterIsToldOnceAndTheRetiredAddressNothingAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _notifications.Sent.Clear();
+
+        Accepted(await EndAsync(Staff, holder));
+
+        Assert.Equal(
+            [Number, Personal],
+            _notifications.Sent.Select(told => told.Destination.Canonical).Order(StringComparer.Ordinal));
+        Assert.All(
+            _notifications.Sent,
+            told => Assert.Equal(MessageKind.IdentifierSettingsChanged, told.Message));
+        Assert.DoesNotContain(_notifications.Sent, told => told.Destination.Canonical == Corporate);
+    }
+
+    /// <summary>
     /// REG-MAIL-003 AC6 and INT-MAIL-006 AC6: an invitation of an address whose standing
     /// mailbox was held before, naming no <c>formerMailbox</c>, is refused and changes
     /// nothing, whoever it invites, the last holder included.
