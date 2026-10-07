@@ -1228,6 +1228,38 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-001 AC5: an alert by text is refused by no restriction and counted under
+    /// none: with every shipped restriction a text to the phone could count under full,
+    /// the alert is carried, and carried again, and no count moves.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_001_AC5_AnAlertIsCountedAndRefusedByNoRestrictionAsync()
+    {
+        var noticed = new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Phone.Value);
+
+        foreach (RestrictionKey full in new[] { Each, Once, noticed })
+        {
+            _ledger.Given(full, Noon, Noon, Noon, Noon, Noon);
+        }
+
+        IReadOnlyCollection<RestrictionKey> before = [.. _ledger.Keys];
+        var alert = new OutboundMessage(
+            SendDestination.Of(Phone),
+            MessageKind.Alert,
+            RestrictionPurpose.Notification,
+            Source: null,
+            "en");
+
+        _ = await SentAsync(alert);
+        _ = await SentAsync(alert);
+
+        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(before, _ledger.Keys);
+        Assert.All(_ledger.Keys, key => Assert.Equal(5, _ledger.Sends(key).Count));
+    }
+
+    /// <summary>
     /// INT-GEN-005 AC1: the field set of an outbound mail is the destination, the
     /// subject, the body and the correlation reference, and nothing else.
     /// </summary>
