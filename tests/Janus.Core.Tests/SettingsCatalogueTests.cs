@@ -27,8 +27,9 @@ public sealed class SettingsCatalogueTests
     // The capital that begins each word of a name after the first.
     private static readonly Regex Words = new("(?<=.)([A-Z])", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
-    // The eleven keys of LIB-HOST-001 that name the deployment, and the three that
-    // are named only where their condition holds.
+    // The twelve keys of LIB-HOST-001 that name the deployment, and the three held
+    // with no default that are named only where their condition holds: the basis of a
+    // transfer and the two password screening sources.
     private static readonly string[] NamedByTheDeployment =
     [
         "abuse.sms.balancefloor",

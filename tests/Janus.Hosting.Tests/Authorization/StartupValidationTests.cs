@@ -1269,6 +1269,74 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         }
     }
 
+    /// <summary>
+    /// LIB-HOST-001 AC2: the service's name is a conditional declaration. A deployment
+    /// that screens passwords against its own name and never said what that name is
+    /// is stopped by that key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_ScreeningAgainstTheContextWithoutTheServiceNameIsRefusedAsync()
+    {
+        StartupException refused = await RefusedHoldingAsync(
+            Settings.PasswordBlocklistSources.Key,
+            Settings.PasswordBlocklistSources.Write(new HashSet<BlocklistRejectionSource>
+            {
+                BlocklistRejectionSource.Leaked,
+                BlocklistRejectionSource.Context,
+            }));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("service.name", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: the address of a corpus the deployment hosts itself is a
+    /// conditional declaration. A deployment that chose that source and never said
+    /// where it answers is stopped by that key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_ASelfHostedCorpusWithoutItsAddressIsRefusedAsync()
+    {
+        StartupException refused = await RefusedHoldingAsync(
+            Settings.PasswordBlocklistSource.Key,
+            Settings.PasswordBlocklistSource.Write(BlocklistSource.SelfHosted));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("password.blocklist.selfhosted.address", refused.Failure?.Details["key"].GetString());
+    }
+
+    // LIB-HOST-001: the deployment, which starts as it stands, started again with one
+    // key holding the value that makes a conditional declaration one to name. The key
+    // goes back to its default afterwards whatever the start did.
+    private async Task<StartupException> RefusedHoldingAsync(ConfigurationKey condition, string holding)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost unconditional = Deployed())
+        {
+            await unconditional.StartAsync(cancellationToken);
+            await unconditional.StopAsync(cancellationToken);
+        }
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + condition + "', '" + holding + "');",
+            cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            return await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+        }
+        finally
+        {
+            await WriteAsync("DELETE FROM identity.settings WHERE key = '" + condition + "';", cancellationToken);
+        }
+    }
+
     // LIB-HOST-001: the deployment started with one key it has to name left unnamed,
     // which is named again afterwards whatever the start did.
     /// <summary>
