@@ -677,12 +677,12 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-PM-001: the handle an authenticator returns is what says whose credential
+    /// REG-PM-001 AC4: the handle an authenticator returns is what says whose credential
     /// answered, so one naming another account is refused as a wrong credential is.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_PM_001_AnAssertionWhoseHandleNamesAnotherAccountIsRefusedAsync()
+    public async Task REG_PM_001_AC4_AnAssertionWhoseHandleNamesAnotherAccountIsRefusedAsync()
     {
         SubjectId subject = Subject();
 
@@ -708,7 +708,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_PM_001_AnAssertionWithNoHandleIsRefusedWhereNoAccountWasNamedAsync()
+    public async Task REG_PM_001_AC4_AnAssertionWithNoHandleIsRefusedWhereNoAccountWasNamedAsync()
     {
         SubjectId subject = Subject();
 

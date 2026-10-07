@@ -819,14 +819,14 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-DOM-001, `09` `POST /auth/step-up`: at a step-up a right email code sent to an
+    /// REG-DOM-001 AC14, `09` `POST /auth/step-up`: at a step-up a right email code sent to an
     /// address the domain lock now refuses answers 422
     /// <c>identity.identifier.domainnotallowed</c>, and the code is spent: presented
     /// again it answers as a code that is gone.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesAnswersTheLocksCodeAsync()
+    public async Task REG_DOM_001_AC14_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesAnswersTheLocksCodeAsync()
     {
         var locked = new OrganizationId(Guid.NewGuid());
         _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);

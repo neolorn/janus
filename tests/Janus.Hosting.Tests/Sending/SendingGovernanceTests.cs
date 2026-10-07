@@ -1459,7 +1459,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     /// below the gateway floor it is asked to carry nothing but an alert.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_004_AReplacedHandlerIsStillGovernedAsync()
+    public async Task LIB_EXT_001_AC4_AReplacedHandlerIsStillGovernedAsync()
     {
         var replaced = new NotificationHandlerInMemory();
 
@@ -1920,12 +1920,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Empty(_outbox.Waiting);
     }
     /// <summary>
-    /// PRIV-RIGHT-005a, AUTH-ABUSE-004 AC16: a message whose row's key erasure has
+    /// PRIV-RIGHT-005a AC15, AUTH-ABUSE-004 AC16: a message whose row's key erasure has
     /// overwritten is never read and never handed to the handler. The pass that meets it
     /// removes the row, and the count the send held from its admission is released.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005a_AMessageWhoseKeyWasErasedIsRemovedUncarriedAndItsCountReleasedAsync()
+    public async Task PRIV_RIGHT_005a_AC15_AMessageWhoseKeyWasErasedIsRemovedUncarriedAndItsCountReleasedAsync()
     {
         var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
 

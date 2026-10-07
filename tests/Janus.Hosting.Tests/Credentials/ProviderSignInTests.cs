@@ -347,14 +347,14 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-ABUSE-001 AC2 and AUTH-ABUSE-001: a return from an address that has earned a
+    /// BFF-ABUSE-001 AC4 and AUTH-ABUSE-001: a return from an address that has earned a
     /// delay is sent back throttled, with the instant the delay lifts, before its code
     /// is traded, so the deployment makes no request of any provider on that address's
     /// behalf, a genuine identity's included.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_ABUSE_001_AC2_AThrottledProviderReturnCarriesItsIntervalAsync()
+    public async Task BFF_ABUSE_001_AC4_AThrottledProviderReturnCarriesItsIntervalAsync()
     {
         var browser = new Browser(_deployment);
         var forged = new ProviderPerson(GoogleSubject) { Forged = true };

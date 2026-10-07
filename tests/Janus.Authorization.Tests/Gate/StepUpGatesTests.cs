@@ -134,7 +134,7 @@ public sealed class StepUpGatesTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_HOST_004_AProviderReportingTheGateMetAdmitsTheActionAsync()
+    public async Task LIB_HOST_004_AC3_AProviderReportingTheGateMetAdmitsTheActionAsync()
     {
         var sessions = new SessionGatesInMemory(Identifiers.Subject());
 
@@ -160,7 +160,7 @@ public sealed class StepUpGatesTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_HOST_004_AProviderReportingAnOlderProofIsRefusedWithTheGateAsync()
+    public async Task LIB_HOST_004_AC3_AProviderReportingAnOlderProofIsRefusedWithTheGateAsync()
     {
         var sessions = new SessionGatesInMemory(Identifiers.Subject());
 
@@ -189,7 +189,7 @@ public sealed class StepUpGatesTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_HOST_004_AProviderReportingNoPhishingResistanceMeetsNoPhishingResistantGateAsync()
+    public async Task LIB_HOST_004_AC3_AProviderReportingNoPhishingResistanceMeetsNoPhishingResistantGateAsync()
     {
         var sessions = new SessionGatesInMemory(Identifiers.Subject());
 

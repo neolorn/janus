@@ -644,7 +644,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// the downgrade and leaves what the session had attained as it was.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync()
+    public async Task IDN_LIFE_009b_AC5_ASessionHeldBeforeTheMembershipIsDowngradedAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -1474,14 +1474,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-DOM-001, AUTH-FACT-004: at a step-up a right email code sent to an address the
+    /// REG-DOM-001 AC14, AUTH-FACT-004: at a step-up a right email code sent to an address the
     /// domain lock now refuses is answered <c>identity.identifier.domainnotallowed</c>.
     /// The lock is judged after the code against the address the code was sent to, the
     /// spend is committed alone, no failure is counted, no refused step-up factor is
     /// recorded, and the session is not raised.
     /// </summary>
     [Fact]
-    public async Task REG_DOM_001_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesIsSpentAndCountsNoFailureAsync()
+    public async Task REG_DOM_001_AC14_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesIsSpentAndCountsNoFailureAsync()
     {
         SubjectId subject = await AccountAsync();
         Enables(Factor.EmailCode);

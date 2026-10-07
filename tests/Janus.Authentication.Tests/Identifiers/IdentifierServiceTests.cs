@@ -1923,12 +1923,12 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-008 AC1: the session kept is the one the replacement completes under,
+    /// IDN-LIFE-008 AC2: the session kept is the one the replacement completes under,
     /// not the one that staged it, so a code typed in another session of the account
     /// keeps that session alone and ends the staging one with the rest.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_008_AC1_AReplacementCompletedInAnotherSessionKeepsThatSessionAloneAsync()
+    public async Task IDN_LIFE_008_AC2_AReplacementCompletedInAnotherSessionKeepsThatSessionAloneAsync()
     {
         _configuration.Set(Settings.IdentifiersEmailMax, 1);
 
@@ -1956,12 +1956,12 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-008 AC1: a replacement the displaced address's confirmation completes
+    /// IDN-LIFE-008 AC3: a replacement the displaced address's confirmation completes
     /// completes under no session of the account, so every session ends, the one that
     /// staged it and typed the new code included.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_008_AC1_AReplacementTheOldAddressConfirmsEndsEverySessionAsync()
+    public async Task IDN_LIFE_008_AC3_AReplacementTheOldAddressConfirmsEndsEverySessionAsync()
     {
         _configuration.Set(Settings.IdentifiersEmailMax, 1);
 
