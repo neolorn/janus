@@ -608,6 +608,18 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-TEST-001 AC2: no project grants its internals to the project that holds
+    /// the consumer sample.
+    /// </summary>
+    [Fact]
+    public void CONV_TEST_001_AC2_NoProjectGrantsItsInternalsToTheProjectHoldingTheSample()
+    {
+        string[] granting = [.. Dependencies.Keys.Where(project => Grants(project).Contains(Sample))];
+
+        Assert.Empty(granting);
+    }
+
+    /// <summary>
     /// CONV-LAYOUT-003 AC1: a file's namespace matches its folder path.
     /// </summary>
     [Fact]
@@ -1309,12 +1321,12 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-TEST-002 AC3: every test class carries one kind of the four, and a job of
+    /// CONV-TEST-002 AC4: every test class carries one kind of the four, and a job of
     /// the pipeline runs that kind on its own, so no class goes unrun for carrying no
     /// kind and none runs with two.
     /// </summary>
     [Fact]
-    public void CONV_TEST_002_AC3_EveryTestClassCarriesOneKindThatAJobRunsOnItsOwn()
+    public void CONV_TEST_002_AC4_EveryTestClassCarriesOneKindThatAJobRunsOnItsOwn()
     {
         string[] run =
         [

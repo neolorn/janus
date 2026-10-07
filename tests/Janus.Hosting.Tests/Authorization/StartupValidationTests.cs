@@ -871,7 +871,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("keyEncryptionKeys")]
     [InlineData("fingerprintKeys")]
     [InlineData("maintenanceCredential")]
-    public async Task OPS_SEC_001_ASecretTheSourceCannotAnswerStopsTheStartNamingItAsync(string key)
+    public async Task INF_HOST_003_AC1_ASecretTheSourceCannotAnswerStopsTheStartNamingItAsync(string key)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         SecretSourceInMemory answering = HostFixture.Secrets(host.MaintenanceConnectionString);
@@ -1234,13 +1234,13 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// LIB-HOST-001 AC2: a key the deployment has to name and left unnamed stops it as
+    /// CONV-DESIGN-007 AC3 (LIB-HOST-001 AC2): a key the deployment has to name and left unnamed stops it as
     /// it starts, by the key's name and before the web server registered after the
     /// library has served anything.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task LIB_HOST_001_AC2_AnUnnamedKeyIsRefusedByNameBeforeTheServerStartsAsync()
+    public async Task CONV_DESIGN_007_AC3_AnUnnamedKeyIsRefusedByNameBeforeTheServerStartsAsync()
     {
         StartupException refused = await RefusedWithoutAsync(
             Settings.HostingEnvironment.Key,
