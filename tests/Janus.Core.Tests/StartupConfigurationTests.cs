@@ -105,12 +105,12 @@ public sealed class StartupConfigurationTests
         Start(Named(without: Settings.ServiceName.Key));
 
     /// <summary>
-    /// LIB-HOST-001 AC2, INT-PWD-003: a deployment that hosts the corpus itself says
+    /// INT-PWD-003 AC2, LIB-HOST-001 AC2: a deployment that hosts the corpus itself says
     /// where it answers, there being nowhere else to look for it, and one that does
     /// not is stopped by that key.
     /// </summary>
     [Fact]
-    public void LIB_HOST_001_AC2_ASelfHostedCorpusRequiresItsAddress()
+    public void INT_PWD_003_AC2_ASelfHostedCorpusRequiresItsAddress()
     {
         StartupException fault = Assert.Throws<StartupException>(
             () => Start(

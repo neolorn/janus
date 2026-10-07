@@ -89,13 +89,13 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// API-CONV-002 (D-166): a reason past 1024 characters after trimming is answered
+    /// API-CONV-002 AC3 (D-166): a reason past 1024 characters after trimming is answered
     /// 400 <c>api.request.malformed</c> naming <c>reason</c>, at the trigger and at the
     /// reversal, and moves nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_CONV_002_AReasonPastTheLimitIsMalformedAsync()
+    public async Task API_CONV_002_AC3_AReasonPastTheLimitIsMalformedAsync()
     {
         Browser browser = await AuthorisedAsync();
         string past = new('r', 1025);

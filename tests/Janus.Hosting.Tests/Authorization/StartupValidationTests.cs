@@ -1604,6 +1604,34 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         await started.StopAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// INT-GEN-002 AC3: a deployment whose declared provider's credential the secret
+    /// source does not supply does not start; the refusal names the credential, and the
+    /// web server is never started.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_GEN_002_AC3_ADeploymentWhoseProviderCredentialIsNotSuppliedDoesNotStartAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var served = new ServerStandIn();
+        var secrets = new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal));
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(
+                services.AddSingleton<IHostedService>(served),
+                providers: [Google],
+                secrets: secrets))
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused.Failure?.Code);
+        Assert.Equal("socialProvider.google", refused.Failure?.Details["key"].GetString());
+        Assert.False(served.Started);
+    }
+
     private async Task<StartupException> RefusedWithoutAsync(ConfigurationKey key, string value)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;

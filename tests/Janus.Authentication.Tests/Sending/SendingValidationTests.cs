@@ -143,12 +143,12 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
-    /// INT-SMS-003, D-166: a text that carries a link is budgeted at two segments of its
+    /// INT-SMS-003 AC4, D-166: a text that carries a link is budgeted at two segments of its
     /// alphabet, 306 units of the default alphabet and 134 outside it, with the link at
     /// its composed width; a text that does not carry one keeps its one segment.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_003_ATextCarryingALinkIsBudgetedAtTwoSegmentsAsync()
+    public async Task INT_SMS_003_AC4_ATextCarryingALinkIsBudgetedAtTwoSegmentsAsync()
     {
         int link = _places.Widths["link"];
 
@@ -224,12 +224,12 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
-    /// INT-SMS-003: the places are a closed set, so a text-message template naming one
+    /// INT-SMS-003 AC4: the places are a closed set, so a text-message template naming one
     /// the library does not fill has no width to be measured at and stops startup,
     /// naming the message and the place.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_003_ATemplateNamingAPlaceWithNoWidthStopsStartupAsync()
+    public async Task INT_SMS_003_AC4_ATemplateNamingAPlaceWithNoWidthStopsStartupAsync()
     {
         Assert.DoesNotContain("offsetSeconds", _places.Widths.Keys, StringComparer.Ordinal);
 
@@ -247,12 +247,12 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
-    /// INT-SMS-003: the retired <c>token</c> place is one with no width, so a
+    /// INT-SMS-003 AC4: the retired <c>token</c> place is one with no width, so a
     /// text-message template still naming it stops startup rather than sending a bare
     /// token.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_003_ATemplateNamingTheRetiredTokenPlaceStopsStartupAsync()
+    public async Task INT_SMS_003_AC4_ATemplateNamingTheRetiredTokenPlaceStopsStartupAsync()
     {
         _templates.Set(MessageKind.SignInLink, SendKind.Sms, "ar", new MessageTemplate(null, "{token}"));
 

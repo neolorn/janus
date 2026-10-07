@@ -176,7 +176,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
     [InlineData("dataOwner", 'd', 1025)]
     [InlineData("organizationalSecurityMeasures", ' ', 1)]
     [InlineData("organizationalSecurityMeasures", 'd', 1025)]
-    public async Task API_CONV_002_AStatementOutsideTheBoundIsRefusedBeforeTheServiceAsync(
+    public async Task API_CONV_002_AC3_AStatementOutsideTheBoundIsRefusedBeforeTheServiceAsync(
         string member,
         char character,
         int length)

@@ -1912,6 +1912,44 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-MAIL-006 AC6: a held mailbox passes to nobody without the inviter's choice,
+    /// whoever is invited to its address, and stays its holder's, unchanged; once its
+    /// holder is erased there is no choice to make, the choice is refused, and the
+    /// address is invited as one never held, taking over nothing.
+    /// </summary>
+    [Fact]
+    public async Task INT_MAIL_006_AC6_AHeldMailboxIsPassedOnOnlyByChoiceAndAnErasedHoldersByNoneAsync()
+    {
+        (SubjectId holder, Mailbox former) = await RetiredAsync();
+        int recorded = _mailboxes.Recorded;
+
+        Error invitee = Failure(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        Error another = Failure(await IssueAsync(Staff, Request(email: "another@elsewhere.test", corporate: Corporate)));
+
+        Assert.Equal(ErrorCodes.InvitationMailboxHeld, invitee.Code);
+        Assert.Equal(ErrorCodes.InvitationMailboxHeld, another.Code);
+        Assert.Same(former, Assert.Single(_mailboxes.Held));
+        Assert.Equal(holder, former.Holder);
+        Assert.Null(former.RemovalOwedAt);
+        Assert.Equal(recorded, _mailboxes.Recorded);
+
+        _ = _mailboxes.Erased.Add(holder);
+
+        (ErrorCode, string?) invalid = (ErrorCodes.RequestInvalid, "formerMailbox");
+
+        Assert.Equal(invalid, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace)))));
+        Assert.Equal(invalid, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Transfer)))));
+        Assert.Same(former, Assert.Single(_mailboxes.Held));
+        Assert.Null(former.RemovalOwedAt);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: "another@elsewhere.test", corporate: Corporate)));
+
+        Assert.Equal(2, _mailboxes.Held.Count);
+        Assert.NotSame(former, _mailboxes.Held[^1]);
+        Assert.Null(_audit.Changes[^1].Takeover);
+    }
+
+    /// <summary>
     /// REG-MAIL-003 and chapter 09 section 8a: a former mailbox is named with a reason of
     /// 1 to 1024 characters after trimming, and a reason comes only with one.
     /// </summary>

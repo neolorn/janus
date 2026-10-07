@@ -253,7 +253,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_CONV_002_AnOverlongDetailIsRefusedBeforeTheServiceAsync()
+    public async Task API_CONV_002_AC3_AnOverlongDetailIsRefusedBeforeTheServiceAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
@@ -279,7 +279,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     [Theory]
     [InlineData("channel")]
     [InlineData("identityConfirmation")]
-    public async Task API_CONV_002_AnEntryWithABlankChannelOrConfirmationIsRefusedAsync(string member)
+    public async Task API_CONV_002_AC3_AnEntryWithABlankChannelOrConfirmationIsRefusedAsync(string member)
     {
         Browser browser = await AuthorisedAsync();
         SubjectId subject = Borne();
@@ -363,7 +363,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     [InlineData('d', 0)]
     [InlineData(' ', 3)]
     [InlineData('d', 1025)]
-    public async Task API_CONV_002_AnEntryWithADetailOutsideTheBoundIsRefusedBeforeTheServiceAsync(
+    public async Task API_CONV_002_AC3_AnEntryWithADetailOutsideTheBoundIsRefusedBeforeTheServiceAsync(
         char character,
         int length)
     {
@@ -391,7 +391,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_CONV_002_ARefusalWithABlankReasonIsRefusedAsync()
+    public async Task API_CONV_002_AC3_ARefusalWithABlankReasonIsRefusedAsync()
     {
         Browser browser = await AuthorisedAsync();
 
@@ -413,6 +413,38 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
         Assert.Equal("reason", refused.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal("open", held.GetProperty("status").GetString());
+    }
+
+    /// <summary>
+    /// API-CONV-003 AC3: a path naming a request the deployment does not hold answers
+    /// 404 with the request's own code, a well-formed entry naming a subject it does not
+    /// hold answers 422 naming the member, and neither answers as a malformed request.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_003_AC3_ARecordThePathNamesIsNotFoundAndOneTheBodyNamesIsInvalidAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/" + Guid.NewGuid().ToString() + "/refuse",
+            ("reason", "the request was withdrawn by letter"));
+        Answer entered = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", Guid.NewGuid().ToString()),
+            ("type", "erasure"),
+            ("receivedAt", "2026-02-27"),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status404NotFound, refused.Status);
+        Assert.Equal("privacy.request.notfound", refused.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, entered.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), entered.Text("code"));
+        Assert.Equal("subject", entered.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
     }
 
     /// <summary>

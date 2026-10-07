@@ -596,7 +596,7 @@ public sealed class JmapMailServerTests : IDisposable
     }
 
     /// <summary>
-    /// LIB-HOST-001, D-176: where the adapter is chosen and the secret source cannot
+    /// INT-GEN-002 AC3, LIB-HOST-001, D-176: where the adapter is chosen and the secret source cannot
     /// answer the mail server's key, or answers it empty, the start stops, naming it.
     /// </summary>
     /// <param name="empty">Whether the source answers an empty key rather than none.</param>
@@ -604,7 +604,7 @@ public sealed class JmapMailServerTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task LIB_HOST_001_AMailServerKeyThatCannotBeReadStopsTheStartAsync(bool empty)
+    public async Task INT_GEN_002_AC3_AMailServerKeyThatCannotBeReadStopsTheStartAsync(bool empty)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
