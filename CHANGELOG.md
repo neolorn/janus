@@ -1177,8 +1177,10 @@ against the public contract of LIB-API-001.
   as `--<key> <value>`; any other key is refused. The database connection, the
   key-encryption keys and the fingerprint keys are read once from a JSON document piped
   to standard input, never from a terminal, an argument or the environment; a terminal,
-  a document that does not read, or one without a usable key is refused with
-  `model.startup.secretunavailable`, `details.key` naming `input` or the key. It writes
+  a document that is no JSON object, or one without a usable key is refused with
+  `model.startup.secretunavailable`, `details.key` naming `input` or the key, and a
+  document that is not JSON or is longer than 64 KiB with `api.request.malformed`,
+  `details.member` `input`. It writes
   the named values, the three administrative roles, the administrative organization and
   its policy, the administrator, the reserved `emergency` account holding the role and
   no way in, and the restore test's canary, raises the alert that no emergency
