@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The message kind `credential-unbound` (`MessageKind.CredentialUnbound`): the notice of
+  a suspended `phoneCode` credential whose number left the account. It goes out by mail
+  and by text, is a notice outside the destination restrictions, names no placeholder,
+  and has shipped words in English and Arabic.
 - A `phoneCode` credential is enrolled by `POST /account/factors/phonecode/begin`, which
   names a verified number of the account by its id and texts it a code, and
   `POST /account/factors/phonecode/confirm`, which makes the credential active, bound to

@@ -176,4 +176,12 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("oob-deletion-notice")]
     OobDeletionNotice = 24,
+
+    /// <summary>
+    /// A suspended credential's number left the account, whatever suspended it: sent
+    /// when the number leaves and then on the schedule the suspension runs, carrying no
+    /// link, since no cancel returns that credential (AUTH-RECOV-007, AUTH-FACT-002).
+    /// </summary>
+    [JsonStringEnumMemberName("credential-unbound")]
+    CredentialUnbound = 25,
 }

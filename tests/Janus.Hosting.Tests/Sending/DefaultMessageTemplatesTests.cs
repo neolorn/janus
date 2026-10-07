@@ -139,6 +139,23 @@ public sealed class DefaultMessageTemplatesTests
     }
 
     /// <summary>
+    /// AUTH-RECOV-007 (D-197): the notice of a suspended credential whose number left
+    /// the account is worded on every channel in every language carried, and names no
+    /// link, since no cancel returns that credential.
+    /// </summary>
+    [Fact]
+    public void AUTH_RECOV_007_AC3_TheNoticeOfACredentialWhoseNumberLeftIsWordedAndNamesNoLink()
+    {
+        var held = Every().Where(one => one.Message is MessageKind.CredentialUnbound).ToList();
+
+        Assert.Equal(
+            MessageChannels.Of(MessageKind.CredentialSuspended).Count * DefaultMessageTemplates.Languages.Count,
+            held.Count);
+        Assert.Contains(MessageKind.CredentialUnbound, (IEnumerable<MessageKind>)MessageChannels.Notices);
+        Assert.All(held, one => Assert.Empty(Places(Found(one).Text)));
+    }
+
+    /// <summary>
     /// API-LAND-001 AC4: the place a bare token went in is retired, so no shipped
     /// template names it, and every shipped text that names a link belongs to a message
     /// that sends one.
