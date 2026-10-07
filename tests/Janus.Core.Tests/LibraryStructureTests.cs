@@ -749,7 +749,7 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// OPS-CFG-002, OPS-CFG-005: one operation writes a runtime setting, so a change
+    /// OPS-CFG-008 AC7, OPS-CFG-002, OPS-CFG-005: one operation writes a runtime setting, so a change
     /// that went round it would be a change nobody was told of and nobody had to answer
     /// for. Nothing else in the library calls the store's write, and the settings table
     /// is written by the store and by the writer of protected keys alone, which bootstrap
@@ -757,7 +757,7 @@ public sealed class LibraryStructureTests
     /// OPS-CFG-004, entries 315 and 319).
     /// </summary>
     [Fact]
-    public void OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting()
+    public void OPS_CFG_008_AC7_OnlyTheConfigurationAdministrationWritesARuntimeSetting()
     {
         IEnumerable<string> writing = Sources()
             .Where(file => !Path.GetFileNameWithoutExtension(file).Equals(

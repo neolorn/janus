@@ -616,8 +616,6 @@ public sealed class OidcFlowTests
 
         Assert.False(document.TryGetProperty("registration_endpoint", out _));
 
-        // A path the library maps for another method answers 405, so 404 is the route
-        // not being there at all rather than this request being the wrong shape.
         Answer reached = await machine.GetAsync("/oidc/register", bearer: string.Empty);
 
         Assert.Equal(StatusCodes.Status404NotFound, reached.Status);
