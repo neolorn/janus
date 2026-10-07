@@ -569,6 +569,41 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-001 AC4: an out-of-band erasure fulfilled on an account already in its
+    /// window leaves the window, its origin and its start as they were, one fulfilled on
+    /// an account already erased changes no account, and both requests are recorded
+    /// <c>fulfilled</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AC4_AnErasureOnADeletingOrADeletedAccountIsRecordedFulfilledAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - TimeSpan.FromDays(3));
+
+        AccountStanding? running = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+        Result onRunning = await ErasedAsync();
+        AccountStanding? kept = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        _accounts.Erases(Ahmed);
+
+        AccountStanding? erased = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+        Result onErased = await ErasedAsync();
+        AccountStanding? left = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        Assert.Null(onRunning.Match(() => (Error?)null, error => error));
+        Assert.Null(onErased.Match(() => (Error?)null, error => error));
+        Assert.Equal(AccountState.Deleting, kept?.State);
+        Assert.Equal(DeletionOrigin.Self, kept?.DeletingBy);
+        Assert.Equal(Noon - TimeSpan.FromDays(3), kept?.DeletingSince);
+        Assert.Equal(running, kept);
+        Assert.Equal(AccountState.Deleted, left?.State);
+        Assert.Equal(erased, left);
+        Assert.Equal(
+            [PrivacyRequestStatus.Fulfilled, PrivacyRequestStatus.Fulfilled],
+            _requests.Queue.Select(request => request.Status));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001 AC3: every exercise is audited, the decision with it.
     /// </summary>
     /// <returns>The work of running it.</returns>
