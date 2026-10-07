@@ -62,6 +62,37 @@ internal sealed class IdentifierStore(
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask LockAsync(
+        SubjectId subject,
+        IdentifierId identifier,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An identifier's row is held only inside the operation's transaction.");
+        }
+
+        _ = await context.Identifiers
+            .FromSql(
+                $"SELECT * FROM identity.identifiers WHERE identifier_id = {identifier.Value} AND subject = {subject.Value} FOR UPDATE")
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read
+        // again; one another transaction removed meanwhile leaves the context.
+        foreach (EntityEntry entry in context.Identifiers.Local
+            .Where(held => held.Subject == subject)
+            .ToList()
+            .Select(context.Entry)
+            .Where(entry => entry.State is EntityState.Unchanged))
+        {
+            await entry.ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     public ValueTask LockValuesAsync(
         IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
         CancellationToken cancellationToken) =>

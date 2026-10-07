@@ -162,7 +162,8 @@ public sealed class ModelTests
             // and AUTH-FACT-014 read, and the keyed fingerprint a provider link is found by
             // (IDN-LIFE-012a), with the subject it is computed from under the key and
             // the fingerprint key's version, so a rotation can compute it again
-            // (OPS-SEC-003 AC6).
+            // (OPS-SEC-003 AC6), and the number a text code's credential is bound to, under
+            // the key (AUTH-FACT-002).
             "authenticators.added_at",
             "authenticators.algorithm",
             "authenticators.backup_eligible",
@@ -170,6 +171,7 @@ public sealed class ModelTests
             "authenticators.confirmed",
             "authenticators.counter",
             "authenticators.credential_id",
+            "authenticators.enc_number",
             "authenticators.enc_provider_subject",
             "authenticators.factor",
             "authenticators.fingerprint_version",
@@ -629,6 +631,18 @@ public sealed class ModelTests
             "passwords.meets_single_factor_floor",
             "passwords.set_at",
             "passwords.subject",
+
+            // Credentials: a text code's enrolment its code has yet to confirm, with
+            // the number it would be bound to and the code under the key (AUTH-FACT-002).
+            "pending_enrolments.enc_code",
+            "pending_enrolments.enc_number",
+            "pending_enrolments.expires_at",
+            "pending_enrolments.factor",
+            "pending_enrolments.issued_at",
+            "pending_enrolments.label",
+            "pending_enrolments.send",
+            "pending_enrolments.subject",
+            "pending_enrolments.wrong_attempts",
 
             // Not an account field: a requirement a scope's policy raised and when the
             // run-up to it began, one row per scope per field, which a sign-in that does

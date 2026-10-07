@@ -103,6 +103,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "تم تعليق وسيلة دخول في حسابك وستتوقف عن العمل. إن لم يكن هذا منك فألغه من هنا: {link}",
                 "عُلقت وسيلة دخول. لست أنت؟ ألغه: {link}")),
         (
+            MessageKind.CredentialUnbound,
+            new Words(
+                "A sign-in method on your account will stop working",
+                "The phone number a sign-in method on your account sends its codes to is no longer on your account. The method is suspended and will stop working. If this was not you, sign in and secure your account.",
+                "A sign-in method lost its phone number and is suspended. Not you? Secure your account."),
+            new Words(
+                "وسيلة دخول في حسابك ستتوقف عن العمل",
+                "رقم الهاتف الذي ترسل إليه وسيلة دخول في حسابك رموزها لم يعد في حسابك. الوسيلة معلقة وستتوقف عن العمل. إن لم يكن هذا منك فسجل الدخول وأمن حسابك.",
+                "فقدت وسيلة دخول رقم هاتفها وهي معلقة. لست أنت؟ أمن حسابك.")),
+        (
             MessageKind.EnrolmentLink,
             new Words(
                 "Your enrolment link",

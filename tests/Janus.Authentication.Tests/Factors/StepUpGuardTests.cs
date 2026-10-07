@@ -208,7 +208,8 @@ public sealed class StepUpGuardTests : IAsyncDisposable
             confirmed: true,
             factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
             null,
-            isPreferred: false));
+            isPreferred: false,
+            number: Authenticator.IsBoundToNumber(factor) ? "+441632960011" : null));
 
     private SessionId Opened(DateTimeOffset at)
     {

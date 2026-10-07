@@ -219,7 +219,8 @@ public sealed class SecurityKeyFlowTests
             confirmed: true,
             null,
             null,
-            isPreferred: false));
+            isPreferred: false,
+            number: Flow.Number));
 
         Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
         string challenge = began.Text("challengeId");

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -86,26 +87,35 @@ internal sealed class PhoneSignals(
     }
 
     /// <summary>
-    /// Considers the number the account would be texted at, and answers whether the
-    /// factor may still be used with it; an account holding no number is refused
-    /// nothing here, since nothing can be texted to it.
+    /// Considers the number an entry would be texted at, and answers whether the factor
+    /// may still be used with it: the number its credential is bound to where the entry
+    /// is bound to one (AUTH-FACT-002), and otherwise the number the account is texted
+    /// at. An account with no such number is refused nothing here, since nothing can be
+    /// texted to it.
     /// </summary>
     /// <param name="factor">The entry the number would carry.</param>
     /// <param name="held">The account's identifiers.</param>
+    /// <param name="enrolled">The account's credentials.</param>
     /// <param name="subject">Whose account it is.</param>
     /// <param name="cancellationToken">Abandons the consideration.</param>
     /// <returns>Whether the factor may be used.</returns>
-    /// <exception cref="ArgumentNullException">The identifiers are absent.</exception>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<bool> AllowsAsync(
         Factor factor,
         HeldIdentifiers held,
+        IReadOnlyList<Authenticator> enrolled,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(enrolled);
 
-        return held.Texted() is not HeldIdentifier texted
-            || await AllowsAsync(factor, texted.Canonical, subject, cancellationToken).ConfigureAwait(false);
+        string? number = Authenticator.IsBoundToNumber(factor)
+            ? SecondStep.Preferred(enrolled.Where(credential => credential.IsUsable && credential.Factor == factor))?.Number
+            : held.Texted()?.Canonical;
+
+        return number is null
+            || await AllowsAsync(factor, number, subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -146,6 +156,45 @@ internal sealed class PhoneSignals(
             .ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// Records what was known about a number an entry was about to be texted at, where
+    /// nothing is then sent to it: what the signal answered before the unit of work
+    /// began, or nothing where no provider is declared. A kept write of the unit of work
+    /// the caller has open (AUTH-FACT-002 AC11, CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="factor">The entry the number would have carried.</param>
+    /// <param name="number">The number, canonically.</param>
+    /// <param name="subject">Whose account it is.</param>
+    /// <param name="cancellationToken">Abandons the consideration.</param>
+    /// <returns>The work of recording it.</returns>
+    /// <exception cref="ArgumentNullException">The number is absent.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A provider is declared and nothing was asked about the number before the unit of
+    /// work began: the provider is never asked inside one.
+    /// </exception>
+    public async ValueTask UnsentAsync(
+        Factor factor,
+        string number,
+        SubjectId? subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(number);
+
+        PhoneSignal? answered = null;
+
+        if (provider is not null)
+        {
+            answered = _answered.Remove(number, out PhoneSignal asked)
+                ? asked
+                : throw new InvalidOperationException(
+                    "The signal for a number is asked before the unit of work that would send to it begins.");
+        }
+
+        await audit
+            .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // Which entry a message amounts to follows from the channel it goes out on and

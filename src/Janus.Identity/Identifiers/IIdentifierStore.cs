@@ -29,6 +29,19 @@ internal interface IIdentifierStore
     ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds the row of one identifier under a lock until the operation's transaction
+    /// ends, so every read of it after the lock is the row as committed when the lock
+    /// was taken, and what is bound to the value it holds is decided on alone
+    /// (AUTH-FACT-002, CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose identifier.</param>
+    /// <param name="identifier">Which identifier.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask LockAsync(SubjectId subject, IdentifierId identifier, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes the lock on each value, held until the operation's transaction ends, so no
     /// other transaction takes or reserves a value between the judgement made under
     /// its lock and the write (CONV-DESIGN-003, REG-SESS-005, REG-IDENT-009). Every

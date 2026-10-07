@@ -11,6 +11,10 @@ namespace Janus.Hosting.Accounts;
 /// <param name="Label">What the person called it.</param>
 /// <param name="State">Where it stands.</param>
 /// <param name="InvalidatesAt">When a reported-lost one stops working.</param>
+/// <param name="Cancellable">
+/// Whether a cancel returns a suspended one to active, and nothing where it is not
+/// suspended.
+/// </param>
 /// <param name="BackupEligible">Whether the authenticator can be synced.</param>
 /// <param name="BackupState">Whether it is synced.</param>
 /// <param name="AddedAt">When it was enrolled.</param>
@@ -22,6 +26,7 @@ internal sealed record CredentialView(
     string Label,
     AuthenticatorState State,
     DateTimeOffset? InvalidatesAt,
+    bool? Cancellable,
     bool? BackupEligible,
     bool? BackupState,
     DateTimeOffset AddedAt,
@@ -43,6 +48,7 @@ internal sealed record CredentialView(
             credential.Label,
             credential.State,
             credential.InvalidatesAt,
+            credential.Cancellable,
             credential.BackupEligible,
             credential.BackupState,
             credential.AddedAt,

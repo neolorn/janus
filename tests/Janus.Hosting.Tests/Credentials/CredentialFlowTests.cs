@@ -306,6 +306,180 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC9 and chapter 09: <c>begin</c> names a verified number of the
+    /// account by its id, answers 202 and texts that number a code; <c>confirm</c>
+    /// answers 200 with the credential as <c>GET /account/credentials</c> lists it and
+    /// the recovery codes with the instant they were generated, shown once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC9_ATextCodeIsEnrolledAndConfirmedOverTheEndpointsAsync()
+    {
+        Browser browser = await SignedInAsync();
+        string number = await TextableAsync();
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", number),
+            ("label", Label));
+
+        Assert.Equal(StatusCodes.Status202Accepted, begun.Status);
+        Assert.Equal(sent + 1, _deployment.Sms.Taken.Count);
+        Assert.Equal(Flow.Number, _deployment.Sms.Taken[^1].Destination.Value);
+
+        Answer confirmed = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/confirm",
+            ("code", _deployment.Sms.Taken[^1].Text));
+
+        Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
+        Assert.Equal(
+            ("phoneCode", Label, "active"),
+            (confirmed.Text("kind"), confirmed.Text("label"), confirmed.Text("state")));
+        Assert.Equal(JsonValueKind.String, confirmed.Json().GetProperty("addedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, confirmed.Json().GetProperty("lastUsedAt").ValueKind);
+        Assert.Equal(
+            Settings.FactorRecoveryCodesCount.Default,
+            confirmed.Json().GetProperty("recoveryCodes").GetProperty("codes").GetArrayLength());
+        Assert.Equal(
+            JsonValueKind.String,
+            confirmed.Json().GetProperty("recoveryCodes").GetProperty("generatedAt").ValueKind);
+
+        Authenticator held = Assert.Single(_deployment.Authenticators.All);
+
+        Assert.Equal((confirmed.Text("id"), Flow.Number, true), (held.Id.ToString(), held.Number, held.IsUsable));
+    }
+
+    /// <summary>
+    /// Chapter 09 <c>POST /account/factors/phonecode/begin</c> and <c>/confirm</c>:
+    /// each refusal answers with the status and the code the route states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_ARefusedEnrolmentOfATextCodeAnswersAsItsRouteStatesAsync()
+    {
+        Browser browser = await SignedInAsync();
+        string number = await TextableAsync();
+
+        Answer nothingPending = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/confirm",
+            ("code", "123456"));
+        Answer unknown = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", Guid.NewGuid().ToString()),
+            ("label", Label));
+        Answer noId = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", "the-first-one"),
+            ("label", Label));
+        Answer unlabelled = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", number));
+        Answer overlong = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", number),
+            ("label", new string('a', 65)));
+
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.CodeExpired.ToString()),
+            (nothingPending.Status, nothingPending.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.IdentifierInvalid.ToString()),
+            (unknown.Status, unknown.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.IdentifierInvalid.ToString()),
+            (noId.Status, noId.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status400BadRequest, ErrorCodes.RequestMalformed.ToString()),
+            (unlabelled.Status, unlabelled.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.CredentialLabelInvalid.ToString()),
+            (overlong.Status, overlong.Text("code")));
+
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", number),
+            ("label", Label));
+
+        string code = _deployment.Sms.Taken[^1].Text;
+
+        Answer wrong = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/confirm",
+            ("code", code == "000000" ? "111111" : "000000"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, begun.Status);
+        Assert.Equal(sent + 1, _deployment.Sms.Taken.Count);
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.CodeInvalid.ToString()),
+            (wrong.Status, wrong.Text("code")));
+        Assert.Equal(1, Assert.Single(_deployment.Enrolments.All).WrongAttempts);
+
+        _deployment.Configuration.Set(Settings.PolicyDefault, Policies.SystemDefault);
+
+        Answer notPermitted = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/confirm",
+            ("code", code));
+
+        Assert.Equal(
+            (StatusCodes.Status422UnprocessableEntity, ErrorCodes.FactorNotPermitted.ToString()),
+            (notPermitted.Status, notPermitted.Text("code")));
+        Assert.Empty(_deployment.Authenticators.All);
+    }
+
+    /// <summary>
+    /// Chapter 09 <c>POST /enrol/begin</c>: the enrolment session an approved recovery
+    /// opened does not reach the enrolment of a text code, so the browser that carries
+    /// it and no session is answered as one holding nothing, and nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheEnrolmentSessionDoesNotReachTheEnrolmentOfATextCodeAsync()
+    {
+        _ = await SignedInAsync();
+
+        string number = await TextableAsync();
+
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/begin",
+            ("identifier", number),
+            ("label", Label));
+        Answer confirmed = await browser.SendAsync(
+            "POST",
+            "/account/factors/phonecode/confirm",
+            ("code", "123456"));
+
+        Assert.Equal(
+            (StatusCodes.Status401Unauthorized, ErrorCodes.SessionExpired.ToString()),
+            (begun.Status, begun.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status401Unauthorized, ErrorCodes.SessionExpired.ToString()),
+            (confirmed.Status, confirmed.Text("code")));
+        Assert.Equal(sent, _deployment.Sms.Taken.Count);
+        Assert.Empty(_deployment.Enrolments.All);
+    }
+
+    /// <summary>
     /// AUTH-STEP-002 and AUTH-STEP-007: once the account reaches AAL2 the session that
     /// presented a password alone is sent to step up rather than served.
     /// </summary>
@@ -837,6 +1011,28 @@ public sealed class CredentialFlowTests : IAsyncDisposable
                 ("code", Code(begun.Text("secret")))));
 
         Assert.False(Assert.Single(await _deployment.Authenticators.OfAsync(subject, cancellationToken)).Confirmed);
+    }
+
+    // AUTH-FACT-002: the policy in force permits the text code and its message has a
+    // template; the answer is the id of the number the signed-in account holds.
+    private async Task<string> TextableAsync()
+    {
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        HeldIdentifiers held = await _deployment.Identifiers
+            .HeldAsync(_deployment.Directory.Created[^1].Subject, TestContext.Current.CancellationToken);
+
+        return held.All.First(identifier => identifier.Kind is IdentifierKind.Phone).Id.Value.ToString();
     }
 
     private async Task<Browser> SignedInAsync()

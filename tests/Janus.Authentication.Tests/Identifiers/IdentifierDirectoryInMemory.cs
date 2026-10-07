@@ -188,6 +188,33 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
         Holding?.Invoke(subject) ?? ValueTask.CompletedTask;
 
+    /// <summary>
+    /// The identifiers whose rows were locked, in the order the locks were taken.
+    /// </summary>
+    public List<IdentifierId> RowsLocked { get; } = [];
+
+    /// <summary>
+    /// What another transaction committed on an identifier while this one waited for
+    /// the lock on its row, applied as the lock is taken.
+    /// </summary>
+    public Func<SubjectId, IdentifierId, ValueTask>? LockingRow { get; set; }
+
+    /// <inheritdoc/>
+    public async ValueTask<HeldIdentifier?> LockAsync(
+        SubjectId subject,
+        IdentifierId identifier,
+        CancellationToken cancellationToken)
+    {
+        RowsLocked.Add(identifier);
+
+        if (LockingRow is not null)
+        {
+            await LockingRow(subject, identifier);
+        }
+
+        return (await HeldAsync(subject, cancellationToken)).Find(identifier);
+    }
+
     /// <inheritdoc/>
     public ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_languages.GetValueOrDefault(subject));

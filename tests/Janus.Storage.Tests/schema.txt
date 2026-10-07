@@ -155,8 +155,10 @@ table authenticators
   column enc_provider_subject bytea
   column fingerprint_version integer
   column transports text[]
+  column enc_number bytea
   constraint ck_authenticators_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
   constraint ck_authenticators_invalidates_at CHECK (((invalidates_at IS NULL) OR (state = 'suspended'::text)))
+  constraint ck_authenticators_number CHECK (((enc_number IS NULL) OR (factor = 'phoneCode'::text)))
   constraint ck_authenticators_provider_subject CHECK ((((provider_subject IS NULL) <> (factor = ANY (ARRAY['apple'::text, 'google'::text]))) AND ((provider_subject IS NULL) OR (octet_length(provider_subject) = 32)) AND ((provider_subject IS NULL) = (fingerprint_version IS NULL)) AND ((provider_subject IS NULL) = (enc_provider_subject IS NULL))))
   constraint ck_authenticators_state CHECK ((state = ANY (ARRAY['active'::text, 'invalidated'::text, 'suspended'::text])))
   constraint ck_authenticators_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
@@ -785,6 +787,23 @@ table passwords
   constraint ck_passwords_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_passwords_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_passwords PRIMARY KEY (subject)
+table pending_enrolments
+  column subject uuid not null
+  column factor text not null
+  column label character varying(64) not null
+  column enc_number bytea not null
+  column send bytea not null
+  column enc_code bytea not null
+  column issued_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column wrong_attempts integer not null
+  constraint ck_pending_enrolments_factor CHECK ((factor = 'phoneCode'::text))
+  constraint ck_pending_enrolments_send CHECK ((octet_length(send) = 32))
+  constraint ck_pending_enrolments_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint ck_pending_enrolments_wrong_attempts CHECK ((wrong_attempts >= 0))
+  constraint fk_pending_enrolments_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_pending_enrolments PRIMARY KEY (subject, factor)
+  index ix_pending_enrolments_expires_at using btree (expires_at)
 table policy_raises
   column id uuid not null
   column organization uuid

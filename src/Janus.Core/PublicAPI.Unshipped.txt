@@ -651,8 +651,10 @@ Janus.Core.CredentialSummary.BackupEligible.get -> bool?
 Janus.Core.CredentialSummary.BackupEligible.init -> void
 Janus.Core.CredentialSummary.BackupState.get -> bool?
 Janus.Core.CredentialSummary.BackupState.init -> void
-Janus.Core.CredentialSummary.CredentialSummary(Janus.Core.AuthenticatorId Id, Janus.Core.Factor Kind, string! Label, Janus.Core.AuthenticatorState State, System.DateTimeOffset? InvalidatesAt, bool? BackupEligible, bool? BackupState, bool Preferred, System.DateTimeOffset AddedAt, System.DateTimeOffset? LastUsedAt) -> void
-Janus.Core.CredentialSummary.Deconstruct(out Janus.Core.AuthenticatorId Id, out Janus.Core.Factor Kind, out string! Label, out Janus.Core.AuthenticatorState State, out System.DateTimeOffset? InvalidatesAt, out bool? BackupEligible, out bool? BackupState, out bool Preferred, out System.DateTimeOffset AddedAt, out System.DateTimeOffset? LastUsedAt) -> void
+Janus.Core.CredentialSummary.Cancellable.get -> bool?
+Janus.Core.CredentialSummary.Cancellable.init -> void
+Janus.Core.CredentialSummary.CredentialSummary(Janus.Core.AuthenticatorId Id, Janus.Core.Factor Kind, string! Label, Janus.Core.AuthenticatorState State, System.DateTimeOffset? InvalidatesAt, bool? Cancellable, bool? BackupEligible, bool? BackupState, bool Preferred, System.DateTimeOffset AddedAt, System.DateTimeOffset? LastUsedAt) -> void
+Janus.Core.CredentialSummary.Deconstruct(out Janus.Core.AuthenticatorId Id, out Janus.Core.Factor Kind, out string! Label, out Janus.Core.AuthenticatorState State, out System.DateTimeOffset? InvalidatesAt, out bool? Cancellable, out bool? BackupEligible, out bool? BackupState, out bool Preferred, out System.DateTimeOffset AddedAt, out System.DateTimeOffset? LastUsedAt) -> void
 Janus.Core.CredentialSummary.Equals(Janus.Core.CredentialSummary? other) -> bool
 Janus.Core.CredentialSummary.Id.get -> Janus.Core.AuthenticatorId
 Janus.Core.CredentialSummary.Id.init -> void
@@ -1279,8 +1281,10 @@ Janus.Core.IConsents.WithdrawObjectionAsync(Janus.Core.AccessContext! context, s
 Janus.Core.ICredentials
 Janus.Core.ICredentials.BeginGeneratorAsync(Janus.Core.CredentialAuthority! authority, string! label, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GeneratorEnrolment!>>
 Janus.Core.ICredentials.BeginKeyAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.Factor kind, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.CredentialCeremony!>>
+Janus.Core.ICredentials.BeginTextCodeAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.IdentifierId identifier, string! label, string! source, string! language, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.CompleteKeyAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorAttestation! attestation, string! label, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolledCredential!>>
 Janus.Core.ICredentials.ConfirmGeneratorAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorId credential, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolledCredential!>>
+Janus.Core.ICredentials.ConfirmTextCodeAsync(Janus.Core.CredentialAuthority! authority, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.TextCodeEnrolment!>>
 Janus.Core.ICredentials.GenerateRecoveryCodesAsync(Janus.Core.CredentialAuthority! authority, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GeneratedRecoveryCodes!>>
 Janus.Core.ICredentials.MarkRecoveryCodesExportedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.MarkRecoveryCodesExportedAsync(Janus.Core.EnrolmentSessionId enrolment, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1769,6 +1773,7 @@ Janus.Core.MessageKind.AccountExists = 7 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.Alert = 5 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.CredentialEnrolled = 12 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.CredentialSuspended = 23 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.CredentialUnbound = 25 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.DeactivationNotice = 17 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.DeletionNotice = 18 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.EnrolmentLink = 4 -> Janus.Core.MessageKind
@@ -2918,6 +2923,15 @@ Janus.Core.TakedownTrigger.AuthorityRequest = 3 -> Janus.Core.TakedownTrigger
 Janus.Core.TakedownTrigger.AutomatedSignal = 2 -> Janus.Core.TakedownTrigger
 Janus.Core.TakedownTrigger.CustomerReport = 1 -> Janus.Core.TakedownTrigger
 Janus.Core.TakedownTrigger.StaffReport = 0 -> Janus.Core.TakedownTrigger
+Janus.Core.TextCodeEnrolment
+Janus.Core.TextCodeEnrolment.<Clone>$() -> Janus.Core.TextCodeEnrolment!
+Janus.Core.TextCodeEnrolment.Credential.get -> Janus.Core.CredentialSummary!
+Janus.Core.TextCodeEnrolment.Credential.init -> void
+Janus.Core.TextCodeEnrolment.Deconstruct(out Janus.Core.CredentialSummary! Credential, out Janus.Core.GeneratedRecoveryCodes? RecoveryCodes) -> void
+Janus.Core.TextCodeEnrolment.Equals(Janus.Core.TextCodeEnrolment? other) -> bool
+Janus.Core.TextCodeEnrolment.RecoveryCodes.get -> Janus.Core.GeneratedRecoveryCodes?
+Janus.Core.TextCodeEnrolment.RecoveryCodes.init -> void
+Janus.Core.TextCodeEnrolment.TextCodeEnrolment(Janus.Core.CredentialSummary! Credential, Janus.Core.GeneratedRecoveryCodes? RecoveryCodes) -> void
 Janus.Core.Username
 Janus.Core.Username.Equals(Janus.Core.Username other) -> bool
 Janus.Core.Username.Username() -> void
@@ -3540,6 +3554,9 @@ override Janus.Core.TakedownReversed.<Clone>$() -> Janus.Core.TakedownReversed!
 override Janus.Core.TakedownReversed.Equals(object? obj) -> bool
 override Janus.Core.TakedownReversed.GetHashCode() -> int
 override Janus.Core.TakedownReversed.ToString() -> string!
+override Janus.Core.TextCodeEnrolment.Equals(object? obj) -> bool
+override Janus.Core.TextCodeEnrolment.GetHashCode() -> int
+override Janus.Core.TextCodeEnrolment.ToString() -> string!
 override Janus.Core.Username.GetHashCode() -> int
 override Janus.Core.Username.ToString() -> string!
 override Janus.Core.WebAuthnChallenge.Equals(object? obj) -> bool
@@ -4483,6 +4500,8 @@ static Janus.Core.TakedownProgress.operator !=(Janus.Core.TakedownProgress? left
 static Janus.Core.TakedownProgress.operator ==(Janus.Core.TakedownProgress? left, Janus.Core.TakedownProgress? right) -> bool
 static Janus.Core.TakedownReversed.operator !=(Janus.Core.TakedownReversed? left, Janus.Core.TakedownReversed? right) -> bool
 static Janus.Core.TakedownReversed.operator ==(Janus.Core.TakedownReversed? left, Janus.Core.TakedownReversed? right) -> bool
+static Janus.Core.TextCodeEnrolment.operator !=(Janus.Core.TextCodeEnrolment? left, Janus.Core.TextCodeEnrolment? right) -> bool
+static Janus.Core.TextCodeEnrolment.operator ==(Janus.Core.TextCodeEnrolment? left, Janus.Core.TextCodeEnrolment? right) -> bool
 static Janus.Core.Username.TryParse(string! entered, out Janus.Core.Username username) -> bool
 static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.Username right) -> bool
 static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.Username right) -> bool

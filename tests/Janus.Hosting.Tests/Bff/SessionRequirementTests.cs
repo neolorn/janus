@@ -77,6 +77,8 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /account/credentials/{id}/upgrade",
         "POST /account/deactivate",
         "POST /account/delete",
+        "POST /account/factors/phonecode/begin",
+        "POST /account/factors/phonecode/confirm",
         "POST /account/identifiers",
         "POST /account/identifiers/{id}/primary",
         "POST /account/invitation/acknowledge",

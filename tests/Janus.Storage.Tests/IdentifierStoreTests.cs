@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Identifiers;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
@@ -841,6 +842,41 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await Store(context).RecordAsync(set, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10: an identifier's row is locked only inside the operation's
+    /// transaction, and what the lock answers is the row as it stands under it: the
+    /// identifier where the account holds it, and nothing where it holds none of that
+    /// id, read again where the request read the set before its lock.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_AnIdentifiersRowIsLockedInsideATransactionAndReadAgainUnderItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId another = await _deployment.AccountAsync(Noon);
+        IdentifierId held = await WriteAsync(subject, _entered);
+
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        IdentifierDirectory directory = Directory(context);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await directory.LockAsync(subject, held, TestContext.Current.CancellationToken));
+
+        Assert.False((await directory.HeldAsync(subject, TestContext.Current.CancellationToken)).Find(held)!.IsVerified);
+
+        await RecordAsync(subject, set => set.Verify(held, Noon));
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        HeldIdentifier? locked = await directory.LockAsync(subject, held, TestContext.Current.CancellationToken);
+        HeldIdentifier? foreign = await directory.LockAsync(another, held, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True(Assert.IsType<HeldIdentifier>(locked).IsVerified);
+        Assert.Null(foreign);
     }
 
     /// <summary>

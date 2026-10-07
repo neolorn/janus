@@ -10,6 +10,48 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
+  number, that the credential is still active and the number still the account's before
+  it issues the code. Where either changed since the ask read the credential, nothing is
+  issued, sent or counted, the consideration is recorded as the signal answered, and
+  the ask is answered `auth.credential.suspended` where the credential is now suspended
+  and otherwise as an ask whose number answers `risk` is.
+- When the number a `phoneCode` credential is bound to leaves the account (its identifier
+  removed, its value replaced, or displaced by an undo), the credential is taken out of
+  use in the same unit of work: an active one is removed where the account reaches as
+  much without it, and otherwise suspended for `recovery.invalidation.window`; one
+  already suspended keeps its invalidation instant. A pending enrolment bound to the
+  number ends with it. An undo restores the number, never the credential or the
+  enrolment. A suspended credential whose number left is told by `credential-unbound`
+  when the number leaves and on its suspension's schedule, its cancel is 404
+  `auth.credential.notfound` (now declared on `POST /recovery/report-loss/{id}/cancel`),
+  and a right code sent before the number left is refused `auth.factor.rejected`.
+- `CredentialSummary.Cancellable`, listed as `cancellable` by `GET /account` and
+  `GET /account/credentials`: for a suspended credential, whether a cancel returns it to
+  active; absent where the credential is not suspended.
+- The message kind `credential-unbound` (`MessageKind.CredentialUnbound`): the notice of
+  a suspended `phoneCode` credential whose number left the account. It goes out by mail
+  and by text, is a notice outside the destination restrictions, names no placeholder,
+  and has shipped words in English and Arabic.
+- A `phoneCode` credential is enrolled by `POST /account/factors/phonecode/begin`, which
+  names a verified number of the account by its id and texts it a code, and
+  `POST /account/factors/phonecode/confirm`, which makes the credential active, bound to
+  that number, retires every other `phoneCode` credential of the account and answers the
+  credential with the recovery codes it brought. `begin` asks the number's signal first
+  and at a risk sends nothing and is refused `auth.factor.notpermitted`; it is refused
+  `identity.identifier.invalid` where the identifier no longer holds, verified, the
+  number it read. A wrong code at `confirm` is `auth.code.invalid` and counts against
+  the enrolment's own `code.signin.attempts`. A new `begin` replaces the pending
+  enrolment. `ICredentials` gains `BeginTextCodeAsync` and `ConfirmTextCodeAsync`, with
+  the record `TextCodeEnrolment`; the pending enrolment is held in the new table
+  `pending_enrolments` (migration `AddPendingEnrolments`), swept with the other expired
+  rows.
+- A `phoneCode` credential is bound to one number, held under the account's key in the
+  new column `authenticators.enc_number` (migration `BindATextedSecondStepToItsNumber`,
+  with `ck_authenticators_number`), and its code is texted to that number, where it
+  went to the account's primary number; the number's signal is asked of that number,
+  at the challenge that offers the code and at the ask. A `phoneCode` credential held
+  before the migration runs is bound to no number: an ask for its code sends nothing.
 - A security key held as a second step is asked for by name. A `factorRequired` answer
   of `POST /auth/factor` or `POST /auth/step-up` whose `required` names `securityKey`
   carries `webauthn`, the request options for the challenge: `relyingPartyId`,

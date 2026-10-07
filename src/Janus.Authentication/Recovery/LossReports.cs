@@ -192,14 +192,64 @@ internal sealed class LossReports(
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        var cancel = OpaqueToken.Draw(randomness);
-        var report = LossReport.Open(held.Id, held.Subject, cancel, now, window);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<LossReported>(notBegun);
         }
+
+        LossReport report = (await OpenAsync(context, held, window, now, cancellationToken).ConfigureAwait(false))
+            .Match(opened => opened, error => Withheld<LossReport>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<LossReported>(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<LossReported>(notCommitted);
+        }
+
+        if (await ToldAsync(report, source, now, cancellationToken).ConfigureAwait(false) is Error untold)
+        {
+            return Result.Failure<LossReported>(untold);
+        }
+
+        return Result.Success(new LossReported(held.Id, report.InvalidatesAt));
+    }
+
+    /// <summary>
+    /// Suspends a credential for the window and opens the report that runs it, inside
+    /// the unit of work of what suspends it: a loss report, a removal that would lower
+    /// reachable assurance, or the number a texted second step is bound to leaving the
+    /// account (AUTH-RECOV-007, AUTH-FACT-002).
+    /// </summary>
+    /// <param name="context">Who asked, or nothing where no session did.</param>
+    /// <param name="held">The credential, active.</param>
+    /// <param name="window">How long the window runs for.</param>
+    /// <param name="now">When it is suspended.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The report, whose first notices <see cref="ToldAsync"/> sends once the unit of
+    /// work has committed; or the failure, on which the caller rolls back.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The credential is absent.</exception>
+    public async ValueTask<Result<LossReport>> OpenAsync(
+        AccessContext? context,
+        Authenticator held,
+        TimeSpan window,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+
+        var cancel = OpaqueToken.Draw(randomness);
+        var report = LossReport.Open(held.Id, held.Subject, cancel, now, window);
 
         held.Suspend(report.InvalidatesAt);
 
@@ -212,7 +262,7 @@ internal sealed class LossReports(
         // CONV-DESIGN-002: the suspension is announced in the transaction that makes it,
         // naming who reported it, so a row that cannot be written leaves the credential
         // as it was and nobody is told of a report that does not stand.
-        if (await AnnouncedAsync(
+        return await AnnouncedAsync(
                 new CredentialSuspended(
                     now,
                     Key(Opened, held.Id, now),
@@ -221,42 +271,52 @@ internal sealed class LossReports(
                     report.InvalidatesAt)
                 {
                     Subject = held.Subject,
-                    Actor = context.Acting,
-                    Effective = context.Effective,
+                    Actor = context?.Acting,
+                    Effective = context?.Effective,
                 },
                 cancellationToken)
-            .ConfigureAwait(false) is Error unannounced)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
+            .ConfigureAwait(false) is Error unannounced
+            ? Result.Failure<LossReport>(unannounced)
+            : Result.Success(report);
+    }
 
-            return Result.Failure<LossReported>(unannounced);
-        }
-
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<LossReported>(notCommitted);
-        }
+    /// <summary>
+    /// Tells every recorded channel of a report and records on it whether any notice
+    /// was taken, after the unit of work that opened it, or that took its credential's
+    /// number from the account, has committed (AUTH-RECOV-007).
+    /// </summary>
+    /// <param name="report">The report.</param>
+    /// <param name="source">The address the request came from, or nothing.</param>
+    /// <param name="at">
+    /// The instant the report's schedule counts its next notice from: now for the
+    /// notices of a report just opened, and the instant it already holds for a notice
+    /// sent beside its schedule.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or what kept the report from being recorded.</returns>
+    /// <exception cref="ArgumentNullException">The report is absent.</exception>
+    public async ValueTask<Error?> ToldAsync(
+        LossReport report,
+        string? source,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(report);
 
         report.Notified(
             await TellAsync(report, source, cancellationToken).ConfigureAwait(false),
-            now);
+            at);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegunAgain)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
-            return Result.Failure<LossReported>(notBegunAgain);
+            return notBegun;
         }
 
         await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-        {
-            return Result.Failure<LossReported>(notCommittedAgain);
-        }
-
-        return Result.Success(new LossReported(held.Id, report.InvalidatesAt));
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     /// <summary>
@@ -305,7 +365,9 @@ internal sealed class LossReports(
         Authenticator? held = await authenticators.FindForUpdateAsync(credential, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held is not null && !Running(held, report))
+        // AUTH-RECOV-007 (D-197): a texted second step whose number left the account is
+        // returned by no cancel, whatever suspended it, from a session or from the link.
+        if (held is not null && (!Running(held, report) || held.IsUnbound))
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -598,11 +660,19 @@ internal sealed class LossReports(
         HeldIdentifiers held = await identifiers.HeldAsync(report.Subject, cancellationToken)
             .ConfigureAwait(false);
 
+        // AUTH-RECOV-007 (D-197): a texted second step whose number left the account is
+        // told so by a notice of its own, which carries no link, since no cancel returns
+        // it; every other suspended credential is told with the link that cancels.
+        bool unbound = await authenticators.FindAsync(report.Credential, cancellationToken).ConfigureAwait(false)
+            is { IsUnbound: true };
+
         string? language = await LanguageAsync(report.Subject, cancellationToken).ConfigureAwait(false);
-        var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
+        var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal);
+
+        if (!unbound)
         {
-            ["link"] = landing.Of(LinkKind.LossReport, Encoding.UTF8.GetString(report.Cancel)),
-        };
+            values["link"] = landing.Of(LinkKind.LossReport, Encoding.UTF8.GetString(report.Cancel));
+        }
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
@@ -620,7 +690,7 @@ internal sealed class LossReports(
                 .AdmitAsync(
                     new OutboundMessage(
                         destination,
-                        MessageKind.CredentialSuspended,
+                        unbound ? MessageKind.CredentialUnbound : MessageKind.CredentialSuspended,
                         RestrictionPurpose.Notification,
                         source,
                         language)

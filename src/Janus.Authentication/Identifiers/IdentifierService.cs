@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
@@ -30,6 +31,7 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="sessions">Where the account's sessions are read and ended.</param>
 /// <param name="stepUp">What asks whether the session has proved enough.</param>
 /// <param name="enrolments">What the enrolment session a browser carries is read from.</param>
+/// <param name="bound">What takes a texted second step out of use when its number leaves.</param>
 /// <param name="configuration">Where the maxima and the windows are read.</param>
 /// <param name="work">The transaction each operation writes inside.</param>
 /// <param name="events">Where what happened is published.</param>
@@ -56,6 +58,7 @@ internal sealed class IdentifierService(
     ISessionStore sessions,
     StepUpGuard stepUp,
     EnrolmentSessions enrolments,
+    BoundCredentials bound,
     IConfigurationStore configuration,
     IUnitOfWork work,
     IEvents events,
@@ -379,10 +382,10 @@ internal sealed class IdentifierService(
 
         staged.Verify(now);
 
-        Result settled = await SettleAsync(waiting, completing, now, source, cancellationToken)
+        Result<IReadOnlyList<LossReport>> settled = await SettleAsync(waiting, completing, now, source, cancellationToken)
             .ConfigureAwait(false);
 
-        if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
+        if (settled.Match(_ => (Error?)null, error => error) is Error unsettled)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -402,7 +405,9 @@ internal sealed class IdentifierService(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Success();
+        return await ToldAsync(settled, source, now, cancellationToken).ConfigureAwait(false) is Error untold
+            ? Result.Failure(untold)
+            : Result.Success();
     }
 
     /// <inheritdoc/>
@@ -548,10 +553,10 @@ internal sealed class IdentifierService(
 
             // IDN-LIFE-008 AC1: the displaced address confirms from no session of the
             // account, so a replacement it completes keeps none.
-            Result settled = await SettleAsync(waiting, completing: null, now, source, cancellationToken)
+            Result<IReadOnlyList<LossReport>> settled = await SettleAsync(waiting, completing: null, now, source, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
+            if (settled.Match(_ => (Error?)null, error => error) is Error unsettled)
             {
                 await work.RollbackAsync().ConfigureAwait(false);
 
@@ -566,6 +571,11 @@ internal sealed class IdentifierService(
                 .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
             {
                 return Result.Failure<LinkLanding>(notCommittedAgain);
+            }
+
+            if (await ToldAsync(settled, source, now, cancellationToken).ConfigureAwait(false) is Error untoldAgain)
+            {
+                return Result.Failure<LinkLanding>(untoldAgain);
             }
 
             return Result.Success(new LinkLanding(Verified: true, SameBrowser: false, Code: null));
@@ -633,10 +643,10 @@ internal sealed class IdentifierService(
 
         staged.Verify(now);
 
-        Result landed = await SettleAsync(waiting, session, now, source, cancellationToken)
+        Result<IReadOnlyList<LossReport>> landed = await SettleAsync(waiting, session, now, source, cancellationToken)
             .ConfigureAwait(false);
 
-        if (landed.Match(() => (Error?)null, error => error) is Error unlanded)
+        if (landed.Match(_ => (Error?)null, error => error) is Error unlanded)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -651,6 +661,11 @@ internal sealed class IdentifierService(
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<LinkLanding>(notCommitted);
+        }
+
+        if (await ToldAsync(landed, source, now, cancellationToken).ConfigureAwait(false) is Error untold)
+        {
+            return Result.Failure<LinkLanding>(untold);
         }
 
         return Result.Success(new LinkLanding(Verified: true, SameBrowser: true, Code: null));
@@ -972,6 +987,19 @@ internal sealed class IdentifierService(
                 .Match(Result.Success, Result.Failure);
         }
 
+        // AUTH-FACT-002 (D-197): a number leaving takes the texted second step bound to
+        // it out of use, and ends a pending enrolment bound to it, in this unit of work.
+        IReadOnlyList<LossReport> suspended = (await ReleasedAsync(context, subject, going, now, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, error => Withheld<IReadOnlyList<LossReport>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
         // REG-IDENT-006: the removal reserves the value under its lock, so an add of it
         // presented meanwhile finds it held or reserved, never free.
         await directory.LockValuesAsync([(going.Kind, going.Canonical)], cancellationToken).ConfigureAwait(false);
@@ -1015,7 +1043,11 @@ internal sealed class IdentifierService(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Success();
+        // AUTH-RECOV-007 (D-197): a credential the number's leaving left suspended is
+        // told of once the removal stands.
+        return await bound.ToldAsync(suspended, source, now, cancellationToken).ConfigureAwait(false) is Error untold
+            ? Result.Failure(untold)
+            : Result.Success();
     }
 
     /// <inheritdoc/>
@@ -1115,6 +1147,27 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
+        // AUTH-FACT-002 (D-197): where the identifier stands under another number, the
+        // undo displaces that number, which takes the texted second step bound to it
+        // out of use as a replace does. The number the undo restores binds nothing
+        // again: neither a credential nor an enrolment returns with it.
+        IReadOnlyList<LossReport> suspended = [];
+
+        if (held.Find(given.Id) is HeldIdentifier moved
+            && !string.Equals(moved.Canonical, given.Canonical, StringComparison.Ordinal))
+        {
+            suspended = (await ReleasedAsync(context: null, given.Subject, moved, now, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(read => read, error => Withheld<IReadOnlyList<LossReport>>(error, ref failure));
+
+            if (failure is not null)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(failure);
+            }
+        }
+
         // IDN-LIFE-008 AC4 (D-190): an undo completes under no session, whatever it
         // restores or displaces, so every session of the account ends with it. It is
         // the owner's answer to a change that may have come from a stolen session,
@@ -1178,7 +1231,9 @@ internal sealed class IdentifierService(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Success();
+        return await bound.ToldAsync(suspended, source, now, cancellationToken).ConfigureAwait(false) is Error untold
+            ? Result.Failure(untold)
+            : Result.Success();
     }
 
     /// <inheritdoc/>
@@ -2209,6 +2264,41 @@ internal sealed class IdentifierService(
             .ConfigureAwait(false);
     }
 
+    // AUTH-RECOV-007 (D-197): a credential a swap's displaced number left suspended is
+    // told of once the swap stands.
+    private async ValueTask<Error?> ToldAsync(
+        Result<IReadOnlyList<LossReport>> settled,
+        string source,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        await bound
+            .ToldAsync(settled.Match(read => read, _ => []), source, now, cancellationToken)
+            .ConfigureAwait(false);
+
+    // AUTH-FACT-002, CONV-DESIGN-003 (D-197): what a number leaving the account does to
+    // the texted second step bound to it. The identifier's row is locked before the
+    // credential or the enrolment bound to the number is read, which is the lock a
+    // begin, a confirm and an ask of a code take first, so each of them either sees
+    // the number gone or is seen here. An address is bound to no credential.
+    private async ValueTask<Result<IReadOnlyList<LossReport>>> ReleasedAsync(
+        AccessContext? context,
+        SubjectId subject,
+        HeldIdentifier leaving,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (leaving.Kind is not IdentifierKind.Phone)
+        {
+            return Result.Success<IReadOnlyList<LossReport>>([]);
+        }
+
+        _ = await directory.LockAsync(subject, leaving.Id, cancellationToken).ConfigureAwait(false);
+
+        return await bound
+            .ReleaseAsync(context, subject, leaving.Canonical, now, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     // AUTH-FACT-004, REG-IDENT-007: a pending verification ended leaves neither of the
     // records it holds, the code's and, for a replace the old address was asked to
     // confirm, the confirmation's.
@@ -2262,7 +2352,7 @@ internal sealed class IdentifierService(
     // nothing and is answered identity.identifier.maximum where the account's verified
     // identifiers already fill the kind; its caller then rolls the presentation back
     // (REG-IDENT-004, REG-IDENT-007).
-    private async ValueTask<Result> SettleAsync(
+    private async ValueTask<Result<IReadOnlyList<LossReport>>> SettleAsync(
         PendingVerification waiting,
         SessionId? completing,
         DateTimeOffset now,
@@ -2273,17 +2363,23 @@ internal sealed class IdentifierService(
         {
             await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
 
-            return Result.Success();
+            return Result.Success<IReadOnlyList<LossReport>>([]);
         }
 
         StagedIdentity staged = waiting.Staged;
 
+        IReadOnlyList<LossReport> suspended = [];
+
         if (waiting.IsReplacement)
         {
-            if ((await SwapAsync(waiting, completing, now, source, cancellationToken).ConfigureAwait(false))
-                .Match(() => (Error?)null, error => error) is Error unswapped)
+            Error? unswapped = null;
+
+            suspended = (await SwapAsync(waiting, completing, now, source, cancellationToken).ConfigureAwait(false))
+                .Match(read => read, error => Withheld<IReadOnlyList<LossReport>>(error, ref unswapped));
+
+            if (unswapped is not null)
             {
-                return Result.Failure(unswapped);
+                return Result.Failure<IReadOnlyList<LossReport>>(unswapped);
             }
         }
         else
@@ -2295,13 +2391,13 @@ internal sealed class IdentifierService(
             if (await HeldSinceAsync(waiting.Subject, staged.Kind, staged.Canonical, now, cancellationToken)
                 .ConfigureAwait(false))
             {
-                return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+                return Result.Failure<IReadOnlyList<LossReport>>(Error.From(ErrorCodes.CodeExpired));
             }
 
             if (await FullAsync(waiting.Subject, staged.Kind, cancellationToken).ConfigureAwait(false)
                 is Error full)
             {
-                return Result.Failure(full);
+                return Result.Failure<IReadOnlyList<LossReport>>(full);
             }
 
             await directory
@@ -2329,13 +2425,13 @@ internal sealed class IdentifierService(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
-            return Result.Failure(unpublished);
+            return Result.Failure<IReadOnlyList<LossReport>>(unpublished);
         }
 
-        return Result.Success();
+        return Result.Success(suspended);
     }
 
-    private async ValueTask<Result> SwapAsync(
+    private async ValueTask<Result<IReadOnlyList<LossReport>>> SwapAsync(
         PendingVerification waiting,
         SessionId? completing,
         DateTimeOffset now,
@@ -2356,12 +2452,12 @@ internal sealed class IdentifierService(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return Result.Failure<IReadOnlyList<LossReport>>(failure);
         }
 
         if (held.Find(staged.Id) is not HeldIdentifier displaced)
         {
-            return Result.Success();
+            return Result.Success<IReadOnlyList<LossReport>>([]);
         }
 
         // REG-IDENT-007: the swap writes the new value to the account and reserves the
@@ -2377,7 +2473,20 @@ internal sealed class IdentifierService(
         if (await HeldSinceAsync(waiting.Subject, staged.Kind, staged.Canonical, now, cancellationToken)
             .ConfigureAwait(false))
         {
-            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+            return Result.Failure<IReadOnlyList<LossReport>>(Error.From(ErrorCodes.CodeExpired));
+        }
+
+        // AUTH-FACT-002 (D-197): the number the swap displaces leaves the account, which
+        // takes the texted second step bound to it out of use, and ends a pending
+        // enrolment bound to it, in the unit of work that applies the swap. A swap
+        // completes under a code or a press and names no acting context.
+        IReadOnlyList<LossReport> suspended = (await ReleasedAsync(context: null, waiting.Subject, displaced, now, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, error => Withheld<IReadOnlyList<LossReport>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IReadOnlyList<LossReport>>(failure);
         }
 
         var undo = OpaqueToken.Draw(randomness);
@@ -2410,6 +2519,6 @@ internal sealed class IdentifierService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success();
+        return Result.Success(suspended);
     }
 }

@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Policies;
@@ -12,6 +15,7 @@ using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
@@ -38,11 +42,16 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private const string Third = "third@example.test";
     private const string Fourth = "fourth@example.test";
     private const string Number = "+441632960011";
+    private const string Elsewhere = "+441632960055";
+    private const string Later = "+441632960077";
 
     // IDN-ACCT-005: a Cyrillic a inside an otherwise Latin word.
     private const string Mixed = "p\u0430ypal@example.test";
 
     private static readonly string[] English = ["en"];
+
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep));
 
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
@@ -57,6 +66,11 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly SessionStoreInMemory _sessions = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
+    private readonly LossReportStoreInMemory _reports = new();
+    private readonly PendingEnrolmentStoreInMemory _enrolments = new();
+    private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
+    private readonly RecoveryCodeStoreInMemory _sets = new();
+    private readonly CredentialAuditInMemory _credentials = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
@@ -109,6 +123,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             new EnrolmentSessions(_links, _work, _clock),
+            Bound,
             _configuration,
             _work,
             _events,
@@ -3476,7 +3491,432 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     // What the account is asking as, and the sessions it asks through: one that has
+    /// <summary>
+    /// AUTH-FACT-002 AC10, REG-IDENT-006: removing the number a text code's credential
+    /// is bound to removes the credential at once where the account reaches as much
+    /// without it, with no window, no report and no notice of a suspension.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_RemovingTheNumberRemovesAnActiveCredentialWhereReachableAssuranceIsUnchangedAsync()
+    {
+        IdentifierId leaving = Numbers();
+        Authenticator generator = Generator();
+        Authenticator bound = TextCode(Elsewhere);
+
+        Accepted(await Service.RemoveAsync(Acting, Proven(), leaving, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal([generator.Id], _authenticators.All.Select(held => held.Id));
+        Assert.Contains((AuditActions.CredentialRemoved, _person, bound.Id), _credentials.Records);
+        Assert.Null(await _reports.FindAsync(bound.Id, TestContext.Current.CancellationToken));
+        Assert.Empty(_events.Of<CredentialSuspended>());
+        Assert.Equal(0, Told(MessageKind.CredentialUnbound));
+        Assert.Equal(0, Told(MessageKind.CredentialSuspended));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10, AUTH-RECOV-007 AC3: removing the number of a credential the
+    /// account would reach less without suspends it for
+    /// <c>recovery.invalidation.window</c> in the removal's unit of work, bound to no
+    /// number from then on. Every recorded channel is told by <c>credential-unbound</c>,
+    /// which carries no link; it is listed as one no cancel returns, and a cancel from a
+    /// session of the account or from a link is 404 <c>auth.credential.notfound</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_RemovingTheNumberSuspendsACredentialTheAccountWouldReachLessWithoutAsync()
+    {
+        IdentifierId leaving = Numbers();
+        Authenticator bound = TextCode(Elsewhere);
+        TimeSpan window = Settings.RecoveryInvalidationWindow.Default;
+
+        Accepted(await Service.RemoveAsync(Acting, Proven(), leaving, Source, TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+        LossReport report = Assert.IsType<LossReport>(
+            await _reports.FindAsync(bound.Id, TestContext.Current.CancellationToken));
+        CredentialSuspended suspended = Assert.Single(_events.Of<CredentialSuspended>());
+
+        Assert.Equal(
+            (AuthenticatorState.Suspended, Noon + window, true, null),
+            (held.State, held.InvalidatesAt, held.IsUnbound, held.Number));
+        Assert.Equal((Noon + window, true), (report.InvalidatesAt, report.AnyDelivered));
+        Assert.Equal((bound.Id, Noon + window, _person), (suspended.Credential, suspended.InvalidatesAt, suspended.Subject));
+        Assert.Contains((AuditActions.CredentialReportedLost, _person, bound.Id), _credentials.Records);
+        Assert.Equal(2, Told(MessageKind.CredentialUnbound));
+        Assert.Equal(0, Told(MessageKind.CredentialSuspended));
+        Assert.All(Notices(MessageKind.CredentialUnbound), notice => Assert.Empty(notice.Values));
+        Assert.DoesNotContain(Notices(MessageKind.CredentialUnbound), notice => notice.Destination.Canonical == Elsewhere);
+        Assert.Equal(
+            (AuthenticatorState.Suspended, false),
+            (CredentialSummaries.Of(held, preferred: false).State, CredentialSummaries.Of(held, preferred: false).Cancellable));
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Losses.CancelAsync(Acting, bound.Id, cancelToken: null, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Losses.CancelAsync(
+                context: null,
+                bound.Id,
+                Encoding.UTF8.GetString(report.Cancel),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(AuthenticatorState.Suspended, Assert.Single(_authenticators.All).State);
+        Assert.NotNull(await _reports.FindAsync(bound.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10, AUTH-RECOV-007: a credential a loss report has already
+    /// suspended stays suspended when its number leaves and keeps its invalidation
+    /// instant. It is told by <c>credential-unbound</c> when the number leaves, beside
+    /// the schedule its suspension runs, and no cancel returns it from then on.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_ACredentialAlreadySuspendedKeepsItsInvalidationInstantWhenItsNumberLeavesAsync()
+    {
+        IdentifierId leaving = Numbers();
+        Authenticator bound = TextCode(Elsewhere);
+        TimeSpan window = Settings.RecoveryInvalidationWindow.Default;
+
+        _ = await Losses.SuspendAsync(Acting, bound, Source, TestContext.Current.CancellationToken);
+
+        int linked = Told(MessageKind.CredentialSuspended);
+
+        _clock.Advance(TimeSpan.FromHours(1));
+
+        Accepted(await Service.RemoveAsync(Acting, Proven(), leaving, Source, TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+        LossReport report = Assert.IsType<LossReport>(
+            await _reports.FindAsync(bound.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (AuthenticatorState.Suspended, Noon + window, true),
+            (held.State, held.InvalidatesAt, held.IsUnbound));
+        Assert.Equal((Noon + window, Noon), (report.InvalidatesAt, report.NotifiedAt));
+        Assert.Single(_events.Of<CredentialSuspended>());
+        Assert.Equal(linked, Told(MessageKind.CredentialSuspended));
+        Assert.Equal(2, Told(MessageKind.CredentialUnbound));
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Losses.CancelAsync(
+                context: null,
+                bound.Id,
+                Encoding.UTF8.GetString(report.Cancel),
+                TestContext.Current.CancellationToken)));
+
+        // AUTH-RECOV-007 (D-153, D-197): the notices its suspension still owes go out
+        // on its schedule, each by the kind that carries no link.
+        _clock.Advance(Settings.RecoveryInvalidationNoticeInterval.Default);
+
+        _ = await Losses.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(linked, Told(MessageKind.CredentialSuspended));
+        Assert.Equal(4, Told(MessageKind.CredentialUnbound));
+        Assert.All(Notices(MessageKind.CredentialUnbound), notice => Assert.Empty(notice.Values));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10: a pending enrolment bound to the number ends in the unit of
+    /// work that removes the number, and the undo, which restores the number, revives
+    /// neither it nor the credential.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_APendingEnrolmentEndsWithItsNumberAndAnUndoRestoresTheNumberAloneAsync()
+    {
+        IdentifierId leaving = Numbers();
+        Authenticator bound = TextCode(Elsewhere);
+
+        await StagedAsync(Elsewhere);
+
+        Accepted(await Service.RemoveAsync(Acting, Proven(), leaving, Source, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_enrolments.All);
+        Assert.DoesNotContain(await HeldAsync(), identifier => identifier.Canonical == Elsewhere);
+
+        Accepted(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+
+        Assert.True(Named(await HeldAsync(), Elsewhere).IsVerified);
+        Assert.Empty(_enrolments.All);
+        Assert.Equal((bound.Id, AuthenticatorState.Suspended, true), (held.Id, held.State, held.IsUnbound));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10: a pending enrolment and a credential bound to another number
+    /// of the account are left as they stand when a number leaves.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_ANumberLeavingTouchesNothingBoundToAnotherNumberAsync()
+    {
+        IdentifierId leaving = Numbers();
+        Authenticator bound = TextCode(Number);
+
+        await StagedAsync(Number);
+
+        Accepted(await Service.RemoveAsync(Acting, Proven(), leaving, Source, TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+
+        Assert.Equal((bound.Id, true, Number), (held.Id, held.IsUsable, held.Number));
+        Assert.Equal(Number, Assert.Single(_enrolments.All).Number);
+        Assert.Equal(0, Told(MessageKind.CredentialUnbound));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007, AUTH-FACT-002 AC10: when a replace's swap applies, the credential
+    /// bound to the number replaced is taken out of use and a pending enrolment bound to
+    /// it ends; the undo restores the number, never the credential or the enrolment.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC10_ReplacingANumberTakesItsCredentialOutOfUseAndTheUndoRestoresTheNumberAloneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersPhoneMax, 1);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId phone = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        Authenticator bound = TextCode(Number);
+
+        await StagedAsync(Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Proven(),
+            phone,
+            Elsewhere,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(Assert.Single(_authenticators.All).IsUsable);
+        Assert.Single(_enrolments.All);
+
+        await VerifiedAsync(phone, Proven());
+
+        Authenticator held = Assert.Single(_authenticators.All);
+
+        Assert.Equal(Elsewhere, Assert.Single(await HeldAsync(), identifier => identifier.Id == phone).Canonical);
+        Assert.Equal((bound.Id, AuthenticatorState.Suspended, true), (held.Id, held.State, held.IsUnbound));
+        Assert.Empty(_enrolments.All);
+        Assert.Equal(2, Told(MessageKind.CredentialUnbound));
+        Assert.DoesNotContain(Notices(MessageKind.CredentialUnbound), notice => notice.Destination.Canonical == Number);
+
+        Accepted(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        held = Assert.Single(_authenticators.All);
+
+        Assert.Equal(Number, Assert.Single(await HeldAsync(), identifier => identifier.Id == phone).Canonical);
+        Assert.Equal((AuthenticatorState.Suspended, true), (held.State, held.IsUnbound));
+        Assert.Empty(_enrolments.All);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006, AUTH-FACT-002 AC10: an undo that moves a number back onto its
+    /// identifier displaces the number the identifier then holds, which takes the
+    /// credential bound to that number out of use and ends a pending enrolment bound to
+    /// it, as a replace does.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC10_AnUndoThatDisplacesANumberTakesItsCredentialOutOfUseAsync()
+    {
+        _configuration.Set(Settings.IdentifiersPhoneMax, 1);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId phone = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Proven(),
+            phone,
+            Elsewhere,
+            Source,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(phone, Proven());
+
+        string undo = Undo();
+        Authenticator bound = TextCode(Elsewhere);
+
+        await StagedAsync(Elsewhere);
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+
+        Assert.Equal(Number, Assert.Single(await HeldAsync(), identifier => identifier.Id == phone).Canonical);
+        Assert.Equal((bound.Id, AuthenticatorState.Suspended, true), (held.Id, held.State, held.IsUnbound));
+        Assert.Empty(_enrolments.All);
+        Assert.Equal(2, Told(MessageKind.CredentialUnbound));
+        Assert.DoesNotContain(Notices(MessageKind.CredentialUnbound), notice => notice.Destination.Canonical == Elsewhere);
+        Assert.Null(Assert.Single(_events.Of<CredentialSuspended>()).Actor);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC10, CONV-DESIGN-003: each writer that takes a number from the
+    /// account (a removal, a replace's swap, an undo that displaces it) locks the
+    /// identifier's row before it reads the enrolment or the credential bound to the
+    /// number, and locks them in the order a confirm does.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC10_EachWriterLocksTheIdentifiersRowBeforeTheEnrolmentAndTheCredentialAsync()
+    {
+        IdentifierId leaving = Numbers();
+        IdentifierId phone = Named(await HeldAsync(), Number).Id;
+        IdentifierId? writing = leaving;
+        var order = new List<string>();
+
+        _ = TextCode(Elsewhere);
+        _directory.LockingRow = (_, row) =>
+        {
+            order.Add(row == writing ? "identifier" : "another identifier");
+
+            return ValueTask.CompletedTask;
+        };
+        _enrolments.Locking = _ =>
+        {
+            order.Add("enrolment");
+
+            return ValueTask.CompletedTask;
+        };
+        _authenticators.Locking = _ => order.Add("credential");
+
+        Accepted(await Service.RemoveAsync(Acting, Proven(), leaving, Source, TestContext.Current.CancellationToken));
+
+        InOrder(order);
+
+        _configuration.Set(Settings.IdentifiersPhoneMax, 1);
+        writing = phone;
+        order.Clear();
+        _ = TextCode(Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Proven(),
+            phone,
+            Later,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(order);
+
+        await VerifiedAsync(phone, Proven());
+
+        InOrder(order);
+
+        string undo = Undo();
+
+        order.Clear();
+        _ = TextCode(Later);
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        InOrder(order);
+    }
+
     // just presented what it holds, and one whose evidence is too old for a gate.
+    // An account reached at an address and two numbers; the second number, which is not
+    // the primary one, is the one a test takes from it.
+    private IdentifierId Numbers()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        return _directory.Verified(_person, IdentifierKind.Phone, Elsewhere);
+    }
+
+    // A text code's credential the account holds, active, bound to a number.
+    private Authenticator TextCode(string number)
+    {
+        var bound = Authenticator.Bound(
+            AuthenticatorId.New(_clock),
+            _person,
+            Factor.PhoneCode,
+            Label("My phone"),
+            number,
+            _clock.GetUtcNow());
+
+        _authenticators.Hold(bound);
+
+        return bound;
+    }
+
+    // A code generator the account holds, active, so that it reaches two factors
+    // without a text code.
+    private Authenticator Generator()
+    {
+        var generator = Authenticator.Existing(
+            AuthenticatorId.New(_clock),
+            _person,
+            Factor.Totp,
+            Label("My generator"),
+            AuthenticatorState.Active,
+            _clock.GetUtcNow(),
+            lastUsedAt: null,
+            invalidatesAt: null,
+            confirmed: true,
+            new TotpMaterial(Drawn(), ConsumedStep: null),
+            webAuthn: null);
+
+        _authenticators.Hold(generator);
+
+        return generator;
+    }
+
+    // An enrolment of a text code the account has yet to confirm, bound to a number.
+    private async Task StagedAsync(string number) =>
+        await _enrolments.ReplaceAsync(
+            PendingEnrolment.Stage(
+                OpaqueToken.Draw(_randomness),
+                _person,
+                Factor.PhoneCode,
+                Label("My new phone"),
+                number,
+                "481516",
+                _clock.GetUtcNow(),
+                TimeSpan.FromMinutes(10)),
+            TestContext.Current.CancellationToken);
+
+    private static CredentialLabel Label(string entered) =>
+        CredentialLabel.TryParse(entered, out CredentialLabel label)
+            ? label
+            : throw new Xunit.Sdk.XunitException("The label is one the chapter admits.");
+
+    // The identifier's row first, the enrolment next, and the credentials after it.
+    private static void InOrder(List<string> order)
+    {
+        Assert.True(order.Count >= 3);
+        Assert.Equal(("identifier", "enrolment"), (order[0], order[1]));
+        Assert.All(order.Skip(2), locked => Assert.Equal("credential", locked));
+    }
+
+    private IEnumerable<OutboundMessage> Notices(MessageKind kind) =>
+        _notifications.Sent.Where(sent => sent.Message == kind);
+
+    private int Told(MessageKind kind) => Notices(kind).Count();
+
+    private LossReports Losses =>
+        new(
+            _reports,
+            _accounts,
+            _authenticators,
+            _passwords,
+            _sets,
+            _directory,
+            new PolicyResolution(_memberships, _configuration, _raises),
+            _notifications,
+            Landing.Links,
+            _credentials,
+            _events,
+            _configuration,
+            _work,
+            _clock,
+            _randomness);
+
+    private BoundCredentials Bound =>
+        new(_authenticators, _enrolments, _passwords, _reports, Losses, _credentials, _configuration);
+
     private AccessContext Acting => AccessContext.Of(_person);
 
     private SessionId Stepped() => Opened(Noon, _person);
@@ -4960,15 +5400,19 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     private SessionId Stepped(SubjectId subject) => Opened(_clock.GetUtcNow(), subject);
 
+    // A session that has just proved two factors, which is what a gate asks of an
+    // account that holds a second step.
+    private SessionId Proven() => Opened(_clock.GetUtcNow(), _person, AssuranceLevel.Aal2);
+
     private SessionId Stale() =>
         Opened(Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1), _person);
 
-    private SessionId Opened(DateTimeOffset at, SubjectId subject)
+    private SessionId Opened(DateTimeOffset at, SubjectId subject, AssuranceLevel level = AssuranceLevel.Aal1)
     {
         var session = Session.Begin(
             SessionId.New(_clock),
             subject,
-            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            new Assurance(level, PhishingResistant: false),
             Somewhere,
             at,
             TimeSpan.FromDays(1),

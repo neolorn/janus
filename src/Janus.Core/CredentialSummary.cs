@@ -13,6 +13,12 @@ namespace Janus.Core;
 /// <param name="InvalidatesAt">
 /// When a suspended credential is invalidated, absent where none is pending.
 /// </param>
+/// <param name="Cancellable">
+/// For a suspended credential, whether a cancel returns it to active: false for a
+/// texted second step whose number left the account, whatever suspended it, and for a
+/// social credential a provider's security event holds. Absent where it is not
+/// suspended.
+/// </param>
 /// <param name="BackupEligible">
 /// Whether the authenticator may synchronise the credential, where it says.
 /// </param>
@@ -32,6 +38,7 @@ public sealed record CredentialSummary(
     string Label,
     AuthenticatorState State,
     DateTimeOffset? InvalidatesAt,
+    bool? Cancellable,
     bool? BackupEligible,
     bool? BackupState,
     bool Preferred,

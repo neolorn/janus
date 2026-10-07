@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
@@ -221,6 +223,79 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)));
 
         Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC3, AUTH-FACT-002 AC10 and chapter 09 (D-197): a suspended text
+    /// code's credential is listed with <c>cancellable</c> true while a cancel returns
+    /// it, and false once its number has left the account; its cancel is then 404
+    /// <c>auth.credential.notfound</c>, from the link a notice carried and from a
+    /// session of the account, and a report of it answers that one is pending.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC3_ACredentialWhoseNumberLeftIsListedAsOneNoCancelReturnsAndItsCancelIsNotFoundAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        Browser browser = await RegisteredAsync();
+        Assert.True(CredentialLabel.TryParse("My phone", out CredentialLabel label));
+        var bound = Authenticator.Bound(
+            AuthenticatorId.New(_deployment.Clock),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.PhoneCode,
+            label,
+            "+441632960066",
+            _deployment.Clock.GetUtcNow());
+
+        _deployment.Authenticators.Hold(bound);
+
+        Answer active = await browser.SendAsync("GET", "/account/credentials");
+        Answer reported = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss",
+            ("credentialId", bound.Id.ToString()));
+        string link = Landing.Token(_deployment.Mail.Taken[^1].Body);
+        Answer suspended = await browser.SendAsync("GET", "/account/credentials");
+
+        Assert.Equal(StatusCodes.Status202Accepted, reported.Status);
+        Assert.Equal(JsonValueKind.Null, Listed(active, bound.Id).GetProperty("cancellable").ValueKind);
+        Assert.Equal(
+            ("suspended", JsonValueKind.True),
+            (Listed(suspended, bound.Id).GetProperty("state").GetString(),
+                Listed(suspended, bound.Id).GetProperty("cancellable").ValueKind));
+
+        bound.Unbind();
+        await _deployment.Authenticators.RecordAsync(bound, TestContext.Current.CancellationToken);
+
+        Answer unbound = await browser.SendAsync("GET", "/account/credentials");
+        Answer fromSession = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss/" + bound.Id + "/cancel",
+            ("token", string.Empty));
+        Answer fromLink = await (await ArrivedAsync()).SendAsync(
+            "POST",
+            "/recovery/report-loss/" + bound.Id + "/cancel",
+            ("token", link));
+        Answer again = await browser.SendAsync(
+            "POST",
+            "/recovery/report-loss",
+            ("credentialId", bound.Id.ToString()));
+
+        Assert.Equal(
+            ("suspended", JsonValueKind.False),
+            (Listed(unbound, bound.Id).GetProperty("state").GetString(),
+                Listed(unbound, bound.Id).GetProperty("cancellable").ValueKind));
+        Assert.Equal(
+            (StatusCodes.Status404NotFound, ErrorCodes.CredentialNotFound.ToString()),
+            (fromSession.Status, fromSession.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status404NotFound, ErrorCodes.CredentialNotFound.ToString()),
+            (fromLink.Status, fromLink.Text("code")));
+        Assert.Equal(
+            (StatusCodes.Status409Conflict, ErrorCodes.LossReportPending.ToString()),
+            (again.Status, again.Text("code")));
+        Assert.Equal(AuthenticatorState.Suspended, bound.State);
     }
 
     /// <summary>
@@ -451,6 +526,10 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
 
     // A confirmed generator on the account the flow registered, which is what a loss
     // report is about.
+    // One credential as GET /account/credentials lists it.
+    private static JsonElement Listed(Answer listing, AuthenticatorId credential) =>
+        listing.Json().EnumerateArray().Single(each => each.GetProperty("id").GetString() == credential.ToString());
+
     private AuthenticatorId Enrolled()
     {
         SubjectId subject = _deployment.Directory.Created[^1].Subject;

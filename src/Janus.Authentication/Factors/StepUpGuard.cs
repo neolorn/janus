@@ -430,11 +430,14 @@ internal sealed class StepUpGuard(
         }
 
         HeldIdentifiers numbers = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
         var withheld = new HashSet<Factor>();
 
         foreach (Factor carried in textable)
         {
-            if (!await signals.AllowsAsync(carried, numbers, subject, cancellationToken).ConfigureAwait(false))
+            if (!await signals.AllowsAsync(carried, numbers, enrolled, subject, cancellationToken)
+                    .ConfigureAwait(false))
             {
                 _ = withheld.Add(carried);
             }

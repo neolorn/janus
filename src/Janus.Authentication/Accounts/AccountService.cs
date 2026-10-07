@@ -659,17 +659,7 @@ internal sealed class AccountService(
 
         foreach (Authenticator credential in enrolled)
         {
-            summaries.Add(new CredentialSummary(
-                credential.Id,
-                credential.Factor,
-                credential.Label.Value,
-                credential.State,
-                credential.InvalidatesAt,
-                credential.WebAuthn?.BackupEligible,
-                credential.WebAuthn?.BackupState,
-                preferred is not null && preferred.Id == credential.Id,
-                credential.AddedAt,
-                credential.LastUsedAt));
+            summaries.Add(CredentialSummaries.Of(credential, preferred is not null && preferred.Id == credential.Id));
         }
 
         return summaries;

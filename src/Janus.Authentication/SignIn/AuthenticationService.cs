@@ -1632,10 +1632,11 @@ internal sealed class AuthenticationService(
     // AUTH-FACT-004 AC7, AUTH-RECOV-007: what refuses a right code of a second step the
     // library texts, read from the one credential its record names from its issue,
     // whatever other credential of the factor the account holds. Where that credential
-    // is suspended, by a loss report or by a removal that would lower reachable
-    // assurance, the code answers that it is suspended; where it has been removed or
-    // invalidated since, the code is refused as one sent to an address given up since
-    // is. A code of any other entry names no credential.
+    // has been removed or invalidated since, or is one whose number left the account,
+    // whatever its state, the code is refused as one sent to an address given up since
+    // is (D-197); where it is otherwise suspended, by a loss report or by a removal that
+    // would lower reachable assurance, the code answers that it is suspended. A code of
+    // any other entry names no credential.
     private async ValueTask<Error?> UnansweredAsync(PendingSignIn held, CancellationToken cancellationToken)
     {
         if (held.Credential is not AuthenticatorId named)
@@ -1645,13 +1646,13 @@ internal sealed class AuthenticationService(
 
         Authenticator? issuedFor = await authenticators.FindAsync(named, cancellationToken).ConfigureAwait(false);
 
-        if (issuedFor is { IsUsable: true })
+        if (issuedFor is { IsUsable: true, IsUnbound: false })
         {
             return null;
         }
 
         return Error.From(
-            issuedFor is { IsAwaitingInvalidation: true }
+            issuedFor is { IsAwaitingInvalidation: true, IsUnbound: false }
                 ? ErrorCodes.CredentialSuspended
                 : ErrorCodes.FactorRejected);
     }
@@ -1803,7 +1804,7 @@ internal sealed class AuthenticationService(
 
         foreach (Factor carried in textable)
         {
-            if (!await TextableAsync(subject, carried, cancellationToken).ConfigureAwait(false))
+            if (!await TextableAsync(subject, carried, enrolled, cancellationToken).ConfigureAwait(false))
             {
                 _ = wanted.Remove(carried);
             }
@@ -1886,16 +1887,19 @@ internal sealed class AuthenticationService(
         open.Email is IdentifierId email
         && (await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false)).Find(email) is null;
 
-    // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
+    // AUTH-FACT-002b: the entry rides the number its credential is bound to, or the
+    // one the account would be texted at where it is bound to none (AUTH-FACT-002), so
     // it is that number the signal is asked about.
     private async ValueTask<bool> TextableAsync(
         SubjectId subject,
         Factor carried,
+        IReadOnlyList<Authenticator> enrolled,
         CancellationToken cancellationToken) =>
         await signals
             .AllowsAsync(
                 carried,
                 await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false),
+                enrolled,
                 subject,
                 cancellationToken)
             .ConfigureAwait(false);

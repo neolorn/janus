@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Janus.Core;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
@@ -45,6 +46,9 @@ public sealed class NeverLoggedTests
             Member<PendingVerificationRecord>(nameof(PendingVerificationRecord.OldLink)),
             Member<PendingSignInRecord>(nameof(PendingSignInRecord.Token)),
             Member<PendingSignInRecord>(nameof(PendingSignInRecord.Code)),
+            Member<PendingEnrolmentRecord>(nameof(PendingEnrolmentRecord.Number)),
+            Member<PendingEnrolmentRecord>(nameof(PendingEnrolmentRecord.Send)),
+            Member<PendingEnrolmentRecord>(nameof(PendingEnrolmentRecord.Code)),
             Member<RegistrationSessionRecord>(nameof(RegistrationSessionRecord.Session)),
             Member<SessionRecord>(nameof(SessionRecord.SecretFingerprint)),
             Member<SessionRecord>(nameof(SessionRecord.CsrfFingerprint)),

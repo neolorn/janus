@@ -28,6 +28,9 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
     /// <summary>The column a linked provider's subject is held in.</summary>
     public const string ProviderSubjectColumn = "enc_provider_subject";
 
+    /// <summary>The column the number a credential is bound to is held in.</summary>
+    public const string NumberColumn = "enc_number";
+
     private const int LabelLength = 64;
 
     // The entries of the catalogue a person links rather than enrols: the social
@@ -37,6 +40,16 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         .. FactorCatalogue.Entries
             .Where(entry => entry.Value.AssuranceLevel is AssuranceLevel.Delegated)
             .Select(entry => VocabularyConverter<Factor>.Write(entry.Key))
+            .Order(StringComparer.Ordinal),
+    ];
+
+    // The entries of the catalogue whose credential is bound to a number: the second
+    // steps the library texts (AUTH-FACT-002).
+    private static readonly string[] Bound =
+    [
+        .. FactorCatalogue.Entries.Keys
+            .Where(Authenticator.IsBoundToNumber)
+            .Select(VocabularyConverter<Factor>.Write)
             .Order(StringComparer.Ordinal),
     ];
 
@@ -91,6 +104,11 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
                         + $"(provider_subject IS NULL) = (fingerprint_version IS NULL) AND "
                         + $"(provider_subject IS NULL) = ({ProviderSubjectColumn} IS NULL)"));
 
+            // AUTH-FACT-002: only a second step the library texts is bound to a number.
+            table.HasCheckConstraint(
+                "ck_authenticators_number",
+                $"({NumberColumn} IS NULL) OR ({Vocabulary.Admits("factor", Bound)})");
+
             table.HasCheckConstraint(
                 "ck_authenticators_subject_not_max_uuid",
                 MaxUuid.Refused("subject"));
@@ -137,6 +155,7 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         builder.Property(credential => credential.ProviderSubject).HasColumnName("provider_subject");
         builder.Property(credential => credential.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(credential => credential.EncryptedProviderSubject).HasColumnName(ProviderSubjectColumn);
+        builder.Property(credential => credential.EncryptedNumber).HasColumnName(NumberColumn);
 
         // AUTH-FACT-013: the browser names the credential and not the account, so the
         // credential identifier is what a presentation is resolved by.

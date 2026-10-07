@@ -70,6 +70,21 @@ internal static class CredentialEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
             .Produces<EnrolledCredentialView>();
+        _ = SessionRequired.On(account.MapPost("/factors/phonecode/begin", BeginTextCodeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.FactorPasswordRequired, ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.IdentifierInvalid, ErrorCodes.CredentialLabelInvalid,
+                    ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = SessionRequired.On(account.MapPost("/factors/phonecode/confirm", ConfirmTextCodeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.FactorPasswordRequired, ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired))
+            .Produces<TextCodeEnrolmentView>();
         _ = SessionRequired.On(account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -288,6 +303,82 @@ internal static class CredentialEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 Enrolled);
+    }
+
+    // AUTH-FACT-002: the enrolment names a number of the account by the id the account
+    // lists it under, and a holder of a session alone asks: the enrolment session an
+    // approved recovery opened does not reach it (chapter 09 POST /enrol/begin).
+    private static async Task<IResult> BeginTextCodeAsync(
+        TextCodeRequest request,
+        ICredentials credentials,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (Holding(browser) is not CredentialAuthority authority)
+        {
+            return Nobody();
+        }
+
+        if (request.Identifier is not { Length: > 0 } named)
+        {
+            return Answers.Malformed("identifier");
+        }
+
+        if (request.Label is not { Length: > 0 } label)
+        {
+            return Answers.Malformed("label");
+        }
+
+        // An id that is no id names no identifier of the account.
+        return !Guid.TryParse(named, out Guid identifier)
+            ? Answers.Refused(ErrorCodes.IdentifierInvalid)
+            : Answers.Of(
+                await credentials
+                    .BeginTextCodeAsync(
+                        authority,
+                        new IdentifierId(identifier),
+                        label,
+                        RequestOrigin.Source(context.Request),
+                        RequestOrigin.Language(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                TypedResults.StatusCode(StatusCodes.Status202Accepted));
+    }
+
+    // AUTH-RECOV-006: the codes a second step beside a password brings with it come
+    // back with the confirmation and are never read back.
+    private static async Task<IResult> ConfirmTextCodeAsync(
+        ConfirmTextCodeRequest request,
+        ICredentials credentials,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (Holding(browser) is not CredentialAuthority authority)
+        {
+            return Nobody();
+        }
+
+        return request.Code is not { Length: > 0 } code
+            ? Answers.Malformed("code")
+            : Answers.Of(
+                await credentials
+                    .ConfirmTextCodeAsync(authority, code, RequestOrigin.Source(context.Request), cancellationToken)
+                    .ConfigureAwait(false),
+                enrolled => TypedResults.Json(
+                    TextCodeEnrolmentView.Of(enrolled),
+                    CredentialsJson.Default.TextCodeEnrolmentView,
+                    contentType: null,
+                    StatusCodes.Status200OK));
     }
 
     // AUTH-FACT-009: the whole previous set stops validating, and the new one is
