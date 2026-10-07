@@ -174,13 +174,13 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-CONS-001 AC1, PRIV-CONS-007 AC4: the one dashboard endpoint serves the
+    /// PRIV-CONS-001 AC5, PRIV-CONS-007 AC4: the one dashboard endpoint serves the
     /// first grant and the prompt a material revision raised, and the record says
     /// which it answered.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_CONS_001_AC1_AGrantOverASupersededConsentIsRecordedAsReconsentAsync()
+    public async Task PRIV_CONS_001_AC5_AGrantOverASupersededConsentIsRecordedAsReconsentAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 

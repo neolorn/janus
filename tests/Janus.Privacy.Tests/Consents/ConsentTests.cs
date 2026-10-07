@@ -623,14 +623,14 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-CONS-001 AC1, PRIV-CONS-007: a grant named <c>dashboard</c> over a consent
+    /// PRIV-CONS-001 AC5, PRIV-CONS-007: a grant named <c>dashboard</c> over a consent
     /// a material revision superseded, and the subject never withdrew, is the answer to
     /// being asked again and is recorded as <c>reconsent</c> by the service itself; over
     /// one the subject withdrew it is recorded as named.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_CONS_001_AC1_ADashboardGrantOverASupersededConsentIsRecordedAsReconsentAsync()
+    public async Task PRIV_CONS_001_AC5_ADashboardGrantOverASupersededConsentIsRecordedAsReconsentAsync()
     {
         await SupersededAsync(Recommendations, withdrawn: false);
         await SupersededAsync(Marketing, withdrawn: true);
@@ -649,12 +649,12 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-CONS-001 AC1: a grant named by any mechanism other than <c>dashboard</c>
+    /// PRIV-CONS-001 AC5: a grant named by any mechanism other than <c>dashboard</c>
     /// over a superseded consent is recorded as named.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_CONS_001_AC1_AnAdministratorGrantOverASupersededConsentIsRecordedAsNamedAsync()
+    public async Task PRIV_CONS_001_AC5_AnAdministratorGrantOverASupersededConsentIsRecordedAsNamedAsync()
     {
         await SupersededAsync(Recommendations, withdrawn: false);
 
