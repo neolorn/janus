@@ -1332,6 +1332,54 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// LIB-PKG-001 AC1: each of the four areas is compiled against the contracts alone,
+    /// and the internals of an area are opened to no other area but the two the item
+    /// allows, the one that implements its ports and the one that registers and maps
+    /// it.
+    /// </summary>
+    [Fact]
+    public void LIB_PKG_001_AC1_NoAreaIsCompiledAgainstAnotherAreasInternals()
+    {
+        string[] allowed = ["Janus.Hosting", "Janus.Storage"];
+        string[] bounded = [.. Areas, .. allowed];
+
+        foreach (string area in Areas)
+        {
+            Assert.Equal(["Janus.Core"], LibraryReferences(area));
+        }
+
+        foreach (string area in bounded)
+        {
+            Assert.Empty(Grants(area).Intersect(bounded, StringComparer.Ordinal).Except(allowed, StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// LIB-PKG-002 AC1: the contracts are compiled against no database tool: the
+    /// project references no other project and no package of one, and the assembly
+    /// built from it names none among the assemblies it was compiled against.
+    /// </summary>
+    [Fact]
+    public void LIB_PKG_002_AC1_TheContractsAreCompiledAgainstNoDatabaseTool()
+    {
+        string[] tools = ["Microsoft.EntityFrameworkCore", "Npgsql", "Dapper", "System.Data"];
+
+        string[] compiledAgainst =
+        [
+            .. typeof(Result).Assembly.GetReferencedAssemblies().Select(reference => reference.Name!),
+        ];
+
+        Assert.Empty(LibraryReferences("Janus.Core"));
+        Assert.Empty(PackageReferences("Janus.Core").Intersect(Persistence, StringComparer.Ordinal));
+        Assert.NotEmpty(compiledAgainst);
+        Assert.DoesNotContain(
+            compiledAgainst,
+            name => tools.Any(tool =>
+                string.Equals(name, tool, StringComparison.Ordinal)
+                || name.StartsWith(tool + ".", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
     /// The project a reference names. A project file writes its includes with the
     /// separator of the machine that wrote them, which is not the separator of the
     /// machine reading them.
