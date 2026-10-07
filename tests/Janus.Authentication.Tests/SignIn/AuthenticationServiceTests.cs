@@ -159,6 +159,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         new(
             _pending,
             _identifiers,
+            _authenticators,
             _accounts,
             Policies,
             Lock,
@@ -4320,6 +4321,170 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC11: a text code asked for at a sign-in whose credential is taken
+    /// out of use, or whose number leaves the account, between the read of the
+    /// credential and the issue of its code sends nothing, issues nothing and counts
+    /// nothing, and records the consideration as the signal answered. It is answered
+    /// <c>auth.credential.suspended</c> where the credential is now suspended, and
+    /// otherwise as an ask whose number answers <c>risk</c> is: here, with no factor
+    /// left, <c>auth.factor.rejected</c>.
+    /// </summary>
+    /// <param name="left">What another request committed while the ask waited for the row.</param>
+    /// <param name="answer">What the ask is refused with.</param>
+    [Theory]
+    [InlineData("suspended", "auth.credential.suspended")]
+    [InlineData("removed", "auth.factor.rejected")]
+    [InlineData("number", "auth.factor.rejected")]
+    public async Task AUTH_FACT_002_AC11_AnAskWhoseCredentialOrNumberLeftBeforeItsCodeIsIssuedSendsNothingAndRecordsTheSignalAsync(
+        string left,
+        string answer)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Authenticator bound = Held(subject, Factor.PhoneCode);
+        Remembered(subject);
+        Answers(PhoneSignal.Clear);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        await LeavesUnderTheLockAsync(subject, bound, left);
+        _work.Reset();
+
+        Assert.Equal(
+            answer,
+            (await AskedAsync(began.Challenge, stepping: null)).Match(_ => string.Empty, error => error.Code.ToString()));
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Clear, (SubjectId?)subject)], _considered.Records);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC11: where another factor is left, an ask whose credential was
+    /// removed before its code was issued is answered with the factors the challenge
+    /// still offers, as a <c>risk</c> ask is; and where no signal is declared the
+    /// consideration is recorded as <c>unavailable</c>.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC11_AnAskWhoseCredentialWasRemovedIsAnsweredWithTheFactorsLeftAsARiskAskIsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Authenticator bound = Held(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        await LeavesUnderTheLockAsync(subject, bound, "removed");
+
+        SignInProgress? offered = (await AskedAsync(began.Challenge, stepping: null))
+            .Match(progress => progress, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+        Assert.Equal([Factor.Totp], offered?.Required);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)null, (SubjectId?)subject)], _considered.Records);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC11, chapter 09 <c>POST /auth/step-up</c>: at a step-up, an ask
+    /// whose credential is suspended before its code is issued is answered
+    /// <c>auth.credential.suspended</c>, and one whose credential was removed is
+    /// answered as a <c>risk</c> ask at a step-up is, with the factors of the
+    /// combinations left; neither sends, issues or counts anything, and each records the
+    /// consideration as the signal answered.
+    /// </summary>
+    /// <param name="left">What another request committed while the ask waited for the row.</param>
+    [Theory]
+    [InlineData("suspended")]
+    [InlineData("removed")]
+    public async Task AUTH_FACT_002_AC11_AnAskAtAStepUpWhoseCredentialLeftBeforeItsCodeIsIssuedSendsNothingAsync(string left)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Authenticator bound = Held(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Clear);
+
+        SignInChallenge began = await BeganAsync(Address);
+        SessionId session = Opened(subject);
+
+        await LeavesUnderTheLockAsync(subject, bound, left);
+
+        Result<SignInProgress?> asked = await AskedAsync(began.Challenge, subject, session);
+
+        if (left == "suspended")
+        {
+            Assert.Equal(ErrorCodes.CredentialSuspended, asked.Match(_ => (ErrorCode?)null, error => error.Code));
+        }
+        else
+        {
+            SignInProgress? offered = asked.Match(
+                progress => progress,
+                error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+            Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+            Assert.Equal([Factor.Password, Factor.Totp], offered?.Required);
+        }
+
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Clear, (SubjectId?)subject)], _considered.Records);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC11, CONV-DESIGN-003: the unit of work that issues a text code
+    /// locks the row of the identifier holding the credential's number first, before it
+    /// reads the credential under its lock, and issues the code only after both.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC11_TheAskLocksTheIdentifiersRowBeforeTheCredentialAndIssuesTheCodeAfterBothAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var order = new List<string>();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        IdentifierId number = (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All
+            .First(identifier => identifier.Kind is IdentifierKind.Phone).Id;
+
+        _identifiers.LockingRow = async (_, row) =>
+        {
+            order.Add(row == number ? "identifier" : "another identifier");
+            order.Add(
+                await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken) is null
+                    ? "no code yet"
+                    : "code");
+        };
+        _authenticators.Locking = _ => order.Add("credential");
+
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
+        Assert.Equal(["identifier", "no code yet", "credential"], order);
+        Assert.NotNull(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Single(_notifications.Texts);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC7, AUTH-FACT-002b AC6: a text code asked for at a sign-in whose
     /// number answers <c>risk</c> is answered with the factors the challenge still
     /// offers, the text code no longer among them, and sends nothing.
@@ -5095,6 +5260,33 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         {
             await GoneAsync(held, removed);
         }
+    }
+
+    // AUTH-FACT-002 AC11: what another request commits between an ask's read of the
+    // credential and its lock on the identifier's row, which the ask then finds under
+    // that lock: the number removed and the credential suspended for it, the credential
+    // removed with its number, or the number gone from the account alone.
+    private async ValueTask LeavesUnderTheLockAsync(SubjectId subject, Authenticator bound, string left)
+    {
+        IdentifierId number = (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All
+            .First(identifier => identifier.Kind is IdentifierKind.Phone).Id;
+
+        _identifiers.LockingRow = async (_, _) =>
+        {
+            _identifiers.LockingRow = null;
+
+            await _identifiers.DiscardAsync(subject, number, TestContext.Current.CancellationToken);
+
+            if (left == "suspended")
+            {
+                bound.Suspend(_clock.GetUtcNow() + Settings.RecoveryInvalidationWindow.Default);
+                bound.Unbind();
+            }
+            else if (left == "removed")
+            {
+                await _authenticators.RemoveAsync(bound.Id, TestContext.Current.CancellationToken);
+            }
+        };
     }
 
     // The account's text code credential as its number leaving the account leaves it

@@ -158,6 +158,45 @@ internal sealed class PhoneSignals(
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
+    /// <summary>
+    /// Records what was known about a number an entry was about to be texted at, where
+    /// nothing is then sent to it: what the signal answered before the unit of work
+    /// began, or nothing where no provider is declared. A kept write of the unit of work
+    /// the caller has open (AUTH-FACT-002 AC11, CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="factor">The entry the number would have carried.</param>
+    /// <param name="number">The number, canonically.</param>
+    /// <param name="subject">Whose account it is.</param>
+    /// <param name="cancellationToken">Abandons the consideration.</param>
+    /// <returns>The work of recording it.</returns>
+    /// <exception cref="ArgumentNullException">The number is absent.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A provider is declared and nothing was asked about the number before the unit of
+    /// work began: the provider is never asked inside one.
+    /// </exception>
+    public async ValueTask UnsentAsync(
+        Factor factor,
+        string number,
+        SubjectId? subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(number);
+
+        PhoneSignal? answered = null;
+
+        if (provider is not null)
+        {
+            answered = _answered.Remove(number, out PhoneSignal asked)
+                ? asked
+                : throw new InvalidOperationException(
+                    "The signal for a number is asked before the unit of work that would send to it begins.");
+        }
+
+        await audit
+            .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     // Which entry a message amounts to follows from the channel it goes out on and
     // whether it carries a link; whether that entry is restricted is the catalogue's.
     private static Factor? Restricted(OutboundMessage request) =>

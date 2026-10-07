@@ -22,6 +22,7 @@ namespace Janus.Authentication.SignIn;
 /// </summary>
 /// <param name="pending">Where the ones that have gone out are held.</param>
 /// <param name="identifiers">Where an identifier is resolved to an account.</param>
+/// <param name="authenticators">Where the credential a code is issued for is read under its lock.</param>
 /// <param name="accounts">Where the account's state is read.</param>
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="domainLock">Whether an email address is one a member may sign in with.</param>
@@ -50,6 +51,7 @@ namespace Janus.Authentication.SignIn;
 internal sealed class SignInLinks(
     IPendingSignInStore pending,
     IIdentifierDirectory identifiers,
+    IAuthenticatorStore authenticators,
     IAccountDirectory accounts,
     PolicyResolution policies,
     DomainLock domainLock,
@@ -265,7 +267,10 @@ internal sealed class SignInLinks(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Whether the ask is answered as one that sent its code, which it is not where the
-    /// number's signal withheld it; or the refusal of the send.
+    /// number's signal withheld it, or where the credential was taken out of use or its
+    /// number left the account before the code was issued (AUTH-FACT-002 AC11); or the
+    /// refusal: of the send, or <c>auth.credential.suspended</c> where the credential is
+    /// by then suspended.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
@@ -328,10 +333,49 @@ internal sealed class SignInLinks(
         string code = VerificationCode.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
+        // The identifier that holds the credential's number, as it was read before the
+        // unit of work began, which is the row the unit of work locks first.
+        IdentifierId? holding = Holding(
+            await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false),
+            texted.Value)?.Id;
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<bool>(notBegun);
+        }
+
+        // AUTH-FACT-002 AC11, CONV-DESIGN-003 (D-197): the row of the identifier holding
+        // the number is locked first, where one still does, and the credential is read
+        // under its own lock after it, so a writer that takes the number from the
+        // account is either seen here or waits for this code to be issued. Where the
+        // credential is no longer active, or the number no longer the account's,
+        // nothing is issued, sent or counted, and the consideration is the one write
+        // kept: as the signal answered, or unavailable where none is declared.
+        HeldIdentifier? locked = holding is IdentifierId row
+            ? await identifiers.LockAsync(subject, row, cancellationToken).ConfigureAwait(false)
+            : null;
+        Authenticator? standing = await authenticators.FindForUpdateAsync(credential.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (standing is not { IsUsable: true }
+            || !string.Equals(standing.Number, texted.Value, StringComparison.Ordinal)
+            || locked is not { IsPending: false }
+            || !string.Equals(locked.Canonical, texted.Value, StringComparison.Ordinal))
+        {
+            await signals.UnsentAsync(factor, texted.Value, subject, cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error unkept)
+            {
+                return Result.Failure<bool>(unkept);
+            }
+
+            // A credential now suspended is answered as AUTH-RECOV-007 states; any other
+            // is withheld from the challenge, as at a risk.
+            return standing is { IsAwaitingInvalidation: true }
+                ? Result.Failure<bool>(Error.From(ErrorCodes.CredentialSuspended))
+                : Result.Success(false);
         }
 
         SendReference sent = (await sending
@@ -786,4 +830,11 @@ internal sealed class SignInLinks(
 
         return default!;
     }
+
+    // The identifier of the account that holds a number: one the account lists as its
+    // own, which a pending add is not yet.
+    private static HeldIdentifier? Holding(HeldIdentifiers held, string number) =>
+        held.All.FirstOrDefault(identifier =>
+            identifier is { Kind: IdentifierKind.Phone, IsPending: false }
+            && string.Equals(identifier.Canonical, number, StringComparison.Ordinal));
 }

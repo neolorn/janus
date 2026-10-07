@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
+  number, that the credential is still active and the number still the account's before
+  it issues the code. Where either changed since the ask read the credential, nothing is
+  issued, sent or counted, the consideration is recorded as the signal answered, and
+  the ask is answered `auth.credential.suspended` where the credential is now suspended
+  and otherwise as an ask whose number answers `risk` is.
 - When the number a `phoneCode` credential is bound to leaves the account (its identifier
   removed, its value replaced, or displaced by an undo), the credential is taken out of
   use in the same unit of work: an active one is removed where the account reaches as
