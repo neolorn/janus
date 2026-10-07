@@ -790,6 +790,65 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-CSRF-001 AC4: a state-changing request refused by the fetch metadata, by
+    /// the custom header, by the origin or by the token is answered the same 403
+    /// <c>auth.session.csrfinvalid</c>, byte for byte under one correlation identifier,
+    /// and only the entry each layer logs says which of them refused.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_001_AC4_EveryLayerRefusesAlikeAndOnlyItsLogEntryNamesItAsync()
+    {
+        var isolation = new LogInMemory<ResourceIsolation>();
+        var header = new LogInMemory<CustomRequestHeader>();
+        var origin = new LogInMemory<OriginValidation>();
+        var limiting = new LogInMemory<SourceRateLimiting>();
+        var token = new LogInMemory<SynchronizerToken>();
+        RequestDelegate pipeline = Mounted(isolation, header, origin, limiting, token);
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext[] refused =
+        [
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "cross-site"),
+                (BrowserCookies.RequestHeader, "1"),
+                ("Origin", Target)),
+            Arriving("POST", ("Sec-Fetch-Site", "same-origin"), ("Origin", Target)),
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "same-origin"),
+                (BrowserCookies.RequestHeader, "1"),
+                ("Origin", "https://elsewhere.example")),
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "same-origin"),
+                (BrowserCookies.RequestHeader, "1"),
+                ("Origin", Target)),
+        ];
+        List<string> answered = [];
+
+        foreach (HttpContext context in refused)
+        {
+            context.TraceIdentifier = "refused";
+            Carrying(context, secret);
+
+            await pipeline(context);
+
+            answered.Add(await AnsweredAsync(context));
+        }
+
+        Assert.All(refused, context => Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode));
+        Assert.Contains("\"code\":\"" + Refused + "\"", answered[0], StringComparison.Ordinal);
+        Assert.Single(answered.Distinct(StringComparer.Ordinal));
+        Assert.Single(refused.Select(context => context.Response.ContentType).Distinct(StringComparer.Ordinal));
+        Assert.Equal([1], isolation.Entries.Select(entry => entry.EventId));
+        Assert.Equal([2], header.Entries.Select(entry => entry.EventId));
+        Assert.Equal([3], origin.Entries.Select(entry => entry.EventId));
+        Assert.Equal([4], token.Entries.Select(entry => entry.EventId));
+        Assert.Empty(limiting.Entries);
+        Assert.False(_reached);
+    }
+
+    /// <summary>
     /// BFF-MACH-001 AC3: a request the machine profile governs carries none of what the
     /// browser profile asks for, and passes it untouched: nothing refused, nothing issued.
     /// </summary>
@@ -996,6 +1055,48 @@ public sealed class BrowserProfileTests : IDisposable
             StringComparison.Ordinal);
         Assert.Contains("randomness.GetBytes", drawing, StringComparison.Ordinal);
         Assert.DoesNotContain("SequenceEqual", comparing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// BFF-CSRF-007 AC2: the synchronizer token is drawn by the framework's generator
+    /// and compared by its fixed-time comparison, and the framework's antiforgery
+    /// component has no part in it. No file the library ships names that component, a
+    /// first contact is issued no cookie of it, and a request presenting its header in
+    /// place of the session's token is refused.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_007_AC2_NoFrameworkAntiforgeryTokenIsIssuedOrReadAsync()
+    {
+        RequestDelegate pipeline = Mounted();
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext arriving = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+        HttpContext presenting = Arriving(
+            "POST",
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target),
+            ("Sec-Fetch-Site", "same-origin"),
+            ("RequestVerificationToken", "presented"));
+
+        Carrying(presenting, secret);
+
+        await pipeline(arriving);
+        await pipeline(presenting);
+        string[] issued = [.. arriving.Response.Headers.SetCookie.Select(written => written!)];
+
+        Assert.Contains(
+            nameof(RandomNumberGenerator),
+            Repository.Authentication("OpaqueToken.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CryptographicOperations.FixedTimeEquals",
+            Repository.Authentication("Sessions/SynchronizerTokens.cs"),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            Shipped(),
+            file => File.ReadAllText(file).Contains("Antiforgery", StringComparison.OrdinalIgnoreCase));
+        Assert.NotEmpty(issued);
+        Assert.DoesNotContain(issued, written => written.Contains("Antiforgery", StringComparison.OrdinalIgnoreCase));
+        await AssertRefusedAsync(presenting);
     }
 
     /// <summary>
