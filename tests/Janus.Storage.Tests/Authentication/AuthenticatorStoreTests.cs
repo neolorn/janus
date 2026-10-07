@@ -100,7 +100,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             subject,
             Factor.Passkey,
             Label("this laptop"),
-            new WebAuthnMaterial(credentialId, PublicKey, -7, "example.com", 4, true, false),
+            new WebAuthnMaterial(credentialId, PublicKey, -7, "example.com", 4, true, false, []),
             Noon));
 
         await using StoreContext reading = database.Context();
@@ -266,15 +266,65 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             subject,
             Factor.Passkey,
             Label("this laptop"),
-            new WebAuthnMaterial(credentialId, PublicKey, -7, "example.com", 4, true, false),
+            new WebAuthnMaterial(credentialId, PublicKey, -7, "example.com", 4, true, false, []),
             Noon));
 
-        var assertion = new WebAuthnAssertion(credentialId, "example.com", UserVerified: true, Counter: 5);
+        var assertion = new WebAuthnAssertion(
+            credentialId,
+            "example.com",
+            UserVerified: true,
+            Counter: 5,
+            BackupEligible: true,
+            BackupState: false);
 
         ErrorCode?[] answers = await Task.WhenAll(AssertedAsync(assertion), AssertedAsync(assertion));
 
         Assert.Equal(1, answers.Count(answer => answer is null));
         Assert.Equal(1, answers.Count(answer => answer == ErrorCodes.WebAuthnCounterMismatch));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC8: a key's transports are kept as its creation gave them, and the
+    /// backup state an assertion carried is written with its counter, the key's
+    /// eligibility and transports standing as they were.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_014_AC8_TheTransportsAreKeptAndAnAssertionsBackupStateIsWrittenAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await WrittenAsync(Authenticator.WebAuthnCredential(
+            id,
+            subject,
+            Factor.Passkey,
+            Label("this laptop"),
+            new WebAuthnMaterial(Secret(), PublicKey, -8, "example.com", 4, true, false, ["internal", "hybrid"]),
+            Noon));
+
+        await using (StoreContext writing = database.Context())
+        {
+            AuthenticatorStore store = Store(writing);
+            Authenticator held = Assert.IsType<Authenticator>(
+                await store.FindAsync(id, TestContext.Current.CancellationToken));
+
+            Assert.Equal(["internal", "hybrid"], held.WebAuthn!.Transports);
+            Assert.False(held.WebAuthn.BackupState);
+
+            held.Counted(5);
+            held.BackedUp(backedUp: true);
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        WebAuthnMaterial read = Assert.IsType<Authenticator>(
+            await Store(reading).FindAsync(id, TestContext.Current.CancellationToken)).WebAuthn!;
+
+        Assert.Equal((5u, true, true), (read.Counter, read.BackupEligible, read.BackupState));
+        Assert.Equal(["internal", "hybrid"], read.Transports);
+        Assert.Equal(-8, read.Algorithm);
     }
 
     /// <summary>
@@ -297,7 +347,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             subject,
             Factor.Passkey,
             Label("this laptop"),
-            new WebAuthnMaterial(Secret(), PublicKey, -7, "example.com", null, false, false),
+            new WebAuthnMaterial(Secret(), PublicKey, -7, "example.com", null, false, false, []),
             Noon + TimeSpan.FromMinutes(1)));
 
         await using StoreContext reading = database.Context();

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Janus.Storage.Authentication.Registration;
 
@@ -17,6 +18,10 @@ namespace Janus.Storage.Authentication.Registration;
 /// <param name="Counter">The signature counter, where the authenticator keeps one.</param>
 /// <param name="BackupEligible">Whether the authenticator may back it up.</param>
 /// <param name="BackupState">Whether it is backed up.</param>
+/// <param name="Transports">
+/// The ways the authenticator can be reached, where it is a WebAuthn one
+/// (AUTH-FACT-014).
+/// </param>
 /// <param name="ProviderSubject">
 /// The provider's own identifier for the person, where it is a social provider's
 /// identity.
@@ -39,5 +44,6 @@ internal sealed record StagedCredentialDocument(
     uint? Counter,
     bool BackupEligible,
     bool BackupState,
+    IReadOnlyList<string>? Transports,
     string? ProviderSubject,
     long? TotpConsumedStep = null);

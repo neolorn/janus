@@ -1221,13 +1221,8 @@ POST /auth/factor
   request application/json
     challengeId: string
     factor: Factor
-    value: string
+    value: JsonElement?
     linkToken: string
-    assertion.credentialId: string
-    assertion.clientDataJson: string
-    assertion.authenticatorData: string
-    assertion.signature: string
-    assertion.userHandle: string
     trustDevice: boolean
     press: boolean
   200
@@ -1305,13 +1300,8 @@ POST /auth/step-up
   request application/json
     challengeId: string
     factor: Factor
-    value: string
+    value: JsonElement?
     linkToken: string
-    assertion.credentialId: string
-    assertion.clientDataJson: string
-    assertion.authenticatorData: string
-    assertion.signature: string
-    assertion.userHandle: string
     trustDevice: boolean
     press: boolean
   200
@@ -1347,14 +1337,15 @@ POST /auth/webauthn/register/begin
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 auth.factor.passwordrequired
-  422 auth.credential.labelinvalid auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
+  422 auth.credential.labelinvalid auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
 POST /auth/webauthn/register/complete
   request application/json
-    credential.credentialId: string
-    credential.clientDataJson: string
-    credential.authenticatorData: string
-    credential.publicKey: string
-    credential.algorithm: number
+    credential.id: string
+    credential.rawId: string
+    credential.type: string
+    credential.response.clientDataJSON: string
+    credential.response.attestationObject: string
+    credential.response.transports[]: string
     label: string
   200
     application/json
@@ -1365,7 +1356,7 @@ POST /auth/webauthn/register/complete
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 auth.factor.passwordrequired
-  422 auth.credential.labelinvalid auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
+  422 auth.credential.labelinvalid auth.factor.rejected auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
 POST /callbacks/providers/apple
   200
   409 integration.callback.inprogress

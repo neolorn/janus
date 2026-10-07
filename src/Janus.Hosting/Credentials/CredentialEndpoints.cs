@@ -91,7 +91,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
-                    ErrorCodes.CredentialLabelInvalid))
+                    ErrorCodes.CredentialLabelInvalid, ErrorCodes.FactorRejected))
             .Produces<CredentialCeremonyView>();
         _ = EnrolmentRoute.On(ceremonies.MapPost("/complete", CompleteKeyAsync))
             .Declares(EndpointDeclaration
@@ -99,7 +99,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired,
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
-                    ErrorCodes.CredentialLabelInvalid))
+                    ErrorCodes.CredentialLabelInvalid, ErrorCodes.FactorRejected))
             .Produces<EnrolledCredentialView>();
 
         return endpoints;
@@ -178,7 +178,7 @@ internal static class CredentialEndpoints
             return Nobody();
         }
 
-        if (request.Credential is not AuthenticatorAttestation attestation)
+        if (request.Credential?.Read() is not AuthenticatorAttestation attestation)
         {
             return Answers.Malformed("credential");
         }

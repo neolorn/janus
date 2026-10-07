@@ -1913,31 +1913,9 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     // What a browser sends back from a creation ceremony: the challenge the server
     // issued, an origin the relying party admits, and a key the runtime can read.
     private static AuthenticatorAttestation Attestation(string challenge, bool synced)
-    {
-        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-
-        byte[] clientData = Encoding.UTF8.GetBytes(
-            "{\"type\":\"webauthn.create\",\"challenge\":\""
-            + challenge
-            + "\",\"origin\":\""
-            + Origin
-            + "\"}");
-
-        byte[] authenticatorData = new byte[37];
-
-        SHA256.HashData(Encoding.UTF8.GetBytes(RelyingParty)).CopyTo(authenticatorData, 0);
-
         // User present and user verified, and where the credential is synced the two
         // backup flags AUTH-FACT-013 reads.
-        authenticatorData[32] = synced ? (byte)0x1D : (byte)0x05;
-
-        return new AuthenticatorAttestation(
-            Base64Url.EncodeToString(Guid.NewGuid().ToByteArray()),
-            Base64Url.EncodeToString(clientData),
-            Base64Url.EncodeToString(authenticatorData),
-            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
-            Algorithm: -7);
-    }
+        => SoftwareAuthenticator.Holding().Attested(challenge, Origin, RelyingParty, synced ? (byte)0x1D : (byte)0x05);
 
     private async ValueTask<EnrolledCredential> KeyAsync(
         SubjectId subject,
@@ -2133,7 +2111,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                     RelyingPartyId: RelyingParty,
                     BackupEligible: true,
                     BackupState: true,
-                    Counter: 0),
+                    Counter: 0,
+                    Transports: []),
                 _clock.GetUtcNow()));
         }
 

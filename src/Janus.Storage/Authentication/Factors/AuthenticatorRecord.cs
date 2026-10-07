@@ -70,6 +70,9 @@ internal sealed class AuthenticatorRecord
     /// <summary>The <c>backup_state</c> column.</summary>
     public bool? BackupState { get; set; }
 
+    /// <summary>The <c>transports</c> column (AUTH-FACT-014).</summary>
+    public string[]? Transports { get; set; }
+
     /// <summary>The <c>is_preferred</c> column (IDN-ATTR-008).</summary>
     public bool IsPreferred { get; set; }
 

@@ -263,6 +263,18 @@ internal sealed class Authenticator
             : WebAuthn with { Counter = counter };
 
     /// <summary>
+    /// The backup state the authenticator reported with an accepted assertion, which is
+    /// recorded so that a credential that became synced, or stopped being, is told
+    /// apart afterwards (AUTH-FACT-013, AUTH-FACT-014).
+    /// </summary>
+    /// <param name="backedUp">Whether the credential is backed up now.</param>
+    /// <exception cref="InvalidOperationException">The credential holds no key.</exception>
+    public void BackedUp(bool backedUp) =>
+        WebAuthn = WebAuthn is null
+            ? throw new InvalidOperationException("The credential holds no key.")
+            : WebAuthn with { BackupState = backedUp };
+
+    /// <summary>
     /// The person renamed it.
     /// </summary>
     /// <param name="label">What they call it now.</param>

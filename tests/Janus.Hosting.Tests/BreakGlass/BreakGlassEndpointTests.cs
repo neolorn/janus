@@ -993,7 +993,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
             (
                 "POST",
                 "/auth/webauthn/register/complete",
-                """{"credential":{"credentialId":"a","clientDataJson":"a","authenticatorData":"a","publicKey":"a","algorithm":-7},"label":"Key"}"""
+                """{"credential":{"id":"YQ","rawId":"YQ","type":"public-key","response":{"clientDataJSON":"YQ","attestationObject":"YQ"}},"label":"Key"}"""
             ),
             ("POST", "/account/credentials/" + absent + "/upgrade", "{}"),
             ("POST", "/account/factors/totp/begin", """{"label":"Phone"}"""),

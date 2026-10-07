@@ -10,6 +10,31 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The analysers are built against the compiler of SDK 10.0.100, the first .NET 10
+  SDK (`Microsoft.CodeAnalysis.CSharp` 5.0.0), so a host's build loads them in every
+  .NET 10 SDK.
+- The two WebAuthn ceremonies are verified by `Fido2` 4.2.0, and the request shapes
+  are the ones a browser gives. `POST /auth/webauthn/register/complete` takes
+  `credential`, the `RegistrationResponseJSON` of `PublicKeyCredential.toJSON()`,
+  where it took `credentialId`, `clientDataJson`, `authenticatorData`, `publicKey`
+  and `algorithm`. A passkey or a security key answers `POST /auth/factor` and
+  `POST /auth/step-up` with the `AuthenticationResponseJSON` as the JSON object in
+  `value`, where it was the member `assertion`; a `value` that is neither text nor
+  such an object, or a `credential` that is no such object, is 400
+  `api.request.malformed` naming it. Members the library does not read, the client
+  extension outputs among them, are passed over, and an authenticator's own
+  extension outputs are ignored. An authenticator that chooses EdDSA enrols and its
+  assertions verify. Client data whose `crossOrigin` is true, an assertion whose
+  backup-eligible flag differs from the one stored, and a creation whose credential
+  identifier a credential already holds are refused 422 `auth.factor.rejected`,
+  which both registration routes now declare; every other refusal keeps its code.
+  Each assertion stores the backup state it carries with its counter. A credential's
+  public key is stored as the COSE key its attested credential data carries and its
+  transports as the response gives them, in the new column
+  `authenticators.transports` (migration `KeepTheTransportsOfAKey`); a key enrolled
+  by an earlier build holds its public key in the earlier form, which no longer
+  verifies, and is enrolled again. `AuthenticatorAttestation` and
+  `AuthenticatorAssertion` carry the members of the two responses.
 - A fault of the sign-on over the deployment's own state names what failed in the
   fault's log entry, read by its correlation identifier. A client secret or the
   authentication application's published keys that cannot be read make a fault

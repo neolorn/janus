@@ -145,8 +145,8 @@ public sealed class ModelTests
             "audit_records.subject",
 
             // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
-            // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011 and
-            // AUTH-FACT-012 read, and the keyed fingerprint a provider link is found by
+            // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011, AUTH-FACT-012
+            // and AUTH-FACT-014 read, and the keyed fingerprint a provider link is found by
             // (IDN-LIFE-012a), with the subject it is computed from under the key and
             // the fingerprint key's version, so a rotation can compute it again
             // (OPS-SEC-003 AC6).
@@ -172,6 +172,7 @@ public sealed class ModelTests
             "authenticators.subject",
             "authenticators.totp_consumed_step",
             "authenticators.totp_secret",
+            "authenticators.transports",
 
             // Not an account field: when each background job was first seen, last
             // attempted, last succeeded and last raised as lapsed (INF-BG-001).

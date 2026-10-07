@@ -3196,7 +3196,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 "example.test",
                 Counter: null,
                 BackupEligible: true,
-                BackupState: true));
+                BackupState: true,
+                Transports: []));
 
     private StagedCredential SecondStepCredential() =>
         new(
@@ -3230,31 +3231,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // What a browser sends back from a creation ceremony: the challenge the server
     // issued, an origin the relying party admits, and a key the runtime can read.
     private static AuthenticatorAttestation Attestation(string challenge)
-    {
-        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-
-        byte[] clientData = Encoding.UTF8.GetBytes(
-            "{\"type\":\"webauthn.create\",\"challenge\":\""
-            + challenge
-            + "\",\"origin\":\""
-            + WebOrigin
-            + "\"}");
-
-        byte[] authenticatorData = new byte[37];
-
-        SHA256.HashData(Encoding.UTF8.GetBytes(RelyingParty)).CopyTo(authenticatorData, 0);
-
         // User present and user verified, with the two backup flags of a synced
         // credential (AUTH-FACT-013).
-        authenticatorData[32] = 0x1D;
-
-        return new AuthenticatorAttestation(
-            Base64Url.EncodeToString(Guid.NewGuid().ToByteArray()),
-            Base64Url.EncodeToString(clientData),
-            Base64Url.EncodeToString(authenticatorData),
-            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
-            Algorithm: -7);
-    }
+        => SoftwareAuthenticator.Holding().Attested(challenge, WebOrigin, RelyingParty, flags: 0x1D);
 
     // The code an authenticator app shows now for the secret it was given.
     private string Generated(string secret) =>

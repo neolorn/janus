@@ -222,6 +222,7 @@ internal sealed class RegistrationSessionStore(
             staged.WebAuthn?.Counter,
             staged.WebAuthn?.BackupEligible ?? false,
             staged.WebAuthn?.BackupState ?? false,
+            staged.WebAuthn?.Transports,
             staged.ProviderSubject,
             staged.Totp?.ConsumedStep);
 
@@ -263,7 +264,8 @@ internal sealed class RegistrationSessionStore(
                     staged.RelyingPartyId!,
                     staged.Counter,
                     staged.BackupEligible,
-                    staged.BackupState),
+                    staged.BackupState,
+                    staged.Transports ?? []),
             staged.ProviderSubject);
 
     // A label this library wrote is a label this library accepts, so a stored value

@@ -154,11 +154,13 @@ table authenticators
   column provider_subject bytea
   column enc_provider_subject bytea
   column fingerprint_version integer
+  column transports text[]
   constraint ck_authenticators_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
   constraint ck_authenticators_invalidates_at CHECK (((invalidates_at IS NULL) OR (state = 'suspended'::text)))
   constraint ck_authenticators_provider_subject CHECK ((((provider_subject IS NULL) <> (factor = ANY (ARRAY['apple'::text, 'google'::text]))) AND ((provider_subject IS NULL) OR (octet_length(provider_subject) = 32)) AND ((provider_subject IS NULL) = (fingerprint_version IS NULL)) AND ((provider_subject IS NULL) = (enc_provider_subject IS NULL))))
   constraint ck_authenticators_state CHECK ((state = ANY (ARRAY['active'::text, 'invalidated'::text, 'suspended'::text])))
   constraint ck_authenticators_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint ck_authenticators_transports CHECK (((transports IS NULL) OR (credential_id IS NOT NULL)))
   constraint ck_authenticators_webauthn CHECK ((((credential_id IS NULL) = (public_key IS NULL)) AND ((credential_id IS NULL) = (algorithm IS NULL)) AND ((credential_id IS NULL) = (relying_party IS NULL)) AND ((credential_id IS NULL) = (backup_eligible IS NULL)) AND ((credential_id IS NULL) = (backup_state IS NULL))))
   constraint fk_authenticators_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_authenticators PRIMARY KEY (id)

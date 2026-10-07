@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Registration;
 using Janus.Core;
@@ -208,6 +209,49 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
 
         Assert.Equal(Noon.AddMinutes(3), read.RecoveryCodesViewedAt);
         Assert.Equal(code.Encoded, Assert.Single(read.RecoveryCodes!).Encoded);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014, REG-SESS-006: a key staged on the session comes back as it was
+    /// staged, its public key and its transports as the creation gave them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AStagedKeyKeepsItsPublicKeyAndItsTransportsAsync()
+    {
+        RegistrationSession opened = Opened();
+        var staged = new StagedCredential(
+            AuthenticatorId.New(TimeProvider.System),
+            Factor.Passkey,
+            Label("This phone"),
+            Totp: null,
+            new WebAuthnMaterial(
+                new byte[] { 1, 2, 3 },
+                new byte[] { 4, 5, 6 },
+                Algorithm: -8,
+                "example.test",
+                Counter: null,
+                BackupEligible: true,
+                BackupState: false,
+                Transports: ["internal", "hybrid"]));
+        opened.Enrol(staged);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(opened, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        RegistrationSession read = Assert.IsType<RegistrationSession>(
+            await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+        WebAuthnMaterial held = Assert.Single(read.Credentials).WebAuthn!;
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, held.CredentialId.ToArray());
+        Assert.Equal(new byte[] { 4, 5, 6 }, held.PublicKey.ToArray());
+        Assert.Equal((-8, "example.test", true, false), (held.Algorithm, held.RelyingPartyId, held.BackupEligible, held.BackupState));
+        Assert.Null(held.Counter);
+        Assert.Equal(["internal", "hybrid"], held.Transports);
     }
 
     /// <inheritdoc/>

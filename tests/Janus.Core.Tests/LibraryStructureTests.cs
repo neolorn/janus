@@ -1106,6 +1106,26 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-008: the analyser-authoring packages stand at the versions the table
+    /// names, the compiler package at that of the first SDK of the release, so that the
+    /// analysers load in every SDK of it.
+    /// </summary>
+    [Fact]
+    public void AnalyserAuthoringPackages_InThePackageVersions_StandAtTheVersionsTheTableNames()
+    {
+        var versions = XDocument
+            .Parse(Repository.ReadText("Directory.Packages.props"))
+            .Descendants("PackageVersion")
+            .ToDictionary(
+                package => package.Attribute("Include")!.Value,
+                package => package.Attribute("Version")!.Value,
+                StringComparer.Ordinal);
+
+        Assert.Equal("5.0.0", versions["Microsoft.CodeAnalysis.CSharp"]);
+        Assert.Equal("5.6.0", versions["Microsoft.CodeAnalysis.Analyzers"]);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-008 AC3: the core, relational and design packages carry one version,
     /// the tool manifest gives dotnet-ef that version, and every lockfile resolves each
     /// of the three at it, so no build has two versions of one of their assemblies to
