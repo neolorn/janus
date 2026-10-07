@@ -5750,6 +5750,37 @@ its commits can be read.
 - Confirmed under D-196, nothing changed: no sign-in test is owed for question 219's rule after question 236 (recorded under question 236).
 - Open: nothing. Questions 243 to 247 are answered by D-196 and built.
 
+**`corrections-4`, after the items of D-197.** Full gate at `87532a0a`, run locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). It was run twice. The first run, at `4660e5f1`, passed every job but the integration tests: 1139 of 1140, the one failure `ConfigureTests.OPS_CFG_004_AChangeWithoutAReasonIsRefusedAsync`, which reads a protected key unset on the deployment its class shares, where `ConfigureTests.OPS_CFG_004_AC3_ARefusalIsReportedAsEveryCommandReportsOneAsync` (written in this round, `68e0f833`) had set that key and left it, so the order of the two decided the result. `87532a0a` has the newer test remove what it set; no assertion changed, and the class passed three runs in a row. The second run, at `87532a0a`, is the table. The pipeline's last run on the pull request covers `4ceb5c62`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 4149 |
+| Contract tests | passed, 155 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1140 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 118 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 23, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). Four migrations since the last gate: `20261007004846_CountASendOnceAgainstAResendRestriction`, `20261007005836_KeepTheTransportsOfAKey`, `20261007024421_BindATextedSecondStepToItsNumber`, `20261007032152_AddPendingEnrolments`. Reported of them: the two check constraints added to `identity.authenticators` (`ck_authenticators_transports`, `ck_authenticators_number`) |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The fast checks ran before the docs commit `304389c5` and before every commit of the working branch after it, and on the merged tree of every merge; the departures on the parts are under "Disclosures of this round" (section 1). At `304389c5` the contract tests held one failure until `66aa8cc5`, as said there.
+- No git configuration was changed. No commit was rewritten, on the working branch or on a part. Nothing was pushed.
+- The owner's uncommitted edit of `Argon2idHasher.cs` was set aside as a patch for the two gate runs, so that they ran on the committed tree, and put back unchanged after them.
+- Resolved by rule: six rows (section 3).
+- Open: questions 248 to 251, Tier 3. Known issues 1 to 48 (section 6).
+
 ## 6. Known issues
 
 Tier 2 questions of the last corrections run (D-197). Each parks its item where it says "parked"; none is answered before the exit gate, and `implementation-plan.md` section 4 carries them into Milestone 2. Each gives the readings we see and the one we would take.
