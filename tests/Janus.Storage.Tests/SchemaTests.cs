@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Core;
+using Janus.Privacy.Bases;
+using Janus.Storage.Privacy.Bases;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -17,6 +20,8 @@ namespace Janus.Storage.Tests;
 [Trait("kind", "integration")]
 public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>
 {
+    private const string InsufficientPrivilege = "42501";
+
     private const string ListDomain =
         "INSERT INTO identity.organization_domains (token, organization, domain, added_at) "
             + "VALUES (@token, @organization, @domain, now())";
@@ -241,6 +246,51 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
             new { schema = StoreContext.Schema });
 
         Assert.Equal(0, enums);
+    }
+
+    /// <summary>
+    /// CONV-ENUM-001 AC3: a role is a row, written while the application runs; an
+    /// account state is a member of a check constraint, which only a migration changes;
+    /// and a lawful basis no release shipped is a row once a host declares it.
+    /// </summary>
+    [Fact]
+    public async Task CONV_ENUM_001_AC3_ARoleAndADeclaredBasisAreRowsAndAnAccountStateIsAConstraintAsync()
+    {
+        var declared = new LawfulBasisDeclaration("art-9-2-h", "Health care", false, false, true, false);
+        AuthorizationDeclarationBuilder declaration = new();
+
+        _ = declaration.LawfulBasis(declared);
+
+        await using (StoreContext context = database.Context())
+        await using (var work = new UnitOfWork(context))
+        {
+            await new LawfulBasisSeed(new LawfulBasisStore(new DataConnections(context)), declaration.Build(), work)
+                .SeededAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+        await connection.ExecuteAsync("SET ROLE identity_app");
+
+        int roles = await connection.ExecuteAsync(
+            "INSERT INTO identity.roles (name) VALUES (@name)",
+            new { name = "ward-clerk" });
+
+        string? state = await connection.ExecuteScalarAsync<string>(
+            "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+                + "WHERE c.conname = 'ck_accounts_state' AND c.contype = 'c' "
+                + "AND c.conrelid = 'identity.accounts'::regclass");
+
+        PostgresException altered = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync("ALTER TABLE identity.accounts DROP CONSTRAINT ck_accounts_state"));
+
+        bool basis = await connection.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS (SELECT 1 FROM identity.lawful_bases WHERE key = @key AND requires_assessment)",
+            new { key = declared.Key });
+
+        Assert.Equal(1, roles);
+        Assert.Contains("'active'", state, StringComparison.Ordinal);
+        Assert.Equal(InsufficientPrivilege, altered.SqlState);
+        Assert.True(basis);
     }
 
     /// <summary>
