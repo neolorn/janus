@@ -515,6 +515,29 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// OPS-CFG-005 AC3: every value the settings table holds once bootstrap has run was
+    /// set by bootstrap, and each is in the audit trail under the <c>bootstrap</c>
+    /// principal with the value the table holds.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_AC3_EveryValueBootstrapSetsIsRecordedUnderItsPrincipalAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        List<(string Key, string Value)> stored = [.. await connection.QueryAsync<(string Key, string Value)>(
+            "SELECT key, value FROM identity.settings")];
+        List<(string Key, string Value)> recorded = [.. await connection.QueryAsync<(string Key, string Value)>(
+            """
+            SELECT details->>'key', details->>'after' FROM identity.audit_records
+            WHERE action = 'ops.configuration.changed' AND principal = 'bootstrap'
+            """)];
+
+        Assert.NotEmpty(stored);
+        Assert.Equal(stored.Order(), recorded.Order());
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003: no grant bootstrap makes names its holder, or any person, as the
     /// one who granted it; each names the nil subject and the reason bootstrap states.
     /// </summary>
@@ -534,6 +557,33 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
         Assert.NotEmpty(grants);
         Assert.All(grants, grant => Assert.Equal((Unheld, "OPS-BOOT-001"), grant));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-001 AC7: bootstrap makes two <c>system-administrator</c> grants, the
+    /// administrator's and the reserved account's, each naming the nil subject as granter
+    /// and <c>OPS-BOOT-001</c> as reason, and no grant it makes names its holder as
+    /// granter.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC7_BothSystemAdministratorGrantsNameTheNilSubjectAndTheItemAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        List<(string Role, string Holder, string GrantedBy, string Reason)> grants = [.. await connection
+            .QueryAsync<(string Role, string Holder, string GrantedBy, string Reason)>(
+                "SELECT role, subject_id::text, granted_by::text, reason FROM identity.grants")];
+        string emergency = await connection.QuerySingleAsync<string>(
+            "SELECT subject::text FROM identity.accounts WHERE emergency");
+
+        var administering = grants.Where(grant => grant.Role == "system-administrator").ToList();
+
+        Assert.Equal(2, administering.Select(grant => grant.Holder).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(2, administering.Count);
+        Assert.Contains(emergency, administering.Select(grant => grant.Holder));
+        Assert.All(administering, grant => Assert.Equal((Unheld, "OPS-BOOT-001"), (grant.GrantedBy, grant.Reason)));
+        Assert.All(grants, grant => Assert.NotEqual(grant.Holder, grant.GrantedBy));
     }
 
     /// <summary>

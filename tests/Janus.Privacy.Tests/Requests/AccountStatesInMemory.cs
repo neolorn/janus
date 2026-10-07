@@ -208,6 +208,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
         PendingDeletion? running = _deletions.GetValueOrDefault(subject);
 
         if (Of(subject) is not AccountState found
+            || _reserved.Contains(subject)
             || found is AccountState.Deleted
             || (found is AccountState.Deleting && running?.By is DeletionOrigin.Takedown))
         {

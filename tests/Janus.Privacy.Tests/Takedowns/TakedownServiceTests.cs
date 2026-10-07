@@ -340,6 +340,28 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-002 AC9: a takedown naming the reserved account is refused with
+    /// <c>authz.denied</c> once the account has been read under its lock, and writes
+    /// nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC9_ATakedownNamingTheReservedAccountIsDeniedAsync()
+    {
+        _accounts.Reserve(Ahmed);
+
+        Error refused = Refused(await ExecutedAsync());
+
+        Assert.Equal(ErrorCodes.Denied, refused.Code);
+        Assert.Equal(AccountState.Active, _accounts.Of(Ahmed));
+        Assert.Empty(_outbox.Deliveries);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Of<AccountSuspended>());
+        Assert.Null(_accounts.SessionsEndedAt(Ahmed));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003, CONV-DESIGN-003 AC6: a state another transaction committed while
     /// the trigger waited for the account's row is the one it answers for, as it would
     /// have been found before, and nothing is written.
