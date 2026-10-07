@@ -49,6 +49,26 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
     }
 
     /// <summary>
+    /// INF-DB-001 AC2: Arabic held in a column that names no collation sorts by Unicode
+    /// rules, since the column takes the collation the database was provisioned with.
+    /// </summary>
+    [Fact]
+    public async Task INF_DB_001_AC2_ArabicHeldInAColumnSortsPerUnicodeRulesAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync("CREATE TEMPORARY TABLE provisioned (word text NOT NULL)");
+        await connection.ExecuteAsync(
+            "INSERT INTO provisioned (word) SELECT unnest(@words)",
+            new { words = Arabic });
+
+        IEnumerable<string> sorted = await connection.QueryAsync<string>(
+            "SELECT word FROM provisioned ORDER BY word");
+
+        Assert.Equal(["بَحر", "بيت"], sorted);
+    }
+
+    /// <summary>
     /// OPS-DB-001 AC2: the case-insensitive collation the plaintext columns carry
     /// compares without regard to case.
     /// </summary>
