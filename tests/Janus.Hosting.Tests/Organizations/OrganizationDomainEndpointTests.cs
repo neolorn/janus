@@ -186,13 +186,13 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-DOM-001 and AUTH-ABUSE-003: a sign-in link asked for a locked address is
+    /// REG-DOM-001 AC9 and AUTH-ABUSE-003: a sign-in link asked for a locked address is
     /// answered as any other ask and sends nothing, and one sent before the domain was
     /// removed no longer signs in, though the sign-in was opened with the number.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task REG_DOM_001_AC4_ALinkNoLongerSignsInToARemovedDomainAsync()
+    public async Task REG_DOM_001_AC9_ALinkNoLongerSignsInToARemovedDomainAsync()
     {
         _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
         _deployment.Configuration.Set(

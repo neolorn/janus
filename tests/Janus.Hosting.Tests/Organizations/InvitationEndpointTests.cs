@@ -139,13 +139,13 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-MAIL-001 and 09 section 8a: a corporate address a standing invitation reserves
-    /// is <c>409</c> <c>identity.mailbox.taken</c> naming <c>corporateEmail</c>, and
-    /// nothing more is issued.
+    /// REG-MAIL-001 AC8 and 09 section 8a: a corporate address a standing invitation
+    /// reserves is <c>409</c> <c>identity.mailbox.taken</c> naming
+    /// <c>corporateEmail</c>, and nothing more is issued.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync()
+    public async Task REG_MAIL_001_AC8_AnAddressAlreadyTakenIsRefusedAsync()
     {
         Browser administrator = await AuthorisedAsync();
 

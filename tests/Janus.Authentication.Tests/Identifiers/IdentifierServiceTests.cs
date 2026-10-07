@@ -905,7 +905,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// removed or replaced by the person while the membership lasts.
     /// </summary>
     [Fact]
-    public async Task REG_MAIL_001_AC5_ThePersonalEmailStaysAsTheMembershipKeepsItAsync()
+    public async Task REG_MAIL_001_AC6_ThePersonalEmailStaysAsTheMembershipKeepsItAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         IdentifierId personal = _directory.Verified(_person, IdentifierKind.Email, Second, isPersonal: true);
