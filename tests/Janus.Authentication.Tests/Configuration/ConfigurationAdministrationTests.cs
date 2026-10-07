@@ -575,12 +575,12 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-011 AC2 (entry 269): withdrawing the declaration, or making Continue
+    /// INT-MAIL-011 AC4 (entry 269): withdrawing the declaration, or making Continue
     /// with Apple a way in again over a domain not declared, warns as well.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_MAIL_011_AC2_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync()
+    public async Task INT_MAIL_011_AC4_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync()
     {
         Policy withoutApple = Janus.Core.Policies.SystemDefault with
         {
@@ -602,6 +602,28 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
         Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+    }
+
+    /// <summary>
+    /// INT-MAIL-011 AC4: withdrawing the sending domain from the registered domains
+    /// while Continue with Apple is a way in warns at the change, naming the domain.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC4_WithdrawingTheDeclarationWhileAppleIsAWayInWarnsAsync()
+    {
+        await ChangedAsync<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(StringComparer.Ordinal),
+            "the registration lapsed",
+            Satisfied);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
+        Assert.Equal(AlertSeverity.Normal, raised.Severity);
+        Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+        Assert.Single(_changes.Written);
     }
 
     /// <summary>
