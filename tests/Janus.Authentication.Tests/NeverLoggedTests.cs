@@ -29,11 +29,11 @@ namespace Janus.Authentication.Tests;
 public sealed class NeverLoggedTests
 {
     /// <summary>
-    /// CONV-LOG-003 AC1: passwords and their hashes, tokens, TOTP secrets, recovery
+    /// CONV-LOG-003 AC3: passwords and their hashes, tokens, TOTP secrets, recovery
     /// and verification codes, and the signing key are marked as types.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryTypeCarryingAForbiddenValueIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryTypeCarryingAForbiddenValueIsMarked() =>
         Assert.Empty(Unmarked(
         [
             typeof(Password),
@@ -49,11 +49,11 @@ public sealed class NeverLoggedTests
         ]));
 
     /// <summary>
-    /// CONV-LOG-003 AC1: where a forbidden value is one member of a record that is not
+    /// CONV-LOG-003 AC3: where a forbidden value is one member of a record that is not
     /// secret as a whole, that member is marked.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryMemberCarryingAForbiddenValueIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryMemberCarryingAForbiddenValueIsMarked() =>
         Assert.Empty(Unmarked(
         [
             Member<LifecycleLink>(nameof(LifecycleLink.Token)),
@@ -74,12 +74,12 @@ public sealed class NeverLoggedTests
         ]));
 
     /// <summary>
-    /// CONV-LOG-003 AC1: the correlation reference authenticates an unsigned callback,
+    /// CONV-LOG-003 AC3: the correlation reference authenticates an unsigned callback,
     /// so it is a token: its type, the member a delivery report carries it in, and
     /// every parameter it passes through before it is hashed are marked.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryCorrelationReferenceIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryCorrelationReferenceIsMarked() =>
         Assert.Empty(UnmarkedCarriers(
         [
             typeof(SendReference),

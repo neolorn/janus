@@ -27,10 +27,10 @@ namespace Janus.Storage.Tests;
 public sealed class NeverLoggedTests
 {
     /// <summary>
-    /// CONV-LOG-003 AC1: the rows' secret columns are marked.
+    /// CONV-LOG-003 AC3: the rows' secret columns are marked.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryColumnCarryingAForbiddenValueIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryColumnCarryingAForbiddenValueIsMarked() =>
         Assert.Empty(Unmarked(
         [
             Member<PasswordRecord>(nameof(PasswordRecord.Hash)),
