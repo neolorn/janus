@@ -383,6 +383,45 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-CFG-007 AC2: a deny of a role carrying system administration, and a grant or a
+    /// deny of it in an organization other than the administrative one, are refused to a
+    /// grant manager without the permission, who still grants another role there.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_007_AC2_ADenyOrAGrantElsewhereOfSystemAdministrationNeedsItAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Administration, Permissions.GrantManage);
+        _deployment.Gate.Grant(actor, Branch, Permissions.GrantManage);
+
+        Answer denied = await GrantedAsync(
+            administrator,
+            "organization",
+            Administration.ToString(),
+            role: SystemAdministrator,
+            deny: true);
+        Answer elsewhere = await GrantedAsync(administrator, "organization", Branch.ToString(), role: SystemAdministrator);
+        Answer deniedElsewhere = await GrantedAsync(
+            administrator,
+            "organization",
+            Branch.ToString(),
+            role: SystemAdministrator,
+            deny: true);
+
+        Assert.All([denied, elsewhere, deniedElsewhere], refused =>
+        {
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        });
+        Assert.Empty(await HeldAsync(Administration));
+        Assert.Empty(await HeldAsync(Branch));
+
+        Answer other = await GrantedAsync(administrator, "organization", Branch.ToString(), role: Reader);
+
+        Assert.Equal(StatusCodes.Status201Created, other.Status);
+    }
+
+    /// <summary>
     /// OPS-CFG-007 AC1, CONV-DESIGN-003 AC6: the role is read again under its lock as the
     /// grant is written, so one that came to carry system administration meanwhile is
     /// not conferred by an administrator without it.
@@ -431,12 +470,12 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002: the reserved account the break-glass session belongs to cannot be
+    /// OPS-BOOT-002 AC9: the reserved account the break-glass session belongs to cannot be
     /// granted anything further, by whoever asks.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountIsGrantedNothingAsync()
+    public async Task OPS_BOOT_002_AC9_TheReservedAccountIsGrantedNothingAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(
             Administration,
@@ -453,13 +492,13 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002, D-166: the reserved account's <c>system-administrator</c> grant is
+    /// OPS-BOOT-002 AC7, D-166: the reserved account's <c>system-administrator</c> grant is
     /// what the break-glass session holds, so a system administrator stepped up is
     /// refused its revocation and the grant stands.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountsAdministrationIsNotRevokedAsync()
+    public async Task OPS_BOOT_002_AC7_TheReservedAccountsAdministrationIsNotRevokedAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(
             Administration,

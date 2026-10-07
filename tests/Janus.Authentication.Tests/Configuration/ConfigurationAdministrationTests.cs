@@ -309,13 +309,13 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-CFG-002 and chapter 10 section 2.1: a loosening is the administrator's, so a
+    /// OPS-CFG-002 AC5 and chapter 10 section 2.1: a loosening is the administrator's, so a
     /// caller without <c>system:administer</c> is refused it whatever the session
     /// proved, and nothing is written.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task OPS_CFG_002_ALooseningIsRefusedWithoutSystemAdministerAsync()
+    public async Task OPS_CFG_002_AC5_ALooseningIsRefusedWithoutSystemAdministerAsync()
     {
         Result changed = await Administration.ChangeAsync(
             Settings.SessionAal2Inactivity,

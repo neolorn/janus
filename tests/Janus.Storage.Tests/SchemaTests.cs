@@ -119,11 +119,11 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
     }
 
     /// <summary>
-    /// OPS-DB-002 AC1: the collation is the library's, so it is created in the library's
+    /// OPS-DB-001 AC4: the collation is the library's, so it is created in the library's
     /// own schema and nowhere else. A column names it by that schema.
     /// </summary>
     [Fact]
-    public async Task OPS_DB_002_AC1_TheCollationLivesInTheLibrarysSchemaAsync()
+    public async Task OPS_DB_001_AC4_TheCollationLivesInTheLibrarysSchemaAsync()
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
 
@@ -249,6 +249,42 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
                 new { subject = Guid.NewGuid() }));
 
         Assert.Equal("ck_accounts_state", refusal.ConstraintName);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC8: the database admits one account carrying the reserved-account
+    /// mark, so a second is refused by the index that holds the mark unique, whoever
+    /// writes it.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC8_ASecondAccountCarryingTheReservedMarkIsRefusedByTheDatabaseAsync()
+    {
+        const string marked =
+            "INSERT INTO identity.accounts (subject, created_at, state, emergency) "
+                + "VALUES (@subject, now(), 'active', true)";
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        var first = Guid.NewGuid();
+
+        await connection.ExecuteAsync(marked, new { subject = first });
+
+        try
+        {
+            PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await connection.ExecuteAsync(marked, new { subject = Guid.NewGuid() }));
+
+            Assert.Equal(PostgresErrorCodes.UniqueViolation, refusal.SqlState);
+            Assert.Equal("ux_accounts_emergency", refusal.ConstraintName);
+        }
+        finally
+        {
+            // The mark is one per database, and the other cases of the class share this
+            // one, so the account goes out with the case that wrote it.
+            await connection.ExecuteAsync(
+                "DELETE FROM identity.accounts WHERE subject = @subject",
+                new { subject = first });
+        }
     }
 
     /// <summary>

@@ -104,14 +104,14 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
-    /// AUTH-FACT-010 AC1 and OPS-BOOT-001: the relying party is settled from the named
+    /// OPS-BOOT-001 AC5 and AUTH-FACT-010 AC1: the relying party is settled from the named
     /// origins by the rule the start applies, before the database is reached, so origins
     /// that share no registrable domain, and an origin that is not an absolute origin,
     /// are each refused with the start's <c>model.startup.rpid</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_FACT_010_AC1_BootstrapRefusesAnIdentifierNoOriginSharesAsync()
+    public async Task OPS_BOOT_001_AC5_BootstrapRefusesAnIdentifierNoOriginSharesAsync()
     {
         string key = Settings.WebAuthnOrigins.Key.ToString();
 
@@ -182,13 +182,13 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
-    /// OPS-SEC-001 and INF-HOST-003: the keys are piped from the secrets manager, never
+    /// OPS-SEC-001 AC4 and INF-HOST-003: the keys are piped from the secrets manager, never
     /// typed, so a command whose standard input is a terminal is refused before it
     /// reads anything.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_001_TheCommandRefusesATerminalAsync()
+    public async Task OPS_SEC_001_AC4_TheCommandRefusesATerminalAsync()
     {
         Invocation run = await Invocation.TypedAsync(Invocation.Bootstrap());
 
@@ -212,6 +212,46 @@ public sealed class BootstrapRefusalTests
         Assert.Empty(run.Output);
         Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
         Assert.Equal("input", Detail(run, "key"));
+    }
+
+    /// <summary>
+    /// OPS-SEC-001 AC4: what is piped in and is not JSON is a command's input that does
+    /// not read, refused as malformed naming the input, and nothing of it is repeated.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_AC4_TheCommandRefusesADocumentThatIsNotJsonAsMalformedAsync()
+    {
+        Invocation run = await Invocation.WrittenAsync(
+            Invocation.Bootstrap(),
+            "connection=" + Nowhere + ";Password=the database credential");
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "member"));
+        Assert.DoesNotContain("the database credential", run.Error, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// OPS-SEC-001 AC4: a document longer than 64 KiB is refused as malformed naming the
+    /// input, though every member of it reads.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_AC4_TheCommandRefusesADocumentOver64KiBAsMalformedAsync()
+    {
+        string document = Invocation.Keys(Nowhere).ToJsonString();
+
+        Invocation run = await Invocation.WrittenAsync(
+            Invocation.Bootstrap(),
+            document + new string(' ', (64 * 1024) + 1 - document.Length));
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "member"));
+        Assert.DoesNotContain(Invocation.KeyEncryptionKey, run.Error, System.StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -287,12 +327,12 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
-    /// API-CONV-002 and CONV-CONTENT-001: a refusal names the member it concerns and
+    /// OPS-SEC-001 AC4, API-CONV-002 and CONV-CONTENT-001: a refusal names the member it concerns and
     /// nothing piped in: no key, and not the connection with its credential.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_001_ARefusalCarriesNoneOfTheDocumentAsync()
+    public async Task OPS_SEC_001_AC4_ARefusalCarriesNoneOfTheDocumentAsync()
     {
         JsonObject document = Invocation.Keys(Nowhere + ";Password=the database credential");
         Assert.True(document.Remove("fingerprintKeys"));

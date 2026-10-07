@@ -83,7 +83,7 @@ internal sealed class KeyDocument
                 {
                     if (read.Length >= Longest)
                     {
-                        return Result.Failure<KeyDocument>(Unavailable("input"));
+                        return Result.Failure<KeyDocument>(Malformed("input"));
                     }
 
                     byte[] grown = new byte[read.Length * 2];
@@ -123,7 +123,7 @@ internal sealed class KeyDocument
         }
         catch (JsonException)
         {
-            return Result.Failure<KeyDocument>(Unavailable("input"));
+            return Result.Failure<KeyDocument>(Malformed("input"));
         }
 
         using (document)

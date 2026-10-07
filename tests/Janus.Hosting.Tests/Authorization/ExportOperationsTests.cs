@@ -86,12 +86,12 @@ public sealed class ExportOperationsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-006, D-045: past the hour's limit an export is refused with the time
+    /// OPS-ALERT-006 AC4, D-045: past the hour's limit an export is refused with the time
     /// the oldest of the hour's exports leaves the window, and admitted again from then.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_006_AnExportPastTheHourlyLimitIsThrottledUntilAPlaceFreesAsync()
+    public async Task OPS_ALERT_006_AC4_AnExportPastTheHourlyLimitIsThrottledUntilAPlaceFreesAsync()
     {
         var clerk = SubjectId.New(_randomness);
 
@@ -184,12 +184,12 @@ public sealed class ExportOperationsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-006, D-045: every admitted export is recorded on its own, naming who
+    /// OPS-ALERT-006 AC3, D-045: every admitted export is recorded on its own, naming who
     /// exported, what, from where and when.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_006_EachAdmittedExportIsIndividuallyAuditedAsync()
+    public async Task OPS_ALERT_006_AC3_EachAdmittedExportIsIndividuallyAuditedAsync()
     {
         var clerk = SubjectId.New(_randomness);
         var organization = new OrganizationId(Guid.CreateVersion7());

@@ -155,6 +155,16 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
         RunAsync(arguments, Encoding.UTF8.GetBytes(document.ToJsonString()), redirected: true, cancellationToken);
 
     /// <summary>
+    /// Runs the application with text piped to standard input as it is written, which
+    /// need not be a document at all.
+    /// </summary>
+    /// <param name="arguments">The arguments, the command's name first.</param>
+    /// <param name="text">What is piped in.</param>
+    /// <returns>What came back.</returns>
+    public static Task<Invocation> WrittenAsync(IReadOnlyList<string> arguments, string text) =>
+        RunAsync(arguments, Encoding.UTF8.GetBytes(text), redirected: true, TestContext.Current.CancellationToken);
+
+    /// <summary>
     /// Runs the application from a terminal, with nothing piped in.
     /// </summary>
     /// <param name="arguments">The arguments, the command's name first.</param>

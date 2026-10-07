@@ -963,13 +963,13 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-002, 09 section 8a (D-183): an erasure of the reserved emergency account
+    /// OPS-BOOT-002 AC9, 09 section 8a (D-183): an erasure of the reserved emergency account
     /// is refused as a missing permission once the account is read, before the session
     /// is asked for a step-up, and the request stays open.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_AnErasureOfTheReservedAccountIsDeniedBeforeTheStepUpAsync()
+    public async Task OPS_BOOT_002_AC9_AnErasureOfTheReservedAccountIsDeniedBeforeTheStepUpAsync()
     {
         PrivacyRequestReceipt receipt =
             await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));

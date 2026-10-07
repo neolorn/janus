@@ -1176,13 +1176,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-003 and AUTH-ABUSE-004: an alert is outside every restriction, so it is
+    /// OPS-ALERT-003 AC5 and AUTH-ABUSE-004: an alert is outside every restriction, so it is
     /// carried with every bucket of every restriction that could count it full, and
     /// counts under none (D-166, 342).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_003_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
+    public async Task OPS_ALERT_003_AC5_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
     {
         _configuration.Set(
             Settings.Restrictions,
@@ -1842,6 +1842,46 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.DoesNotContain("The claim was not written.", line, StringComparison.Ordinal);
 
         _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Single(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC5: a setting that does not read under its key, met by the attempt
+    /// that runs after the send committed, is logged there and goes no further: the send
+    /// answers as it committed and its row is left to the publisher. The publisher's own
+    /// pass, which is a job, fails on the same read as a fault and carries nothing on the
+    /// key's default; the row goes out once the value reads.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AC5_ASettingThatDoesNotReadAfterTheCommitIsLoggedAndItsRowLeftAsync()
+    {
+        using var logs = new LogsInMemory();
+        using ILoggerFactory logging = LoggerFactory.Create(builder => builder.AddProvider(logs));
+
+        _log = logging.CreateLogger<SendPublisher>();
+        _configuration.Unreachable = Settings.OutboxRetryFactor.Key;
+
+        SendReference answered = await SentAsync(Mailed());
+
+        SendDelivery held = Assert.Single(_outbox.Waiting);
+
+        Assert.Equal(answered, held.Reference);
+        Assert.Equal(0, held.Attempts);
+        Assert.Empty(_mail.Taken);
+        Assert.False(_work.Open);
+        _ = Assert.Single(logs.Lines, written => written.Contains(typeof(SendPublisher).FullName!, StringComparison.Ordinal));
+
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(RetriedAsync);
+
+        Assert.Empty(_mail.Taken);
+        Assert.Equal(0, Assert.Single(_outbox.Waiting).Attempts);
+
+        _configuration.Unreachable = null;
 
         Assert.Equal(1, await RetriedAsync());
         Assert.Single(_mail.Taken);

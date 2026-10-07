@@ -77,6 +77,46 @@ public sealed class SchemaValidationTests(DatabaseFixture database) : IClassFixt
         Assert.Empty(schemas);
     }
 
+    /// <summary>
+    /// OPS-MIG-002 AC3: a history that holds one migration more than the build declares
+    /// is what the previous version meets during a rollout, so the check passes and the
+    /// application starts.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_002_AC3_ADatabaseOneMigrationAheadOfTheBuildStartsAsync()
+    {
+        const string ahead = "99991231235959_AddedByTheNextVersion";
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(
+            "INSERT INTO identity." + StoreContext.MigrationsHistoryTable + " (\"MigrationId\", \"ProductVersion\") "
+                + "SELECT @ahead, max(\"ProductVersion\") FROM identity." + StoreContext.MigrationsHistoryTable,
+            new { ahead });
+
+        try
+        {
+            await using StoreContext context = database.Context();
+
+            Result read = await new SchemaValidation(context)
+                .ValidateAsync(TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain(ahead, context.Database.GetMigrations());
+            Assert.Contains(
+                ahead,
+                await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
+            Assert.Null(read.Match(() => (Error?)null, failure => failure));
+        }
+        finally
+        {
+            // The other cases of the class read the same history, so the row goes out
+            // with the case that wrote it.
+            await connection.ExecuteAsync(
+                "DELETE FROM identity." + StoreContext.MigrationsHistoryTable + " WHERE \"MigrationId\" = @ahead",
+                new { ahead });
+        }
+    }
+
     // A second database on the same server, created as the deployment's own is and
     // never migrated: the state OPS-MIG-002 is about.
     private async ValueTask<StoreContext> BehindAsync()

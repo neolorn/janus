@@ -359,13 +359,13 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-CFG-007 AC1: a member of a group holds what it and every group holding it
+    /// OPS-CFG-007 AC4: a member of a group holds what it and every group holding it
     /// hold, so a change of members where one of them holds system administration is
     /// made only by a system administrator.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_CFG_007_AC1_ChangingAnAdministeringGroupNeedsSystemAdministrationAsync()
+    public async Task OPS_CFG_007_AC4_ChangingAnAdministeringGroupNeedsSystemAdministrationAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Administration, Permissions.GroupManage);
         GroupId operators = Id(await CreatedAsync(administrator, "Operators", Administration));
@@ -580,13 +580,13 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-BOOT-002: the reserved account the break-glass session belongs to cannot be
+    /// OPS-BOOT-002 AC9: the reserved account the break-glass session belongs to cannot be
     /// granted anything further, a group's grants included, so it is made a member of
     /// no group and the refusal records nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_BOOT_002_TheReservedAccountJoinsNoGroupAsync()
+    public async Task OPS_BOOT_002_AC9_TheReservedAccountJoinsNoGroupAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));

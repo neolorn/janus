@@ -141,11 +141,11 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-002: the account the break-glass session belongs to is never suspended,
+    /// OPS-BOOT-002 AC9: the account the break-glass session belongs to is never suspended,
     /// by any administrator, and nothing is announced for the refusal.
     /// </summary>
     [Fact]
-    public async Task OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedAsync()
+    public async Task OPS_BOOT_002_AC9_TheEmergencyAccountIsNeverSuspendedAsync()
     {
         _emergency.Account = _member;
 

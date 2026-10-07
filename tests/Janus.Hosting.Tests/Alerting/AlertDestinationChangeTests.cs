@@ -340,11 +340,11 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-CFG-002, OPS-CFG-005: the destination list is a runtime setting, so the
+    /// OPS-ALERT-004a AC6, OPS-CFG-005: the destination list is a runtime setting, so the
     /// change goes through the one operation and is written down with what it replaced.
     /// </summary>
     [Fact]
-    public async Task ChangeAsync_ADestinationChange_IsWrittenDownAsARuntimeChangeAsync()
+    public async Task OPS_ALERT_004a_AC6_ADestinationChangeIsWrittenDownWithBeforeAndAfterAsync()
     {
         await ChangedAsync(SendKind.Email, Elsewhere);
 

@@ -1881,4 +1881,31 @@ public sealed class LibraryStructureTests
         project is "Janus.Authentication.Tests" or "Janus.Authorization.Tests" or "Janus.Privacy.Tests"
             ? ["Janus.Hosting.Tests"]
             : [];
+
+    /// <summary>
+    /// OPS-DATA-001 AC2: every file that writes SQL by hand is the persistence project's
+    /// and sits in the folder of the aggregate whose rows it reads or writes, so no
+    /// project that calls a store carries a statement inline. The one file outside it
+    /// is the conformance suite's, which writes a truth-table case's rows into the
+    /// library-owned tables of the host under test and is called by no operation.
+    /// </summary>
+    [Fact]
+    public void OPS_DATA_001_AC2_HandWrittenSqlIsWrittenOnlyInAnAggregatesFolderOfTheStore()
+    {
+        string store = Path.Combine(Repository.Root, "src", "Janus.Storage");
+
+        string[] elsewhere =
+        [
+            .. Sources()
+                .Where(file => File.ReadAllText(file).Contains("using Dapper;", StringComparison.Ordinal))
+                .Where(file => Path.GetRelativePath(store, Path.GetDirectoryName(file)!) is var folder
+                    && (folder is "."
+                        || folder.StartsWith("..", StringComparison.Ordinal)
+                        || folder.Split(Path.DirectorySeparatorChar)[0] is "Migrations"))
+                .Select(file => Path.GetRelativePath(Repository.Root, file).Replace(Path.DirectorySeparatorChar, '/'))
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Equal(["src/Janus.Conformance/CaseRows.cs"], elsewhere);
+    }
 }
