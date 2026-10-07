@@ -7,11 +7,13 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Callbacks;
 using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -46,6 +48,35 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     private static readonly PhoneNumber Phone = Number("+201001234567");
 
     private static readonly string[] Declared = ["en", "ar"];
+
+    // A deployment whose text messages answer to one restriction that counts each of
+    // them and one marked resend, which counts a send once.
+    private static readonly IReadOnlyList<Restriction> Paced =
+    [
+        new Restriction(
+            "sms.destination",
+            RestrictionKeyKind.Destination,
+            HostKeyName: null,
+            RestrictionPurpose.Any,
+            [new Bucket(10, TimeSpan.FromHours(24), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+        },
+        new Restriction(
+            "sms.resend",
+            RestrictionKeyKind.Destination,
+            HostKeyName: null,
+            RestrictionPurpose.Any,
+            [new Bucket(1, TimeSpan.FromMinutes(3), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+            Resend = true,
+        },
+    ];
+
+    private static readonly RestrictionKey Each = new("sms.destination", RestrictionKeyKind.Destination, Phone.Value);
+
+    private static readonly RestrictionKey Once = new("sms.resend", RestrictionKeyKind.Destination, Phone.Value);
 
     private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
 
@@ -1714,6 +1745,230 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Equal([Noon + TimeSpan.FromMinutes(2)], _ledger.Sends(key));
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-004 AC1 and chapter 10 section 5.16a: a text message owed in two
+    /// declared languages counts each language against a restriction not marked
+    /// <c>resend</c> and the send once against one that is, which judges it as one: its
+    /// bucket of one has room for both texts, and none for the send that follows.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC1_ASendInTwoLanguagesCountsOnceAgainstAResendRestrictionAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+
+        _ = await SentAsync(Texted() with { Language = null });
+
+        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon], _ledger.Sends(Once));
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Result<SendReference> second = await SendAsync(
+            Texted() with { Language = null },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3), RetryAt(second));
+        Assert.Equal([Noon], _ledger.Sends(Once));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC2, INT-SMS-005 AC3: a failure report of one text of a send in
+    /// two languages releases that text's count from the restriction not marked
+    /// <c>resend</c> and leaves the send's one count against the one that is, so the
+    /// next send is still refused; the failure report of the other releases it, and the
+    /// next send is admitted at once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC2_AFailureReportReleasesTheResendCountOnceEveryTextHasFailedAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+
+        _ = await SentAsync(Texted() with { Language = null });
+
+        await ReportedAsync(_sms.Taken[0].Reference, delivered: false);
+
+        Assert.Equal([Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon], _ledger.Sends(Once));
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
+
+        await ReportedAsync(_sms.Taken[1].Reference, delivered: false);
+
+        Assert.Empty(_ledger.Sends(Each));
+        Assert.Empty(_ledger.Sends(Once));
+
+        _ = await SentAsync(Texted());
+
+        Assert.Equal(3, _sms.Taken.Count);
+    }
+
+    /// <summary>
+    /// INT-SMS-005 AC3, AUTH-ABUSE-004 AC20: a report that a text was delivered releases
+    /// the one count of a send of purpose <c>secondfactor</c> from the restriction
+    /// marked <c>resend</c> and changes nothing else; for a send of any other purpose it
+    /// changes nothing at all, since an ask that sends nothing counts too and an early
+    /// release would tell its asker that a message went out (AUTH-ABUSE-003).
+    /// </summary>
+    /// <param name="message">The message.</param>
+    /// <param name="purpose">The purpose it is undertaken under.</param>
+    /// <param name="released">Whether the report releases the send's one count.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(MessageKind.SecondStepCode, RestrictionPurpose.SecondFactor, true)]
+    [InlineData(MessageKind.SignInLink, RestrictionPurpose.SignIn, false)]
+    [InlineData(MessageKind.RecoveryLink, RestrictionPurpose.SignIn, false)]
+    [InlineData(MessageKind.VerificationCode, RestrictionPurpose.Verification, false)]
+    public async Task INT_SMS_005_AC3_ADeliveryReportReleasesTheResendCountOfASecondFactorSendAloneAsync(
+        MessageKind message,
+        RestrictionPurpose purpose,
+        bool released)
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+
+        SendReference reference = await SentAsync(Texted() with { Message = message, Purpose = purpose });
+
+        await ReportedAsync(reference.Value, delivered: true);
+
+        DateTimeOffset[] standing = released ? [] : [Noon];
+
+        Assert.Equal([Noon], _ledger.Sends(Each));
+        Assert.Equal(standing, _ledger.Sends(Once));
+        Assert.Equal(
+            released,
+            (await SendAsync(
+                Texted() with { Message = message, Purpose = purpose },
+                TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC16: a send all of whose texts fail for good, their attempts
+    /// spent, releases each text's count and the send's one count from the restriction
+    /// marked <c>resend</c>.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC16_ASendWhoseTextsAllFailForGoodReleasesItsResendCountAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
+        _sms.Accepts = false;
+
+        _ = await SentAsync(Texted() with { Language = null });
+
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon], _ledger.Sends(Once));
+
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_ledger.Sends(Each));
+        Assert.Empty(_ledger.Sends(Once));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC16, AC9: a retried text is judged with its own count and its
+    /// send's one count set aside, so the restriction marked <c>resend</c> does not
+    /// refuse the send its own retry; admitted, each counts at the retry's instant in
+    /// place of its earlier count.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC16_ARetriedTextIsJudgedWithItsSendsOneCountSetAsideAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _sms.Accepts = false;
+
+        _ = await SentAsync(Texted());
+
+        _sms.Accepts = true;
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Single(_sms.Taken);
+        Assert.Equal([Noon + TimeSpan.FromSeconds(30)], _ledger.Sends(Each));
+        Assert.Equal([Noon + TimeSpan.FromSeconds(30)], _ledger.Sends(Once));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC9, AC16: a text that could not be judged at its retry holds no
+    /// count of its own while it waits and has not failed for good, so it stays of its
+    /// send and the send's one count stands; judged at its next attempt, it counts at
+    /// that instant and the send once, in place of the earlier count.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC9_ATextNotJudgedAtItsRetryStaysOfItsSendAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _sms.Takes = 1;
+
+        _ = await SentAsync(Texted() with { Language = null });
+
+        // A restriction whose key no supplier answers for: the retry cannot be judged.
+        _configuration.Set<IReadOnlyList<Restriction>>(
+            Settings.Restrictions,
+            [
+                .. Paced,
+                new Restriction(
+                    "tenant.sends",
+                    RestrictionKeyKind.Host,
+                    "tenant",
+                    RestrictionPurpose.Any,
+                    [new Bucket(1, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
+            ]);
+        _sms.Takes = int.MaxValue;
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Single(_outbox.Waiting);
+        Assert.Equal([Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon], _ledger.Sends(Once));
+
+        _configuration.Set(Settings.Restrictions, Paced);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal([Noon, Noon + TimeSpan.FromSeconds(90)], _ledger.Sends(Each));
+        Assert.Equal([Noon + TimeSpan.FromSeconds(90)], _ledger.Sends(Once));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC14, AUTH-ABUSE-003: an ask that sends nothing is counted as its
+    /// message would be, each language against a restriction not marked <c>resend</c>
+    /// and the ask once against one that is, under references no report names and no
+    /// code or link answers; the next ask is refused as it would be after a send.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC14_AnAskThatSendsNothingCountsOnceAgainstAResendRestrictionAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+
+        (await DrawAsync(Texted() with { Language = null }, TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The ask was refused: {error.Code}."));
+
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_sms.Taken);
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
+        Assert.Equal([Noon], _ledger.Sends(Once));
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Result<SendReference> next = await SendAsync(
+            Texted() with { Language = null },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(next));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3), RetryAt(next));
+    }
+
     private static IEnumerable<Type> Carried(MemberInfo member) =>
         member switch
         {
@@ -1805,6 +2060,16 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             ?? throw new Xunit.Sdk.XunitException("The refusal carries no retryAt."),
             CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind);
+
+    // One delivery report taken as the callback takes it.
+    private async Task ReportedAsync(string reference, bool delivered) =>
+        (await new DeliveryReports(
+                new CallbackAdmission(_configuration, new CallbackLedgerInMemory(), new CallbackEventsInMemory(), _events, _clock),
+                _ledger,
+                _work)
+            .ReportAsync("203.0.113.9", reference, delivered, TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The report was refused: {error.Code}."));
 
     private async Task<int> RetriedAsync() =>
         (await Path.Publisher.RetryAsync(Carrier, TestContext.Current.CancellationToken)).Match(

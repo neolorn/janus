@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A restriction marked `resend` judges and counts a send once, whatever the number of
+  languages it goes out in, where every other restriction still judges a text message
+  owed in several languages with the weight of their number and counts each. That one
+  count is released when every text of the send has failed for good, and for a send of
+  purpose `secondfactor` when a delivery report says a text of it was delivered. A
+  failure report of one text releases that text's count and credit from the
+  restrictions not marked `resend` alone, and a delivery report changes nothing else.
+  An ask that sends nothing counts once against such a restriction too.
 - A restriction may be marked `resend` (`Restriction.Resend`): `PUT
   /admin/restrictions/{name}` takes an optional boolean `resend`, absent read as false
   and anything else refused 400 `api.request.malformed` naming `resend`, and `GET

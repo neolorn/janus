@@ -80,18 +80,28 @@ internal sealed class SendLedgerInMemory : ISendLedger
 
         Held.AddRange(keys);
 
+        Counted? retried = null;
+
         if (setAside is not null)
         {
-            _ = await ReleaseAsync(setAside, cancellationToken);
+            await SetAsideAsync(setAside, cancellationToken);
+            _ = _records.TryGetValue(Convert.ToHexString(setAside), out retried);
         }
 
         var standing = new Dictionary<RestrictionKey, SendCounter>();
 
         foreach (RestrictionKey key in keys)
         {
-            standing[key] = new SendCounter(
-                _sends.TryGetValue(key, out List<DateTimeOffset>? times) ? [.. times] : [],
-                Credit(key));
+            List<DateTimeOffset> counted = _sends.TryGetValue(key, out List<DateTimeOffset>? times) ? [.. times] : [];
+
+            // What the send of a message judged again counted once is left out of what
+            // it is judged on, and stands until the message is admitted or fails.
+            if (retried is { ResendAt: DateTimeOffset once } && retried.Resend.Contains(key))
+            {
+                _ = counted.Remove(once);
+            }
+
+            standing[key] = new SendCounter(counted, Credit(key));
         }
 
         return standing;
@@ -118,44 +128,89 @@ internal sealed class SendLedgerInMemory : ISendLedger
 
     /// <inheritdoc/>
     public ValueTask RecordAsync(
-        byte[] reference,
-        IReadOnlyCollection<SendCount> counted,
-        IReadOnlyCollection<RestrictionKey> spent,
+        IReadOnlyList<CountedMessage> messages,
+        SendPlan once,
+        bool secondFactor,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         Undoing();
 
-        foreach (SendCount count in counted)
-        {
-            if (!_sends.TryGetValue(count.Key, out List<DateTimeOffset>? times))
-            {
-                times = [];
-                _sends[count.Key] = times;
-            }
+        // A message judged again stays of the send it was first counted under; at a
+        // first admission the first message names the send.
+        string first = Convert.ToHexString(messages[0].Reference);
+        string send = _records.TryGetValue(first, out Counted? standing) ? standing.Send : first;
+        string? answer = Of(send).Select(one => one.Value.Answer).FirstOrDefault(one => one is not null);
 
-            times.RemoveAll(sent => sent <= at - count.Retain);
-            times.Add(at);
+        TakeBackOnce(send);
+
+        foreach (SendCount count in once.Counted)
+        {
+            Count(count, at);
         }
 
-        foreach (RestrictionKey key in spent)
+        foreach (RestrictionKey key in once.Spent)
         {
-            Spent.Add(key);
-
-            if (_credit.TryGetValue(key, out int credit) && credit <= 1)
-            {
-                _credit.Remove(key);
-            }
-            else if (credit > 1)
-            {
-                _credit[key] = credit - 1;
-            }
+            Spend(key);
         }
 
-        TimeSpan settles = counted.Select(count => count.Retain).DefaultIfEmpty(TimeSpan.Zero).Max();
+        RestrictionKey[] resend = [.. once.Counted.Select(count => count.Key)];
+        TimeSpan kept = once.Counted.Select(count => count.Retain).DefaultIfEmpty(TimeSpan.Zero).Max();
 
-        _records[Convert.ToHexString(reference)] =
-            new Counted([.. counted.Select(count => count.Key)], [.. spent], at, at + settles);
+        foreach (CountedMessage message in messages)
+        {
+            foreach (SendCount count in message.Plan.Counted)
+            {
+                Count(count, at);
+            }
+
+            foreach (RestrictionKey key in message.Plan.Spent)
+            {
+                Spend(key);
+            }
+
+            TimeSpan settles = message.Plan.Counted.Select(count => count.Retain).Append(kept).Max();
+
+            _records[Convert.ToHexString(message.Reference)] = new Counted(
+                send,
+                [.. message.Plan.Counted.Select(count => count.Key)],
+                [.. message.Plan.Spent],
+                at,
+                at + settles,
+                Admitted: true,
+                resend,
+                resend.Length > 0 ? at : null,
+                secondFactor,
+                answer);
+        }
+
+        foreach ((string reference, Counted other) in Of(send))
+        {
+            _records[reference] = other with
+            {
+                Resend = resend,
+                ResendAt = resend.Length > 0 ? at : null,
+                SettlesAt = other.SettlesAt > at + kept ? other.SettlesAt : at + kept,
+            };
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask SetAsideAsync(byte[] reference, CancellationToken cancellationToken)
+    {
+        string held = Convert.ToHexString(reference);
+
+        if (!_records.TryGetValue(held, out Counted? record))
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        Undoing();
+        TakeBack(record);
+
+        _records[held] = record with { Keys = [], Spent = [], Admitted = false };
 
         return ValueTask.CompletedTask;
     }
@@ -165,8 +220,10 @@ internal sealed class SendLedgerInMemory : ISendLedger
     {
         Undoing();
 
+        // A send is forgotten whole: a message of it stands while any other still could
+        // be reported on.
         foreach (string settled in _records
-            .Where(record => record.Value.SettlesAt < now)
+            .Where(record => Of(record.Value.Send).All(one => one.Value.SettlesAt < now))
             .Select(record => record.Key)
             .ToArray())
         {
@@ -178,7 +235,8 @@ internal sealed class SendLedgerInMemory : ISendLedger
 
     /// <inheritdoc/>
     public ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_records.ContainsKey(Convert.ToHexString(reference)));
+        ValueTask.FromResult(
+            _records.TryGetValue(Convert.ToHexString(reference), out Counted? record) && record.Admitted);
 
     /// <inheritdoc/>
     public ValueTask<bool> ReleaseAsync(byte[] reference, CancellationToken cancellationToken)
@@ -191,30 +249,67 @@ internal sealed class SendLedgerInMemory : ISendLedger
         }
 
         Undoing();
+        TakeBack(record);
 
-        foreach (RestrictionKey key in record.Keys)
+        // The last message of a send to fail for good takes what the send counted once
+        // with it.
+        if (Of(record.Send).Length == 1)
         {
-            if (!_sends.TryGetValue(key, out List<DateTimeOffset>? times))
-            {
-                continue;
-            }
-
-            times.Remove(record.At);
-
-            if (times.Count == 0)
-            {
-                _sends.Remove(key);
-            }
-        }
-
-        foreach (RestrictionKey key in record.Spent)
-        {
-            _credit[key] = Credit(key) + 1;
+            TakeBackOnce(record.Send);
         }
 
         _records.Remove(held);
 
         return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> DeliveredAsync(byte[] reference, CancellationToken cancellationToken)
+    {
+        if (!_records.TryGetValue(Convert.ToHexString(reference), out Counted? record))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        if (record.SecondFactor)
+        {
+            Undoing();
+            TakeBackOnce(record.Send);
+        }
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask BindAsync(byte[] reference, byte[] answer, CancellationToken cancellationToken)
+    {
+        Undoing();
+
+        foreach ((string held, Counted record) in Of(Convert.ToHexString(reference)))
+        {
+            _records[held] = record with { Answer = Convert.ToHexString(answer) };
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask AnsweredAsync(byte[] answer, CancellationToken cancellationToken)
+    {
+        string presented = Convert.ToHexString(answer);
+
+        Undoing();
+
+        foreach (string send in _records.Values
+            .Where(record => string.Equals(record.Answer, presented, StringComparison.Ordinal))
+            .Select(record => record.Send)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray())
+        {
+            TakeBackOnce(send);
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -259,10 +354,101 @@ internal sealed class SendLedgerInMemory : ISendLedger
         });
     }
 
-    // One send as the ledger counts it: the keys, the credit spent and the instants.
+    // The messages counted under one send, each with the reference it answers to.
+    private KeyValuePair<string, Counted>[] Of(string send) =>
+        [.. _records.Where(record => string.Equals(record.Value.Send, send, StringComparison.Ordinal))];
+
+    private void Count(SendCount count, DateTimeOffset at)
+    {
+        if (!_sends.TryGetValue(count.Key, out List<DateTimeOffset>? times))
+        {
+            times = [];
+            _sends[count.Key] = times;
+        }
+
+        times.RemoveAll(sent => sent <= at - count.Retain);
+        times.Add(at);
+    }
+
+    private void Spend(RestrictionKey key)
+    {
+        Spent.Add(key);
+
+        if (_credit.TryGetValue(key, out int credit) && credit <= 1)
+        {
+            _credit.Remove(key);
+        }
+        else if (credit > 1)
+        {
+            _credit[key] = credit - 1;
+        }
+    }
+
+    private void Uncount(RestrictionKey key, DateTimeOffset at)
+    {
+        if (!_sends.TryGetValue(key, out List<DateTimeOffset>? times))
+        {
+            return;
+        }
+
+        times.Remove(at);
+
+        if (times.Count == 0)
+        {
+            _sends.Remove(key);
+        }
+    }
+
+    // One message taken back out of every bucket it counted against, and the credit it
+    // spent given back.
+    private void TakeBack(Counted record)
+    {
+        foreach (RestrictionKey key in record.Keys)
+        {
+            Uncount(key, record.At);
+        }
+
+        foreach (RestrictionKey key in record.Spent)
+        {
+            _credit[key] = Credit(key) + 1;
+        }
+    }
+
+    // What a send counted once taken back, and no message of it holding it any longer.
+    private void TakeBackOnce(string send)
+    {
+        KeyValuePair<string, Counted>[] messages = Of(send);
+
+        if (messages.Select(one => one.Value).FirstOrDefault(one => one.ResendAt is not null) is not Counted counted
+            || counted.ResendAt is not DateTimeOffset at)
+        {
+            return;
+        }
+
+        foreach (RestrictionKey key in counted.Resend)
+        {
+            Uncount(key, at);
+        }
+
+        foreach ((string reference, Counted record) in messages)
+        {
+            _records[reference] = record with { Resend = [], ResendAt = null };
+        }
+    }
+
+    // One message as the ledger counts it: the send it is of, the keys, the credit
+    // spent, the instants, whether it holds the count of an admission, what its send
+    // counted once and when, whether a delivered report releases that, and what the
+    // send is answered by.
     private sealed record Counted(
+        string Send,
         RestrictionKey[] Keys,
         RestrictionKey[] Spent,
         DateTimeOffset At,
-        DateTimeOffset SettlesAt);
+        DateTimeOffset SettlesAt,
+        bool Admitted,
+        RestrictionKey[] Resend,
+        DateTimeOffset? ResendAt,
+        bool SecondFactor,
+        string? Answer);
 }

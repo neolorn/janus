@@ -31,7 +31,25 @@ internal sealed class SendConfiguration : IEntityTypeConfiguration<SendRecord>
         builder.Property(send => send.SentAt).HasColumnName("sent_at");
         builder.Property(send => send.SettlesAt).HasColumnName("settles_at");
 
+        builder.Property(send => send.Send)
+            .HasColumnName("send")
+            .HasMaxLength(Fingerprint.Length);
+
+        builder.Property(send => send.Admitted).HasColumnName("admitted");
+        builder.Property(send => send.Resend).HasColumnName("resend");
+        builder.Property(send => send.ResendAt).HasColumnName("resend_at");
+        builder.Property(send => send.SecondFactor).HasColumnName("second_factor");
+
+        builder.Property(send => send.Answer)
+            .HasColumnName("answer")
+            .HasMaxLength(Fingerprint.Length);
+
         // The settled are swept, so the table holds only what a report could change.
         builder.HasIndex(send => send.SettlesAt).HasDatabaseName("ix_sends_settles_at");
+
+        // The messages of one send are read together, and the sends a code or a link
+        // answers are found by what names it.
+        builder.HasIndex(send => send.Send).HasDatabaseName("ix_sends_send");
+        builder.HasIndex(send => send.Answer).HasDatabaseName("ix_sends_answer");
     }
 }

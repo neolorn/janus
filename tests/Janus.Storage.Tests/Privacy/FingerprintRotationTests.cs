@@ -331,16 +331,22 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
             await new ThrottleLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.9", standing: 0, Noon, cancellationToken);
             await new SendLedger(counting, new DataConnections(counting), Deployment.Fingerprints).RecordAsync(
-                RandomNumberGenerator.GetBytes(32),
                 [
-                    new SendCount(
-                        new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, "+201001234579"),
-                        TimeSpan.FromDays(1)),
-                    new SendCount(
-                        new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.9"),
-                        TimeSpan.FromDays(1)),
+                    new CountedMessage(
+                        RandomNumberGenerator.GetBytes(32),
+                        new SendPlan(
+                            [
+                                new SendCount(
+                                    new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, "+201001234579"),
+                                    TimeSpan.FromDays(1)),
+                                new SendCount(
+                                    new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.9"),
+                                    TimeSpan.FromDays(1)),
+                            ],
+                            [])),
                 ],
-                [],
+                new SendPlan([], []),
+                secondFactor: false,
                 Noon,
                 cancellationToken);
             await new RegistrationSourceLedger(counting, Deployment.Fingerprints)

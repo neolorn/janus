@@ -811,10 +811,18 @@ public sealed class ModelTests
 
             // Not an account field: the message a transport took (AUTH-ABUSE-004,
             // INT-SMS-005), held by the hash of its correlation reference so that a
-            // delivery report can take its counts back out.
+            // delivery report can take its counts back out, with the send it is of, what
+            // that send counts once against the restrictions marked resend, and what
+            // names the code or the link whose answer releases it (10 section 5.16a).
+            "sends.admitted",
+            "sends.answer",
             "sends.counted",
             "sends.fingerprint_version",
             "sends.reference",
+            "sends.resend",
+            "sends.resend_at",
+            "sends.second_factor",
+            "sends.send",
             "sends.sent_at",
             "sends.settles_at",
             "sends.spent",

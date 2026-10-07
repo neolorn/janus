@@ -77,9 +77,11 @@ internal sealed class GovernedSend(
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     /// <remarks>
     /// AUTH-ABUSE-002 AC3: the send is judged exactly as <see cref="UndertakeAsync"/>
-    /// judges the message it stands for, the gateway floor included, and counted once
-    /// for each message it would have been, each under a reference no delivery report
-    /// will ever name, so what it counts is kept until its buckets are empty.
+    /// judges the message it stands for, the gateway floor included, and counted as it
+    /// would have been, once for each message and the send once against a restriction
+    /// marked <c>resend</c>, each message under a reference no delivery report will ever
+    /// name and no code or link answers, so what it counts is kept until its buckets are
+    /// empty.
     /// </remarks>
     public async ValueTask<Result> DrawAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
@@ -96,22 +98,19 @@ internal sealed class GovernedSend(
             return Result.Failure(failure);
         }
 
-        IReadOnlyList<SendPlan> plans = (await admission
+        SendJudgement judged = (await admission
                 .JudgeAsync(message, owed.Count, setAside: null, now, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<SendPlan>>(error, ref failure));
+            .Match(value => value, error => Held<SendJudgement>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure(failure);
         }
 
-        foreach (SendPlan plan in plans)
-        {
-            await admission
-                .CountAsync(SendReference.Draw(randomness), plan, now, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        await admission
+            .CountAsync([.. owed.Select(_ => SendReference.Draw(randomness))], judged, now, cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -140,10 +139,10 @@ internal sealed class GovernedSend(
             return Result.Failure<IReadOnlyList<SendDelivery>>(failure);
         }
 
-        IReadOnlyList<SendPlan> plans = (await admission
+        SendJudgement judged = (await admission
                 .JudgeAsync(message, owed.Count, setAside: null, now, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<SendPlan>>(error, ref failure));
+            .Match(value => value, error => Held<SendJudgement>(error, ref failure));
 
         if (failure is not null)
         {
@@ -175,7 +174,6 @@ internal sealed class GovernedSend(
                 attempted ? initial : TimeSpan.Zero);
 
             await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
-            await admission.CountAsync(reference, plans[index], now, cancellationToken).ConfigureAwait(false);
 
             if (attempted)
             {
@@ -187,6 +185,12 @@ internal sealed class GovernedSend(
 
             admitted.Add(delivery);
         }
+
+        // AUTH-ABUSE-004: the send counts from its admission, each message against the
+        // restrictions that count each and the send once against those marked resend.
+        await admission
+            .CountAsync([.. admitted.Select(one => one.Reference)], judged, now, cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success<IReadOnlyList<SendDelivery>>(admitted);
     }
