@@ -16,6 +16,7 @@ using Janus.Hosting.Tests.Authorization;
 using Janus.Hosting.Tests.Bff;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Janus.Hosting.Tests;
@@ -24,9 +25,10 @@ namespace Janus.Hosting.Tests;
 /// What the shipped assemblies may expose, derive from and carry: public types in the
 /// contract's projects alone, one internal sealed implementation of each service
 /// contract whose operations meet the gate first, one public registration, no
-/// controller, no validation attribute, and no member that takes a typed value as the
-/// type it is stored in (LIB-API-002, CONV-LAYOUT-002, CONV-DESIGN-002, CONV-DESIGN-004,
-/// CONV-DESIGN-006, CONV-DESIGN-007, CONV-CODE-006).
+/// controller, no validation attribute, no member that takes a typed value as the type
+/// it is stored in, and no log entry carrying a value its message does not name
+/// (LIB-API-002, CONV-LAYOUT-002, CONV-DESIGN-002, CONV-DESIGN-004, CONV-DESIGN-006,
+/// CONV-DESIGN-007, CONV-CODE-006, CONV-LOG-001).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
@@ -260,6 +262,12 @@ public sealed class PublicSurfaceTests
     private static readonly Regex Parameter = new(
         @"(?<type>[\w.]+)(?:<.*>)?\??\s+(?<name>\w+)\s*(?:=.*)?$",
         RegexOptions.CultureInvariant | RegexOptions.Singleline,
+        TimeSpan.FromSeconds(5));
+
+    // One field an entry's message names.
+    private static readonly Regex Field = new(
+        @"\{(?<name>\w+)\}",
+        RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
     /// <summary>
@@ -839,6 +847,37 @@ public sealed class PublicSurfaceTests
         Assert.Empty(extensions);
         Assert.Empty(unreferenced);
         Assert.Empty(packaged);
+    }
+
+    /// <summary>
+    /// CONV-LOG-001 AC2: every value a log method of a shipped assembly is handed is a
+    /// field its entry names, and every field an entry names is a value the method is
+    /// handed, so that no value of an entry is reachable only by reading its sentence.
+    /// </summary>
+    [Fact]
+    public void CONV_LOG_001_AC2_EveryValueAnEntryCarriesIsANamedField()
+    {
+        (MethodInfo Method, string Message)[] entries =
+        [
+            .. ShippedTypes
+                .SelectMany(type => type.GetMethods(Declared))
+                .Select(method => (Method: method, Entry: method.GetCustomAttribute<LoggerMessageAttribute>()))
+                .Where(logged => logged.Entry is not null)
+                .Select(logged => (logged.Method, logged.Entry!.Message)),
+        ];
+
+        IEnumerable<string> unnamed = entries
+            .Where(entry => !Field.Matches(entry.Message)
+                .Select(field => field.Groups["name"].Value)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(entry.Method.GetParameters()
+                    .Where(parameter => !typeof(ILogger).IsAssignableFrom(parameter.ParameterType)
+                        && !typeof(Exception).IsAssignableFrom(parameter.ParameterType))
+                    .Select(parameter => parameter.Name!)))
+            .Select(entry => entry.Method.DeclaringType!.FullName + "." + entry.Method.Name);
+
+        Assert.NotEmpty(entries);
+        Assert.Empty(unnamed);
     }
 
     private static Assembly Load(string name) => Assembly.Load(new AssemblyName(name));

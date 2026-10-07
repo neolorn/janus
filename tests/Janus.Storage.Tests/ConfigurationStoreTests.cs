@@ -203,13 +203,13 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     }
 
     /// <summary>
-    /// OPS-CFG-008 and `10` section 4: the row carries the key's written form, so a row
-    /// that does not parse is a fault, for a key that exists once, for a member of a
-    /// family and among the members written: the read throws, naming the key and never
-    /// the stored text, and no default stands in for the value.
+    /// CONV-DESIGN-007 AC4, OPS-CFG-008 and `10` section 4: the row carries the key's
+    /// written form, so a row that does not parse is a fault, for a key that exists
+    /// once, for a member of a family and among the members written: the read throws,
+    /// naming the key and never the stored text, and no default stands in for the value.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync()
+    public async Task CONV_DESIGN_007_AC4_AStoredValueThatDoesNotReadIsAFaultAsync()
     {
         await using StoreContext context = database.Context();
 

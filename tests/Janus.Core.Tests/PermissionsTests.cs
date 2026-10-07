@@ -56,6 +56,19 @@ public sealed class PermissionsTests
     }
 
     /// <summary>
+    /// REF-001 AC4: a permission the library declares that is no row of chapter 10
+    /// section 2.1 fails here. The test reads chapter 10 alone.
+    /// </summary>
+    [Fact]
+    public void REF_001_AC4_EveryPermissionTheLibraryDeclaresIsARowOfTheReference()
+    {
+        string[] declared = [.. Permissions.All.Select(permission => permission.ToString())];
+
+        Assert.NotEmpty(declared);
+        Assert.Empty(declared.Except(ReferenceRows.ChapterPermissions, StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// The catalogue is the list, so a permission added to the library appears in both
     /// or in neither.
     /// </summary>

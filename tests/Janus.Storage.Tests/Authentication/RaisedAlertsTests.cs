@@ -108,7 +108,7 @@ public sealed class RaisedAlertsTests(DatabaseFixture database) : IClassFixture<
     /// next pass take it; and an outcome whose claim was taken over changes nothing.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC9_ARaisedConditionIsClaimedByOnePassAsync()
+    public async Task INF_BG_001_AC4_ARaisedConditionIsClaimedByOnePassAsync()
     {
         await EmptiedAsync();
 

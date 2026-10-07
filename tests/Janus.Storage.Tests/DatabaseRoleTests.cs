@@ -468,6 +468,26 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// INF-DB-003 AC1: the credential the application runs under creates nothing in the
+    /// library's schema, and alters and drops nothing it holds.
+    /// </summary>
+    /// <param name="statement">A statement that would alter the schema.</param>
+    [Theory]
+    [InlineData("CREATE TABLE identity.spare (id integer)")]
+    [InlineData("CREATE INDEX ix_spare ON identity.accounts (created_at)")]
+    [InlineData("ALTER TABLE identity.accounts DROP CONSTRAINT ck_accounts_state")]
+    [InlineData("DROP SCHEMA identity CASCADE")]
+    public async Task INF_DB_003_AC1_TheApplicationCredentialRunsNoSchemaAlteringStatementAsync(string statement)
+    {
+        await using NpgsqlConnection connection = await AsAsync("identity_app");
+
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(statement));
+
+        Assert.Equal(InsufficientPrivilege, refused.SqlState);
+    }
+
+    /// <summary>
     /// A retention below the floor its key carries is refused, so the caller cannot
     /// shorten retention by argument.
     /// </summary>

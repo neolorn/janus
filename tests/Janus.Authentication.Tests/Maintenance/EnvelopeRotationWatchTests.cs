@@ -117,14 +117,14 @@ public sealed class EnvelopeRotationWatchTests
     }
 
     /// <summary>
-    /// DR-009a AC1, AC6: a maintenance log entry for the envelope operation, with no
+    /// DR-009a AC6, AC1: a maintenance log entry for the envelope operation, with no
     /// rotation of the key-encryption key behind it, leaves the cryptoperiod raised under
     /// <c>kek-cryptoperiod</c>, naming the version, when it was rotated in and when its
     /// cryptoperiod ends.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task DR_009a_AC1_ALogEntryWithoutARotationLeavesTheCryptoperiodRaisedAsync()
+    public async Task DR_009a_AC6_ALogEntryWithoutARotationLeavesTheCryptoperiodRaisedAsync()
     {
         DateTimeOffset rotated = Noon.AddYears(-1).AddDays(-3);
 
@@ -197,7 +197,7 @@ public sealed class EnvelopeRotationWatchTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task DR_009a_AC1_AFingerprintKeyRotationDoesNotEndTheWarningAsync()
+    public async Task DR_009a_AC6_AFingerprintKeyRotationDoesNotEndTheWarningAsync()
     {
         await RecordedAsync(MaintenanceTask.EnvelopeRotation, Noon.AddDays(-1));
         _store.Bootstrapped = Noon.AddYears(-2);

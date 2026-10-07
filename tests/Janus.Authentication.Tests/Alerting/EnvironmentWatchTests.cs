@@ -100,13 +100,13 @@ public sealed class EnvironmentWatchTests
     }
 
     /// <summary>
-    /// INF-HOST-001 AC2: a clock nothing measures is not known to be within the
+    /// INF-HOST-001 AC3: a clock nothing measures is not known to be within the
     /// tolerance, so a deployment that registered no reference, or one that holds no
     /// measurement, is raised as a degradation.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INF_HOST_001_AC2_AnUnmeasuredClockIsRaisedAsADegradationAsync()
+    public async Task INF_HOST_001_AC3_AnUnmeasuredClockIsRaisedAsADegradationAsync()
     {
         await WatchedAsync(new ClockDriftWatch(reference: null, _configuration, _alerts, _clock).WatchAsync);
 
@@ -154,13 +154,13 @@ public sealed class EnvironmentWatchTests
     }
 
     /// <summary>
-    /// INF-TLS-003 AC2: a renewal nothing watches is not known to work, so a deployment
+    /// INF-TLS-003 AC4: a renewal nothing watches is not known to work, so a deployment
     /// that registered nothing over its renewer, or one whose outcome cannot be read, is
     /// raised as a degradation.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INF_TLS_003_AC2_AnUnwatchedRenewalIsRaisedAsADegradationAsync()
+    public async Task INF_TLS_003_AC4_AnUnwatchedRenewalIsRaisedAsADegradationAsync()
     {
         await WatchedAsync(new CertificateRenewalWatch(renewal: null, _alerts, _clock).WatchAsync);
 

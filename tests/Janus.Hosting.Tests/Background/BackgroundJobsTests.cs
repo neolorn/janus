@@ -382,13 +382,13 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
-    /// IDN-PRIN-001 AC3 (D-166, 304): every job hands the context it is run as to the
-    /// method its work runs, and that method refuses a principal whose operation is not
-    /// the job's before it reads or changes anything.
+    /// INF-BG-002 AC3, IDN-PRIN-001 AC3 (D-166, 304): every job hands the context it is
+    /// run as to the method its work runs, and that method refuses a principal whose
+    /// operation is not the job's before it reads or changes anything.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_PRIN_001_AC3_EveryJobRefusesAPrincipalOfAnotherOperationAsync()
+    public async Task INF_BG_002_AC3_EveryJobRefusesAPrincipalOfAnotherOperationAsync()
     {
         await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon);
 

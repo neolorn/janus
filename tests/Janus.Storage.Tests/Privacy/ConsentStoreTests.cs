@@ -69,13 +69,13 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
-    /// PRIV-CONS-001 AC1, PRIV-CONS-002 AC1: a consent given at registration is added in
+    /// CONV-DESIGN-003 AC11, PRIV-CONS-002 AC1: a consent given at registration is added in
     /// the unit of work that adds its account, so the account is written before the
     /// record that refers to it and both are held once it commits.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_CONS_001_AC1_AConsentAddedWithItsAccountInOneUnitOfWorkIsHeldAsync()
+    public async Task CONV_DESIGN_003_AC11_AnAccountAndAConsentNamingItCommitTogetherAsync()
     {
         SubjectId subject = Subjects.New();
 

@@ -40,6 +40,12 @@ internal static class ReferenceRows
         Names(Rows(Section(Lines(Reference), "## 1. "), "Code"));
 
     /// <summary>
+    /// The permissions chapter 10 section 2.1 holds a live row for.
+    /// </summary>
+    public static IReadOnlySet<string> ChapterPermissions { get; } =
+        Names(Rows(Subsection(Section(Lines(Reference), "## 2. "), "### 2.1 "), "Permission"));
+
+    /// <summary>
     /// The keys chapter 10 section 4 holds a live row for, a family written as its
     /// prefix and one placeholder.
     /// </summary>

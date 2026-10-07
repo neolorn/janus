@@ -243,7 +243,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
     /// records nothing.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC9_ADeliveryIsClaimedByOnePassAndWrittenOnlyUnderItsClaimAsync()
+    public async Task INF_BG_001_AC4_ADeliveryIsClaimedByOnePassAndWrittenOnlyUnderItsClaimAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
         var delivery = Delivery.Of(subject, SubjectEventKind.ErasureRequested, Noon);

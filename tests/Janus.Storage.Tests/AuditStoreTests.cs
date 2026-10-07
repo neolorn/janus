@@ -691,11 +691,12 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
-    /// IDN-PRIN-001 AC4, PRIV-BREACH-002: the trail read by subject names the principal of
-    /// the background work that acted on the account and the reason it stated.
+    /// INF-BG-002 AC2, IDN-PRIN-001 AC4, PRIV-BREACH-002: the trail read by subject names
+    /// the principal of the background work that acted on the account and the reason it
+    /// stated.
     /// </summary>
     [Fact]
-    public async Task IDN_PRIN_001_AC4_TheTrailNamesTheBackgroundPrincipalAndItsReasonAsync()
+    public async Task INF_BG_002_AC2_TheTrailNamesTheBackgroundPrincipalAndItsReasonAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Now());
         var principal = SystemPrincipal.ForDeployment("account-deletion", "IDN-LIFE-014", SystemOperation.ExpirySweep);

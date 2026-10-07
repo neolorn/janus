@@ -25,19 +25,19 @@ namespace Janus.Hosting.Tests;
 public sealed class NeverLoggedTests
 {
     /// <summary>
-    /// CONV-LOG-003 AC1: a registered client's secrets and the recovery codes shown
+    /// CONV-LOG-003 AC3: a registered client's secrets and the recovery codes shown
     /// once are marked as types.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryTypeCarryingAForbiddenValueIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryTypeCarryingAForbiddenValueIsMarked() =>
         Assert.Empty(Unmarked([typeof(RegisteredSecret), typeof(RecoveryCodesView)]));
 
     /// <summary>
-    /// CONV-LOG-003 AC1: every password, code and token a request carries in or an
+    /// CONV-LOG-003 AC3: every password, code and token a request carries in or an
     /// answer carries out is marked where it is a member.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryMemberCarryingAForbiddenValueIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryMemberCarryingAForbiddenValueIsMarked() =>
         Assert.Empty(Unmarked(
         [
             Member<SetPasswordRequest>(nameof(SetPasswordRequest.Password)),

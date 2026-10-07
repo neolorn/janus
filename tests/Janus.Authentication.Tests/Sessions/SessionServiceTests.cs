@@ -970,13 +970,13 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-002 AC3, AUTH-SESS-013, D-166: a session of another account is not the
+    /// CONV-DESIGN-002 AC4, AUTH-SESS-013, D-166: a session of another account is not the
     /// caller's to end, and is answered as one that does not exist, with the same code
     /// and no details, and it goes on.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task CONV_DESIGN_002_AC3_AnotherAccountsSessionIsAnsweredAsNoneAsync()
+    public async Task CONV_DESIGN_002_AC4_AnotherAccountsSessionIsAnsweredAsNoneAsync()
     {
         IssuedSession theirs = await BegunAsync(Subject(), [Factor.Password]);
 
@@ -1003,13 +1003,13 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-002 AC3: ending a session asks first whose account is asking, so a
+    /// CONV-DESIGN-002 AC4: ending a session asks first whose account is asking, so a
     /// context naming no account is refused before any session is read, and the
     /// session it named goes on.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task CONV_DESIGN_002_AC3_AnEndForNoAccountReadsNoSessionAsync()
+    public async Task CONV_DESIGN_002_AC4_AnEndForNoAccountReadsNoSessionAsync()
     {
         IssuedSession held = await BegunAsync(Subject(), [Factor.Password]);
         int found = _sessions.Found;
@@ -1022,13 +1022,13 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-002 AC3: reading a session asks first whose account is asking, so a
+    /// CONV-DESIGN-002 AC4: reading a session asks first whose account is asking, so a
     /// context naming no account is answered as a session that is not there before any
     /// session is read.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task CONV_DESIGN_002_AC3_AReadForNoAccountReadsNoSessionAsync()
+    public async Task CONV_DESIGN_002_AC4_AReadForNoAccountReadsNoSessionAsync()
     {
         IssuedSession held = await BegunAsync(Subject(), [Factor.Password]);
         int found = _sessions.Found;

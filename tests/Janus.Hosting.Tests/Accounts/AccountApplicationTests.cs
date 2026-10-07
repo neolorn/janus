@@ -197,13 +197,13 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-002 AC3, D-166: another account's session or browser, named in the
+    /// CONV-DESIGN-002 AC4, D-166: another account's session or browser, named in the
     /// path, is answered as one that does not exist, with the body an identifier nobody
     /// holds is answered with, apart from the correlation identifier.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task CONV_DESIGN_002_AC3_AnotherAccountsSessionOrBrowserReadsAsNoneAsync()
+    public async Task CONV_DESIGN_002_AC4_AnotherAccountsSessionOrBrowserReadsAsNoneAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
         var another = SubjectId.New(_randomness);
