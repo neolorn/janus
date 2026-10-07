@@ -606,6 +606,53 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-PWD-004 AC1: the screening call is in the records of a deployment that
+    /// declared no recipient at all, outside the country, with the basis the
+    /// configuration states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_PWD_004_AC1_TheScreeningCallAppearsWithItsDestinationAndBasisAsync()
+    {
+        _configuration.Set(Settings.HostingCrossBorderBasis, Permit);
+
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        RecipientRecord screening = Assert.Single(
+            register.Recipients,
+            recipient => recipient.Name is "password screening");
+
+        Assert.Equal(HostingLocation.Outside, screening.Location);
+        Assert.Equal(Permit, screening.CrossBorderBasis);
+    }
+
+    /// <summary>
+    /// INT-HOST-001 AC1: the hosting location the configuration records is on the
+    /// register generated from it, and on the hosting provider's row.
+    /// </summary>
+    /// <param name="location">Where the deployment is hosted.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(HostingLocation.Inside)]
+    [InlineData(HostingLocation.Outside)]
+    public async Task INT_HOST_001_AC1_TheHostingLocationIsOnTheRegisterAsync(HostingLocation location)
+    {
+        _configuration.Set(Settings.HostingLocation, location);
+        _configuration.Set(Settings.HostingCrossBorderBasis, Permit);
+
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        RecipientRecord hosting = Assert.Single(
+            register.Recipients,
+            recipient => recipient.Name is "hosting provider");
+
+        Assert.Equal(location, register.HostingLocation);
+        Assert.Equal(location, hosting.Location);
+    }
+
+    /// <summary>
     /// INT-HOST-002 AC2: with the deployment hosted outside the country, a consent
     /// granted and then withdrawn leaves the register stating the basis the transfer
     /// stands on, on the register and on every recipient outside the country, with no
