@@ -2523,6 +2523,43 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-010 AC3: a request giving a locked identifier another value, by its
+    /// Change or at its step, is refused <c>identity.identifier.locked</c> and changes
+    /// nothing: every staged identifier keeps its value, what it proved and its lock,
+    /// the session stays at its step, and no code is drawn or sent for the value asked.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_010_AC3_AnotherValueForALockedIdentifierIsRefusedAndChangesNothingAsync()
+    {
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+        (IdentifierId Id, string Canonical, bool IsVerified, bool IsLocked)[] standing = Standing(session);
+        RegistrationStep step = Live(session).Step;
+        int codes = _codes.All.Count;
+        int sent = _notifications.Sent.Count;
+
+        ErrorCode changed = Refused(await Service.ChangeAsync(
+            session,
+            Identity(session, IdentifierKind.Email).Id,
+            "other@example.test",
+            Source,
+            TestContext.Current.CancellationToken));
+        ErrorCode entered = Refused(await Service.StageAsync(
+            session,
+            IdentifierKind.Phone,
+            Mistyped,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.IdentifierLocked, changed);
+        Assert.Equal(ErrorCodes.IdentifierLocked, entered);
+        Assert.Equal(standing, Standing(session));
+        Assert.Equal(step, Live(session).Step);
+        Assert.Equal(codes, _codes.All.Count);
+        Assert.Equal(sent, _notifications.Sent.Count);
+    }
+
+    /// <summary>
     /// REG-MAIL-001 AC4: the press on the invitation link that opens the registration
     /// is what verifies the email the invitation bound, and no code is sent to it; its
     /// step has nothing left to collect.
@@ -3247,6 +3284,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
     private StagedIdentity Identity(RegistrationSessionId session, IdentifierKind kind) =>
         Live(session).Identifiers.Last(staged => staged.Kind == kind);
+
+    // Every identifier the session stages, as a request that changes nothing leaves it.
+    private (IdentifierId Id, string Canonical, bool IsVerified, bool IsLocked)[] Standing(
+        RegistrationSessionId session) =>
+        [.. Live(session).Identifiers.Select(staged =>
+            (staged.Id, staged.Canonical, staged.IsVerified, staged.IsLocked))];
 
     // The link token never touches the session: it is in the message, as it is for
     // the person reading it.
