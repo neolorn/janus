@@ -50,16 +50,14 @@ against the public contract of LIB-API-001.
   longer, are no longer declared. Their identifiers and their names are given to no
   other event of that log, so a query or an alert kept on any of them matches
   nothing from now on.
-- `POST /auth/factor` at a sign-in where a second step is accepted before any first
-  factor answers 200 `factorRequired` with `required` naming the first factors of the
-  `available` that `POST /auth/begin` answered, where it named every usable second
-  step the account holds, the one just accepted among them. A text code asked for at
-  a sign-in while no first factor has been accepted on its challenge, a second step
-  accepted on it or not, is an ask before a first factor: it is answered 202, no
-  phone signal is asked and nothing is sent, whatever the account holds. Before, an
-  ask after a second step accepted first sent the code, or was answered 200 or 422
-  `auth.factor.rejected` where the number's signal withheld it, or 422
-  `auth.credential.suspended` for a suspended number.
+- At a sign-in a second step (a generated code, a security key under two-step, a text
+  code or a recovery code) is accepted only once a first factor has been accepted on
+  the challenge. Presented before, `POST /auth/factor` answers 422
+  `auth.factor.notpermitted` without verifying it and without reading anything of the
+  account: the answer is the same for every identifier, no delay is asked, nothing is
+  counted and no failed authentication is recorded. A text code asked for at a
+  sign-in while no first factor has been accepted on its challenge is answered 202,
+  no phone signal is asked and nothing is sent, whatever the account holds.
 - A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
   Information, by the code the browser is returned with and the one the refusal
   carried inside. A refused authorization response no longer writes event 10 as
@@ -238,6 +236,12 @@ against the public contract of LIB-API-001.
   200 `factorRequired`, with the factors still to present, until what was accepted
   reaches the strictest of the gates of the policy in force, and 200 `complete` then,
   where the first accepted factor ended the challenge before.
+- `POST /auth/step-up` judges the session against the strictest of the gates of the
+  policy in force, field by field, and offers every combination that reaches the
+  weakest of them, field by field: under a policy where one gate asks phishing
+  resistance and another does not, a password with a generator's code is accepted and
+  raises the session to `aal2`. A 403 `auth.stepup.required` of the route carries the
+  weakest gate's values in `required`, and its `outcome` is read against that gate.
 - Each 200 of `POST /auth/step-up` reports in `assuranceLevel` and
   `phishingResistant` what the factors accepted on the challenge reach together,
   where it reported the highest level the session had ever reached: a password alone
@@ -500,7 +504,7 @@ against the public contract of LIB-API-001.
 - A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
   `risk`, is no longer answered 202: nothing is issued, sent or counted, and the ask is
   answered 403 `auth.stepup.required` with `details` computed without the entry against
-  the strictest of the gates of the policy in force, field by field, the step-up naming
+  the weakest of the gates of the policy in force, field by field, the step-up naming
   no action; `outcome` is `report-loss` or `enrol` where no combination is left.
 - A sign-in code presented right whose sign-in a domain lock then refuses is spent in the
   one transaction that refuses it: the refusal `identity.identifier.domainnotallowed`
@@ -514,9 +518,11 @@ against the public contract of LIB-API-001.
 - A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
   `risk`, is answered as `POST /auth/factor` answers it: 200 `factorRequired` with
   `required` naming the factors of the combinations left without the entry, judged
-  against the strictest of the policy's gates; 200 with `required` empty where the
-  session already meets that gate, which used to be 202; and 403 `auth.stepup.required`
-  only where no combination is left, with `outcome` `report-loss`, `enrol` or `pending`.
+  against the weakest of the policy's gates; 200 with `required` empty where the
+  session already meets the strictest of them, which used to be 202, or where no
+  combination is left and the factors accepted on the challenge reach the weakest; and
+  403 `auth.stepup.required` only where no combination is left and they do not, with
+  `outcome` `report-loss`, `enrol` or `pending`.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised

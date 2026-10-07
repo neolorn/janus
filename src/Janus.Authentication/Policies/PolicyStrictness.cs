@@ -276,4 +276,16 @@ internal static class PolicyStrictness
             Rank(first.Level) >= Rank(second.Level) ? first.Level : second.Level,
             first.PhishingResistant || second.PhishingResistant,
             first.MaximumAge <= second.MaximumAge ? first.MaximumAge : second.MaximumAge);
+
+    /// <summary>
+    /// The gate that asks the less of two in each of its three values.
+    /// </summary>
+    /// <param name="first">One gate.</param>
+    /// <param name="second">The other.</param>
+    /// <returns>The lower level, phishing resistance only where both ask it, and the longer age.</returns>
+    public static Gate Weakest(Gate first, Gate second) =>
+        new(
+            Rank(first.Level) <= Rank(second.Level) ? first.Level : second.Level,
+            first.PhishingResistant && second.PhishingResistant,
+            first.MaximumAge >= second.MaximumAge ? first.MaximumAge : second.MaximumAge);
 }

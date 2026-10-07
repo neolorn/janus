@@ -130,7 +130,7 @@ internal sealed class StepUpGuard(
         SessionId session,
         StepUpAction action,
         CancellationToken cancellationToken) =>
-        ChallengedAsync(subject, session, action, enrolling: null, textsWithheld: false, cancellationToken);
+        ChallengedAsync(subject, session, action, enrolling: null, Asking.Named, cancellationToken);
 
     /// <summary>
     /// What a session's proof amounts to against a gate named rather than enumerated:
@@ -156,13 +156,14 @@ internal sealed class StepUpGuard(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
 
-        return ChallengedAsync(subject, session, Named(gate), enrolling: null, textsWithheld: false, cancellationToken);
+        return ChallengedAsync(subject, session, Named(gate), enrolling: null, Asking.Named, cancellationToken);
     }
 
     /// <summary>
     /// What a session's proof amounts to at a step-up that names no action, once the
-    /// carrier's signal has withheld the entries a text carries: the strictest of the
-    /// policy's gates, field by field, and the combinations left without those entries.
+    /// carrier's signal has withheld the entries a text carries: the session judged
+    /// against the strictest of the policy's gates, field by field, and the combinations
+    /// that reach the weakest of them left without those entries.
     /// </summary>
     /// <param name="subject">Whose account is stepping up.</param>
     /// <param name="session">The session the step-up raises.</param>
@@ -172,21 +173,22 @@ internal sealed class StepUpGuard(
     /// account's.
     /// </returns>
     /// <remarks>
-    /// Implements AUTH-FACT-002 AC7 and AUTH-STEP-002 (D-187). The step-up's challenge
-    /// names no action, so it costs what a gate no policy states values for costs. The
-    /// signal was asked, and its consideration recorded, at the ask that came here; it
-    /// is not asked again.
+    /// Implements AUTH-FACT-002 AC7 and AUTH-STEP-002 (D-187, D-197). The signal was
+    /// asked, and its consideration recorded, at the ask that came here; it is not
+    /// asked again.
     /// </remarks>
     public ValueTask<Result<StepUpChallenge>> ChallengeWithoutTextsAsync(
         SubjectId subject,
         SessionId session,
         CancellationToken cancellationToken) =>
-        ChallengedAsync(subject, session, action: null, enrolling: null, textsWithheld: true, cancellationToken);
+        ChallengedAsync(subject, session, action: null, enrolling: null, Asking.UnnamedWithoutTexts, cancellationToken);
 
     /// <summary>
-    /// What a session's proof amounts to at a step-up that names no action: the
-    /// strictest of the policy's gates, field by field, and the combinations that would
-    /// meet it.
+    /// What a session's proof amounts to at a step-up that names no action: the session
+    /// judged against the strictest of the policy's gates, field by field, and, where it
+    /// does not meet that, the combinations that reach the weakest of them, field by
+    /// field, or the one of three answers an account that can present none is given,
+    /// with the weakest gate's values.
     /// </summary>
     /// <param name="subject">Whose account is stepping up.</param>
     /// <param name="session">The session the step-up raises.</param>
@@ -196,20 +198,20 @@ internal sealed class StepUpGuard(
     /// account's.
     /// </returns>
     /// <remarks>
-    /// Implements AUTH-STEP-002 step 2 (D-187, D-190). It asks the carrier's signal of
-    /// a number a combination on offer would text, so it is asked outside any unit of
-    /// work (AUTH-FACT-002b).
+    /// Implements AUTH-STEP-002 steps 1 to 3 as a step-up reads them (D-187, D-190,
+    /// D-197). It asks the carrier's signal of a number a combination on offer would
+    /// text, so it is asked outside any unit of work (AUTH-FACT-002b).
     /// </remarks>
     public ValueTask<Result<StepUpChallenge>> ChallengeUnnamedAsync(
         SubjectId subject,
         SessionId session,
         CancellationToken cancellationToken) =>
-        ChallengedAsync(subject, session, action: null, enrolling: null, textsWithheld: false, cancellationToken);
+        ChallengedAsync(subject, session, action: null, enrolling: null, Asking.Unnamed, cancellationToken);
 
     /// <summary>
     /// Whether a session, as its caller holds it and has just raised it, has reached the
-    /// gate of a step-up that names no action, which is the strictest of the policy's
-    /// gates, field by field.
+    /// strictest of the policy's gates, field by field, which a step-up that names no
+    /// action goes on asking for until it is met.
     /// </summary>
     /// <param name="live">The session, as raised.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -288,7 +290,7 @@ internal sealed class StepUpGuard(
         StepUpAction action,
         Factor? enrolling,
         CancellationToken cancellationToken) =>
-        (await ChallengedAsync(subject, session, action, enrolling, textsWithheld: false, cancellationToken).ConfigureAwait(false))
+        (await ChallengedAsync(subject, session, action, enrolling, Asking.Named, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(
                 challenge => StepUpRefusal.Met(challenge) ? null : StepUpRefusal.Of(challenge),
                 error => error);
@@ -298,7 +300,7 @@ internal sealed class StepUpGuard(
         SessionId session,
         StepUpAction? action,
         Factor? enrolling,
-        bool textsWithheld,
+        Asking asking,
         CancellationToken cancellationToken)
     {
         Session? live = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
@@ -323,9 +325,17 @@ internal sealed class StepUpGuard(
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
         }
 
+        // AUTH-STEP-002 step 2 (D-197): a step-up names no action, so what it offers,
+        // and what it answers an account that can present nothing with, is read from
+        // the weakest of the policy's gates, field by field. A gate that is named is
+        // judged and offered against the one gate it costs.
+        Gate offering = asking is Asking.Named
+            ? gate
+            : policy.Gates.Values.Aggregate(PolicyStrictness.Weakest);
+
         HeldFactors held = await HeldAsync(subject, cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = time.GetUtcNow();
-        StepUpChallenge challenge = Challenged(live, gate, held, enrolling, now);
+        StepUpChallenge challenge = Challenged(live, gate, offering, held, enrolling, now);
 
         // AUTH-FACT-002b AC6: where the carrier reports a recent change of SIM or of
         // network for the number, the entries a text carries are withheld from the
@@ -333,7 +343,7 @@ internal sealed class StepUpGuard(
         // that cannot reach the gate is given, and never a pass. An ask the signal
         // already refused withholds every such entry the account could present, the one
         // number carrying them all, and asks nothing again.
-        IReadOnlySet<Factor> withheld = textsWithheld
+        IReadOnlySet<Factor> withheld = asking is Asking.UnnamedWithoutTexts
             ? held.Usable.Where(usable => FactorCatalogue.Of(usable).Restricted).ToFrozenSet()
             : challenge.Outcome is StepUpOutcome.Present
                 ? await WithheldAsync(subject, challenge.Combinations, cancellationToken).ConfigureAwait(false)
@@ -341,7 +351,13 @@ internal sealed class StepUpGuard(
 
         return Result.Success(withheld.Count is 0
             ? challenge
-            : Challenged(live, gate, held with { Usable = held.Usable.Except(withheld).ToFrozenSet() }, enrolling, now));
+            : Challenged(
+                live,
+                gate,
+                offering,
+                held with { Usable = held.Usable.Except(withheld).ToFrozenSet() },
+                enrolling,
+                now));
     }
 
     private async ValueTask<HeldFactors> HeldAsync(SubjectId subject, CancellationToken cancellationToken)
@@ -356,15 +372,45 @@ internal sealed class StepUpGuard(
         return HeldFactors.Of(enrolled, password is not null);
     }
 
+    // AUTH-STEP-002 steps 1 to 3: the session is judged against the gate. Where it does
+    // not meet it and the offer is read from another gate, as a step-up's is from the
+    // weakest of the policy's (D-197), the combinations offered and the answer given an
+    // account that can present none are that gate's, at the level it is read at for
+    // the account, whether or not the session meets that gate.
     private static StepUpChallenge Challenged(
         Session live,
         Gate gate,
+        Gate offering,
         HeldFactors held,
         Factor? enrolling,
-        DateTimeOffset now) =>
-        enrolling is Factor creating
-            ? StepUp.ToEnrol(live, gate, held, creating, now)
-            : StepUp.On(live, gate, held, now);
+        DateTimeOffset now)
+    {
+        if (enrolling is Factor creating)
+        {
+            return StepUp.ToEnrol(live, gate, held, creating, now);
+        }
+
+        StepUpChallenge judged = StepUp.On(live, gate, held, now);
+
+        if (offering == gate || StepUpRefusal.Met(judged))
+        {
+            return judged;
+        }
+
+        StepUpChallenge offered = StepUp.On(live, offering, held, now);
+
+        return (StepUpRefusal.Met(offered)
+            ? StepUpOffer.To(
+                held,
+                offered.Required,
+                offered.PhishingResistant,
+                offered.MaximumAge,
+                StepUp.Reachable(held.Standing))
+            : offered) with
+        {
+            Downgraded = judged.Downgraded,
+        };
+    }
 
     // The signal is asked about the entries a combination on offer would text, and
     // about nothing else, so a gate already met or met without a text asks nothing.
@@ -409,5 +455,14 @@ internal sealed class StepUpGuard(
         failure = error;
 
         return default!;
+    }
+
+    // What a challenge is asked for: a gate that is named, by the catalogue or by a
+    // host, or a step-up, which names none, with or without the entries a text carries.
+    private enum Asking
+    {
+        Named = 0,
+        Unnamed = 1,
+        UnnamedWithoutTexts = 2,
     }
 }
