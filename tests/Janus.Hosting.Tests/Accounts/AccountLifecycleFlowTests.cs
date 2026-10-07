@@ -69,12 +69,12 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-013: an account an administrator suspended is not stood up by a
+    /// IDN-LIFE-013 AC2: an account an administrator suspended is not stood up by a
     /// link of its own, and is told which of the two it is.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_013_AnAdministrativeSuspensionIsAConflictAsync()
+    public async Task IDN_LIFE_013_AC2_AnAdministrativeSuspensionIsAConflictAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 

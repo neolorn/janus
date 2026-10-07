@@ -196,6 +196,61 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
             (read.State, read.SuspendedBy));
     }
 
+    /// <summary>
+    /// IDN-LIFE-013 AC4: an account restricted, then suspended by an administrator and
+    /// reactivated, is restricted again, holding no suspension, and neither the
+    /// suspension nor the reactivation writes a delivery telling the subscribers of a
+    /// restriction that never changed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_013_AC4_ARestrictedAccountSuspendedAndReactivatedIsRestrictedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext restricting = database.Context())
+        {
+            var accounts = new AccountStore(restricting);
+            Account account = Assert.IsType<Account>(
+                await accounts.FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+            account.Restrict();
+            await accounts.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+            await restricting.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await SuspendedAsync(subject);
+
+        await using (StoreContext suspended = database.Context())
+        {
+            Account held = Assert.IsType<Account>(
+                await new AccountStore(suspended).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+            Assert.Equal(
+                (AccountState.Suspended, SuspensionOrigin.Administrator, true),
+                (held.State, held.SuspendedBy, held.RestrictionHeld));
+        }
+
+        await using (StoreContext reactivating = database.Context())
+        {
+            await using var work = new UnitOfWork(reactivating);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Directory(reactivating).ReinstateAsync(subject, TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Account read = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal(AccountState.Restricted, read.State);
+        Assert.Null(read.SuspendedBy);
+        Assert.False(await reading.Outbox.AnyAsync(
+            delivery => delivery.Subject == subject,
+            TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
