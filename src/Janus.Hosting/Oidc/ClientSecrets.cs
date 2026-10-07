@@ -21,7 +21,10 @@ namespace Janus.Hosting.Oidc;
 /// <param name="logger">Where the server records what it did with an entry.</param>
 /// <param name="options">The server's own options.</param>
 /// <param name="store">The registry, as the server reads it.</param>
-/// <param name="clients">The registry the secrets are read from.</param>
+/// <param name="secrets">
+/// The read of the secrets the registry holds, which removes a replaced one whose
+/// overlap has ended.
+/// </param>
 /// <param name="time">The clock a replaced secret's overlap is read against.</param>
 /// <remarks>
 /// Implements AUTH-OIDC-001 AC2, OPS-SEC-002 and CONV-SEC-002, as D-166 (340) settles
@@ -29,7 +32,8 @@ namespace Janus.Hosting.Oidc;
 /// and cleared after it, and the comparison takes the same time whether the first byte
 /// differs or the last, so nothing about a wrong secret is learned from how long the
 /// answer took. A secret the current one replaced is taken until its overlap ends, and
-/// both are compared whichever one matches. The registry is written by the client
+/// both are compared whichever one matches; the read removes it once that overlap has
+/// ended (OPS-SEC-002 AC3). A secret is drawn and replaced by the client
 /// registry alone, so the server never has a secret of its own to hold.
 /// </remarks>
 internal sealed class ClientSecrets(
@@ -37,7 +41,7 @@ internal sealed class ClientSecrets(
     ILogger<OpenIddictApplicationManager<OidcClientRecord>> logger,
     IOptionsMonitor<OpenIddictCoreOptions> options,
     IOpenIddictApplicationStore<OidcClientRecord> store,
-    IOidcClientStore clients,
+    RegisteredSecrets secrets,
     TimeProvider time)
     : OpenIddictApplicationManager<OidcClientRecord>(cache, logger, options, store)
 {
@@ -54,9 +58,12 @@ internal sealed class ClientSecrets(
             return false;
         }
 
-        RegisteredSecret? held = await clients
-            .SecretAsync(application.ClientId, cancellationToken)
-            .ConfigureAwait(false);
+        // OPS-SEC-002 AC3: the read removes a replaced secret whose overlap has ended. A
+        // read that could not is a secret not judged, which is refused.
+        RegisteredSecret? held = (await secrets
+                .HeldAsync(application.ClientId, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, _ => null);
 
         if (held is null)
         {

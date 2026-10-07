@@ -69,6 +69,26 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
+    /// OPS-SEC-001: <c>rotate-kek</c> reports as every command does. A seal confirmed
+    /// before any rotation is refused with exit code 1, one JSON line on standard error
+    /// and nothing on standard output; the rotation exits 0 with nothing on standard
+    /// error.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_RotateKekExitsZeroOrOneWithOneLineOnStandardErrorAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await SeedAsync(connection, 1);
+
+        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
+
+        Assert.Equal("model.rotation.notready", Reported.Refusal(refused));
+        Reported.Success(rotated);
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC2, AC3: a run killed mid-batch leaves the batches it committed and
     /// the point it reached; the keys it had not reached still unwrap under the previous
     /// version; run again, it resumes from that point, and when it reports complete every

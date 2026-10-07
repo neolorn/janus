@@ -158,6 +158,29 @@ internal sealed class OidcClientStore(
         return replaced == 1;
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<bool> RemoveReplacedSecretAsync(
+        string clientId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        // X3: the removal stands only where the end stored is reached, so a secret
+        // replaced since the read keeps its overlap, and of two processes removing
+        // together one removes it and the other changes nothing.
+        int removed = await context.OidcClients
+            .Where(client => client.ClientId == clientId
+                && client.PreviousSecretUntil != null
+                && client.PreviousSecretUntil <= now)
+            .ExecuteUpdateAsync(
+                columns => columns
+                    .SetProperty(client => client.PreviousSecret, (byte[]?)null)
+                    .SetProperty(client => client.PreviousSecretUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return removed == 1;
+    }
+
     private static OidcClient Client(OidcClientRecord record) =>
         new(record.ClientId, record.Name, record.Kind, record.Redirect, record.Scopes);
 

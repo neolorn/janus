@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A repeated `POST /account/identifiers` naming the value already pending is a resend
+  only from the session that staged it. From any other session of the account it
+  stages the add afresh for the asking session, under the identifier the add is listed
+  by: its code is a send the sending restrictions count, the code and the link sent
+  before it answer nothing, and a press of the new link verifies only in the asking
+  session's browser (REG-IDENT-004).
+- `token.signing.rotation`, the cadence of the signing keys and of every registered
+  client's secret, has a floor of one day: a shorter value is refused with
+  `config.value.belowfloor`. Lengthening it is the change that loosens (OPS-CFG-002).
 - The analysers are built against the compiler of SDK 10.0.100, the first .NET 10
   SDK (`Microsoft.CodeAnalysis.CSharp` 5.0.0), so a host's build loads them in every
   .NET 10 SDK.
@@ -70,11 +79,6 @@ against the public contract of LIB-API-001.
   26 carried such a value exactly as the browser brought it, line breaks and any
   length included, and a return carrying an empty `error` beside a `code` went on to
   the exchange. A value that reads is handled as before.
-- Events 10 (`SignOnRefused`), 11 (`SignOnExchangeRejected`) and 14
-  (`SignOnPushRejected`) of the browser profile's log, which nothing writes any
-  longer, are no longer declared. Their identifiers and their names are given to no
-  other event of that log, so a query or an alert kept on any of them matches
-  nothing from now on.
 - At a sign-in a second step (a generated code, a security key under two-step, a text
   code or a recovery code) is accepted only once a first factor has been accepted on
   the challenge. Presented before, `POST /auth/factor` answers 422
@@ -942,7 +946,10 @@ against the public contract of LIB-API-001.
   that finds it due, while the deployment runs; of two instances that find it due
   together one replaces it and the other presents what the first wrote. The provider
   takes the secret it replaced for the access-token lifetime and five minutes, compared
-  in fixed time. No person chooses, carries or rotates a client secret. The migration
+  in fixed time. The end of that overlap is stored at the replacement, so no later
+  change of a setting moves it, and the first read of the client's secrets at or after
+  it removes the replaced secret and that end from the registry (OPS-SEC-002). No
+  person chooses, carries or rotates a client secret. The migration
   that moves the registry to held secrets refuses to run where a client is registered,
   since what a secret hashed to cannot become the secret.
 - The audit trail's monthly partitions are kept by a daily job, `audit-partitions`,

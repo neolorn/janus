@@ -79,4 +79,17 @@ internal interface IOidcClientStore
         DateTimeOffset now,
         DateTimeOffset replacedUntil,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes a client's replaced secret, and the end of its overlap stored beside it,
+    /// where that end has been reached.
+    /// </summary>
+    /// <param name="clientId">Which client.</param>
+    /// <param name="now">The instant the end is judged at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether this call removed it; another may have first, and a secret replaced since
+    /// is still inside its overlap.
+    /// </returns>
+    ValueTask<bool> RemoveReplacedSecretAsync(string clientId, DateTimeOffset now, CancellationToken cancellationToken);
 }

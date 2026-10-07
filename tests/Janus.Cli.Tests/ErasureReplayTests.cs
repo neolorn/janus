@@ -98,6 +98,27 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// OPS-SEC-001: <c>replay-erasures</c> reports as every command does. A ledger with a
+    /// line in another form is refused with exit code 1, one JSON line on standard error
+    /// and nothing on standard output; a ledger that reads exits 0 with nothing on
+    /// standard error.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_ReplayErasuresExitsZeroOrOneWithOneLineOnStandardErrorAsync()
+    {
+        var absent = Guid.NewGuid();
+
+        await WrittenAsync($"2026-08-14T09:22Z  {absent:D}  erasure-request");
+        Invocation refused = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+        await WrittenAsync($"2026-08-14T09:22:05Z {absent:D} erasure-request");
+        Invocation replayed = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+
+        Assert.Equal("api.request.malformed", Reported.Refusal(refused));
+        Reported.Success(replayed);
+    }
+
+    /// <summary>
     /// DR-016, chapter 10 section 5.12a: the replay's audit record carries the line's
     /// reason by its written name, as the line spells it.
     /// </summary>

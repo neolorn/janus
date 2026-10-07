@@ -3677,7 +3677,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     public async Task REG_IDENT_004_AResendOfAnAddsCodeHoldsItsRowBeforeItWritesAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
-        await AddedAsync(Second);
+        SessionId staging = Stepped();
+        await AddedAsync(Second, staging);
         IdentifierId second = Named(await HeldAsync(), Second).Id;
         int sent = _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink);
         var held = new List<(IdentifierId Row, int Sent, bool Open)>();
@@ -3687,7 +3688,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink),
             _work.Open));
 
-        await AddedAsync(Second);
+        await AddedAsync(Second, staging);
 
         Assert.Equal([(second, sent, true)], held);
         Assert.Equal(sent + 1, _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink));
@@ -3756,6 +3757,99 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(1, Sent(MessageKind.VerificationLink));
         Assert.Equal(0, _work.OutermostCommitted);
         Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC8 (D-197): a repeated add naming the pending value from another
+    /// session stages it afresh for that session, under the identifier it is listed
+    /// by, its code a new send and the set told nothing more. The link sent before it
+    /// opens nothing, the code that answers is the one sent last, and a press of the
+    /// new link verifies only in the asking session's browser.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC8_ARepeatedAddFromAnotherSessionStagesItAfreshForThatSessionAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        SessionId asking = Stepped();
+        await AddedAsync(Second, staging);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string before = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        string earlier = Code(second);
+        _work.Reset();
+
+        await AddedAsync(Second, asking);
+
+        OutboundMessage sent = _notifications.Mail.Last(message => message.Message is MessageKind.VerificationLink);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal((second, (SessionId?)asking), (Assert.Single(_pending.All).Identifier, Waiting(second).Browser));
+        Assert.Equal((2, 1), (Sent(MessageKind.VerificationLink), Sent(MessageKind.IdentifierAdded)));
+        Assert.NotEqual(earlier, Code(second));
+        Assert.Equal(sent.Values["code"], Code(second));
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.LandAsync(staging, before, press: true, Source, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            new LinkLanding(Verified: false, SameBrowser: false, Code(second)),
+            Landed(await Service.LandAsync(staging, sent.Token(), press: true, Source, TestContext.Current.CancellationToken)));
+        Assert.True(Landed(await Service.LandAsync(asking, sent.Token(), press: true, Source, TestContext.Current.CancellationToken)).Verified);
+        Assert.True(Named(await HeldAsync(), Second).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC8, AUTH-ABUSE-004 (D-197): an add staged afresh is a send the
+    /// restrictions count, and one they refuse is refused as a first send is: its unit
+    /// of work is rolled back and the staging before it stands with the record it had.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC8_AnAddStagedAfreshTheRestrictionsRefuseLeavesTheStagingBeforeItAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        await AddedAsync(Second, staging);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = Code(second);
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        _work.Reset();
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        ErrorCode refused = Refused(await Service.AddAsync(
+            Acting,
+            Stepped(),
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, refused);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(1, Sent(MessageKind.VerificationLink));
+        Assert.Equal(staging, Waiting(second).Browser);
+        Assert.Equal(code, Code(second));
+        Assert.True(Landed(await Service.LandAsync(staging, link, press: false, Source, TestContext.Current.CancellationToken)).SameBrowser);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 (D-190, D-197): a repeated add naming the pending value from the
+    /// session that staged it is a resend: the add stays that session's, and the link
+    /// sent last verifies in its browser.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_ARepeatedAddFromTheSessionThatStagedItIsAResendAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId staging = Stepped();
+        await AddedAsync(Second, staging);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+
+        await AddedAsync(Second, staging);
+
+        string sent = _notifications.Mail.Last(message => message.Message is MessageKind.VerificationLink).Token();
+        Assert.Equal(staging, Assert.Single(_pending.All).Browser);
+        Assert.Equal((2, 1), (Sent(MessageKind.VerificationLink), Sent(MessageKind.IdentifierAdded)));
+        Assert.True(Landed(await Service.LandAsync(staging, sent, press: true, Source, TestContext.Current.CancellationToken)).Verified);
+        Assert.True(Named(await HeldAsync(), Second).IsVerified);
     }
 
     /// <summary>
@@ -4806,11 +4900,13 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     private int Sent(MessageKind kind) => _notifications.Mail.Count(sent => sent.Message == kind);
 
-    private async Task AddedAsync(string value)
+    private async Task AddedAsync(string value) => await AddedAsync(value, Stepped());
+
+    private async Task AddedAsync(string value, SessionId session)
     {
         Accepted(await Service.AddAsync(
             Acting,
-            Stepped(),
+            session,
             IdentifierKind.Email,
             value,
             Source,

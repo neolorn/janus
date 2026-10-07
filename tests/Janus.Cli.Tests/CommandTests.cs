@@ -58,6 +58,38 @@ public sealed class CommandTests
     }
 
     /// <summary>
+    /// OPS-SEC-001: every command the executable carries reports a refusal as
+    /// <c>bootstrap</c> does. Started at a terminal with no argument, each is refused,
+    /// by what it was not given or by the terminal, with exit code 1, one JSON line of
+    /// the code and its details on standard error, and nothing on standard output.
+    /// </summary>
+    /// <param name="command">The command named.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("bootstrap")]
+    [InlineData("rotate-kek")]
+    [InlineData("rotate-fingerprint-key")]
+    [InlineData("configure")]
+    [InlineData("replay-erasures")]
+    [InlineData("register-client")]
+    public async Task OPS_SEC_001_EveryCommandReportsARefusalAsOneLineOnStandardErrorAsync(string command)
+    {
+        Invocation run = await Invocation.TypedAsync([command]);
+
+        string code = Reported.Refusal(run);
+
+        Assert.Contains(
+            code,
+            new[]
+            {
+                ErrorCodes.RequestMalformed.ToString(),
+                ErrorCodes.StartupSecretUnavailable.ToString(),
+                ErrorCodes.StartupDeclarationMissing.ToString(),
+                ErrorCodes.ConfigurationChangeReasonRequired.ToString(),
+            });
+    }
+
+    /// <summary>
     /// CONV-CODE-007 AC3, OPS-SEC-001: a command reads the document's keys into its key
     /// ring at its start, which lends them from then on, and the ring is cleared when the
     /// command ends, after which a read of it throws.

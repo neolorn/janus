@@ -63,6 +63,29 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// Chapter 10 section 4 and OPS-CFG-003: the cadence of the signing keys and of the
+    /// client secrets has a floor of a day, so a shorter one is refused by name rather
+    /// than raised to it, and a day is taken.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_003_ASigningRotationUnderADayIsRejected()
+    {
+        Result<TimeSpan> outcome = Settings.TokenSigningRotation.Accept(TimeSpan.FromHours(23));
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            outcome.Match(_ => default, failure => failure.Code));
+        Assert.Equal(
+            "P1D",
+            outcome.Match(
+                _ => throw new InvalidOperationException(),
+                failure => failure.Details)["floor"].GetString());
+        Assert.Equal(
+            TimeSpan.FromDays(1),
+            Settings.TokenSigningRotation.Accept(TimeSpan.FromDays(1)).Match(taken => taken, _ => default));
+    }
+
+    /// <summary>
     /// PRIV-RET-001 AC1, AC2: each category the library keeps has a declared period,
     /// and a deployment that names a shorter one than the floor is refused rather
     /// than quietly held to the floor.

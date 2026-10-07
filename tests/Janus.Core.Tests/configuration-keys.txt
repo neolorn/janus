@@ -137,7 +137,7 @@ session.stepup.recency duration R
 sweep.interval duration R ceiling=PT15M
 takedown.grace duration R floor=P7D
 token.signing.algorithm choice P allowed=ES256
-token.signing.rotation duration R
+token.signing.rotation duration R floor=P1D
 webauthn.algorithms integer-list P unremovable=-7
 webauthn.origins text-list P minimum=1
 webauthn.relatedorigins text-list R

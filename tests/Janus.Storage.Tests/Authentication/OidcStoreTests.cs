@@ -157,6 +157,60 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// OPS-SEC-002 AC3 (D-197): a replaced secret and the end of its overlap are removed
+    /// together once that end is reached and not before it; a second removal finds
+    /// nothing, and the current secret is left as it was.
+    /// </summary>
+    [Fact]
+    public async Task OPS_SEC_002_AC3_AReplacedSecretIsRemovedOnceItsOverlapHasEndedAsync()
+    {
+        const string rotated = "overlapped-client";
+
+        byte[] replacement = Encoding.UTF8.GetBytes("the-secret-that-replaced-it");
+        DateTimeOffset until = Noon + TimeSpan.FromMinutes(15);
+
+        await RegisteredAsync(rotated, OidcClientKind.Protocol);
+
+        bool early;
+        bool ended;
+        bool again;
+        RegisteredSecret within;
+
+        await using (StoreContext writing = database.Context())
+        {
+            var clients = new OidcClientStore(writing, _deployment.DataKey(writing));
+
+            _ = await clients.ReplaceSecretAsync(
+                rotated, Noon, replacement, Noon, until, TestContext.Current.CancellationToken);
+            early = await clients.RemoveReplacedSecretAsync(
+                rotated, until - TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            within = (await clients.SecretAsync(rotated, TestContext.Current.CancellationToken))!;
+            ended = await clients.RemoveReplacedSecretAsync(rotated, until, TestContext.Current.CancellationToken);
+            again = await clients.RemoveReplacedSecretAsync(rotated, until, TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        RegisteredSecret held = (await new OidcClientStore(reading, _deployment.DataKey(reading))
+            .SecretAsync(rotated, TestContext.Current.CancellationToken))!;
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal((false, true, false), (early, ended, again));
+        Assert.Equal(Encoding.UTF8.GetBytes(Secret), within.Previous);
+        Assert.Equal(until, within.PreviousUntil);
+        Assert.Equal(replacement, held.Current);
+        Assert.Null(held.Previous);
+        Assert.Null(held.PreviousUntil);
+        Assert.Equal(
+            1,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM identity.oidc_clients "
+                    + "WHERE client_id = @clientId AND previous_secret IS NULL AND previous_secret_until IS NULL",
+                new { clientId = rotated }));
+    }
+
+    /// <summary>
     /// AUTH-OIDC-002 AC1 and AC2, chapter 09 section 9: the grant that refreshes a
     /// token is a protocol client's and a browser application's own layer does not
     /// hold it.

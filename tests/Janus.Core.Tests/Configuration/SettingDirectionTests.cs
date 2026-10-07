@@ -39,6 +39,20 @@ public sealed class SettingDirectionTests
     }
 
     /// <summary>
+    /// Chapter 10 section 4: where a row names the direction, that governs. The cadence
+    /// of the signing keys is bounded only below and yet loosens when lengthened, since
+    /// a longer cadence leaves a key and a client secret in use for longer.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_002_TheSigningRotationLoosensWhenLengthened()
+    {
+        Assert.Equal(SettingDirection.Increase, Settings.TokenSigningRotation.Loosening);
+        Assert.True(Settings.TokenSigningRotation.Loosens(TimeSpan.FromDays(90), TimeSpan.FromDays(180)));
+        Assert.False(Settings.TokenSigningRotation.Loosens(TimeSpan.FromDays(90), TimeSpan.FromDays(30)));
+        Assert.False(Settings.TokenSigningRotation.Loosens(TimeSpan.FromDays(90), TimeSpan.FromDays(90)));
+    }
+
+    /// <summary>
     /// Chapter 10 section 4: a boolean loosens away from its default, so turning off a
     /// check that ships on loosens and turning it back on does not.
     /// </summary>

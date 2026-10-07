@@ -607,13 +607,13 @@ public sealed class SigningKeysTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_KEY_001_AC8_EveryKeyButTheFirstIsPublishedFiveMinutesBeforeItSignsAsync()
     {
-        _configuration.Set(Settings.TokenSigningRotation, TimeSpan.FromHours(1));
+        _configuration.Set(Settings.TokenSigningRotation, TimeSpan.FromDays(1));
 
         var publishedFrom = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         var signingFrom = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         int[] steps = [1, 7, 13, 2, 29, 3, 11];
 
-        for (int read = 0; read < 400; read++)
+        for (int read = 0; read < 1800; read++)
         {
             DateTimeOffset now = _clock.GetUtcNow();
             SigningKeySet set = await _process.ReadAsync();

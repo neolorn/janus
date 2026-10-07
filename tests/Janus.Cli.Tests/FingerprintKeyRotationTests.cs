@@ -63,6 +63,26 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
     }
 
     /// <summary>
+    /// OPS-SEC-001: <c>rotate-fingerprint-key</c> reports as every command does. A seal
+    /// confirmed before any rotation is refused with exit code 1, one JSON line on
+    /// standard error and nothing on standard output; the rotation exits 0 with nothing
+    /// on standard error.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_RotateFingerprintKeyExitsZeroOrOneWithOneLineOnStandardErrorAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await CountedAsync(connection, 1);
+
+        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
+
+        Assert.Equal("model.rotation.notready", Reported.Refusal(refused));
+        Reported.Success(rotated);
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC4, AC6: the command prints the escrow copy of the new version, the
     /// rotation stays unretired until the seal is confirmed, and the confirmation retires
     /// the previous version and forgets what was hashed under it.

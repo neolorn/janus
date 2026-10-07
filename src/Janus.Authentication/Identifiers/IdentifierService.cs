@@ -1815,12 +1815,25 @@ internal sealed class IdentifierService(
             if (await pending.FindForUpdateAsync(standing.Id, cancellationToken).ConfigureAwait(false)
                 is PendingVerification again)
             {
-                if (await AskAsync(again, source, cancellationToken).ConfigureAwait(false) is Error refused)
+                // REG-IDENT-004 AC8 (D-197): the repeat is a resend only from the session
+                // that staged the add. From any other it is staged afresh for the asking
+                // session on the row held above, under the identifier it is listed by:
+                // the record asked for below replaces the one sent before it, so nothing
+                // sent before it answers.
+                PendingVerification asked = again.IsReplacement || StagedBy(again, session, enrolment: null)
+                    ? again
+                    : PendingVerification.ToAdd(
+                        subject,
+                        session,
+                        StagedIdentity.Of(standing.Id, kind, entered, canonical),
+                        time.GetUtcNow());
+
+                if (await AskAsync(asked, source, cancellationToken).ConfigureAwait(false) is Error refused)
                 {
                     return (refused, false);
                 }
 
-                await pending.RecordAsync(again, cancellationToken).ConfigureAwait(false);
+                await pending.RecordAsync(asked, cancellationToken).ConfigureAwait(false);
 
                 return (null, true);
             }
