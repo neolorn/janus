@@ -48,6 +48,67 @@ public sealed class DeliveryReportEndpointTests
     }
 
     /// <summary>
+    /// Chapter 09 section 10 AC2, INT-SMS-005 AC3 and AUTH-ABUSE-004 AC20: a report that a
+    /// text was delivered is taken and answered 200. For a registration's code, whose
+    /// purpose is not <c>secondfactor</c>, it advances and releases nothing; for a send of
+    /// purpose <c>secondfactor</c> it releases the send's one count from
+    /// <c>sms.resend</c> and nothing else.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_005_AC3_ADeliveredReportReleasesOnlyASecondFactorSendsResendCountAsync()
+    {
+        await using Deployment deployment = Prepared();
+
+        string reference = await SentAsync(deployment);
+        var machine = new Machine(deployment);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
+        var resend = new RestrictionKey("sms.resend", RestrictionKeyKind.Destination, Flow.Number);
+
+        Answer verification = await machine
+            .CallAsync("/callbacks/sms/dlr?reference=" + reference + "&status=delivered");
+
+        Assert.Equal(StatusCodes.Status200OK, verification.Status);
+        Assert.Single(deployment.SendLedger.Sends(destination));
+        Assert.Single(deployment.SendLedger.Sends(resend));
+
+        const string other = "+201001234999";
+        string second;
+
+        await using (AsyncServiceScope scope = deployment.Scope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            _ = await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(PhoneNumber.TryParse(other, out PhoneNumber number));
+
+            second = (await scope.ServiceProvider.GetRequiredService<IGovernedSend>().UndertakeAsync(
+                    new OutboundMessage(
+                        SendDestination.Of(number),
+                        MessageKind.SecondStepCode,
+                        RestrictionPurpose.SecondFactor,
+                        "203.0.113.7",
+                        "en")
+                    {
+                        Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "123456" },
+                    },
+                    TestContext.Current.CancellationToken))
+                .Match(sent => sent.Value, error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
+
+            _ = await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Answer secondFactor = await machine
+            .CallAsync("/callbacks/sms/dlr?reference=" + second + "&status=delivered");
+
+        Assert.Equal(StatusCodes.Status200OK, secondFactor.Status);
+        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, other)));
+        Assert.Empty(deployment.SendLedger.Sends(new RestrictionKey("sms.resend", RestrictionKeyKind.Destination, other)));
+        Assert.Single(deployment.SendLedger.Sends(resend));
+    }
+
+    /// <summary>
     /// Chapter 09 section 10 AC1, INT-GEN-003 AC1 and INT-SMS-005 AC3: a report
     /// carrying a reference no send was given, and one the transport cannot read, are
     /// rejected and release nothing.
