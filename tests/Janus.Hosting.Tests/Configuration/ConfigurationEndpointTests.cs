@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Configuration;
@@ -85,6 +87,60 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal("PT1H", read.Text("default"));
         Assert.False(read.Json().GetProperty("protected").GetBoolean());
         Assert.Equal("increase", read.Text("direction"));
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC6: a loosening asked in process and one asked over the route meet
+    /// the same rule, the permission and then the step-up, and where both are admitted
+    /// they write the same audit record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_008_AC6_AChangeInProcessMeetsTheRouteRuleAndWritesItsRecordAsync()
+    {
+        Browser administrator = await AuthorisedAsync(Permissions.ConfigurationManage);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SessionId session = _deployment.Sessions.All.Last(held => held.Subject == subject).Id;
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        IConfigurationAdministration administration =
+            scope.ServiceProvider.GetRequiredService<IConfigurationAdministration>();
+
+        async Task<ErrorCode?> InProcessAsync() =>
+            (await administration.ChangeAsync(
+                AccessContext.Of(subject),
+                session,
+                Settings.SessionAal2Inactivity.Key,
+                JsonSerializer.SerializeToElement("PT2H"),
+                "a support window",
+                TestContext.Current.CancellationToken)).Match(() => (ErrorCode?)null, refusal => refusal.Code);
+
+        Answer denied = await LoosenedAsync(administrator);
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), denied.Text("code"));
+        Assert.Equal(ErrorCodes.Denied, await InProcessAsync());
+        Assert.Empty(_deployment.Changes.Written);
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+
+        Answer changed = await LoosenedAsync(administrator);
+
+        _deployment.Configuration.Set(Settings.SessionAal2Inactivity, Settings.SessionAal2Inactivity.Default);
+
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Null(await InProcessAsync());
+        Assert.Equal(TimeSpan.FromHours(2), await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Equal(2, _deployment.Changes.Written.Count);
+        Assert.Equal(_deployment.Changes.Written[0], _deployment.Changes.Written[1]);
+
+        _deployment.Configuration.Set(Settings.SessionAal2Inactivity, Settings.SessionAal2Inactivity.Default);
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer stale = await LoosenedAsync(administrator);
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), stale.Text("code"));
+        Assert.Equal(ErrorCodes.StepUpRequired, await InProcessAsync());
+        Assert.Equal(2, _deployment.Changes.Written.Count);
     }
 
     /// <summary>
