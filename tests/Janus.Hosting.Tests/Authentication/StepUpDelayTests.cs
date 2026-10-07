@@ -144,13 +144,13 @@ public sealed class StepUpDelayTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-001 AC3: a sign-in failure and a step-up failure against one account
+    /// AUTH-ABUSE-001 AC7: a sign-in failure and a step-up failure against one account
     /// are counted once, together, so neither flow is a second budget of guesses
     /// against the account's factors.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_001_AC3_SignInAndStepUpFailuresShareTheAccountsCountAsync()
+    public async Task AUTH_ABUSE_001_AC7_SignInAndStepUpFailuresShareTheAccountsCountAsync()
     {
         (Browser owner, string challenge) = await OpenedAsync();
         var stranger = new Browser(_deployment);

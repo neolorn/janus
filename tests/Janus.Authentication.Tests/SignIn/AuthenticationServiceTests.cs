@@ -328,7 +328,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// active account's same sign-in is offered it.
     /// </summary>
     [Fact]
-    public async Task IDN_ACCT_007_ARestrictedAccountsSignInTrustsNoDeviceAsync()
+    public async Task AUTH_FACT_015_AC8_ARestrictedAccountsSignInTrustsNoDeviceAsync()
     {
         SubjectId active = await AccountAsync();
 
@@ -2836,13 +2836,13 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-001 AC1, AUTH-ABUSE-003: failures against an identifier no account
+    /// AUTH-ABUSE-001 AC9, AUTH-ABUSE-003: failures against an identifier no account
     /// holds are counted against the identifier as failures against one an account
     /// holds are, so from a source that has failed nothing both are held alike and a
     /// third identifier is not held at all.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_001_AC1_AnIdentifierNoAccountHoldsIsHeldFromAFreshSourceAsOneAnAccountHoldsAsync()
+    public async Task AUTH_ABUSE_001_AC9_AnIdentifierNoAccountHoldsIsHeldFromAFreshSourceAsOneAnAccountHoldsAsync()
     {
         await AccountAsync();
 

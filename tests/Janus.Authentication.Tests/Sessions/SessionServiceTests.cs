@@ -736,12 +736,12 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-GEN-006 AC3: the city on an entry is what the local database made of the
+    /// AUTH-SESS-013 AC5: the city on an entry is what the local database made of the
     /// address the session was used from, and a place written onto the origin by the
     /// code that built it is not read.
     /// </summary>
     [Fact]
-    public async Task INT_GEN_006_AC3_TheCityIsWhatTheDatabaseMadeOfTheAddressAsync()
+    public async Task AUTH_SESS_013_AC5_TheCityIsWhatTheDatabaseMadeOfTheAddressAsync()
     {
         SubjectId subject = Subject();
         _locations.Holds("198.51.100.7", new SessionLocation("Alexandria", "EG"));

@@ -114,11 +114,11 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-001 AC2: a failure after a quiet spell earns what the halved count
+    /// AUTH-ABUSE-001 AC8: a failure after a quiet spell earns what the halved count
     /// earns, not what the count before the spell would have.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_001_AC2_AFailureAfterAQuietSpellEarnsLessAsync()
+    public async Task AUTH_ABUSE_001_AC8_AFailureAfterAQuietSpellEarnsLessAsync()
     {
         var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
 
@@ -130,12 +130,12 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-001 AC1: failures made one after another, each once the delay the
+    /// AUTH-ABUSE-001 AC8: failures made one after another, each once the delay the
     /// last one earned has run, escalate the delay; seconds of decay between them do
     /// not keep the count where it was.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_001_AC1_FailuresMadeOneAfterAnotherEscalateTheDelayAsync()
+    public async Task AUTH_ABUSE_001_AC8_FailuresMadeOneAfterAnotherEscalateTheDelayAsync()
     {
         var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
         var earned = new List<TimeSpan>();
@@ -292,7 +292,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     /// the browser itself is held by its source alone.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_001_AC5_ARecognisedBrowsersFailuresCountAgainstTheAccountAsync()
+    public async Task AUTH_ABUSE_001_AC10_ARecognisedBrowsersFailuresCountAgainstTheAccountAsync()
     {
         _configuration.Set(Settings.AlertingAuthFailuresThreshold, 5);
 

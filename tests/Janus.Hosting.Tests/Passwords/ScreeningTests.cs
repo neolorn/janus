@@ -242,7 +242,7 @@ public sealed class ScreeningTests : IDisposable
     /// treated as no corpus.
     /// </summary>
     [Fact]
-    public async Task ScreenAsync_ACorpusWithNoDate_RefusesAsync()
+    public async Task AUTH_PASS_004_AC7_AnOfflineListWithNoReadableDateAnswersNoScreeningAsync()
     {
         _service.Reachable = false;
         _offline = new OfflineCorpus(() => Written(Hash(Password) + Line));

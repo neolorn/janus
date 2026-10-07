@@ -210,7 +210,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_STEP_007_ASetPasswordIsAnnouncedAsync()
+    public async Task AUTH_STEP_007_AC4_ASetPasswordIsAnnouncedAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
         SubjectId recovering = await AccountAsync(password: false);

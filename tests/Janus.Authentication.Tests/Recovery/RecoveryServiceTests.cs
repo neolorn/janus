@@ -168,7 +168,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_STEP_007_ARecoveredPasswordIsAnnouncedAsync()
+    public async Task AUTH_STEP_007_AC4_ARecoveredPasswordIsAnnouncedAsync()
     {
         SubjectId subject = await AccountAsync(password: false);
 

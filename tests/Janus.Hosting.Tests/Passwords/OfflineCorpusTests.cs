@@ -19,7 +19,7 @@ public sealed class OfflineCorpusTests
     /// hexadecimal characters, one to a line.
     /// </summary>
     [Fact]
-    public void AUTH_PASS_004_TheShippedListIsTheHundredThousandItNames()
+    public void AUTH_PASS_004_AC6_TheShippedListIsTheHundredThousandItNames()
     {
         using Stream shipped = typeof(OfflineCorpus).Assembly.GetManifestResourceStream(OfflineCorpus.Resource)
             ?? throw new InvalidOperationException("The package carries no offline list.");

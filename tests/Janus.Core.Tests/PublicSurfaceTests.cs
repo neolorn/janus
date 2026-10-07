@@ -120,12 +120,12 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
-    /// INT-GEN-006 AC3: where a session was is resolved inside the library from the
+    /// AUTH-SESS-013 AC5: where a session was is resolved inside the library from the
     /// address it was used from, so no contract member is told a place by its caller.
     /// The equality a record is given compares two places and is told nothing.
     /// </summary>
     [Fact]
-    public void INT_GEN_006_AC3_NoContractMemberIsToldWhereASessionWas()
+    public void AUTH_SESS_013_AC5_NoContractMemberIsToldWhereASessionWas()
     {
         IEnumerable<string> told = typeof(Result).Assembly
             .GetExportedTypes()
