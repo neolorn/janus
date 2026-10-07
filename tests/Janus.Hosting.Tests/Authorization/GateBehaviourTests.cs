@@ -88,13 +88,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// IDN-ORG-003 AC1 and AC2: a grant of an organization whose deletion was requested
+    /// IDN-ORG-003 AC8 and AC2: a grant of an organization whose deletion was requested
     /// confers nothing on the next request, and confers again once the request is
     /// cancelled, the grant itself untouched.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task IDN_ORG_003_AC1_ASuspendedOrganizationConfersNothingAsync()
+    public async Task IDN_ORG_003_AC8_ASuspendedOrganizationConfersNothingAsync()
     {
         Nested nested = await NestAsync();
 
@@ -119,14 +119,14 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// IDN-ORG-003 AC1 and AC2, AUTHZ-TEST-001 AC3 (entry 266): a derivation confers
+    /// IDN-ORG-003 AC11, AUTHZ-TEST-001 AC3 (entry 266): a derivation confers
     /// nothing in an organization whose deletion was requested, on the check, the filter
     /// and the capability page alike, as a materialised one would not, and confers again
     /// once the request is cancelled, the host's fact untouched.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task IDN_ORG_003_AC1_ASuspendedOrganizationsDerivationsConferNothingAsync()
+    public async Task IDN_ORG_003_AC11_ASuspendedOrganizationsDerivationsConferNothingAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Nested nested = await NestAsync();
@@ -150,6 +150,39 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         Assert.True(await ChecksAsync(nested.Account, nested.Record));
         Assert.NotEmpty(await ListedAsync(nested, reading));
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC11: the explanation of a derivation reaching a record of an
+    /// organization whose deletion was requested is a denial naming no grant, and names
+    /// the derived grant again once the request is cancelled, the host's fact untouched.
+    /// The type asked about is the disclosing one, a concealing type being explained to
+    /// nobody (AUTHZ-CONCEAL-003).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC11_ASuspendedOrganizationsDerivationIsExplainedAsADenialAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.ReadNote], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        AccessExplanation before = await ExplainedAsync(nested);
+
+        await nested.Deployment.SuspendAsync(cancellationToken);
+
+        AccessExplanation suspended = await ExplainedAsync(nested);
+
+        await nested.Deployment.RestoreAsync(cancellationToken);
+
+        AccessExplanation restored = await ExplainedAsync(nested);
+
+        Assert.Equal((AccessOutcome.Allowed, GrantKind.Derived), (before.Outcome, before.Grant?.Kind));
+        Assert.Equal(AccessOutcome.Denied, suspended.Outcome);
+        Assert.Null(suspended.Grant);
+        Assert.Equal((AccessOutcome.Allowed, GrantKind.Derived), (restored.Outcome, restored.Grant?.Kind));
     }
 
     /// <summary>
@@ -278,6 +311,35 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         Assert.True(await ChecksAsync(one.Account, one.Record));
         Assert.True(await ChecksAsync(one.Account, other.Record));
+    }
+
+    /// <summary>
+    /// IDN-MEM-003 AC2: the check is handed the caller and the record and nothing that
+    /// names an organization, so one account asking the same way of two records is
+    /// decided by the organization each record belongs to: the grant over the whole of
+    /// one organization admits its record and not the other's.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_MEM_003_AC2_TheCheckTakesTheOrganizationFromTheResourceAsync()
+    {
+        Nested one = await NestAsync();
+        Nested other = await NestAsync(one.Account);
+
+        await one.Deployment.GrantAsync(
+            GrantSubject.Of(one.Account),
+            one.Role,
+            null,
+            false,
+            null,
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(
+            typeof(AccessContext).GetProperties(),
+            property => (Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType) == typeof(OrganizationId));
+        Assert.True(await ChecksAsync(one.Account, one.Record));
+        Assert.False(await ChecksAsync(one.Account, other.Record));
     }
 
     /// <summary>
@@ -1692,6 +1754,22 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             .Where(filter)
             .Select(document => document.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    // The explanation of the account's access to the note, asked with the host's rows.
+    private async Task<AccessExplanation> ExplainedAsync(Nested nested)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        return Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ExplainAsync(
+                    AccessContext.Of(nested.Account),
+                    HostPermissions.ReadNote,
+                    nested.Note,
+                    Sources(reading),
+                    TestContext.Current.CancellationToken));
     }
 
     // What the capability page confers on the record, asked the way a host asks it.

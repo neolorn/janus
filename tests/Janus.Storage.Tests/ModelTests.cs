@@ -73,6 +73,19 @@ public sealed class ModelTests
         RefuseColumnsNamedAfter(["staff", "customer", "employee", "internal", "external"]);
 
     /// <summary>
+    /// IDN-MEM-003 AC1: the session's row has no column naming an organization, so there
+    /// is no active organization for a request to carry.
+    /// </summary>
+    [Fact]
+    public void IDN_MEM_003_AC1_NoSessionColumnNamesAnOrganization()
+    {
+        List<string> held = [.. Columns().Where(column => column.StartsWith("sessions.", StringComparison.Ordinal))];
+
+        Assert.NotEmpty(held);
+        Assert.DoesNotContain(held, column => column.Contains("organization", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// REG-ACCT-001 AC2: every column the library maps is a field the item's table
     /// names, or one the chapter that table points to requires. A column that belongs
     /// to neither is a field the account grew without a rule for who fills it, so the

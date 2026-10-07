@@ -143,6 +143,41 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
 
 
     /// <summary>
+    /// IDN-ORG-003 AC8: the sessions of the organization's current members end inside
+    /// the unit of work that suspends it: nothing has ended when the organization's row
+    /// is held, and the one commit that follows carries the suspension, the ended
+    /// sessions and the record together. A session of someone who is no member stands.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_003_AC8_TheMemberSessionsEndInTheUnitOfWorkThatSuspendsAsync()
+    {
+        var member = SubjectId.New(_randomness);
+        Session theirs = Begun(member);
+        Session own = Begun(_administrator);
+        (bool Open, DateTimeOffset? Ended) held = default;
+
+        _memberships.Place(member, Customer);
+        _organizations.Holding = _ => held = (_work.Open, theirs.EndedAt);
+
+        Result requested = await Service.RequestDeletionAsync(
+            Acting,
+            own.Id,
+            Customer,
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(requested.Match(() => true, _ => false));
+        Assert.Equal((true, null), held);
+        Assert.Equal((1, 0, false), (_work.Committed, _work.RolledBack, _work.Open));
+        Assert.Equal(Noon, theirs.EndedAt);
+        Assert.Null(own.EndedAt);
+        Assert.Equal(
+            Noon,
+            (await _organizations.FindAsync(Customer, TestContext.Current.CancellationToken))?.DeletionRequestedAt);
+        Assert.Single(_audit.Changes);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10: a deletion request that finds one made under the
     /// organization's lock, and a cancellation that finds the deletion cancelled, are
     /// each done having written nothing, so each rolls its unit of work back.
@@ -230,11 +265,13 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
             () => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error.Code);
 
-    private SessionId Stepped()
+    private SessionId Stepped() => Begun(_administrator).Id;
+
+    private Session Begun(SubjectId subject)
     {
         var session = Session.Begin(
             SessionId.New(_clock),
-            _administrator,
+            subject,
             new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
             Somewhere,
             Noon,
@@ -247,7 +284,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
             .GetAwaiter()
             .GetResult();
 
-        return session.Id;
+        return session;
     }
 
     private byte[] Drawn()

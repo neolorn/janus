@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -132,6 +134,45 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         Assert.Equal(GrantKind.Materialised, explained.Grant?.Kind);
         Assert.Equal(Reviewer, explained.Grant?.Role);
         Assert.Equal(reviewed.Workspace, explained.Grant?.InheritedFrom);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC11: a derivation precomputed into grant rows admits no one to a
+    /// record of an organization whose deletion was requested, through the check, the
+    /// filter, the capability page or the explanation, the rows standing as they were,
+    /// and admits again once the request is cancelled.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC11_AMaterialisedDerivationConfersNothingWhileDeletionIsRequestedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+        await RefreshAsync(deployment, reviewed);
+
+        Assert.True(await AdmitsAsync(deployment, reviewed));
+        Assert.NotEmpty(await ListedAsync(deployment, reviewed));
+        Assert.Contains(HostPermissions.Read, await ConferredAsync(deployment, reviewed));
+        Assert.Equal(GrantKind.Materialised, (await ExplainedAsync(deployment, reviewed)).Grant?.Kind);
+
+        await reviewed.Deployment.SuspendAsync(cancellationToken);
+
+        AccessExplanation suspended = await ExplainedAsync(deployment, reviewed);
+
+        Assert.False(await AdmitsAsync(deployment, reviewed));
+        Assert.Empty(await ListedAsync(deployment, reviewed));
+        Assert.Empty(await ConferredAsync(deployment, reviewed));
+        Assert.Equal(AccessOutcome.Denied, suspended.Outcome);
+        Assert.Null(suspended.Grant);
+
+        await reviewed.Deployment.RestoreAsync(cancellationToken);
+
+        Assert.True(await AdmitsAsync(deployment, reviewed));
+        Assert.NotEmpty(await ListedAsync(deployment, reviewed));
+        Assert.Contains(HostPermissions.Read, await ConferredAsync(deployment, reviewed));
+        Assert.Equal(GrantKind.Materialised, (await ExplainedAsync(deployment, reviewed)).Grant?.Kind);
     }
 
     /// <summary>
@@ -508,6 +549,59 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => true, _ => false);
+    }
+
+    // The documents the filter admits for the account, over the host's own table.
+    private async Task<IReadOnlyList<string>> ListedAsync(IServiceProvider deployment, Reviewed reviewed)
+    {
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Expression<Func<HostDocument, bool>> filter = Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .FilterAsync(
+                    AccessContext.Of(reviewed.Account),
+                    HostPermissions.Read,
+                    Document,
+                    reviewed.Deployment.Organization,
+                    Sources(reading),
+                    TestContext.Current.CancellationToken));
+
+        return await reading.Documents
+            .Where(filter)
+            .Select(document => document.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    // What the capability page confers on the document, asked without the host's rows.
+    private static async Task<IReadOnlySet<Permission>> ConferredAsync(IServiceProvider deployment, Reviewed reviewed)
+    {
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        IReadOnlyList<Capability> page = Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(reviewed.Account),
+                    Document,
+                    [reviewed.Record.Id],
+                    [HostPermissions.Read],
+                    TestContext.Current.CancellationToken));
+
+        return Assert.Single(page).Can;
+    }
+
+    // The explanation of the account's access to the note, the disclosing type.
+    private static async Task<AccessExplanation> ExplainedAsync(IServiceProvider deployment, Reviewed reviewed)
+    {
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        return Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ExplainAsync(
+                    AccessContext.Of(reviewed.Account),
+                    HostPermissions.ReadNote,
+                    reviewed.Note,
+                    TestContext.Current.CancellationToken));
     }
 
     // A workspace with a document in it, an account reviewing the workspace, and the

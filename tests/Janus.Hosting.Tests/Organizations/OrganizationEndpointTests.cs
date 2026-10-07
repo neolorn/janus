@@ -114,6 +114,108 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ORG-003 AC8: the request ends the session of every current member as it
+    /// suspends the organization, so a member's own browser is refused
+    /// at its next request; the member then signs in again with the password and holds a
+    /// session. What the organization's grants confer meanwhile is the gate's to say
+    /// (AUTHZ-CACHE-001).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC8_TheRequestEndsEveryMemberSessionAndTheMemberSignsInAgainAsync()
+    {
+        // The new-device check would hold the sign-in for a code (AUTH-FACT-016), which
+        // is not what this test is about.
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        (Browser member, SubjectId subject) = await AuthorisedAsync(Administration);
+        Session colleague = await SessionOfAsync(new SubjectId(Guid.NewGuid()));
+
+        _deployment.Memberships.Place(subject, Branch);
+        _deployment.Memberships.Place(colleague.Subject, Branch);
+
+        Answer requested = await RequestedAsync(member, Branch);
+        Answer refused = await member.SendAsync("GET", "/auth/session");
+        Browser again = await SignedInAgainAsync();
+        Answer read = await again.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status204NoContent, requested.Status);
+        Assert.Equal(_deployment.Clock.GetUtcNow(), (await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(_deployment.Clock.GetUtcNow(), colleague.EndedAt);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC9: a cancellation restores the organization and no session the
+    /// request ended, so the browser the request signed out is still refused, and the
+    /// session of another member stays ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC9_ACancellationRestoresNoEndedSessionAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        (Browser member, SubjectId subject) = await AuthorisedAsync(Administration);
+        Session colleague = await SessionOfAsync(new SubjectId(Guid.NewGuid()));
+
+        _deployment.Memberships.Place(subject, Branch);
+        _deployment.Memberships.Place(colleague.Subject, Branch);
+
+        _ = await RequestedAsync(member, Branch);
+        DateTimeOffset ended = _deployment.Clock.GetUtcNow();
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
+
+        Browser again = await SignedInAgainAsync();
+        Answer cancelled = await CancelledAsync(again, Branch);
+        Answer refused = await member.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+        Assert.Null((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
+        Assert.Equal(ended, colleague.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC10: a cancellation at the window's end, after it, and after the
+    /// erasure has run is refused with the one code, and changes and records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC10_ACancellationAtOrAfterTheWindowsEndIsRefusedErasedOrNotAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        OrganizationId overdue = new(Guid.NewGuid());
+        OrganizationId erased = new(Guid.NewGuid());
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        _deployment.Organizations.Seed(Branch, deletionRequestedAt: now - TimeSpan.FromDays(30));
+        _deployment.Organizations.Seed(overdue, deletionRequestedAt: now - TimeSpan.FromDays(45));
+        _deployment.Organizations.Seed(
+            erased,
+            deletionRequestedAt: now - TimeSpan.FromDays(31),
+            erasedAt: now - TimeSpan.FromDays(1));
+
+        Answer atTheEnd = await CancelledAsync(administrator, Branch);
+        Answer afterIt = await CancelledAsync(administrator, overdue);
+        Answer afterTheErasure = await CancelledAsync(administrator, erased);
+
+        Assert.All(
+            [atTheEnd, afterIt, afterTheErasure],
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+                Assert.Equal(ErrorCodes.DeletionWindowElapsed.ToString(), answer.Text("code"));
+            });
+        Assert.NotNull((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.NotNull((await StandingAsync(overdue)).DeletionRequestedAt);
+        Assert.NotNull((await StandingAsync(erased)).ErasedAt);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
     /// IDN-ORG-003: a request for an organization whose deletion is already requested
     /// changes nothing and records nothing.
     /// </summary>
@@ -302,14 +404,14 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ACCT-005 AC3 and IDN-ACCT-004 AC3: an organization name is judged on its
+    /// IDN-ACCT-005 AC5 and IDN-ACCT-004 AC3: an organization name is judged on its
     /// comparison key, so a word that mixes scripts once its circled letters are
     /// normalized is refused by the named code naming the field, as a plainly mixed one
     /// is, and nothing is created; whole words of separate scripts are accepted.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ACCT_005_AC3_AnOrganizationNameMixingScriptsInAWordIsRefusedByItsCodeAsync()
+    public async Task IDN_ACCT_005_AC5_AnOrganizationNameMixingScriptsInAWordIsRefusedByItsCodeAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Administration);
 
@@ -505,6 +607,27 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         return session;
+    }
+
+    // The person the flow registered, signed in afresh with their password in a browser
+    // that holds nothing of the earlier session.
+    private async Task<Browser> SignedInAgainAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer signedIn = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Equal("complete", signedIn.Text("status"));
+
+        return browser;
     }
 
     // The policy key the deployment holds for the organization, where one was written.

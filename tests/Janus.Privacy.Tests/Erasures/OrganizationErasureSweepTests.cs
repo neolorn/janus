@@ -225,7 +225,7 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ORG_003_AnErasureWhoseEventRowFailsErasesNothingAsync()
+    public async Task IDN_ORG_003_AC6_AnErasureWhoseEventRowFailsErasesNothingAsync()
     {
         _organizations.Deletes(Acme, Noon, members: 1);
         _organizations.Deletes(Beta, Noon.AddMinutes(1));
@@ -276,7 +276,7 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ORG_003_APassThatCannotReadItsWindowErasesNothingAsync()
+    public async Task IDN_ORG_003_AC7_APassThatCannotReadItsWindowErasesNothingAsync()
     {
         _organizations.Deletes(Acme, Noon, members: 1);
 
