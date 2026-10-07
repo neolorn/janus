@@ -1055,6 +1055,7 @@ GET /admin/restrictions
       [].buckets[].max: number
       [].buckets[].interval: string
       [].buckets[].window: string
+      [].resend: boolean
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
 DELETE /admin/restrictions/{name}
@@ -1076,6 +1077,7 @@ GET /admin/restrictions/{name}
       buckets[].max: number
       buckets[].interval: string
       buckets[].window: string
+      resend: boolean
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
@@ -1088,6 +1090,7 @@ PUT /admin/restrictions/{name}
     buckets[].max: number?
     buckets[].interval: string
     buckets[].window: string
+    resend: boolean?
     reason: string
   204
   400 api.request.malformed

@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A restriction may be marked `resend` (`Restriction.Resend`): `PUT
+  /admin/restrictions/{name}` takes an optional boolean `resend`, absent read as false
+  and anything else refused 400 `api.request.malformed` naming `resend`, and `GET
+  /admin/restrictions` and `GET /admin/restrictions/{name}` answer each restriction's
+  `resend`. A stored restriction without the mark reads as unmarked. Adding the mark
+  to a restriction is a loosening, so it needs `system:administer` and raises the
+  Normal alert; removing it is not.
 - A send a restriction refuses carries in `retryAt` the earliest instant at which every
   bucket it exceeds has room for it: where it exceeds several, of one restriction or of
   several, that is the latest of the instants they lift at.

@@ -148,6 +148,52 @@ public sealed class RestrictionSetSettingTests
                 Named("sms.destination") with { Channel = before },
                 Named("sms.destination") with { Channel = after }));
 
+    /// <summary>
+    /// AUTH-ABUSE-004 and chapter 10 section 5.16a: a stored restriction without the
+    /// <c>resend</c> mark reads as unmarked, and one written with it reads back marked.
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_004_AStoredRestrictionWithoutTheResendMarkReadsAsUnmarked()
+    {
+        const string stored =
+            "[{\"name\":\"old.destination\",\"key\":\"destination\",\"purpose\":\"any\","
+            + "\"buckets\":[{\"max\":3,\"interval\":\"PT24H\",\"window\":\"sliding\"}]}]";
+
+        Restriction unmarked = Assert.Single(Settings.Restrictions
+            .Read(stored)
+            .Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString())));
+
+        Restriction marked = Assert.Single(Settings.Restrictions
+            .Read(Settings.Restrictions.Write([unmarked with { Resend = true }]))
+            .Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString())));
+
+        Assert.False(unmarked.Resend);
+        Assert.True(marked.Resend);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC3 and chapter 10 section 4: a <c>resend</c> mark added is a
+    /// loosening, and one removed or left as it stood is not; a new restriction that
+    /// carries the mark loosens nothing.
+    /// </summary>
+    /// <param name="before">Whether the restriction that stood was marked.</param>
+    /// <param name="after">Whether the one that replaces it is.</param>
+    /// <param name="loosening">Whether the change loosens.</param>
+    [Theory]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public void AUTH_ABUSE_004_AC3_AddingTheResendMarkIsALoosening(bool before, bool after, bool loosening)
+    {
+        Assert.Equal(
+            loosening,
+            RestrictionSetSetting.Loosens(
+                Named("sms.destination") with { Resend = before },
+                Named("sms.destination") with { Resend = after }));
+        Assert.False(RestrictionSetSetting.Loosens(null, Named("sms.destination") with { Resend = after }));
+    }
+
     // A record's equality compares its list of buckets by reference, so two readings of
     // one set are compared member by member.
     private static bool RestrictionEquals(Restriction left, Restriction right) =>
@@ -156,6 +202,7 @@ public sealed class RestrictionSetSettingTests
         && left.HostKeyName == right.HostKeyName
         && left.Purpose == right.Purpose
         && left.Channel == right.Channel
+        && left.Resend == right.Resend
         && left.Buckets.SequenceEqual(right.Buckets);
 
     private static bool Admitted(string name) =>
