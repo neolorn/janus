@@ -587,6 +587,74 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007 AC3 (D-197): a text code's credential whose number left the
+    /// account is the one a cancel does not return, whatever suspended it: from a
+    /// session of the account and from the link an earlier notice carried the cancel is
+    /// <c>auth.credential.notfound</c>, a report of it answers that one is pending, the
+    /// notices its window still owes carry no link, and the window invalidates it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC3_NoCancelReturnsATextCodeWhoseNumberLeftAndItsWindowInvalidatesItAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var bound = Authenticator.Bound(
+            AuthenticatorId.New(_clock),
+            subject,
+            Factor.PhoneCode,
+            Label(),
+            Number,
+            _clock.GetUtcNow());
+
+        _authenticators.Hold(bound);
+
+        _ = await Service.ReportAsync(AccessContext.Of(subject), bound.Id, Source, TestContext.Current.CancellationToken);
+
+        string link = Encoding.UTF8.GetString(
+            (await _reports.FindAsync(bound.Id, TestContext.Current.CancellationToken))!.Cancel);
+        int linked = _notifications.Sent.Count(sent => sent.Message is MessageKind.CredentialSuspended);
+
+        bound.Unbind();
+        await _authenticators.RecordAsync(bound, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Cancelled(await Service.CancelAsync(
+                AccessContext.Of(subject),
+                bound.Id,
+                cancelToken: null,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Cancelled(await Service.CancelAsync(context: null, bound.Id, link, TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.LossReportPending,
+            Refused(await Service.ReportAsync(
+                AccessContext.Of(subject),
+                bound.Id,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(AuthenticatorState.Suspended, await StateAsync(bound.Id));
+        Assert.Empty(_events.Of<CredentialRestored>());
+
+        _clock.Advance(Settings.RecoveryInvalidationNoticeInterval.Default);
+
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(linked, _notifications.Sent.Count(sent => sent.Message is MessageKind.CredentialSuspended));
+        Assert.Contains(_notifications.Sent, sent => sent.Message is MessageKind.CredentialUnbound);
+        Assert.All(
+            _notifications.Sent.Where(sent => sent.Message is MessageKind.CredentialUnbound),
+            notice => Assert.Empty(notice.Values));
+
+        _clock.Advance(Settings.RecoveryInvalidationWindow.Default);
+
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AuthenticatorState.Invalidated, await StateAsync(bound.Id));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC3: the link every notice carried cancels the report on its own,
     /// which is what someone who cannot sign in has.
     /// </summary>
@@ -1072,6 +1140,9 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     private static bool Succeeded(Result result) => result.Match(() => true, _ => false);
+
+    // What a cancel was refused with, or nothing where it cancelled the report.
+    private static ErrorCode Cancelled(Result result) => result.Match(() => default, error => error.Code);
 
     private static ErrorCode Refused<TValue>(Result<TValue> result) =>
         result.Match(_ => default, error => error.Code);

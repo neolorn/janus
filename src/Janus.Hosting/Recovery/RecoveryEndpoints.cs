@@ -57,7 +57,8 @@ internal static class RecoveryEndpoints
         _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.SessionExpired, ErrorCodes.LossReportNotPermitted,
+                    ErrorCodes.SessionExpired, ErrorCodes.CredentialNotFound,
+                    ErrorCodes.LossReportNotPermitted,
                     ErrorCodes.LossReportPending)
                 .Binding<AuthenticatorId>("id"))
             .Produces(StatusCodes.Status204NoContent);

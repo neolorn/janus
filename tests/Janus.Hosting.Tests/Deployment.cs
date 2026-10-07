@@ -1051,6 +1051,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IAccounts, AccountAdministration>();
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<TextedEnrolments>();
+        _ = services.AddScoped<BoundCredentials>();
         _ = services.AddScoped<WebAuthnService>();
         _ = services.AddScoped<SignInLinks>();
         _ = services.AddScoped<VerificationCodes>();

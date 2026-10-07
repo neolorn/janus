@@ -31,6 +31,7 @@ GET /account
       credentials[].label: string
       credentials[].state: AuthenticatorState
       credentials[].invalidatesAt: DateTimeOffset?
+      credentials[].cancellable: boolean?
       credentials[].backupEligible: boolean?
       credentials[].backupState: boolean?
       credentials[].addedAt: DateTimeOffset
@@ -58,6 +59,7 @@ GET /account/credentials
       [].label: string
       [].state: AuthenticatorState
       [].invalidatesAt: DateTimeOffset?
+      [].cancellable: boolean?
       [].backupEligible: boolean?
       [].backupState: boolean?
       [].addedAt: DateTimeOffset
@@ -1559,6 +1561,7 @@ POST /recovery/report-loss/{id}/cancel
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid
+  404 auth.credential.notfound
   409 auth.lossreport.notpermitted auth.lossreport.pending
 GET /register
   200

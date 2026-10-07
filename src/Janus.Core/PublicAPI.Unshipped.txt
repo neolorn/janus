@@ -651,8 +651,10 @@ Janus.Core.CredentialSummary.BackupEligible.get -> bool?
 Janus.Core.CredentialSummary.BackupEligible.init -> void
 Janus.Core.CredentialSummary.BackupState.get -> bool?
 Janus.Core.CredentialSummary.BackupState.init -> void
-Janus.Core.CredentialSummary.CredentialSummary(Janus.Core.AuthenticatorId Id, Janus.Core.Factor Kind, string! Label, Janus.Core.AuthenticatorState State, System.DateTimeOffset? InvalidatesAt, bool? BackupEligible, bool? BackupState, bool Preferred, System.DateTimeOffset AddedAt, System.DateTimeOffset? LastUsedAt) -> void
-Janus.Core.CredentialSummary.Deconstruct(out Janus.Core.AuthenticatorId Id, out Janus.Core.Factor Kind, out string! Label, out Janus.Core.AuthenticatorState State, out System.DateTimeOffset? InvalidatesAt, out bool? BackupEligible, out bool? BackupState, out bool Preferred, out System.DateTimeOffset AddedAt, out System.DateTimeOffset? LastUsedAt) -> void
+Janus.Core.CredentialSummary.Cancellable.get -> bool?
+Janus.Core.CredentialSummary.Cancellable.init -> void
+Janus.Core.CredentialSummary.CredentialSummary(Janus.Core.AuthenticatorId Id, Janus.Core.Factor Kind, string! Label, Janus.Core.AuthenticatorState State, System.DateTimeOffset? InvalidatesAt, bool? Cancellable, bool? BackupEligible, bool? BackupState, bool Preferred, System.DateTimeOffset AddedAt, System.DateTimeOffset? LastUsedAt) -> void
+Janus.Core.CredentialSummary.Deconstruct(out Janus.Core.AuthenticatorId Id, out Janus.Core.Factor Kind, out string! Label, out Janus.Core.AuthenticatorState State, out System.DateTimeOffset? InvalidatesAt, out bool? Cancellable, out bool? BackupEligible, out bool? BackupState, out bool Preferred, out System.DateTimeOffset AddedAt, out System.DateTimeOffset? LastUsedAt) -> void
 Janus.Core.CredentialSummary.Equals(Janus.Core.CredentialSummary? other) -> bool
 Janus.Core.CredentialSummary.Id.get -> Janus.Core.AuthenticatorId
 Janus.Core.CredentialSummary.Id.init -> void

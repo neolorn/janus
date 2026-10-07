@@ -31,10 +31,20 @@ internal static class CredentialSummaries
             credential.Label.Value,
             credential.State,
             credential.InvalidatesAt,
+            Cancellable(credential),
             credential.WebAuthn?.BackupEligible,
             credential.WebAuthn?.BackupState,
             preferred,
             credential.AddedAt,
             credential.LastUsedAt);
     }
+
+    // `09` GET /account/credentials (D-197): a suspended credential says whether a
+    // cancel returns it to active. None returns a texted second step whose number left
+    // the account, whatever suspended it, nor a social credential a provider's security
+    // event holds, which a sign-in by another factor restores (IDN-LIFE-012a).
+    private static bool? Cancellable(Authenticator credential) =>
+        credential.State is AuthenticatorState.Suspended
+            ? !(credential.IsUnbound || credential.IsHeldByProvider)
+            : null;
 }

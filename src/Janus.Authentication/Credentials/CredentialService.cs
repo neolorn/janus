@@ -935,7 +935,7 @@ internal sealed class CredentialService(
         // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
         // reaching less than it does now runs the notified window instead, so the
         // credential is refused at once and gone only once somebody has been told.
-        bool lowers = refusal is null && Lowers(enrolled, going!, password);
+        bool lowers = refusal is null && HeldFactors.LoweredWithout(enrolled, going!, password);
 
         if (refusal is not null || lowers)
         {
@@ -1251,23 +1251,6 @@ internal sealed class CredentialService(
             is Error refused
             ? Result.Failure<Acting>(refused)
             : Result.Success(acting);
-    }
-
-    // What the account would reach without this credential, against what it reaches
-    // with it: the comparison AUTH-STEP-006 turns on.
-    private static bool Lowers(
-        IReadOnlyList<Authenticator> enrolled,
-        Authenticator going,
-        bool password)
-    {
-        AssuranceLevel standing = StepUp.Reachable(HeldFactors.Of(enrolled, password).Standing).Level;
-        AssuranceLevel without = StepUp
-            .Reachable(HeldFactors
-                .Of([.. enrolled.Where(credential => credential.Id != going.Id)], password)
-                .Standing)
-            .Level;
-
-        return without < standing;
     }
 
     private static SendDestination? Destination(HeldIdentifier identifier)

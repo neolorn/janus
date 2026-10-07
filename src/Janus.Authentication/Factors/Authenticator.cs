@@ -368,6 +368,20 @@ internal sealed class Authenticator
     }
 
     /// <summary>
+    /// Whether it is a second step the library texts whose number is no longer the
+    /// account's: the number it was bound to left the account, or it was never bound to
+    /// one. No code is texted for it and no cancel returns it (AUTH-FACT-002,
+    /// AUTH-RECOV-007).
+    /// </summary>
+    public bool IsUnbound => IsBoundToNumber(Factor) && Number is null;
+
+    /// <summary>
+    /// The number it is bound to left the account, so it is bound to none from now; an
+    /// undo that restores the number does not bind it again (AUTH-FACT-002).
+    /// </summary>
+    public void Unbind() => Number = null;
+
+    /// <summary>
     /// Whether a social provider's security event holds it: suspended with no instant
     /// at which it is invalidated, until the person signs in by another factor
     /// (IDN-LIFE-012a). A reported loss always carries that instant, so the two are

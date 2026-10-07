@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- When the number a `phoneCode` credential is bound to leaves the account (its identifier
+  removed, its value replaced, or displaced by an undo), the credential is taken out of
+  use in the same unit of work: an active one is removed where the account reaches as
+  much without it, and otherwise suspended for `recovery.invalidation.window`; one
+  already suspended keeps its invalidation instant. A pending enrolment bound to the
+  number ends with it. An undo restores the number, never the credential or the
+  enrolment. A suspended credential whose number left is told by `credential-unbound`
+  when the number leaves and on its suspension's schedule, its cancel is 404
+  `auth.credential.notfound` (now declared on `POST /recovery/report-loss/{id}/cancel`),
+  and a right code sent before the number left is refused `auth.factor.rejected`.
+- `CredentialSummary.Cancellable`, listed as `cancellable` by `GET /account` and
+  `GET /account/credentials`: for a suspended credential, whether a cancel returns it to
+  active; absent where the credential is not suspended.
 - The message kind `credential-unbound` (`MessageKind.CredentialUnbound`): the notice of
   a suspended `phoneCode` credential whose number left the account. It goes out by mail
   and by text, is a notice outside the destination restrictions, names no placeholder,
