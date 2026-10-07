@@ -9,8 +9,10 @@ using Dapper;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Grants;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -1307,6 +1309,150 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-001 AC4: a capability page and an explanation asked without the
+    /// host's rows on a type a derivation reaches are faults for a permission the
+    /// conferred role does not allow, as they are for one it does.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_001_AC4_APageOrAnExplanationIsAFaultWhateverTheRoleAllowsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result<IReadOnlyList<Capability>> page = await gate.CapabilitiesAsync(
+            AccessContext.Of(nested.Account),
+            Document,
+            [nested.Record.Id],
+            [HostPermissions.Edit],
+            cancellationToken);
+        Result<AccessExplanation> explaining = await gate.ExplainAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.ReadNote,
+            nested.Note,
+            cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.DerivationSourcesMissing,
+            page.Match(_ => throw new InvalidOperationException("It was not a fault."), error => error.Code));
+        Assert.Equal(
+            ErrorCodes.DerivationSourcesMissing,
+            explaining.Match(_ => throw new InvalidOperationException("It was not a fault."), error => error.Code));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-005 AC5: a page of fifty records on a type a derivation reaches, asked
+    /// for three permissions with the host's rows, is one statement in the host's
+    /// context and no grant read through the library's own connection, and a deny on a
+    /// record defeats the derived grant on the page as it does in the check.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC5_APageOfFiftyAskedThreePermissionsIsOneStatementAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+        List<ResourceId> page = [];
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        for (int record = 0; record < 50; record++)
+        {
+            ResourceReference reference = Reference(Document);
+            await nested.Deployment.RegisterAsync(reference, nested.Bottom, cancellationToken);
+            page.Add(reference.Id);
+        }
+
+        ResourceId denied = page[17];
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            new ResourceReference(Document, denied),
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        var counted = new CountedCommands();
+        IReadOnlyList<Capability> capabilities;
+        int grantReads;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        await using (HostContext reading = host.Context(counted))
+        {
+            using var traced = new TracedStatements();
+
+            capabilities = Rendered(
+                await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .CapabilitiesAsync(
+                        AccessContext.Of(nested.Account),
+                        Document,
+                        page,
+                        [HostPermissions.Read, HostPermissions.Edit, HostPermissions.Publish],
+                        Sources(reading),
+                        cancellationToken));
+            grantReads = GrantReads(traced);
+        }
+
+        bool deniedIsChecked = await ChecksAsync(nested.Account, new ResourceReference(Document, denied));
+        bool anotherIsChecked = await ChecksAsync(nested.Account, new ResourceReference(Document, page[18]));
+
+        Assert.Equal(1, counted.Statements);
+        Assert.Equal(1, grantReads);
+        Assert.Equal(page, capabilities.Select(capability => capability.Resource));
+        Assert.Empty(capabilities.Single(capability => capability.Resource == denied).Can);
+        Assert.All(
+            capabilities.Where(capability => capability.Resource != denied),
+            capability => Assert.Equal([HostPermissions.Read], capability.Can));
+        Assert.False(deniedIsChecked);
+        Assert.True(anotherIsChecked);
+    }
+
+    /// <summary>
+    /// AUTHZ-CACHE-001 AC9: an organization's deletion request stops its grants
+    /// conferring on the next request and its cancellation restores them, and neither
+    /// raises the holder's counter, the request being read live through the effective
+    /// grants.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CACHE_001_AC9_ADeletionRequestAndItsCancellationRaiseNoCounterAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        long before = await VersionAsync(nested.Account);
+        bool conferred = await ChecksAsync(nested.Account, nested.Record);
+
+        await DeletionAsync(nested.Deployment.Organization, requested: true);
+        (bool Conferred, long Version) requested =
+            (await ChecksAsync(nested.Account, nested.Record), await VersionAsync(nested.Account));
+        await DeletionAsync(nested.Deployment.Organization, requested: false);
+        (bool Conferred, long Version) cancelled =
+            (await ChecksAsync(nested.Account, nested.Record), await VersionAsync(nested.Account));
+
+        Assert.True(conferred);
+        Assert.Equal((false, before), requested);
+        Assert.Equal((true, before), cancelled);
+    }
+
+    /// <summary>
     /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-162): on a type no derivation reaches,
     /// on itself or through a container, the stored grants are the whole of the answer
     /// and the path without the host's rows answers it.
@@ -2233,6 +2379,42 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         traced.Texts.Count(text =>
             text.Contains("effective_grants", StringComparison.Ordinal)
             || text.Contains("ancestry", StringComparison.Ordinal));
+
+    // The counter a change to what the account holds raises (AUTHZ-CACHE-001).
+    private async Task<long> VersionAsync(SubjectId account)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IGrantStore>()
+            .VersionAsync(account, TestContext.Current.CancellationToken);
+    }
+
+    // The organization's deletion requested, or the request cancelled, as the operation
+    // writes either: through the directory, in a unit of work of its own (IDN-ORG-003).
+    private async Task DeletionAsync(OrganizationId organization, bool requested)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        IOrganizationDirectory directory = scope.ServiceProvider.GetRequiredService<IOrganizationDirectory>();
+
+        await work.BeginAsync(cancellationToken);
+
+        if (requested)
+        {
+            (await directory.RequestDeletionAsync(organization, Deployment.Noon, cancellationToken))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+        else
+        {
+            await directory.CancelDeletionAsync(organization, cancellationToken);
+        }
+
+        (await work.CommitAsync(cancellationToken))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
 
     // An organization-wide check, as an administrative operation makes it.
     private async Task<bool> HeldAsync(SubjectId account, OrganizationId organization)

@@ -131,6 +131,56 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-GATE-004 AC5: where a deny on the record matches beside the fact that
+    /// would admit it, the explanation asked with the host's rows names the deny, the
+    /// row somebody wrote, and not the grant the fact produced.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC5_ADenyIsNamedInsteadOfTheGrantAFactProducedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+
+        await deployed.Deployment.NamedRoleAsync(
+            Reviewer,
+            [HostPermissions.ReadNote],
+            cancellationToken);
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Account, cancellationToken);
+
+        GrantId deny = await deployed.Deployment.GrantAsync(
+            GrantSubject.Of(deployed.Account),
+            deployed.Role,
+            deployed.Note,
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        AccessExplanation explanation = Explained(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ExplainAsync(
+                    AccessContext.Of(deployed.Account),
+                    HostPermissions.ReadNote,
+                    deployed.Note,
+                    Sources(reading),
+                    cancellationToken));
+
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+
+        ExplainedGrant grant = Assert.IsType<ExplainedGrant>(explanation.Grant);
+
+        Assert.Equal(deny, grant.Id);
+        Assert.Equal(GrantKind.Stored, grant.Kind);
+        Assert.Equal(deployed.Role, grant.Role);
+        Assert.True(grant.Deny);
+        Assert.Null(grant.InheritedFrom);
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC1, AUTHZ-DERIVE-002 AC1 (D-162): where no fact of the host's
     /// admits the record either, the explanation asked with the rows says that no grant
     /// matched rather than refusing the operation.
