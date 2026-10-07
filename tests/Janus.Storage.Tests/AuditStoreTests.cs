@@ -455,6 +455,107 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
+    /// PRIV-BREACH-002 AC3: the trail carries what a record holds in the clear and
+    /// nothing it holds under a subject's key, whichever side of the record the subject
+    /// it is read for is on: its own act, another's act on it, and its act on another.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_AC3_TheTrailCarriesNoValueHeldUnderASubjectsKeyAsync()
+    {
+        const string keyed = "ahmed@example.com";
+
+        SubjectId subject = await _deployment.AccountAsync(Now());
+        SubjectId other = await _deployment.AccountAsync(Now());
+        DateTimeOffset occurred = Now();
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            occurred,
+            subject,
+            subject,
+            breakGlassReason: null,
+            organization: null,
+            details: Fields(("trigger", "staff-report")),
+            personalDetails: Fields(("reason", keyed))));
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            occurred - TimeSpan.FromMinutes(1),
+            other,
+            subject,
+            breakGlassReason: null,
+            organization: null,
+            personalDetails: Fields(("address", keyed))));
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            occurred - TimeSpan.FromMinutes(2),
+            subject,
+            other,
+            breakGlassReason: null,
+            organization: null,
+            personalDetails: Fields(("address", keyed))));
+
+        IReadOnlyList<AuditEntry> trail = await TrailAsync(subject);
+
+        Assert.Equal(3, trail.Count);
+        Assert.Equal(["trigger"], trail.SelectMany(entry => entry.Details.Keys));
+        Assert.Equal("staff-report", trail[0].Details["trigger"].GetString());
+        Assert.DoesNotContain(
+            trail.SelectMany(entry => entry.Details.Values),
+            value => value.GetRawText().Contains(keyed, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// PRIV-BREACH-002 AC4: an action taken on another person's account is read for
+    /// that person through the record's subject and names the one who acted as acting
+    /// and effective identity both. One taken in a break-glass session carries the
+    /// reason given at its use, and one taken in any other session carries none.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_AC4_AnActionOnAnothersAccountIsReadForThatPersonWithItsActorAsync()
+    {
+        SubjectId administrator = await _deployment.AccountAsync(Now());
+        SubjectId emergency = await _deployment.AccountAsync(Now());
+        SubjectId person = await _deployment.AccountAsync(Now());
+        AuditRecordId ordinary = NewId();
+        AuditRecordId urgent = NewId();
+        DateTimeOffset occurred = Now();
+
+        await AppendAsync(AuditRecord.Of(
+            ordinary,
+            AuditCategory.Security,
+            Suspended,
+            occurred - TimeSpan.FromMinutes(5),
+            administrator,
+            person,
+            breakGlassReason: null,
+            organization: null));
+        await AppendAsync(AuditRecord.Of(
+            urgent,
+            AuditCategory.Security,
+            AuditAction.Parse("auth.recovery.approved"),
+            occurred,
+            emergency,
+            person,
+            "The operator cannot be reached.",
+            organization: null));
+
+        IReadOnlyList<AuditEntry> trail = await TrailAsync(person);
+
+        Assert.Equal([urgent, ordinary], trail.Select(entry => entry.Id));
+        Assert.All(trail, entry => Assert.Equal(person, entry.Subject));
+        Assert.Equal((emergency, emergency), (trail[0].Acting, trail[0].Effective));
+        Assert.Equal("The operator cannot be reached.", trail[0].BreakGlassReason);
+        Assert.Equal((administrator, administrator), (trail[1].Acting, trail[1].Effective));
+        Assert.Null(trail[1].BreakGlassReason);
+    }
+
+    /// <summary>
     /// PRIV-BREACH-002 AC1 (entry 267): the trail naming a subject either way still
     /// takes the indexes and not a scan of the partition holding its rows.
     /// </summary>
