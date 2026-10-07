@@ -451,6 +451,49 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GROUP-001 AC3: creating a group, removing one, adding a member and taking
+    /// one out, each without a reason or with one blank after trimming, is refused
+    /// naming the reason to a caller who may make the change, and the groups, their
+    /// members and the record of changes stand as they were.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AC3_AChangeWithoutAReasonChangesNothingAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        Group tellers = await HeldAsync(Branch, "Tellers");
+        Group empty = await HeldAsync(Branch, "Empty");
+        string members = "/admin/groups/" + tellers.Id + "/members";
+        var joining = GrantSubject.Of(new SubjectId(Guid.NewGuid()));
+
+        await _deployment.Groups.AddMemberAsync(tellers.Id, User, CancellationToken.None);
+
+        Answer[] refusals =
+        [
+            await administrator.SendAsync("POST", "/admin/groups", ("organization", Branch.Value), ("name", "Cashiers")),
+            await CreatedAsync(administrator, "Cashiers", reason: " "),
+            await administrator.SendAsync("DELETE", "/admin/groups/" + empty.Id, "{}"),
+            await administrator.SendAsync("DELETE", "/admin/groups/" + empty.Id, ("reason", " ")),
+            await administrator.SendAsync("POST", members, ("subjectType", "user"), ("subjectId", joining.Value)),
+            await AddedAsync(administrator, tellers.Id, joining, reason: " "),
+            await administrator.SendAsync("DELETE", members, ("subjectType", "user"), ("subjectId", Holder)),
+            await administrator.SendAsync(
+                "DELETE",
+                members,
+                ("subjectType", "user"),
+                ("subjectId", Holder),
+                ("reason", " ")),
+        ];
+
+        Assert.All(refusals, refused => Assert.Equal("reason", Member(refused)));
+        Assert.Equal(
+            new[] { empty.Id.Value, tellers.Id.Value }.Order(),
+            (await _deployment.Groups.InAsync(Branch, CancellationToken.None)).Select(group => group.Id.Value).Order());
+        Assert.Equal([User], await _deployment.Groups.MembersAsync(tellers.Id, CancellationToken.None));
+        Assert.Empty(_deployment.GroupChanges.Changes);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10: a member added that the group already holds, and one taken
     /// out that it does not hold, are each answered as done having written nothing, so
     /// each rolls its unit of work back and records nothing.
