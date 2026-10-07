@@ -345,8 +345,14 @@ internal sealed class SignInLinks(
             return Result.Failure<bool>(notBegun);
         }
 
+        // CONV-DESIGN-003: every writer that takes a number from the account holds the
+        // account's row before the identifier's, and the record of the code refers to
+        // that row, so it is held here first: taken after the identifier's, the two
+        // would wait on each other.
+        await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
         // AUTH-FACT-002 AC11, CONV-DESIGN-003 (D-197): the row of the identifier holding
-        // the number is locked first, where one still does, and the credential is read
+        // the number is locked next, where one still does, and the credential is read
         // under its own lock after it, so a writer that takes the number from the
         // account is either seen here or waits for this code to be issued. Where the
         // credential is no longer active, or the number no longer the account's,

@@ -4448,8 +4448,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002 AC11, CONV-DESIGN-003: the unit of work that issues a text code
-    /// locks the row of the identifier holding the credential's number first, before it
-    /// reads the credential under its lock, and issues the code only after both.
+    /// holds the account's row first, as every writer that takes a number from the
+    /// account does, then locks the row of the identifier holding the credential's
+    /// number, before it reads the credential under its lock, and issues the code only
+    /// after all three.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_002_AC11_TheAskLocksTheIdentifiersRowBeforeTheCredentialAndIssuesTheCodeAfterBothAsync()
@@ -4468,6 +4470,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         IdentifierId number = (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).All
             .First(identifier => identifier.Kind is IdentifierKind.Phone).Id;
 
+        _accounts.Holding = held => order.Add(held == subject ? "account" : "another account");
         _identifiers.LockingRow = async (_, row) =>
         {
             order.Add(row == number ? "identifier" : "another identifier");
@@ -4479,7 +4482,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         _authenticators.Locking = _ => order.Add("credential");
 
         Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
-        Assert.Equal(["identifier", "no code yet", "credential"], order);
+        Assert.Equal(["account", "identifier", "no code yet", "credential"], order);
         Assert.NotNull(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
         Assert.Single(_notifications.Texts);
     }
