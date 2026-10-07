@@ -65,6 +65,22 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
     }
 
     /// <summary>
+    /// OPS-SEC-001: <c>register-client</c> reports as every command does. A registration
+    /// exits 0 with nothing on standard error; one refused once the database is reached
+    /// exits 1 with one JSON line on standard error and nothing on standard output.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_RegisterClientExitsZeroOrOneWithOneLineOnStandardErrorAsync()
+    {
+        Invocation registered = await RegisteredAsync(Arguments("reported", "protocol", Redirect));
+        Invocation refused = await RegisteredAsync(Arguments("unreported", "protocol", "http://mail.example.test/callback"));
+
+        Reported.Success(registered);
+        Assert.Equal("model.startup.redirectclient", Reported.Refusal(refused));
+    }
+
+    /// <summary>
     /// OPS-SEC-002: registering a client the registry holds changes its kind and
     /// destination and leaves its secret, and when the secret was drawn, as they were.
     /// </summary>

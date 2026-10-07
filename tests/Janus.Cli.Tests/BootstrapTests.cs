@@ -45,6 +45,22 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// OPS-SEC-001 and OPS-BOOT-001: the report every command follows. The run that
+    /// stood the deployment up exits 0 with nothing on standard error; the run after it
+    /// is refused with exit code 1, one JSON line on standard error and nothing on
+    /// standard output.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_BootstrapExitsZeroOrOneWithOneLineOnStandardErrorAsync()
+    {
+        Invocation again = await Invocation.PipedAsync(Invocation.Bootstrap(), Invocation.Keys(deployment.ConnectionString));
+
+        Reported.Success(deployment.First);
+        Assert.Equal(ErrorCodes.Denied.ToString(), Reported.Refusal(again));
+    }
+
+    /// <summary>
     /// OPS-BOOT-001 AC1: running it again while a system administrator exists is refused,
     /// and changes nothing.
     /// </summary>

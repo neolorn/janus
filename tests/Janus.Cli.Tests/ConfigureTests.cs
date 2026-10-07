@@ -60,6 +60,28 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// OPS-CFG-004 AC3 and OPS-SEC-001: a change is reported as every command reports.
+    /// One taken exits 0 with nothing on standard error; one the start's own checks
+    /// refuse, once the database is reached, exits 1 with one JSON line on standard
+    /// error and nothing on standard output, and nothing of it is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_004_AC3_ARefusalIsReportedAsEveryCommandReportsOneAsync()
+    {
+        string key = Settings.WebAuthnRelyingPartyId.Key.ToString();
+
+        Invocation taken = await ConfiguredAsync("--" + Settings.ExfiltrationExportAuditing.Key, "true", "--reason", Reason);
+        Invocation refused = await ConfiguredAsync("--" + key, "report.example.org", "--reason", Reason);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Reported.Success(taken);
+        Assert.Equal("model.startup.rpid", Reported.Refusal(refused));
+        Assert.Null(await ValueAsync(connection, key));
+    }
+
+    /// <summary>
     /// OPS-CFG-004 and OPS-ALERT-001: the governing language changes from the server
     /// under its own Normal condition as well as the High one every protected key raises.
     /// </summary>
