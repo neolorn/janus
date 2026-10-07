@@ -922,7 +922,12 @@ public static class Settings
     /// plus five minutes, and is not a key of its own.
     /// </summary>
     public static DurationSetting TokenSigningRotation { get; } =
-        new("token.signing.rotation", SettingScope.Runtime, "P90D");
+        new(
+            "token.signing.rotation",
+            SettingScope.Runtime,
+            "P90D",
+            floor: "P1D",
+            loosening: SettingDirection.Increase);
 
     /// <summary>
     /// What an organization changes about the system policy: one key per organization,

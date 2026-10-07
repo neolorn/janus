@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `token.signing.rotation`, the cadence of the signing keys and of every registered
+  client's secret, has a floor of one day: a shorter value is refused with
+  `config.value.belowfloor`. Lengthening it is the change that loosens (OPS-CFG-002).
 - A fault of the sign-on over the deployment's own state names what failed in the
   fault's log entry, read by its correlation identifier. A client secret or the
   authentication application's published keys that cannot be read make a fault
