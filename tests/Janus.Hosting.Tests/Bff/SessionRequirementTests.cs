@@ -216,7 +216,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_ORDER_001_AnEndedSessionDoesNotRefuseAnEndpointThatNeedsNoneAsync()
+    public async Task BFF_ORDER_001_AC4_AnEndedSessionDoesNotRefuseAnEndpointThatNeedsNoneAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
@@ -226,6 +226,24 @@ public sealed class SessionRequirementTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status200OK, begun.Status);
         Assert.NotEmpty(begun.Text("challengeId"));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC4: the same cookie of an ended session, carried to an endpoint
+    /// that requires a session, is answered 401 <c>auth.session.expired</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC4_AnEndedSessionIsRefusedByAnEndpointThatRequiresOneAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(100));
+
+        Answer answered = await browser.SendAsync("GET", "/account/sessions");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, answered.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), answered.Text("code"));
     }
 
     /// <summary>

@@ -107,12 +107,12 @@ public sealed class SensitiveBodyLoggingTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-LOG-002 AC1: a request the logging meets before its endpoint is known is
+    /// BFF-LOG-002 AC3: a request the logging meets before its endpoint is known is
     /// treated as marked, so a host that logs ahead of routing logs no body at all.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_LOG_002_AC1_ABodyMetBeforeRoutingIsNotLoggedAsync()
+    public async Task BFF_LOG_002_AC3_ABodyMetBeforeRoutingIsNotLoggedAsync()
     {
         using WebApplication application = Registered(everything: true);
 

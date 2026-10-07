@@ -30,6 +30,9 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Callbacks;
+using Janus.Hosting.Tests.Authorization;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +44,7 @@ namespace Janus.Hosting.Tests.Bff;
 /// <summary>
 /// The browser profile: what the pipeline refuses before an endpoint sees it, and
 /// what it lets through (BFF-CSRF-001 to BFF-CSRF-004, BFF-CSRF-006, BFF-CSRF-007,
-/// BFF-OWN-001, BFF-OWN-003, BFF-MACH-001).
+/// BFF-OWN-001 to BFF-OWN-003, BFF-MACH-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class BrowserProfileTests : IDisposable
@@ -401,6 +404,129 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-OWN-001 AC2: nothing a host hangs on one of its endpoints takes it out of
+    /// the enforcement. An endpoint marked as needing no antiforgery token and as open
+    /// to anyone is refused a state change without the session's token like every
+    /// other, and is not reached.
+    /// </summary>
+    [Fact]
+    public async Task BFF_OWN_001_AC2_AnEndpointMarkedToOptOutIsRefusedWithoutTheTokenAsync()
+    {
+        RequestDelegate pipeline = Mounted();
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext context = Arriving(
+            "POST",
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target),
+            ("Sec-Fetch-Site", "same-origin"));
+
+        Carrying(context, secret);
+        context.SetEndpoint(new Endpoint(
+            Endpoint,
+            new EndpointMetadataCollection(
+                new RequireAntiforgeryTokenAttribute(required: false),
+                new AllowAnonymousAttribute()),
+            "opted out"));
+
+        await pipeline(context);
+
+        await AssertRefusedAsync(context);
+        Assert.False(_reached);
+    }
+
+    /// <summary>
+    /// BFF-OWN-001 AC3: every application mounts the one implementation. One method
+    /// mounts the browser profile, and the kind of application is read where the
+    /// library is registered and where a cookie's attributes are written and nowhere
+    /// else, so no stage runs differently for one application than for another.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_001_AC3_EveryKindOfApplicationMountsTheOneImplementation()
+    {
+        MethodInfo[] mounting =
+        [
+            .. typeof(PipelineProfiles)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(mount => mount.Name is nameof(PipelineProfiles.UseBrowserProfile)),
+        ];
+
+        string[] reading =
+        [
+            .. Shipped()
+                .Where(file => File.ReadAllText(file).Contains(nameof(ApplicationKind), StringComparison.Ordinal))
+                .Select(file => Path.GetFileName(file))
+                .Order(StringComparer.Ordinal),
+        ];
+
+        _ = Assert.Single(mounting);
+        Assert.Equal(
+            [
+                "ApplicationKind.cs",
+                "BrowserCookies.cs",
+                "BrowserSessionCookies.cs",
+                "ConformanceSuite.cs",
+                "HostingRegistration.cs",
+            ],
+            reading);
+    }
+
+    /// <summary>
+    /// BFF-OWN-002 AC1: the types of a host's domain are the host's, and no file the
+    /// library ships names one of those this host declares.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_002_AC1_NoShippedSourceNamesAHostDomainType()
+    {
+        string[] domain =
+        [
+            nameof(HostDocument),
+            nameof(HostNote),
+            nameof(HostReport),
+            nameof(HostReviewer),
+            nameof(HostWorkspace),
+        ];
+
+        string[] shipped = Shipped();
+
+        Assert.NotEmpty(shipped);
+        Assert.All(
+            shipped,
+            file => Assert.DoesNotMatch("\\b(" + string.Join('|', domain) + ")\\b", File.ReadAllText(file)));
+    }
+
+    /// <summary>
+    /// BFF-OWN-002 AC2: a host has nothing to set the session cookie with and nothing
+    /// to validate the token with, the types that write the cookies and compare the
+    /// token being out of its reach, and the host these tests stand up names neither
+    /// a cookie nor the token.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_002_AC2_NoHostCodeSetsTheSessionCookieOrValidatesTheToken()
+    {
+        Type[] owned =
+        [
+            typeof(BrowserCookies),
+            typeof(BrowserSessionCookies),
+            typeof(SynchronizerToken),
+            typeof(SynchronizerTokens),
+        ];
+
+        string[] host = Directory.GetFiles(
+            Path.Combine(
+                Repository.Root(),
+                "tests",
+                typeof(HostDocument).Assembly.GetName().Name!,
+                "Authorization"),
+            "Host*.cs");
+
+        Assert.All(owned, type => Assert.False(type.IsVisible));
+        Assert.NotEmpty(host);
+        Assert.All(
+            host,
+            file => Assert.DoesNotMatch("(?i)cookie|csrf|synchronizer", File.ReadAllText(file)));
+    }
+
+    /// <summary>
     /// AUTH-SESS-007 AC1 and AC3: a state-changing request whose token is not the
     /// session's is rejected, and the rejection is recorded.
     /// </summary>
@@ -664,6 +790,65 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-CSRF-001 AC4: a state-changing request refused by the fetch metadata, by
+    /// the custom header, by the origin or by the token is answered the same 403
+    /// <c>auth.session.csrfinvalid</c>, byte for byte under one correlation identifier,
+    /// and only the entry each layer logs says which of them refused.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_001_AC4_EveryLayerRefusesAlikeAndOnlyItsLogEntryNamesItAsync()
+    {
+        var isolation = new LogInMemory<ResourceIsolation>();
+        var header = new LogInMemory<CustomRequestHeader>();
+        var origin = new LogInMemory<OriginValidation>();
+        var limiting = new LogInMemory<SourceRateLimiting>();
+        var token = new LogInMemory<SynchronizerToken>();
+        RequestDelegate pipeline = Mounted(isolation, header, origin, limiting, token);
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext[] refused =
+        [
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "cross-site"),
+                (BrowserCookies.RequestHeader, "1"),
+                ("Origin", Target)),
+            Arriving("POST", ("Sec-Fetch-Site", "same-origin"), ("Origin", Target)),
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "same-origin"),
+                (BrowserCookies.RequestHeader, "1"),
+                ("Origin", "https://elsewhere.example")),
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "same-origin"),
+                (BrowserCookies.RequestHeader, "1"),
+                ("Origin", Target)),
+        ];
+        List<string> answered = [];
+
+        foreach (HttpContext context in refused)
+        {
+            context.TraceIdentifier = "refused";
+            Carrying(context, secret);
+
+            await pipeline(context);
+
+            answered.Add(await AnsweredAsync(context));
+        }
+
+        Assert.All(refused, context => Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode));
+        Assert.Contains("\"code\":\"" + Refused + "\"", answered[0], StringComparison.Ordinal);
+        Assert.Single(answered.Distinct(StringComparer.Ordinal));
+        Assert.Single(refused.Select(context => context.Response.ContentType).Distinct(StringComparer.Ordinal));
+        Assert.Equal([1], isolation.Entries.Select(entry => entry.EventId));
+        Assert.Equal([2], header.Entries.Select(entry => entry.EventId));
+        Assert.Equal([3], origin.Entries.Select(entry => entry.EventId));
+        Assert.Equal([4], token.Entries.Select(entry => entry.EventId));
+        Assert.Empty(limiting.Entries);
+        Assert.False(_reached);
+    }
+
+    /// <summary>
     /// BFF-MACH-001 AC3: a request the machine profile governs carries none of what the
     /// browser profile asks for, and passes it untouched: nothing refused, nothing issued.
     /// </summary>
@@ -870,6 +1055,48 @@ public sealed class BrowserProfileTests : IDisposable
             StringComparison.Ordinal);
         Assert.Contains("randomness.GetBytes", drawing, StringComparison.Ordinal);
         Assert.DoesNotContain("SequenceEqual", comparing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// BFF-CSRF-007 AC2: the synchronizer token is drawn by the framework's generator
+    /// and compared by its fixed-time comparison, and the framework's antiforgery
+    /// component has no part in it. No file the library ships names that component, a
+    /// first contact is issued no cookie of it, and a request presenting its header in
+    /// place of the session's token is refused.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_007_AC2_NoFrameworkAntiforgeryTokenIsIssuedOrReadAsync()
+    {
+        RequestDelegate pipeline = Mounted();
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext arriving = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+        HttpContext presenting = Arriving(
+            "POST",
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target),
+            ("Sec-Fetch-Site", "same-origin"),
+            ("RequestVerificationToken", "presented"));
+
+        Carrying(presenting, secret);
+
+        await pipeline(arriving);
+        await pipeline(presenting);
+        string[] issued = [.. arriving.Response.Headers.SetCookie.Select(written => written!)];
+
+        Assert.Contains(
+            nameof(RandomNumberGenerator),
+            Repository.Authentication("OpaqueToken.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CryptographicOperations.FixedTimeEquals",
+            Repository.Authentication("Sessions/SynchronizerTokens.cs"),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            Shipped(),
+            file => File.ReadAllText(file).Contains("Antiforgery", StringComparison.OrdinalIgnoreCase));
+        Assert.NotEmpty(issued);
+        Assert.DoesNotContain(issued, written => written.Contains("Antiforgery", StringComparison.OrdinalIgnoreCase));
+        await AssertRefusedAsync(presenting);
     }
 
     /// <summary>
@@ -1105,6 +1332,14 @@ public sealed class BrowserProfileTests : IDisposable
                 what.Any(named => line.Contains(named, StringComparison.Ordinal))))
             .Select(file => Path.GetFileName(file)!)
             .Order(StringComparer.Ordinal),
+    ];
+
+    // Every source file of every project the library ships.
+    private static string[] Shipped() =>
+    [
+        .. Directory
+            .GetDirectories(Path.Combine(Repository.Root(), "src"))
+            .SelectMany(project => Repository.Project(Path.GetFileName(project))),
     ];
 
     private SynchronizerTokens Tokens() => new(_sessions, _contacts, _clock);

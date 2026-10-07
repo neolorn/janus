@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Security.Cryptography;
@@ -1102,6 +1103,110 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     [HostPermissions.Read, undeclared],
                     Sources(reading),
                     cancellationToken));
+    }
+
+    /// <summary>
+    /// BFF-CAP-001 AC1: a list of fifty records is answered with the capabilities of
+    /// each by the one statement that reads the page, so the capabilities cost no
+    /// query beside it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_001_AC1_AListOfFiftyCarriesItsCapabilitiesInOneStatementAsync()
+    {
+        Nested nested = await NestAsync();
+        IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 50);
+        var counted = new CountedCommands();
+
+        IReadOnlyList<Capability> capabilities = await CapabilitiesAsync(nested, list, counted);
+
+        Assert.Equal(1, counted.Statements);
+        Assert.Equal(list, capabilities.Select(capability => capability.Resource));
+        Assert.All(capabilities, capability => Assert.Equal([HostPermissions.Read], capability.Can));
+    }
+
+    /// <summary>
+    /// BFF-CAP-001 AC2: a capability whose <c>requires</c> is empty is one the check
+    /// admits, for every permission it names.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_001_AC2_ACapabilityWithAnEmptyRequiresPassesTheCheckAsync()
+    {
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+        IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 1);
+
+        Capability capability = Assert.Single(await CapabilitiesAsync(nested, list));
+
+        Assert.Empty(capability.Requires);
+        Assert.True(capability.Can.SetEquals([HostPermissions.Read, HostPermissions.Edit]));
+
+        foreach (Permission permission in capability.Can)
+        {
+            Assert.True(await ChecksAsync(
+                nested.Account,
+                new ResourceReference(Document, capability.Resource),
+                permission));
+        }
+    }
+
+    /// <summary>
+    /// BFF-CAP-001 AC3: <c>requires</c> names the permission a gate still stands in
+    /// front of with the gate that remains, names no permission nothing remains for,
+    /// and holds no empty entry.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_001_AC3_RequiresCarriesTheGateThatRemainsAndNoEmptyEntryAsync()
+    {
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+        IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 1);
+
+        Capability capability = Assert.Single(await CapabilitiesAsync(nested, list));
+
+        Assert.True(capability.Can.SetEquals([HostPermissions.Read, HostPermissions.Publish]));
+        Assert.Equal([HostPermissions.Publish], capability.Requires.Keys);
+        Assert.Equal([CapabilityResidual.StepUp], capability.Requires[HostPermissions.Publish]);
+        Assert.All(capability.Requires.Values, remaining => Assert.NotEmpty(remaining));
+    }
+
+    /// <summary>
+    /// BFF-CAP-002 AC1: the capabilities of a record are the permissions the host
+    /// declared for its type. No file of the library names one of them, so a
+    /// capability the host declares is answered by the library as it stands.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC1_ACapabilityTheHostDeclaresIsAnsweredByALibraryThatNamesNoneAsync()
+    {
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+        IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 1);
+        string[] declared = [HostPermissions.Read.ToString(), HostPermissions.Edit.ToString()];
+
+        Capability capability = Assert.Single(await CapabilitiesAsync(nested, list));
+
+        Assert.True(capability.Can.SetEquals([HostPermissions.Read, HostPermissions.Edit]));
+        Assert.DoesNotContain(
+            Shipped(),
+            file => declared.Any(permission => File.ReadAllText(file).Contains(permission, StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// BFF-CAP-003 AC1: a list of fifty records costs the statements a list of one
+    /// costs, over every connection, the library's own included.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_003_AC1_AListOfFiftyCostsTheStatementsAListOfOneCostsAsync()
+    {
+        Nested nested = await NestAsync();
+        IReadOnlyList<ResourceId> list = await ListedUnderAGrantAsync(nested, 50);
+
+        int one = await StatementsAsync(nested, [list[0]]);
+        int fifty = await StatementsAsync(nested, list);
+
+        Assert.NotEqual(0, one);
+        Assert.Equal(one, fifty);
     }
 
     /// <summary>
@@ -2273,6 +2378,72 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             await Task.Delay(TimeSpan.FromMilliseconds(20), bounded.Token);
         }
     }
+
+    // A list of the host's records beneath a container the account is granted the
+    // case's role on, in the order they were written.
+    private static async Task<IReadOnlyList<ResourceId>> ListedUnderAGrantAsync(Nested nested, int records)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        List<ResourceId> list = [];
+
+        for (int record = 0; record < records; record++)
+        {
+            ResourceReference reference = Reference(Document);
+            await nested.Deployment.RegisterAsync(reference, nested.Bottom, cancellationToken);
+            list.Add(reference.Id);
+        }
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        return list;
+    }
+
+    // The capabilities of a list, asked for every permission the host declares on its
+    // documents that a role may carry, through a host context that counts what it
+    // sends where the test is about the cost.
+    private async Task<IReadOnlyList<Capability>> CapabilitiesAsync(
+        Nested nested,
+        IReadOnlyList<ResourceId> list,
+        CountedCommands? counted = null)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = counted is null ? host.Context() : host.Context(counted);
+
+        return Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    list,
+                    [HostPermissions.Read, HostPermissions.Edit, HostPermissions.Publish],
+                    Sources(reading),
+                    TestContext.Current.CancellationToken));
+    }
+
+    // The statements every connection sent to answer the capabilities of a list.
+    private async Task<int> StatementsAsync(Nested nested, IReadOnlyList<ResourceId> list)
+    {
+        using var traced = new TracedStatements();
+
+        _ = await CapabilitiesAsync(nested, list);
+
+        return traced.Statements;
+    }
+
+    // Every source file of every project the library ships.
+    private static string[] Shipped() =>
+    [
+        .. Directory
+            .GetDirectories(Path.Combine(Bff.Repository.Root(), "src"))
+            .SelectMany(project => Bff.Repository.Project(Path.GetFileName(project))),
+    ];
 
     private async Task<Capability> CapabilityAsync(Nested nested)
     {

@@ -208,14 +208,14 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-MACH-002 AC3: a delivery whose route never finished, because its process
+    /// BFF-MACH-002 AC5: a delivery whose route never finished, because its process
     /// ended inside the route, left its claim unsettled; the provider's next delivery
     /// of the event, once <c>integration.callback.claimtimeout</c> has passed at its
     /// default, takes the claim over, is carried, and settles it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_MACH_002_AC3_ADeliveryWhoseRouteNeverFinishedIsCarriedAfterFiveMinutesAsync()
+    public async Task BFF_MACH_002_AC5_ADeliveryWhoseRouteNeverFinishedIsCarriedAfterFiveMinutesAsync()
     {
         await AbandonedAsync();
 
@@ -232,7 +232,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-MACH-002 AC3: a delivery meeting a claim still being carried, younger than
+    /// BFF-MACH-002 AC5: a delivery meeting a claim still being carried, younger than
     /// <c>integration.callback.claimtimeout</c>, is answered 409
     /// <c>integration.callback.inprogress</c> so the provider delivers it again; it
     /// does not reach the route, is logged at Information and is not counted as a
@@ -240,7 +240,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_MACH_002_AC3_ADeliveryMeetingOneInProgressIsNotAcknowledgedAsync()
+    public async Task BFF_MACH_002_AC5_ADeliveryMeetingOneInProgressIsNotAcknowledgedAsync()
     {
         await AbandonedAsync();
 

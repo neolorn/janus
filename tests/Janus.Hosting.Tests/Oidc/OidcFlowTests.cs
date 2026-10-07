@@ -898,13 +898,13 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// LIB-API-003 AC1 (D-166, 394): every error the provider answers carries the
+    /// LIB-API-003 AC5 (D-166, 394): every error the provider answers carries the
     /// protocol's code alone, and no description or documentation address, in its body,
     /// its <c>WWW-Authenticate</c> header or the address the client is sent back to.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_API_003_AC1_NoProviderErrorCarriesADescriptionAsync()
+    public async Task LIB_API_003_AC5_NoProviderErrorCarriesADescriptionAsync()
     {
         await using var deployment = new Deployment();
 

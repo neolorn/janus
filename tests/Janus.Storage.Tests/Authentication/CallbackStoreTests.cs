@@ -69,13 +69,13 @@ public sealed class CallbackStoreTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// BFF-MACH-002 AC3: a claim left unsettled stands against every delivery of its
+    /// BFF-MACH-002 AC5: a claim left unsettled stands against every delivery of its
     /// event for <c>integration.callback.claimtimeout</c>, five minutes by default, and
     /// a delivery once that has passed takes it over. The delivery overtaken can then
     /// neither give the claim back nor settle it; the one that took it over settles it.
     /// </summary>
     [Fact]
-    public async Task BFF_MACH_002_AC3_AnUnsettledClaimIsTakenOverOnlyAfterFiveMinutesAsync()
+    public async Task BFF_MACH_002_AC5_AnUnsettledClaimIsTakenOverOnlyAfterFiveMinutesAsync()
     {
         byte[] identifier = Hashed("evt-taken-over");
         DateTimeOffset late = Noon + Timeout;
