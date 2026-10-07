@@ -762,11 +762,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-003 (D-166, message kinds (1)): the message that verifies an address
-    /// being registered is the one worded with a code and a link, and carries both.
+    /// REG-SESS-003 AC5 (D-166, message kinds (1)): the message that verifies an
+    /// address being registered is the one worded with a code and a link, and carries
+    /// both.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_003_ARegistrationMessageCarriesItsCodeAndItsLinkAsync()
+    public async Task REG_SESS_003_AC5_ARegistrationMessageCarriesItsCodeAndItsLinkAsync()
     {
         _ = await AwaitingAsync();
 
@@ -1840,7 +1841,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     /// and the step with both completes it.
     /// </summary>
     [Fact]
-    public async Task REG_SESS_007_AC2_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync()
+    public async Task REG_SESS_007_AC5_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync()
     {
         RegistrationSessionId session = await SecuredAsync();
 
@@ -2522,6 +2523,43 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-010 AC3: a request giving a locked identifier another value, by its
+    /// Change or at its step, is refused <c>identity.identifier.locked</c> and changes
+    /// nothing: every staged identifier keeps its value, what it proved and its lock,
+    /// the session stays at its step, and no code is drawn or sent for the value asked.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_010_AC3_AnotherValueForALockedIdentifierIsRefusedAndChangesNothingAsync()
+    {
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+        (IdentifierId Id, string Canonical, bool IsVerified, bool IsLocked)[] standing = Standing(session);
+        RegistrationStep step = Live(session).Step;
+        int codes = _codes.All.Count;
+        int sent = _notifications.Sent.Count;
+
+        ErrorCode changed = Refused(await Service.ChangeAsync(
+            session,
+            Identity(session, IdentifierKind.Email).Id,
+            "other@example.test",
+            Source,
+            TestContext.Current.CancellationToken));
+        ErrorCode entered = Refused(await Service.StageAsync(
+            session,
+            IdentifierKind.Phone,
+            Mistyped,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.IdentifierLocked, changed);
+        Assert.Equal(ErrorCodes.IdentifierLocked, entered);
+        Assert.Equal(standing, Standing(session));
+        Assert.Equal(step, Live(session).Step);
+        Assert.Equal(codes, _codes.All.Count);
+        Assert.Equal(sent, _notifications.Sent.Count);
+    }
+
+    /// <summary>
     /// REG-MAIL-001 AC4: the press on the invitation link that opens the registration
     /// is what verifies the email the invitation bound, and no code is sent to it; its
     /// step has nothing left to collect.
@@ -2649,12 +2687,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-INV-002: an email the invitation binds that an account holds already is
-    /// refused, so its holder accepts by signing in; the invitation is not spent and
-    /// no registration is opened.
+    /// REG-INV-001 AC5, REG-INV-002: an email the invitation binds that an account
+    /// holds already is refused, so its holder accepts by signing in; the invitation
+    /// is not spent and no registration is opened.
     /// </summary>
     [Fact]
-    public async Task REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
+    public async Task REG_INV_001_AC5_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
     {
         _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
 
@@ -2683,12 +2721,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-002 and chapter 09 <c>POST /register</c>: a browser signed in already is
-    /// refused, and no registration session is created for it.
+    /// REG-SESS-002 AC4 and chapter 09 <c>POST /register</c>: a browser signed in
+    /// already is refused, and no registration session is created for it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_SESS_002_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync()
+    public async Task REG_SESS_002_AC4_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync()
     {
         Assert.Equal(
             ErrorCodes.RegistrationSignedIn,
@@ -3246,6 +3284,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
     private StagedIdentity Identity(RegistrationSessionId session, IdentifierKind kind) =>
         Live(session).Identifiers.Last(staged => staged.Kind == kind);
+
+    // Every identifier the session stages, as a request that changes nothing leaves it.
+    private (IdentifierId Id, string Canonical, bool IsVerified, bool IsLocked)[] Standing(
+        RegistrationSessionId session) =>
+        [.. Live(session).Identifiers.Select(staged =>
+            (staged.Id, staged.Canonical, staged.IsVerified, staged.IsLocked))];
 
     // The link token never touches the session: it is in the message, as it is for
     // the person reading it.

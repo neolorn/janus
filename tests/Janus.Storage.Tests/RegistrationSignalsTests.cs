@@ -116,15 +116,16 @@ public sealed class RegistrationSignalsTests : IClassFixture<DatabaseFixture>, I
     }
 
     /// <summary>
-    /// OPS-OBS-002, REG-SESS-003: a wait that begins while the channel is not listening,
-    /// its connection having ended, raises the degradation naming the registration
-    /// channel, and the wait still ends on its interval. The first wait of all opens
-    /// the channel and raises nothing, and a wait that begins once the channel listens
-    /// again raises nothing further.
+    /// REG-SESS-003 AC7, OPS-OBS-002: a wait that begins while the channel is not
+    /// listening, its connection having ended, raises the degradation naming the
+    /// registration channel, and the wait still ends on its interval, which is when
+    /// the stream reads the state back. The first wait of all opens the channel and
+    /// raises nothing, and a wait that begins once the channel listens again raises
+    /// nothing further.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_OBS_002_ALostChannelIsRaisedAsADegradationAsync()
+    public async Task REG_SESS_003_AC7_ALostChannelIsRaisedAsADegradationAsync()
     {
         var time = new ManualTime();
 

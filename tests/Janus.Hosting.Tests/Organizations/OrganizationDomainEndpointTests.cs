@@ -108,6 +108,27 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-DOM-001 AC8: against an address the lock refuses, a wrong password is
+    /// answered <c>auth.factor.rejected</c>, as a wrong password is anywhere, and the
+    /// right one <c>identity.identifier.domainnotallowed</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AC8_AWrongPasswordIsRejectedAndTheRightOneIsToldTheLockAsync()
+    {
+        (Browser administrator, SubjectId member) = await AuthorisedAsync();
+        _deployment.Memberships.Place(member, Branch);
+        _ = await administrator.SendAsync("POST", PathOf(Branch), Listed);
+
+        Answer wrong = await SignInAsync("notthepassword");
+        Answer right = await SignInAsync(Flow.Password);
+
+        Assert.Equal(ErrorCodes.FactorRejected.ToString(), wrong.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, right.Status);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed.ToString(), right.Text("code"));
+    }
+
+    /// <summary>
     /// REG-DOM-001 AC3: a scheduled check that no longer finds the record raises
     /// <c>domain-reverification-failed</c> and changes nothing else: the domain stays
     /// verified, the member keeps the session and the membership, and still signs in.
@@ -186,13 +207,13 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-DOM-001 and AUTH-ABUSE-003: a sign-in link asked for a locked address is
+    /// REG-DOM-001 AC9 and AUTH-ABUSE-003: a sign-in link asked for a locked address is
     /// answered as any other ask and sends nothing, and one sent before the domain was
     /// removed no longer signs in, though the sign-in was opened with the number.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task REG_DOM_001_AC4_ALinkNoLongerSignsInToARemovedDomainAsync()
+    public async Task REG_DOM_001_AC9_ALinkNoLongerSignsInToARemovedDomainAsync()
     {
         _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
         _deployment.Configuration.Set(

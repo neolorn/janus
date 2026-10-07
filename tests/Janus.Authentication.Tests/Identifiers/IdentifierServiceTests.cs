@@ -905,7 +905,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// removed or replaced by the person while the membership lasts.
     /// </summary>
     [Fact]
-    public async Task REG_MAIL_001_AC5_ThePersonalEmailStaysAsTheMembershipKeepsItAsync()
+    public async Task REG_MAIL_001_AC6_ThePersonalEmailStaysAsTheMembershipKeepsItAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         IdentifierId personal = _directory.Verified(_person, IdentifierKind.Email, Second, isPersonal: true);
@@ -2239,7 +2239,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// identifier is accepted; until then a new one is refused.
     /// </summary>
     [Fact]
-    public async Task REG_IDENT_007_AnAbandonedReplaceIsSweptAndANewOneIsTakenAsync()
+    public async Task REG_IDENT_007_AC4_AnAbandonedReplaceIsSweptAndANewOneIsTakenAsync()
     {
         _configuration.Set(Settings.IdentifiersEmailMax, 1);
 
@@ -2334,7 +2334,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// identifier for it, and adding the same address again sends a new code.
     /// </summary>
     [Fact]
-    public async Task REG_IDENT_004_AnAbandonedAddLeavesNoIdentifierAsync()
+    public async Task REG_IDENT_004_AC4_AnAbandonedAddLeavesNoIdentifierAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
 

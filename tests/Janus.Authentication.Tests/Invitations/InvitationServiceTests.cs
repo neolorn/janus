@@ -348,11 +348,11 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-MAIL-001: an address an open invitation already stands over, or one a
+    /// REG-MAIL-001 AC8: an address an open invitation already stands over, or one a
     /// member holds, is not reserved a second time: it is taken, naming the member.
     /// </summary>
     [Fact]
-    public async Task REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync()
+    public async Task REG_MAIL_001_AC8_AnAddressAlreadyTakenIsRefusedAsync()
     {
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
@@ -394,12 +394,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-DOM-001: the address a member will sign in with is judged against the
+    /// REG-DOM-001 AC11: the address a member will sign in with is judged against the
     /// organization's lock at issue: the corporate address where the mail is
     /// integrated, the bound email otherwise.
     /// </summary>
     [Fact]
-    public async Task REG_DOM_001_TheLockJudgesTheAddressTheMemberWillSignInWithAsync()
+    public async Task REG_DOM_001_AC11_TheLockJudgesTheAddressTheMemberWillSignInWithAsync()
     {
         await LockedAsync(Customer, "staff.test");
         await LockedAsync(Staff, "staff.test");
@@ -416,14 +416,14 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-INV-001: an invitation grants what its inviter may grant when it is
+    /// REG-INV-001 AC6: an invitation grants what its inviter may grant when it is
     /// acknowledged, so an inviter who lost <c>membership:manage</c>, <c>grant:manage</c>
     /// for a role named, or the permission to administer the deployment for a role
     /// carrying it, leaves an invitation that is expired and grants nothing; once the
     /// inviter holds them again it attaches.
     /// </summary>
     [Fact]
-    public async Task REG_INV_001_AnInviterWhoLostTheRightToGrantGrantsNothingAsync()
+    public async Task REG_INV_001_AC6_AnInviterWhoLostTheRightToGrantGrantsNothingAsync()
     {
         RoleName root = _roles.Define("root", Permissions.SystemAdminister);
 
@@ -1010,12 +1010,13 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ACCT-007 AC2 (D-166): a membership changes the account, so a restricted
-    /// account acknowledges no invitation: it is refused <c>authz.restricted</c>, and
-    /// nothing attaches, is announced or is written down, and the invitation stands.
+    /// REG-INV-001 AC7, IDN-ACCT-007 AC2 (D-166): a membership changes the account, so
+    /// a restricted account acknowledges no invitation: it is refused
+    /// <c>authz.restricted</c>, and nothing attaches, is announced or is written down,
+    /// and the invitation stands.
     /// </summary>
     [Fact]
-    public async Task IDN_ACCT_007_AC2_ARestrictedAccountAcknowledgesNoInvitationAsync()
+    public async Task REG_INV_001_AC7_ARestrictedAccountAcknowledgesNoInvitationAsync()
     {
         string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
         SubjectId holder = Holder();
@@ -1222,12 +1223,13 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-MAIL-001, REG-IDENT-004, CONV-DESIGN-003 AC6: the corporate address is taken
-    /// on under the lock on the account's identifiers, so an address the account
-    /// proved while the acknowledgement waited for it is in the set that hears of it.
+    /// REG-MAIL-001 AC7, REG-IDENT-004, CONV-DESIGN-003 AC6: the corporate address is
+    /// taken on under the lock on the account's identifiers, so an address the account
+    /// proved while the acknowledgement waited for it is in the set that hears of it,
+    /// each member of which is told once and the corporate address not at all.
     /// </summary>
     [Fact]
-    public async Task REG_MAIL_001_AnAddressProvedMeanwhileHearsOfTheCorporateAddressAsync()
+    public async Task REG_MAIL_001_AC7_AnAddressProvedMeanwhileHearsOfTheCorporateAddressAsync()
     {
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
@@ -1519,12 +1521,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-INV-002 and 09 section 6a: a refusal no enrolment could meet is told before
-    /// the credential policy, so an account at its membership limit and below the
-    /// organization's assurance is refused for the limit and not sent to enrol.
+    /// REG-INV-002 AC4 and 09 section 6a: a refusal no enrolment could meet is told
+    /// before the credential policy, so an account at its membership limit and below
+    /// the organization's assurance is refused for the limit and not sent to enrol.
     /// </summary>
     [Fact]
-    public async Task REG_INV_002_TheMembershipLimitComesBeforeTheCredentialPolicyAsync()
+    public async Task REG_INV_002_AC4_TheMembershipLimitComesBeforeTheCredentialPolicyAsync()
     {
         _configuration.Set(Settings.OrganizationPolicy, Customer.ToString(), Aal2WithPasskey);
 
@@ -1718,6 +1720,30 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC5: the end of the membership is told once to each member of the
+    /// security-notice set as it stands after the change, the personal email that is
+    /// now the primary and the phone, and the retired corporate address is sent
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC5_TheSetAsItStandsAfterIsToldOnceAndTheRetiredAddressNothingAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _notifications.Sent.Clear();
+
+        Accepted(await EndAsync(Staff, holder));
+
+        Assert.Equal(
+            [Number, Personal],
+            _notifications.Sent.Select(told => told.Destination.Canonical).Order(StringComparer.Ordinal));
+        Assert.All(
+            _notifications.Sent,
+            told => Assert.Equal(MessageKind.IdentifierSettingsChanged, told.Message));
+        Assert.DoesNotContain(_notifications.Sent, told => told.Destination.Canonical == Corporate);
+    }
+
+    /// <summary>
     /// REG-MAIL-003 AC6 and INT-MAIL-006 AC6: an invitation of an address whose standing
     /// mailbox was held before, naming no <c>formerMailbox</c>, is refused and changes
     /// nothing, whoever it invites, the last holder included.
@@ -1907,13 +1933,13 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-MEM-001 AC1 and REG-MAIL-003: ending a membership that gave no corporate
+    /// REG-MAIL-003 AC4 and IDN-MEM-001 AC1: ending a membership that gave no corporate
     /// address changes no identifier, sends nothing and retires no mailbox, and ending
     /// another membership of an account that holds a corporate address leaves the
     /// address, the primary and the mailbox where they were; the organization persists.
     /// </summary>
     [Fact]
-    public async Task IDN_MEM_001_AC1_EndingAnotherMembershipLeavesTheCorporateAddressAsync()
+    public async Task REG_MAIL_003_AC4_EndingAnotherMembershipLeavesTheCorporateAddressAsync()
     {
         _configuration.Set(Settings.OrganizationMultipleMemberships, true);
 
