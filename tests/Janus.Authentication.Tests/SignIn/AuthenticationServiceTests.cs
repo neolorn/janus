@@ -979,6 +979,63 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC9: a factor the policy in force does not permit is in no
+    /// combination a gate offers, though the account holds it and it would reach the
+    /// gate, and presenting it is refused before it is verified, right or wrong, and
+    /// counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AC9_AFactorThePolicyDoesNotPermitIsNotOfferedAndIsRefusedWhenPresentedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(15)),
+            new Gate(GateLevel.Aal1, PhishingResistant: false, TimeSpan.FromMinutes(15)));
+
+        SessionId held = Opened(subject);
+        string[] permitted = Named(await OfferedAsync(subject, held));
+
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    Janus.Core.Policies.SystemDefault.LoginFactors.Where(factor => factor != Factor.Totp)),
+                Gates = Janus.Core.Policies.SystemDefault.Gates.ToDictionary(
+                    gate => gate.Key,
+                    gate => gate.Key is StepUpAction.AccountSuspend
+                        ? new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(15))
+                        : new Gate(GateLevel.Aal1, PhishingResistant: false, TimeSpan.FromMinutes(15))),
+            });
+
+        string[] offered = Named(await OfferedAsync(subject, held));
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        Result<SignInProgress> right = await SteppedAsync(generated);
+        Result<SignInProgress> wrong = await SteppedAsync("000000");
+
+        Assert.Contains(Named(Factor.Password, Factor.Totp), permitted);
+        Assert.Equal([Named(Factor.Password)], offered);
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(right));
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(wrong));
+        Assert.Equal([Factor.Totp, Factor.Totp], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(2, _throttle.Counted.Count);
+        Assert.False(_work.Open);
+
+        async ValueTask<Result<SignInProgress>> SteppedAsync(string code) =>
+            await Service.StepUpAsync(
+                AccessContext.Of(subject),
+                held,
+                (await BeganAsync(Address)).Challenge,
+                new FactorPresentation(Factor.Totp) { Value = code },
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// AUTH-STEP-002 AC6: at a step-up every combination that reaches the weakest of
     /// the policy's gates, field by field, is offered, and none that does not: the
     /// lowest level any gate asks, phishing resistance only where every gate asks it,

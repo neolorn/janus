@@ -239,7 +239,7 @@ internal sealed class StepUpGuard(
         return Result.Success(StepUpRefusal.Met(StepUp.On(
             live,
             gate,
-            await HeldAsync(live.Subject, cancellationToken).ConfigureAwait(false),
+            await HeldAsync(live.Subject, policy, cancellationToken).ConfigureAwait(false),
             time.GetUtcNow())));
     }
 
@@ -333,7 +333,7 @@ internal sealed class StepUpGuard(
             ? gate
             : policy.Gates.Values.Aggregate(PolicyStrictness.Weakest);
 
-        HeldFactors held = await HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+        HeldFactors held = await HeldAsync(subject, policy, cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = time.GetUtcNow();
         StepUpChallenge challenge = Challenged(live, gate, offering, held, enrolling, now);
 
@@ -360,7 +360,13 @@ internal sealed class StepUpGuard(
                 now));
     }
 
-    private async ValueTask<HeldFactors> HeldAsync(SubjectId subject, CancellationToken cancellationToken)
+    // AUTH-STEP-002 step 2: a factor the policy in force does not permit is not one the
+    // account can present at a gate, so no combination offered holds it. What the
+    // account can reach (AUTH-STEP-006) is read from its credentials alone.
+    private async ValueTask<HeldFactors> HeldAsync(
+        SubjectId subject,
+        Policy policy,
+        CancellationToken cancellationToken)
     {
         IReadOnlyList<Authenticator> enrolled = await authenticators
             .OfAsync(subject, cancellationToken)
@@ -369,7 +375,9 @@ internal sealed class StepUpGuard(
         Password? password = await passwords.FindAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        return HeldFactors.Of(enrolled, password is not null);
+        var held = HeldFactors.Of(enrolled, password is not null);
+
+        return held with { Usable = held.Usable.Intersect(policy.LoginFactors).ToFrozenSet() };
     }
 
     // AUTH-STEP-002 steps 1 to 3: the session is judged against the gate. Where it does
