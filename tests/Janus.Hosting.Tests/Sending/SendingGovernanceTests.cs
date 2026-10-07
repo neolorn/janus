@@ -966,13 +966,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-003 and AUTH-ABUSE-004: an alert is outside every restriction, so it is
+    /// OPS-ALERT-003 AC5 and AUTH-ABUSE-004: an alert is outside every restriction, so it is
     /// carried with every bucket of every restriction that could count it full, and
     /// counts under none (D-166, 342).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_003_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
+    public async Task OPS_ALERT_003_AC5_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
     {
         _configuration.Set(
             Settings.Restrictions,

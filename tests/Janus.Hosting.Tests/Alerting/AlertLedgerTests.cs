@@ -28,13 +28,13 @@ public sealed class AlertLedgerTests(HostFixture host) : IClassFixture<HostFixtu
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// OPS-ALERT-002: two passes that overlap on a key never raised before claim it
+    /// OPS-ALERT-002 AC2: two passes that overlap on a key never raised before claim it
     /// once between them; the second waits for the first, then finds the key taken, and
     /// neither faults.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_002_TwoOverlappingPassesDeliverOneAlertAsync()
+    public async Task OPS_ALERT_002_AC2_TwoOverlappingPassesDeliverOneAlertAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         string key = "background-job-failed:" + Guid.NewGuid().ToString("N");

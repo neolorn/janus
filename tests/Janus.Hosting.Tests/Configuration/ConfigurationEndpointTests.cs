@@ -636,7 +636,7 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_ALERT_001_TurningExportStepUpOffRaisesStepUpPolicyWeakenedAsync()
+    public async Task OPS_ALERT_006_AC5_TurningExportStepUpOffRaisesStepUpPolicyWeakenedAsync()
     {
         Browser administrator = await AuthorisedAsync(
             Permissions.ConfigurationManage,
