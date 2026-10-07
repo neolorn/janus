@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Configuration;
@@ -22,7 +23,7 @@ namespace Janus.Authentication.Tests.Organizations;
 
 /// <summary>
 /// The changes to an organization's domain list, as the unit of work sees them ended
-/// (CONV-DESIGN-003).
+/// (CONV-DESIGN-003), and what the lock admits once they are made (REG-DOM-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class OrganizationDomainServiceTests : IAsyncDisposable
@@ -162,8 +163,133 @@ public sealed class OrganizationDomainServiceTests : IAsyncDisposable
         Assert.True(Assert.Single(_domains.Held).IsListed);
     }
 
+    /// <summary>
+    /// REG-DOM-001 AC5: with only unverified domains listed the lock is on and admits
+    /// nothing, so a member's sign-in email is refused whatever its domain: one in a
+    /// listed domain and one in a domain never listed alike.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AC5_WithOnlyUnverifiedDomainsListedEveryAddressIsRefusedAsync()
+    {
+        SubjectId member = Member();
+        _ = await ListedAsync(Domain);
+        _ = await ListedAsync("corp.example");
+
+        ErrorCode? listed = await JudgedAsync(member, "person@example.test");
+        ErrorCode? listedToo = await JudgedAsync(member, "person@corp.example");
+        ErrorCode? unlisted = await JudgedAsync(member, "person@elsewhere.test");
+
+        Assert.All(_domains.Held, held => Assert.Null(held.VerifiedAt));
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, listed);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, listedToo);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, unlisted);
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC6: once the last listed domain is removed the list is empty, an
+    /// address in the removed domain is still refused, and an address in any other
+    /// domain, refused while the domain was listed, is admitted.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AC6_AfterTheLastDomainIsRemovedItsAddressesAreRefusedAndOthersAdmittedAsync()
+    {
+        SubjectId member = Member();
+        await VerifiedAsync(await ListedAsync(Domain));
+        ErrorCode? outsideWhileListed = await JudgedAsync(member, "person@elsewhere.test");
+
+        await RemovedAsync(Domain);
+        ErrorCode? within = await JudgedAsync(member, "person@example.test");
+        ErrorCode? outside = await JudgedAsync(member, "person@elsewhere.test");
+
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, outsideWhileListed);
+        Assert.DoesNotContain(_domains.Held, held => held.IsListed);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, within);
+        Assert.Null(outside);
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC7: a domain listed anew draws a token no row of it ever carried,
+    /// and admits nothing, the record of its first listing still published, until its
+    /// own record is found.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AC7_ADomainListedAnewDrawsANewTokenAndAdmitsNothingUntilVerifiedAsync()
+    {
+        SubjectId member = Member();
+        OrganizationDomain first = await ListedAsync(Domain);
+        await VerifiedAsync(first);
+        await RemovedAsync(Domain);
+
+        OrganizationDomain anew = await ListedAsync(Domain);
+        ErrorCode? unverified = await JudgedAsync(member, "person@example.test");
+        await VerifiedAsync(anew);
+        ErrorCode? verified = await JudgedAsync(member, "person@example.test");
+
+        Assert.NotEqual(first.RecordValue, anew.RecordValue);
+        Assert.Equal(2, _domains.Held.Select(held => held.Token).Distinct(StringComparer.Ordinal).Count());
+        Assert.Null(anew.VerifiedAt);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, unverified);
+        Assert.Null(verified);
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
+
+    private static TValue Admitted<TValue>(Result<TValue> outcome) =>
+        outcome.Match(
+            value => value,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+    // A member of the organization whose list the tests change.
+    private SubjectId Member()
+    {
+        var member = SubjectId.New(_randomness);
+
+        _memberships.Place(member, Customer);
+
+        return member;
+    }
+
+    private async Task<OrganizationDomain> ListedAsync(string domain) =>
+        Admitted(await Service(_dns).AddDomainAsync(
+            Acting,
+            Opened(Noon),
+            Customer,
+            domain,
+            Reason,
+            TestContext.Current.CancellationToken));
+
+    // The domain's record published as the listing answered it, and the domain verified.
+    private async Task VerifiedAsync(OrganizationDomain listed)
+    {
+        _dns.Publish(listed.RecordName, listed.RecordValue);
+
+        _ = Admitted(await Service(_dns).VerifyDomainAsync(
+            Acting,
+            Opened(Noon),
+            Customer,
+            listed.Domain,
+            Reason,
+            TestContext.Current.CancellationToken));
+    }
+
+    private async Task RemovedAsync(string domain) =>
+        (await Service(_dns).RemoveDomainAsync(
+                Acting,
+                Opened(Noon),
+                Customer,
+                domain,
+                Reason,
+                TestContext.Current.CancellationToken))
+            .Match(
+                () => true,
+                error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+    // What the lock answers a member's sign-in email: the refusal's code, or nothing
+    // where it admits the address.
+    private async Task<ErrorCode?> JudgedAsync(SubjectId member, string address) =>
+        (await new DomainLock(_memberships, _configuration, _domains)
+            .RefusedAsync(member, address, TestContext.Current.CancellationToken))?.Code;
 
     private static ErrorCode Refused<TValue>(Result<TValue> outcome) =>
         outcome.Match<ErrorCode>(
