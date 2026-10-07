@@ -45,11 +45,6 @@ against the public contract of LIB-API-001.
   26 carried such a value exactly as the browser brought it, line breaks and any
   length included, and a return carrying an empty `error` beside a `code` went on to
   the exchange. A value that reads is handled as before.
-- Events 10 (`SignOnRefused`), 11 (`SignOnExchangeRejected`) and 14
-  (`SignOnPushRejected`) of the browser profile's log, which nothing writes any
-  longer, are no longer declared. Their identifiers and their names are given to no
-  other event of that log, so a query or an alert kept on any of them matches
-  nothing from now on.
 - `POST /auth/factor` at a sign-in where a second step is accepted before any first
   factor answers 200 `factorRequired` with `required` naming the first factors of the
   `available` that `POST /auth/begin` answered, where it named every usable second
