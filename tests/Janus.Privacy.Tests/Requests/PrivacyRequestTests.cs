@@ -411,13 +411,13 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): a suspended account the fulfilled erasure
+    /// PRIV-RIGHT-001 AC4, IDN-LIFE-003 (D-166): a suspended account the fulfilled erasure
     /// finds enters its window by <c>oob-request</c> holding the suspension, and a
     /// cancellation returns it suspended.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ASuspendedAccountEntersTheWindowAndComesBackSuspendedAsync()
+    public async Task PRIV_RIGHT_001_AC4_ASuspendedAccountEntersTheWindowAndComesBackSuspendedAsync()
     {
         _accounts.Hold(Ahmed, AccountState.Suspended);
 
