@@ -1967,12 +1967,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-MEM-001 and REG-MAIL-003: ending a membership changes another person's
+    /// IDN-MEM-001 AC5 and REG-MAIL-003: ending a membership changes another person's
     /// account, so it is the <c>membership:end</c> step-up action; a session whose proof
     /// is stale ends nothing and begins no transaction.
     /// </summary>
     [Fact]
-    public async Task IDN_MEM_001_EndingAMembershipAsksForStepUpAsync()
+    public async Task IDN_MEM_001_AC5_EndingAMembershipAsksForStepUpAsync()
     {
         SubjectId holder = Holder();
 

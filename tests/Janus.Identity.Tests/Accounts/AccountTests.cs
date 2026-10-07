@@ -353,11 +353,49 @@ public sealed class AccountTests
     }
 
     /// <summary>
-    /// IDN-LIFE-013: a takedown reversed on an account an administrator suspended leaves
-    /// it suspended by the administrator, so only <c>account:manage</c> reactivates it.
+    /// IDN-LIFE-003 AC11 (D-166): a restricted account an administrator suspended, whose
+    /// out-of-band erasure was fulfilled and which was then taken down, comes back
+    /// through each step it passed: the reversal returns it to its out-of-band deletion
+    /// with the start it had, holding the suspension and the restriction; cancelling the
+    /// deletion returns it suspended by the administrator; reactivating it returns it
+    /// restricted.
     /// </summary>
     [Fact]
-    public void IDN_LIFE_013_AReversedTakedownReturnsTheAdministratorsSuspension()
+    public void IDN_LIFE_003_AC11_ARestrictedSuspendedAccountComesBackThroughEachStepItPassed()
+    {
+        var account = Account.Create(Ahmed, Noon);
+
+        account.Restrict();
+        account.Suspend();
+        account.RequestDeletion(DeletionOrigin.OutOfBandRequest, Noon);
+        account.Takedown(Noon.AddDays(2));
+
+        account.ReverseTakedown();
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, Noon, SuspensionOrigin.Administrator, true),
+            (account.State, account.DeletingBy, account.DeletingSince, account.SuspensionHeld, account.RestrictionHeld));
+
+        account.CancelDeletion();
+
+        Assert.Equal(
+            (AccountState.Suspended, SuspensionOrigin.Administrator, true),
+            (account.State, account.SuspendedBy, account.RestrictionHeld));
+        Assert.Null(account.DeletingBy);
+
+        account.Reactivate();
+
+        Assert.Equal((AccountState.Restricted, false), (account.State, account.RestrictionHeld));
+        Assert.Null(account.SuspendedBy);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC8, IDN-LIFE-013: a takedown reversed on an account an administrator
+    /// suspended leaves it suspended by the administrator, so only <c>account:manage</c>
+    /// reactivates it.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_003_AC8_AReversedTakedownReturnsTheAdministratorsSuspension()
     {
         Account account = SuspendedBy(SuspensionOrigin.Administrator);
         account.Takedown(Noon);
@@ -453,7 +491,7 @@ public sealed class AccountTests
     }
 
     /// <summary>
-    /// IDN-LIFE-003, PRIV-RIGHT-001 (D-166): a suspended account enters the window on a
+    /// IDN-LIFE-003 AC8, PRIV-RIGHT-001 (D-166): a suspended account enters the window on a
     /// request that arrived out of band, holding the suspension with its origin, and a
     /// cancellation returns it suspended by that origin; the subject's own request does
     /// not start a suspended account's window.
@@ -462,7 +500,7 @@ public sealed class AccountTests
     [Theory]
     [InlineData(SuspensionOrigin.Administrator)]
     [InlineData(SuspensionOrigin.Self)]
-    public void IDN_LIFE_003_ASuspendedAccountEntersTheWindowOutOfBandAndComesBackSuspended(
+    public void IDN_LIFE_003_AC8_ASuspendedAccountEntersTheWindowOutOfBandAndComesBackSuspended(
         SuspensionOrigin origin)
     {
         var account = Account.Create(Ahmed, Noon);

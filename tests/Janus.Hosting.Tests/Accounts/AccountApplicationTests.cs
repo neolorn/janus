@@ -60,7 +60,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ACCT-007 AC2 (D-166), end to end: a restriction fulfilled through the queue
+    /// IDN-ACCT-007 AC5 and AC2 (D-166), end to end: a restriction fulfilled through the queue
     /// ends the account's session; the account then signs in with its password, reads
     /// itself as restricted, is refused a change to its profile with
     /// <c>authz.restricted</c>, still exercises its rights with a request, and exports
@@ -68,7 +68,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ACCT_007_AC2_ARestrictedAccountSignsInReadsAndIsRefusedAChangeAsync()
+    public async Task IDN_ACCT_007_AC5_ARestrictedAccountSignsInReadsAndIsRefusedAChangeAsync()
     {
         // The new-device check would hold the sign-in for a code (AUTH-FACT-016), which
         // is not what this test is about.

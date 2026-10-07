@@ -25,13 +25,13 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
     private const string Source = "198.51.100.7";
 
     /// <summary>
-    /// IDN-MEM-001, IDN-LIFE-009a, D-166: ending an account's membership of the
+    /// IDN-MEM-001 AC4, IDN-LIFE-009a, D-166: ending an account's membership of the
     /// administrative organization stops what its grants there confer, and removes no
     /// grant.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task IDN_MEM_001_EndingTheAdministrativeMembershipStopsItsGrantsAndKeepsThemAsync()
+    public async Task IDN_MEM_001_AC4_EndingTheAdministrativeMembershipStopsItsGrantsAndKeepsThemAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var deployment = new Authorization.Deployment(host);
@@ -82,6 +82,82 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
 
         Assert.False(await HeldAsync(member, administrative));
         Assert.Equal(1, await StandingAsync(held));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC3: after a membership of an organization ends, the grant the
+    /// account held there is still a standing row and still confers, and it is revoked
+    /// as its own step, which then takes it away.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AC3_AGrantOutlivesTheMembershipAndIsRevokedAsItsOwnStepAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Authorization.Deployment(host);
+
+        RoleName managing = await deployment.BeginAsync(
+            [Permissions.MembershipManage, Permissions.GrantManage],
+            cancellationToken);
+        RoleName reading = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+        OrganizationId organization = deployment.Organization;
+        SubjectId administrator = await deployment.AccountAsync(cancellationToken);
+        SubjectId member = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.MemberAsync(administrator, organization, cancellationToken);
+        await deployment.MemberAsync(member, organization, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(administrator),
+            managing,
+            null,
+            false,
+            null,
+            organization,
+            cancellationToken);
+
+        GrantId held = await deployment.GrantAsync(
+            GrantSubject.Of(member),
+            reading,
+            null,
+            false,
+            null,
+            organization,
+            cancellationToken);
+
+        SessionId session = await SteppedUpAsync(administrator);
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result ended = await scope.ServiceProvider.GetRequiredService<IInvitations>()
+                .EndMembershipAsync(
+                    AccessContext.Of(administrator),
+                    session,
+                    organization,
+                    member,
+                    Source,
+                    cancellationToken);
+
+            Assert.True(ended.Match(() => true, _ => false));
+        }
+
+        Assert.Equal(1, await StandingAsync(held));
+        Assert.True(await HeldAsync(member, organization));
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result revoked = await scope.ServiceProvider.GetRequiredService<IGrants>()
+                .RevokeAsync(
+                    AccessContext.Of(administrator),
+                    session,
+                    held,
+                    "The membership ended.",
+                    cancellationToken);
+
+            Assert.True(revoked.Match(() => true, _ => false));
+        }
+
+        Assert.Equal(0, await StandingAsync(held));
+        Assert.False(await HeldAsync(member, organization));
     }
 
     // A session of the account's own that proved a phishing-resistant second factor just

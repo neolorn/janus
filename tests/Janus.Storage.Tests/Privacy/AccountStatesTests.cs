@@ -228,7 +228,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     /// nothing to take, and the reversal returns the account to its own window.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_003_ARunningDeletionIsTakenDownAsync()
+    public async Task IDN_LIFE_003_AC7_ARunningDeletionIsTakenDownAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
         DateTimeOffset began = Noon - TimeSpan.FromDays(2);
@@ -280,7 +280,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     /// with its origin, and a cancellation returns it suspended by the administrator.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_003_ASuspendedAccountBeginsItsDeletionOutOfBandAsync()
+    public async Task IDN_LIFE_003_AC8_ASuspendedAccountBeginsItsDeletionOutOfBandAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
@@ -348,7 +348,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     /// <c>account:manage</c> and no reversal stands in for that.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_013_AReversedTakedownLeavesTheAccountToAnAdministratorAsync()
+    public async Task IDN_LIFE_003_AC8_AReversedTakedownLeavesTheAccountToAnAdministratorAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 

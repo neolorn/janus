@@ -205,13 +205,13 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-013: only an administrator's suspension is reversed here; what its owner
+    /// IDN-LIFE-013 AC3: only an administrator's suspension is reversed here; what its owner
     /// deactivated is theirs to stand back up, and an account in no suspension has
     /// nothing to reverse. Each is a conflict with the state, named with who suspended
     /// it where it is suspended.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_013_OnlyAnAdministratorsSuspensionIsReactivatedAsync()
+    public async Task IDN_LIFE_013_AC3_OnlyAnAdministratorsSuspensionIsReactivatedAsync()
     {
         var deactivated = SubjectId.New(_randomness);
 
@@ -251,6 +251,54 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.AccountNotFound, Refused(await ReactivateAsync(SubjectId.New(_randomness))));
         Assert.Equal(AccountState.Deleting, await StateAsync(_member));
         Assert.Empty(_audit.Administered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC6: an erased account is past suspending, so the administrator's
+    /// suspension is refused as a conflict with its state, which the refusal names, and
+    /// the same operation naming a subject no account bears is refused as not found;
+    /// neither changes or records anything.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC6_ASuspensionOfADeletedAccountIsAConflictAndOfNoAccountNotFoundAsync()
+    {
+        _directory.Stands(_member, AccountState.Deleted);
+
+        Error deleted = Refusal(await SuspendAsync(_member));
+        Error unknown = Refusal(await SuspendAsync(SubjectId.New(_randomness)));
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, deleted.Code);
+        Assert.Equal("deleted", deleted.Details["state"].GetString());
+        Assert.False(deleted.Details.ContainsKey("suspendedBy"));
+        Assert.Equal(ErrorCodes.AccountNotFound, unknown.Code);
+        Assert.Equal(AccountState.Deleted, await StateAsync(_member));
+        Assert.Empty(_events.Published);
+        Assert.Empty(_audit.Administered);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-013 AC4: an account restricted, then suspended by an administrator and
+    /// reactivated, is restricted again; the suspension and the reactivation are
+    /// announced, and nothing is announced of the restriction on either side.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_AC4_ARestrictedAccountSuspendedAndReactivatedIsRestrictedAsync()
+    {
+        _directory.Stands(_member, AccountState.Restricted);
+
+        Accepted(await SuspendAsync(_member));
+
+        Assert.Equal(AccountState.Suspended, await StateAsync(_member));
+        Assert.Equal([typeof(AccountSuspended)], _events.Published.Select(published => published.GetType()));
+
+        Accepted(await ReactivateAsync(_member));
+
+        Assert.Equal(AccountState.Restricted, await StateAsync(_member));
+        Assert.Equal(
+            [typeof(AccountSuspended), typeof(AccountReactivated)],
+            _events.Published.Select(published => published.GetType()));
+        Assert.Empty(_directory.Lifted);
     }
 
     /// <summary>

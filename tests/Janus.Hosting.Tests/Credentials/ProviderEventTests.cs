@@ -491,7 +491,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_012a_AHeldCredentialStandsAgainOnceThePersonSignsInByAnotherFactorAsync()
+    public async Task IDN_LIFE_012a_AC6_AHeldCredentialStandsAgainOnceThePersonSignsInByAnotherFactorAsync()
     {
         (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
 
@@ -738,13 +738,13 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-012a AC2 (D-166, 286): where the account's other way in is a credential a
+    /// IDN-LIFE-012a AC4 (D-166, 286): where the account's other way in is a credential a
     /// provider's event holds, nothing usable may begin a sign-in without the withdrawn
     /// identity, so the credential stays and the account is suspended instead.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_012a_AC2_AWithdrawnIdentityWhoseOtherWayInIsHeldSuspendsTheAccountAsync()
+    public async Task IDN_LIFE_012a_AC4_AWithdrawnIdentityWhoseOtherWayInIsHeldSuspendsTheAccountAsync()
     {
         var subject = SubjectId.New(_randomness);
 
@@ -801,6 +801,38 @@ public sealed class ProviderEventTests : IAsyncDisposable
         Assert.False(held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == Flow.Address).IsVerified);
         Assert.Equal(
             (AuditActions.ProviderEventTaken, linked.Id, "email-disabled", ProviderEventOutcome.AddressUnverified),
+            Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC5: the personal email a membership keeps is not the provider's to
+    /// take the verification of, so an event naming it leaves it verified, and the event
+    /// is recorded as one that changed nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC5_AnEventNamingTheKeptPersonalEmailLeavesItVerifiedAndIsRecordedAsync()
+    {
+        const string personal = "ahmed.personal@example.test";
+
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Apple, AppleSubject);
+
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, personal, isPersonal: true);
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("email-disabled", AppleSubject, personal))));
+
+        HeldIdentifiers held = await _deployment.Identifiers.HeldAsync(subject, CancellationToken.None);
+        HeldIdentifier kept = held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == personal);
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.True(kept is { IsVerified: true, IsPersonal: true });
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, linked.Id, "email-disabled", ProviderEventOutcome.Recorded),
             Assert.Single(_deployment.CredentialAudit.ProviderEvents));
     }
 

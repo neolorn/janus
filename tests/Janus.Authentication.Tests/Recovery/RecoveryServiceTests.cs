@@ -310,6 +310,37 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-013 AC2: recovery does not restore a deactivated account an
+    /// administrator has since suspended. The link sent while the account was its
+    /// owner's to stand up completes and leaves it suspended by the administrator, and a
+    /// recovery begun after the suspension sends nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_013_AC2_RecoveryDoesNotStandUpAnAccountAnAdministratorSuspendedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _accounts.Suspended(subject, SuspensionOrigin.Self);
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        _accounts.Suspended(subject, SuspensionOrigin.Administrator);
+
+        _ = await Service.CompleteAsync(Sent(), Secret, Source, TestContext.Current.CancellationToken);
+
+        int sent = _notifications.Mail.Count;
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            (AccountState.Suspended, SuspensionOrigin.Administrator),
+            (await _accounts.StateAsync(subject, TestContext.Current.CancellationToken),
+                await _accounts.SuspendedByAsync(subject, TestContext.Current.CancellationToken)));
+        Assert.Equal(sent, _notifications.Mail.Count);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC2 (D-166): a restricted account signs in, so it recovers its
     /// password as an active one does and stays restricted.
     /// </summary>

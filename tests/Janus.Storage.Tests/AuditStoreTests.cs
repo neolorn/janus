@@ -691,7 +691,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
-    /// INF-BG-002 AC2, IDN-PRIN-001 AC4, PRIV-BREACH-002: the trail read by subject names
+    /// INF-BG-002 AC2, IDN-AUD-001 AC3, PRIV-BREACH-002: the trail read by subject names
     /// the principal of the background work that acted on the account and the reason it
     /// stated.
     /// </summary>

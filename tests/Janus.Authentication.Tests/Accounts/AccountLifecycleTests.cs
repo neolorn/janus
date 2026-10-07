@@ -169,11 +169,11 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-013: an administrator's suspension is an administrator's to
+    /// IDN-LIFE-013 AC2: an administrator's suspension is an administrator's to
     /// reverse, whatever link the account is still holding.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_013_AdministrativeSuspensionIsNotReversedByALinkAsync()
+    public async Task IDN_LIFE_013_AC2_AdministrativeSuspensionIsNotReversedByALinkAsync()
     {
         Accepted(await Lifecycle.DeactivateAsync(
             Acting,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -185,13 +186,13 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// IDN-MEM-002 AC2, X3 of D-166: two acknowledgements for one account, made
+    /// IDN-MEM-002 AC6, X3 of D-166: two acknowledgements for one account, made
     /// together, leave one membership. The second waits on the account's row the first
     /// holds, and decides only once the first has committed, on the membership it made.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task IDN_MEM_002_AC2_TwoAttachmentsTogetherLeaveOneMembershipAsync()
+    public async Task IDN_MEM_002_AC6_TwoAttachmentsTogetherLeaveOneMembershipAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         SubjectId subject = await _deployment.AccountAsync(Noon);
@@ -285,6 +286,43 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
 
         Assert.Equal(PostgresErrorCodes.UniqueViolation, refusal.SqlState);
         Assert.Equal("ux_memberships_current", refusal.ConstraintName);
+    }
+
+    /// <summary>
+    /// IDN-ORG-001 AC2: the data model holds one account as a current member of two
+    /// organizations at once; whether a deployment lets it is the setting's to say, not
+    /// the schema's.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ORG_001_AC2_OneAccountIsACurrentMemberOfTwoOrganizationsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId first = await _deployment.OrganizationAsync(Noon);
+        OrganizationId second = await _deployment.OrganizationAsync(Noon);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            Member,
+            Row(subject, first, ended: null),
+            cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            Member,
+            Row(subject, second, ended: null),
+            cancellationToken: cancellationToken));
+
+        await using StoreContext reading = database.Context();
+
+        List<OrganizationId> held = await reading.Memberships
+            .Where(row => row.Subject == subject && row.EndedAt == null)
+            .Select(row => row.Organization)
+            .ToListAsync(cancellationToken);
+
+        Assert.Equal(2, held.Count);
+        Assert.Contains(first, held);
+        Assert.Contains(second, held);
     }
 
     /// <inheritdoc/>

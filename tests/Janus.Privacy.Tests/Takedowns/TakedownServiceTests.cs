@@ -197,13 +197,13 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003 AC2, IDN-LIFE-003a: a takedown whose retries were spent and which an
+    /// IDN-LIFE-003a AC9, IDN-LIFE-003 AC2: a takedown whose retries were spent and which an
     /// operator completed by hand, under <c>privacyrequest:manage</c>, reads
     /// <c>complete</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003_AC2_ATakedownCompletedByHandReadsCompleteAsync()
+    public async Task IDN_LIFE_003a_AC9_ATakedownCompletedByHandReadsCompleteAsync()
     {
         ExecutedTakedown takedown = Held(await ExecutedAsync());
 
@@ -295,7 +295,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     [Theory]
     [InlineData(DeletionOrigin.Self)]
     [InlineData(DeletionOrigin.OutOfBandRequest)]
-    public async Task IDN_LIFE_003_ARunningDeletionIsTakenDownAsync(DeletionOrigin origin)
+    public async Task IDN_LIFE_003_AC7_ARunningDeletionIsTakenDownAsync(DeletionOrigin origin)
     {
         DateTimeOffset began = Noon - Settings.AccountDeletionGrace.Default + TimeSpan.FromDays(1);
 
@@ -726,16 +726,17 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003 AC4 (D-166): <c>AccountSuspended</c> announces that access stopped,
-    /// so a trigger on an account already suspended, or already in its own deletion,
-    /// writes one as a trigger on an active account does.
+    /// IDN-LIFE-003 AC9 (D-166): <c>AccountSuspended</c> announces that access stopped,
+    /// so a trigger on an account restricted, already suspended, or already in its own
+    /// deletion, writes one as a trigger on an active account does.
     /// </summary>
     /// <param name="state">Where the account stood.</param>
     /// <returns>The work of the test.</returns>
     [Theory]
+    [InlineData(AccountState.Restricted)]
     [InlineData(AccountState.Suspended)]
     [InlineData(AccountState.Deleting)]
-    public async Task IDN_LIFE_003_AC4_EveryTriggerAnnouncesTheSuspensionAsync(AccountState state)
+    public async Task IDN_LIFE_003_AC9_EveryTriggerAnnouncesTheSuspensionAsync(AccountState state)
     {
         if (state is AccountState.Deleting)
         {

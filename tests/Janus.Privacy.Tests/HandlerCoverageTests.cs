@@ -107,12 +107,12 @@ public sealed class HandlerCoverageTests
     }
 
     /// <summary>
-    /// DR-016 AC2, IDN-LIFE-003a: a subscriber registered under the name the erasure
+    /// IDN-LIFE-003a AC7, DR-016 AC2: a subscriber registered under the name the erasure
     /// ledger's confirmation is recorded under would take the ledger's line for its own
     /// work, so the deployment does not start, and the failure names it.
     /// </summary>
     [Fact]
-    public void DR_016_AC2_ASubscriberUnderTheLedgersNameFailsStartup()
+    public void IDN_LIFE_003a_AC7_ASubscriberUnderTheLedgersNameFailsStartup()
     {
         Result outcome = Coverage(
             [Covering(Statement), new SubscriberInMemory("erasure-ledger", required: true)],
@@ -129,12 +129,12 @@ public sealed class HandlerCoverageTests
     }
 
     /// <summary>
-    /// IDN-LIFE-003a AC3: two subscribers under one name would share one confirmation,
+    /// IDN-LIFE-003a AC7: two subscribers under one name would share one confirmation,
     /// so the second would never be offered an event the first had confirmed; the
     /// deployment does not start.
     /// </summary>
     [Fact]
-    public void IDN_LIFE_003a_TwoSubscribersUnderOneNameFailStartup()
+    public void IDN_LIFE_003a_AC7_TwoSubscribersUnderOneNameFailStartup()
     {
         Result outcome = Coverage(
             [Covering(Statement), new SubscriberInMemory("host", required: false)],
