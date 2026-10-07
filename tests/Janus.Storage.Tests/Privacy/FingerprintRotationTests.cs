@@ -630,6 +630,49 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         Assert.Equal(altered, fingerprint);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005c AC7: the row of a fingerprint names the version of the key it was
+    /// computed under, the previous one for a value written before the new version was
+    /// current and the new one for a value written after. An application holding both
+    /// finds the owner of each, and one holding the new version alone finds only the
+    /// value fingerprinted under it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005c_AC7_EachFingerprintNamesItsVersionAndALookupFindsEveryVersionHeldAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId earlier = await _deployment.AccountAsync(Noon);
+        SubjectId later = await _deployment.AccountAsync(Noon);
+        string before = Fresh("Before");
+        string after = Fresh("After");
+
+        await VerifiedAsync(earlier, before, Deployment.FingerprintKeys);
+        await VerifiedAsync(later, after, Rotating);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            [(earlier.Value, 1), (later.Value, 2)],
+            await connection.QueryAsync<(Guid, int)>(
+                "SELECT subject, fingerprint_version FROM identity.identifiers ORDER BY fingerprint_version"));
+
+        await using StoreContext reading = database.Context();
+        IdentifierStore both = Identifiers(reading, Rotating);
+        IdentifierStore current = Identifiers(reading, Retired);
+
+        Assert.Equal(
+            earlier,
+            await both.FindOwnerAsync(IdentifierKind.Email, Canonicalised(before), cancellationToken));
+        Assert.Equal(
+            later,
+            await both.FindOwnerAsync(IdentifierKind.Email, Canonicalised(after), cancellationToken));
+        Assert.Null(await current.FindOwnerAsync(IdentifierKind.Email, Canonicalised(before), cancellationToken));
+        Assert.Equal(
+            later,
+            await current.FindOwnerAsync(IdentifierKind.Email, Canonicalised(after), cancellationToken));
+    }
+
     private static KeyRotationProgress Completed(Result<KeyRotationProgress> outcome) => outcome.Match(
         progress => progress,
         error => throw new InvalidOperationException("The rotation was refused: " + error.Code + "."));
@@ -773,6 +816,22 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return entered;
+    }
+
+    // A verified email of the account's, written by an application holding these keys.
+    private async Task VerifiedAsync(SubjectId subject, string entered, FingerprintKeys fingerprintKeys)
+    {
+        await using StoreContext context = database.Context();
+        IdentifierStore store = Identifiers(context, fingerprintKeys);
+
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        var email = Identifier.Email(IdentifierId.New(TimeProvider.System), subject, Parsed(entered), entered, Noon);
+
+        set.Add(email, maximum: 5);
+        set.Verify(email.Id, Noon);
+
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     // A username an erasure holds, as the eraser writes the hold.
