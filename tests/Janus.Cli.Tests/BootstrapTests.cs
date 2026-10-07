@@ -105,14 +105,14 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
-    /// IDN-ACCT-005 AC3 and IDN-ACCT-004: the organization's name is judged on its
+    /// IDN-ACCT-005 AC5 and IDN-ACCT-004: the organization's name is judged on its
     /// comparison key, so a word that mixes scripts once its circled letters are
     /// normalized is refused by the code that names the mixing, against the member it
     /// was given as, and nothing is written.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ACCT_005_AC3_BootstrapRefusesAMixedOrganizationNameByItsOwnCodeAsync()
+    public async Task IDN_ACCT_005_AC5_BootstrapRefusesAMixedOrganizationNameByItsOwnCodeAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -515,12 +515,12 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-003: no grant bootstrap makes names its holder, or any person, as the
+    /// AUTHZ-GRANT-003 AC4: no grant bootstrap makes names its holder, or any person, as the
     /// one who granted it; each names the nil subject and the reason bootstrap states.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_003_TheFirstGrantsNameNoPersonAsTheirGranterAsync()
+    public async Task AUTHZ_GRANT_003_AC4_TheFirstGrantsNameNoPersonAsTheirGranterAsync()
     {
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 

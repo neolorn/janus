@@ -145,7 +145,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-SEC-002, IDN-LIFE-012 AC5 (D-166 343): with a signing credential supplied,
+    /// IDN-LIFE-012 AC5, OPS-SEC-002 (D-166 343): with a signing credential supplied,
     /// each exchange presents a client secret minted for it, signed with ES256 under the
     /// declared key and naming it, carrying the five claims and lasting five minutes from
     /// the moment it was made; two exchanges a year apart on the clock both succeed with
@@ -153,7 +153,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_002_ASignedClientSecretIsMintedForEachExchangeAsync()
+    public async Task IDN_LIFE_012_AC5_ASignedClientSecretIsMintedForEachExchangeAsync()
     {
         SubjectId subject = await RegisteredAsync();
 

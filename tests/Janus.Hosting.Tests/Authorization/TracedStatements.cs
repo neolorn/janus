@@ -10,7 +10,7 @@ namespace Janus.Hosting.Tests.Authorization;
 /// included, read from the traces the database driver writes.
 /// </summary>
 /// <remarks>
-/// Implements CONV-TEST-002 for AUTHZ-GATE-005 AC1 and AUTHZ-CONCEAL-002 AC2. The library's context takes no
+/// Implements CONV-TEST-002 for AUTHZ-GATE-005 AC1 and AUTHZ-CONCEAL-002 AC3. The library's context takes no
 /// interceptor from a host, so its statements are counted where the driver traces
 /// them, and only those traced under the operation this instance started, since other
 /// test classes run beside it.
