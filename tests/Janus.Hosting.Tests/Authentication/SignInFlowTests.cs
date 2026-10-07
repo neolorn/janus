@@ -271,7 +271,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
             confirmed: true,
             null,
             null,
-            isPreferred: false));
+            isPreferred: false,
+            number: Flow.Number));
 
         var browser = new Browser(_deployment);
         string challenge = await BegunAsync(browser);
@@ -390,7 +391,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 confirmed: true,
                 factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
                 null,
-                isPreferred: false);
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
     }
 
     /// <summary>
@@ -490,7 +492,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 confirmed: true,
                 factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
                 null,
-                isPreferred: false);
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
     }
 
     /// <summary>
@@ -589,7 +592,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 confirmed: true,
                 factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
                 null,
-                isPreferred: false);
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
     }
 
     /// <summary>
@@ -673,7 +677,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 confirmed: true,
                 factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
                 null,
-                isPreferred: false);
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
     }
 
     /// <summary>
@@ -743,7 +748,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 confirmed: true,
                 factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
                 null,
-                isPreferred: false);
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
     }
 
     /// <summary>

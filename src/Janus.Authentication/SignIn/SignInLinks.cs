@@ -310,12 +310,10 @@ internal sealed class SignInLinks(
             return Result.Failure<bool>(failure);
         }
 
-        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
-
-        // An account with no number to text is sent nothing and answered as an ask
-        // that sent its code; only the carrier's signal is told apart.
-        if (held.Texted() is not HeldIdentifier number
-            || !PhoneNumber.TryParse(number.Canonical, out PhoneNumber texted))
+        // AUTH-FACT-002: the code goes to the number the credential is bound to and to
+        // no other. One bound to none is sent nothing and answered as an ask that sent
+        // its code; only the carrier's signal is told apart.
+        if (credential.Number is null || !PhoneNumber.TryParse(credential.Number, out PhoneNumber texted))
         {
             return Result.Success(true);
         }

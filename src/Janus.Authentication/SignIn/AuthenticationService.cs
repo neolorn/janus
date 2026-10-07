@@ -1767,7 +1767,7 @@ internal sealed class AuthenticationService(
 
         foreach (Factor carried in textable)
         {
-            if (!await TextableAsync(subject, carried, cancellationToken).ConfigureAwait(false))
+            if (!await TextableAsync(subject, carried, enrolled, cancellationToken).ConfigureAwait(false))
             {
                 _ = wanted.Remove(carried);
             }
@@ -1846,16 +1846,19 @@ internal sealed class AuthenticationService(
         open.Email is IdentifierId email
         && (await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false)).Find(email) is null;
 
-    // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
+    // AUTH-FACT-002b: the entry rides the number its credential is bound to, or the
+    // one the account would be texted at where it is bound to none (AUTH-FACT-002), so
     // it is that number the signal is asked about.
     private async ValueTask<bool> TextableAsync(
         SubjectId subject,
         Factor carried,
+        IReadOnlyList<Authenticator> enrolled,
         CancellationToken cancellationToken) =>
         await signals
             .AllowsAsync(
                 carried,
                 await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false),
+                enrolled,
                 subject,
                 cancellationToken)
             .ConfigureAwait(false);

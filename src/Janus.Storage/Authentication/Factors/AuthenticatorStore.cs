@@ -20,12 +20,13 @@ namespace Janus.Storage.Authentication.Factors;
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-006, IDN-LIFE-012a, PRIV-RIGHT-005c, OPS-SEC-003
+/// Implements AUTH-FACT-001, AUTH-FACT-002, AUTH-FACT-006, IDN-LIFE-012a, PRIV-RIGHT-005c, OPS-SEC-003
 /// and CONV-DESIGN-003. The shared secret of a code generator is written under the
 /// person's key, so a dump of the table yields no usable secret; the subject a social
 /// provider knows a linked identity by is found by its keyed fingerprint and held under
 /// the person's key, so a dump does not say who the person is at the provider either,
-/// and a rotation of the fingerprint key can compute the fingerprint again.
+/// and a rotation of the fingerprint key can compute the fingerprint again. The number a
+/// text code's credential is bound to is held under the person's key too (AUTH-FACT-002).
 /// </remarks>
 internal sealed class AuthenticatorStore(
     StoreContext context,
@@ -223,6 +224,13 @@ internal sealed class AuthenticatorStore(
         record.Counter = authenticator.WebAuthn?.Counter;
         record.BackupState = authenticator.WebAuthn?.BackupState;
         record.IsPreferred = authenticator.IsPreferred;
+
+        // AUTH-FACT-002: the number a credential is bound to is written once, as it is
+        // confirmed, and the one change it takes is to leave.
+        if (authenticator.Number is null)
+        {
+            record.EncryptedNumber = null;
+        }
     }
 
     /// <inheritdoc/>
@@ -243,6 +251,9 @@ internal sealed class AuthenticatorStore(
 
     private static PersonalFieldLocation Linked(SubjectId subject) =>
         new(subject, AuthenticatorConfiguration.Table, AuthenticatorConfiguration.ProviderSubjectColumn);
+
+    private static PersonalFieldLocation Numbered(SubjectId subject) =>
+        new(subject, AuthenticatorConfiguration.Table, AuthenticatorConfiguration.NumberColumn);
 
     private static Authenticator Read(ReadOnlySpan<byte> dataKey, AuthenticatorRecord record) =>
         Authenticator.Existing(
@@ -271,7 +282,11 @@ internal sealed class AuthenticatorStore(
                     record.BackupEligible!.Value,
                     record.BackupState!.Value,
                     record.Transports ?? []),
-            record.IsPreferred);
+            record.IsPreferred,
+            record.EncryptedNumber is null
+                ? null
+                : Encoding.UTF8.GetString(
+                    PersonalFieldCipher.Decrypt(dataKey, Numbered(record.Subject), record.EncryptedNumber)));
 
     // A label this library wrote is a label this library accepts, so a stored value
     // that no longer parses is a corrupted row and not a label to drop quietly.
@@ -310,7 +325,7 @@ internal sealed class AuthenticatorStore(
             IsPreferred = authenticator.IsPreferred,
         };
 
-        if (authenticator.Totp is not null || providerSubject is not null)
+        if (authenticator.Totp is not null || providerSubject is not null || authenticator.Number is not null)
         {
             byte[] dataKey = await DataKeyAsync(authenticator.Subject, cancellationToken)
                 .ConfigureAwait(false);
@@ -323,6 +338,15 @@ internal sealed class AuthenticatorStore(
                         dataKey,
                         Located(authenticator.Subject),
                         authenticator.Totp.Secret.Span,
+                        randomness);
+                }
+
+                if (authenticator.Number is not null)
+                {
+                    record.EncryptedNumber = PersonalFieldCipher.Encrypt(
+                        dataKey,
+                        Numbered(authenticator.Subject),
+                        Encoding.UTF8.GetBytes(authenticator.Number),
                         randomness);
                 }
 
@@ -355,7 +379,7 @@ internal sealed class AuthenticatorStore(
         AuthenticatorRecord record,
         CancellationToken cancellationToken)
     {
-        if (record.TotpSecret is null)
+        if (record.TotpSecret is null && record.EncryptedNumber is null)
         {
             return Read([], record);
         }

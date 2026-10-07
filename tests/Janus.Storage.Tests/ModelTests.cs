@@ -149,7 +149,8 @@ public sealed class ModelTests
             // and AUTH-FACT-014 read, and the keyed fingerprint a provider link is found by
             // (IDN-LIFE-012a), with the subject it is computed from under the key and
             // the fingerprint key's version, so a rotation can compute it again
-            // (OPS-SEC-003 AC6).
+            // (OPS-SEC-003 AC6), and the number a text code's credential is bound to, under
+            // the key (AUTH-FACT-002).
             "authenticators.added_at",
             "authenticators.algorithm",
             "authenticators.backup_eligible",
@@ -157,6 +158,7 @@ public sealed class ModelTests
             "authenticators.confirmed",
             "authenticators.counter",
             "authenticators.credential_id",
+            "authenticators.enc_number",
             "authenticators.enc_provider_subject",
             "authenticators.factor",
             "authenticators.fingerprint_version",

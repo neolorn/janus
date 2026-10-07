@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Janus.Core;
 
 namespace Janus.Authentication.Factors;
@@ -72,6 +73,14 @@ internal sealed class Authenticator
 
     /// <summary>The key material, where it is a WebAuthn credential.</summary>
     public WebAuthnMaterial? WebAuthn { get; private set; }
+
+    /// <summary>
+    /// The number it is bound to, canonically, where it is a second step the library
+    /// texts: the number its code confirmed it on, to which every later code goes, and
+    /// nothing once that number has left the account (AUTH-FACT-002).
+    /// </summary>
+    [NeverLogged]
+    public string? Number { get; private set; }
 
     /// <summary>
     /// Whether the person chose this one to be offered first at a second step. Where
@@ -188,6 +197,60 @@ internal sealed class Authenticator
     }
 
     /// <summary>
+    /// Whether an entry's credential is bound to a number: a second step the library
+    /// texts, which goes to the number it was confirmed on and to no other
+    /// (AUTH-FACT-002).
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    /// <returns>Whether its credential is bound to a number.</returns>
+    public static bool IsBoundToNumber(Factor factor) =>
+        FactorCatalogue.Of(factor).CanBeSecondFactor
+        && FactorCatalogue.Sent.Any(sent => sent.Key.Channel is IdentifierKind.Phone && sent.Value == factor);
+
+    /// <summary>
+    /// A second step the library texts, confirmed by the code texted to the number it
+    /// is bound to from then on (AUTH-FACT-002).
+    /// </summary>
+    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="factor">Which catalogue entry the code confirmed.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="number">The number the code was texted to, canonically.</param>
+    /// <param name="at">When it was confirmed.</param>
+    /// <returns>The credential.</returns>
+    /// <exception cref="ArgumentException">
+    /// The entry's credential is bound to no number, or the number is absent.
+    /// </exception>
+    public static Authenticator Bound(
+        AuthenticatorId id,
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        [NeverLogged] string number,
+        DateTimeOffset at)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(number);
+
+        if (!IsBoundToNumber(factor))
+        {
+            throw new ArgumentException("Only a second step the library texts is bound to a number.", nameof(factor));
+        }
+
+        return new Authenticator(
+            id,
+            subject,
+            factor,
+            label,
+            at,
+            confirmed: true,
+            totp: null,
+            webAuthn: null)
+        {
+            Number = number,
+        };
+    }
+
+    /// <summary>
     /// The credential as it already stands, which is the store's translation of a row
     /// and no change to it.
     /// </summary>
@@ -203,6 +266,7 @@ internal sealed class Authenticator
     /// <param name="totp">The shared secret, where it is a code generator.</param>
     /// <param name="webAuthn">The key material, where it holds a key.</param>
     /// <param name="isPreferred">Whether the person chose it to be offered first.</param>
+    /// <param name="number">The number it is bound to, where it is bound to one.</param>
     /// <returns>The credential.</returns>
     public static Authenticator Existing(
         AuthenticatorId id,
@@ -216,13 +280,15 @@ internal sealed class Authenticator
         bool confirmed,
         TotpMaterial? totp,
         WebAuthnMaterial? webAuthn,
-        bool isPreferred = false) =>
+        bool isPreferred = false,
+        [NeverLogged] string? number = null) =>
         new(id, subject, factor, label, addedAt, confirmed, totp, webAuthn)
         {
             State = state,
             LastUsedAt = lastUsedAt,
             InvalidatesAt = invalidatesAt,
             IsPreferred = isPreferred,
+            Number = number,
         };
 
     /// <summary>

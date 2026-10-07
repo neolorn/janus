@@ -3948,6 +3948,70 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC6 and AC9: the text code goes to the number its credential is
+    /// bound to, which is the one it was confirmed on, and never to the account's
+    /// primary number where that is another.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC6_ATextCodeGoesToTheNumberItsCredentialIsBoundToAndNotThePrimaryAsync()
+    {
+        const string bound = "+441632960029";
+
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        _ = _identifiers.Verified(subject, IdentifierKind.Phone, bound);
+        _ = Held(subject, Factor.PhoneCode, number: bound);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.Equal([Factor.PhoneCode], Reached(await PresentAsync(began.Challenge, Factor.Password, Secret)).Required);
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
+
+        OutboundMessage texted = Assert.Single(_notifications.Texts);
+
+        Assert.Equal(Number, (await _identifiers.HeldAsync(subject, TestContext.Current.CancellationToken)).Texted()?.Canonical);
+        Assert.Equal(bound, texted.Destination.Canonical);
+        Assert.Equal(
+            SignInStatus.Complete,
+            Reached(await PresentAsync(began.Challenge, Factor.PhoneCode, texted.Values["code"])).Status);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6 and AUTH-FACT-002 AC9: the signal a text code's second step
+    /// is considered by is the one of the number its credential is bound to, at the
+    /// challenge that offers it and at the ask alike.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_TheSignalOfATextCodeIsAskedOfTheNumberItsCredentialIsBoundToAsync()
+    {
+        const string bound = "+441632960029";
+
+        SubjectId subject = await AccountAsync();
+        var asked = new List<string>();
+
+        Enables(Factor.PhoneCode);
+        _ = _identifiers.Verified(subject, IdentifierKind.Phone, bound);
+        _ = Held(subject, Factor.PhoneCode, number: bound);
+        Remembered(subject);
+        _provider = new PhoneSignalProvider((number, _) =>
+        {
+            asked.Add(number);
+
+            return ValueTask.FromResult(PhoneSignal.Clear);
+        });
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.Equal([Factor.PhoneCode], Reached(await PresentAsync(began.Challenge, Factor.Password, Secret)).Required);
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
+
+        Assert.NotEmpty(asked);
+        Assert.All(asked, number => Assert.Equal(bound, number));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC4 and AC6: the text code asked for at the second step goes to the
     /// account's number as <c>secondstep-code</c> under the purpose <c>secondfactor</c>,
     /// and a password beside it, presented, completes the sign-in at AAL2 and not
@@ -4883,7 +4947,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private void Holds(SubjectId subject, Factor factor, bool isPreferred = false) =>
         _ = Held(subject, factor, isPreferred);
 
-    private Authenticator Held(SubjectId subject, Factor factor, bool isPreferred = false)
+    // AUTH-FACT-002: a text code's credential is bound to a number, which is the
+    // account's own unless the test names another.
+    private Authenticator Held(SubjectId subject, Factor factor, bool isPreferred = false, string number = Number)
     {
         var held = Authenticator.Existing(
             AuthenticatorId.New(_clock),
@@ -4899,7 +4965,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             factor is Factor.SecurityKey
                 ? new WebAuthnMaterial(new byte[] { 1 }, new byte[] { 2 }, -7, "example.test", 0, false, false, [])
                 : null,
-            isPreferred);
+            isPreferred,
+            Authenticator.IsBoundToNumber(factor) ? number : null);
 
         _authenticators.Hold(held);
 

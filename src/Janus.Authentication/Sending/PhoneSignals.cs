@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -86,26 +87,35 @@ internal sealed class PhoneSignals(
     }
 
     /// <summary>
-    /// Considers the number the account would be texted at, and answers whether the
-    /// factor may still be used with it; an account holding no number is refused
-    /// nothing here, since nothing can be texted to it.
+    /// Considers the number an entry would be texted at, and answers whether the factor
+    /// may still be used with it: the number its credential is bound to where the entry
+    /// is bound to one (AUTH-FACT-002), and otherwise the number the account is texted
+    /// at. An account with no such number is refused nothing here, since nothing can be
+    /// texted to it.
     /// </summary>
     /// <param name="factor">The entry the number would carry.</param>
     /// <param name="held">The account's identifiers.</param>
+    /// <param name="enrolled">The account's credentials.</param>
     /// <param name="subject">Whose account it is.</param>
     /// <param name="cancellationToken">Abandons the consideration.</param>
     /// <returns>Whether the factor may be used.</returns>
-    /// <exception cref="ArgumentNullException">The identifiers are absent.</exception>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<bool> AllowsAsync(
         Factor factor,
         HeldIdentifiers held,
+        IReadOnlyList<Authenticator> enrolled,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(enrolled);
 
-        return held.Texted() is not HeldIdentifier texted
-            || await AllowsAsync(factor, texted.Canonical, subject, cancellationToken).ConfigureAwait(false);
+        string? number = Authenticator.IsBoundToNumber(factor)
+            ? SecondStep.Preferred(enrolled.Where(credential => credential.IsUsable && credential.Factor == factor))?.Number
+            : held.Texted()?.Canonical;
+
+        return number is null
+            || await AllowsAsync(factor, number, subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

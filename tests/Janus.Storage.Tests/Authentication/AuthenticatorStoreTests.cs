@@ -426,6 +426,59 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC9: the number a text code's credential is bound to reads back as
+    /// it was confirmed, and is in the table under the person's key and not in plain.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC9_TheNumberACredentialIsBoundToReadsBackAndIsNotInTheTableInPlainAsync()
+    {
+        const string number = "+441632960017";
+
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await WrittenAsync(Authenticator.Bound(id, subject, Factor.PhoneCode, Label("my phone"), number, Noon));
+
+        await using StoreContext reading = database.Context();
+        AuthenticatorRecord stored = await reading.Authenticators
+            .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
+        Authenticator read = Assert.IsType<Authenticator>(
+            await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
+
+        Assert.NotNull(stored.EncryptedNumber);
+        Assert.Equal(PersonalDataFormat.Marker, stored.EncryptedNumber[0]);
+        Assert.Equal(-1, stored.EncryptedNumber.AsSpan().IndexOf(Encoding.UTF8.GetBytes(number)));
+        Assert.Equal(number, read.Number);
+        Assert.Equal(number, Assert.Single(await Store(reading).OfAsync(subject, TestContext.Current.CancellationToken)).Number);
+        Assert.True(read.IsUsable);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC9: only a second step the library texts is bound to a number, so
+    /// no other credential's row carries one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC9_OnlyATextCodesCredentialIsBoundToANumberAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        _ = await Assert.ThrowsAsync<DbUpdateException>(() => WrittenAsync(Authenticator.Existing(
+            AuthenticatorId.New(TimeProvider.System),
+            subject,
+            Factor.Totp,
+            Label("this phone"),
+            AuthenticatorState.Active,
+            Noon,
+            lastUsedAt: null,
+            invalidatesAt: null,
+            confirmed: true,
+            new TotpMaterial(Secret(), ConsumedStep: null),
+            webAuthn: null,
+            isPreferred: false,
+            number: "+441632960018")));
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a: a credential a provider's event holds reads back held, with no
     /// instant at which it is invalidated.
     /// </summary>

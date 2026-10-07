@@ -95,4 +95,11 @@ internal sealed class AuthenticatorRecord
     /// key rotates (OPS-SEC-003).
     /// </summary>
     public byte[]? EncryptedProviderSubject { get; set; }
+
+    /// <summary>
+    /// The <c>enc_number</c> column: the number a second step the library texts is
+    /// bound to, under the account's key, and nothing once that number has left the
+    /// account (AUTH-FACT-002).
+    /// </summary>
+    public byte[]? EncryptedNumber { get; set; }
 }

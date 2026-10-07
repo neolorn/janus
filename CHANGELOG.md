@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `phoneCode` credential is bound to one number, held under the account's key in the
+  new column `authenticators.enc_number` (migration `BindATextedSecondStepToItsNumber`,
+  with `ck_authenticators_number`), and its code is texted to that number, where it
+  went to the account's primary number; the number's signal is asked of that number,
+  at the challenge that offers the code and at the ask. A `phoneCode` credential held
+  before the migration runs is bound to no number: an ask for its code sends nothing.
 - The library ships a fifth restriction, `sms.resend`: key `destination`, purpose
   `any`, channel `sms`, one send per 3 minutes sliding, marked `resend`. A second text
   message to one number inside 3 minutes is refused with `auth.restriction.exceeded`

@@ -502,6 +502,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("credential_id");
 
+                b.Property<byte[]>("EncryptedNumber")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_number");
+
                 b.Property<byte[]>("EncryptedProviderSubject")
                     .HasColumnType("bytea")
                     .HasColumnName("enc_provider_subject");
@@ -594,6 +598,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_authenticators_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
                         t.HasCheckConstraint("ck_authenticators_invalidates_at", "invalidates_at IS NULL OR state IN ('suspended')");
+
+                        t.HasCheckConstraint("ck_authenticators_number", "(enc_number IS NULL) OR (factor IN ('phoneCode'))");
 
                         t.HasCheckConstraint("ck_authenticators_provider_subject", "(provider_subject IS NULL) <> (factor IN ('apple', 'google')) AND (provider_subject IS NULL OR octet_length(provider_subject) = 32) AND (provider_subject IS NULL) = (fingerprint_version IS NULL) AND (provider_subject IS NULL) = (enc_provider_subject IS NULL)");
 

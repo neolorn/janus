@@ -155,8 +155,10 @@ table authenticators
   column enc_provider_subject bytea
   column fingerprint_version integer
   column transports text[]
+  column enc_number bytea
   constraint ck_authenticators_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
   constraint ck_authenticators_invalidates_at CHECK (((invalidates_at IS NULL) OR (state = 'suspended'::text)))
+  constraint ck_authenticators_number CHECK (((enc_number IS NULL) OR (factor = 'phoneCode'::text)))
   constraint ck_authenticators_provider_subject CHECK ((((provider_subject IS NULL) <> (factor = ANY (ARRAY['apple'::text, 'google'::text]))) AND ((provider_subject IS NULL) OR (octet_length(provider_subject) = 32)) AND ((provider_subject IS NULL) = (fingerprint_version IS NULL)) AND ((provider_subject IS NULL) = (enc_provider_subject IS NULL))))
   constraint ck_authenticators_state CHECK ((state = ANY (ARRAY['active'::text, 'invalidated'::text, 'suspended'::text])))
   constraint ck_authenticators_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
