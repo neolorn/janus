@@ -206,6 +206,68 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-015 AC1: the state a suspended holder's mailbox is owed, pushed again
+    /// because the server's answer to the first push was lost, goes under the key it
+    /// first went under, and the server applies it once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_015_AC1_TheOwedStateOfASuspendedHolderPushedAgainIsAppliedOnceAsync()
+    {
+        Mailbox held = await HeldAsync();
+        int received = _server.Received.Count;
+        int applied = _server.Applied.Count;
+
+        _ = _mailboxes.Standing.Remove(_holder);
+        _server.LosesAnswers = true;
+
+        Assert.Equal(0, await PassAsync());
+
+        _server.LosesAnswers = false;
+        _clock.Advance(TimeSpan.FromHours(1));
+
+        Assert.Equal(1, await PassAsync());
+
+        Assert.Equal(received + 2, _server.Received.Count);
+        Assert.Equal(_server.Received[^2].Key, _server.Received[^1].Key);
+        Assert.Equal(applied + 1, _server.Applied.Count);
+        Assert.False(_server.Hosts(Address));
+        Assert.Equal(MailboxState.Disabled, held.Pushed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-015 AC3: a holder's suspension that does not reach the mail server
+    /// leaves the mailbox serving, so once the push has spent its budget it is raised as
+    /// <c>degradation</c> naming the mailbox and the state it is owed, and marked failed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_015_AC3_ASuspensionThatDoesNotReachTheServerIsRaisedAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
+
+        Mailbox held = await HeldAsync();
+
+        _ = _mailboxes.Standing.Remove(_holder);
+        _server.Unreachable = true;
+
+        _ = await PassAsync();
+
+        Assert.Empty(_events.Of<AlertRaised>());
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        _ = await PassAsync();
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.Degradation, raised.Condition);
+        Assert.Equal(held.Id.ToString(), raised.Details["mailbox"].GetString());
+        Assert.Equal("disabled", raised.Details["state"].GetString());
+        Assert.NotNull(held.FailedAt);
+        Assert.True(_server.Hosts(Address));
+    }
+
+    /// <summary>
     /// INT-MAIL-001 AC4, D-177: a push the server answers with a conflict is marked
     /// failed at that attempt, with no further attempt in the run, and raises
     /// <c>degradation</c> scoped to the mailbox's conflict, naming the mailbox and the

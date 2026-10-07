@@ -83,6 +83,32 @@ public sealed class MailboxReconciliationTests : IDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-015 AC2: a suspended holder's mailbox the server still serves is a
+    /// discrepancy the reconciliation reports and raises, and it corrects neither side:
+    /// the server goes on serving it, nothing is pushed, and no row is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_015_AC2_ASuspendedHoldersServingMailboxIsReportedAndLeftAsItIsAsync()
+    {
+        Mailbox held = await HeldAsync(enabledOnServer: true);
+
+        _ = _mailboxes.Standing.Remove(_holder);
+
+        MailboxDrift drift = await ReconciledAsync();
+
+        Assert.Equal([held.Id], drift.Mailboxes);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.Degradation, raised.Condition);
+        Assert.Equal(held.Id.ToString(), raised.Details["mailboxes"][0].GetString());
+        Assert.True(_server.Hosts(Address));
+        Assert.Empty(_server.Received);
+        Assert.Equal(0, _mailboxes.Recorded);
+    }
+
+    /// <summary>
     /// INT-MAIL-006 AC1c: a mailbox reserved for an open or expired invitation is
     /// expected disabled, and finding it so is no drift.
     /// </summary>
