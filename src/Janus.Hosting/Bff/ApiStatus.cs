@@ -47,6 +47,7 @@ internal static class ApiStatus
         [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRedirectClient] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupRequestLogging] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupSchemaMismatch] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.TruthTableDisagreement] = StatusCodes.Status500InternalServerError,

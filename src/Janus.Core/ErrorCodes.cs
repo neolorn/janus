@@ -196,6 +196,16 @@ public static class ErrorCodes
     public static ErrorCode StartupRedirectClient { get; } = ErrorCode.Parse("model.startup.redirectclient");
 
     /// <summary>
+    /// Startup: the host's logging enables the category of the web server's own
+    /// per-request entries, which carry a request's query string, at Information
+    /// through a provider, or disables it in every provider, which would drop the
+    /// scope carrying <c>RequestId</c>. Leave the category at the level the
+    /// registration sets, or set it above that and below none.
+    /// </summary>
+    /// <remarks>Implements BFF-LOG-002, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupRequestLogging { get; } = ErrorCode.Parse("model.startup.requestlogging");
+
+    /// <summary>
     /// Startup: the database schema is behind the model, so a migration the pipeline
     /// should have applied has not been. The details name the migrations still to
     /// apply under <c>pending</c>; apply them and start again. A schema ahead of the

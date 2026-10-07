@@ -160,6 +160,7 @@ public sealed class ErrorCodesTests
         "model.startup.labellimit",
         "model.startup.preferencedeclaration",
         "model.startup.redirectclient",
+        "model.startup.requestlogging",
         "model.startup.rpid",
         "model.startup.schemamismatch",
         "model.startup.secretunavailable",

@@ -1286,6 +1286,13 @@ against the public contract of LIB-API-001.
   reach the framework's request logging, whatever fields the deployment or the endpoint
   asks it to record. Every endpoint the library maps carries it, and a request the
   logging meets before its endpoint is known is treated as marked.
+- `AddJanus` sets the minimum level of the category
+  `Microsoft.AspNetCore.Hosting.Diagnostics` to Warning, so the server's own entries for
+  each request, which write its query string, are not written, while the scope that
+  carries `RequestId` stays open around every entry of the request. A deployment whose
+  logging enables that category at Information or below through any provider, or
+  disables it in every provider it registers, does not start: the failure is
+  `model.startup.requestlogging`.
 - An administrator holding `membership:manage` can invite a person into an organization:
   `POST /admin/organizations/{id}/invitations` binds an `email`, a `phone`, both or
   neither, and may attach `roles` (which also asks `grant:manage`) and `documents`

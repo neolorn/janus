@@ -133,6 +133,7 @@ model.startup.governinglanguage 500
 model.startup.labellimit 500
 model.startup.preferencedeclaration 500
 model.startup.redirectclient 500
+model.startup.requestlogging 500
 model.startup.rpid 500
 model.startup.schemamismatch 500
 model.startup.secretunavailable 500
