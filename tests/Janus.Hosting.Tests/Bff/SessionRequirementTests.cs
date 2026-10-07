@@ -229,6 +229,24 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ORDER-001 AC4: the same cookie of an ended session, carried to an endpoint
+    /// that requires a session, is answered 401 <c>auth.session.expired</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC4_AnEndedSessionIsRefusedByAnEndpointThatRequiresOneAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(100));
+
+        Answer answered = await browser.SendAsync("GET", "/account/sessions");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, answered.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), answered.Text("code"));
+    }
+
+    /// <summary>
     /// BFF-ORDER-001 stage 5: once the ended session's row has been swept, the token
     /// the browser carries was bound to a session nothing holds, so the step refuses it
     /// once with a fresh pair and answers the retry.
