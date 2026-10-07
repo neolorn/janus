@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Janus.Core;
@@ -253,6 +255,74 @@ public sealed class PersonalFieldCipherTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a AC16: the key-encryption key wraps the rows of the subject-key
+    /// table and nothing else. The one wrap under it is called by the three stores that
+    /// write such a row, a subject's, the deployment's and the rotation's re-wrap; the
+    /// other sources that borrow it unwrap such a row, derive the token protection key
+    /// (AUTH-KEY-002), print the escrow copy or read which versions are held; and the
+    /// key wrap itself is written in one place.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_AC16_OnlyTheStoresOfTheSubjectKeyTableWrapUnderTheKeyEncryptionKey()
+    {
+        Assert.Equal(
+            ["DeploymentDataKeyStore.cs", "KeyRotationStore.cs", "SubjectKeyStore.cs"],
+            Sources("PersonalFieldCipher.WrapUnderCurrent("));
+        Assert.Equal(
+            ["EscrowCopy.cs", "KeyRingService.cs", "KeyRotation.cs", "PersonalFieldCipher.cs", "TokenProtection.cs"],
+            Sources(".BorrowKeyEncryptionKey"));
+        Assert.Equal(["PersonalFieldCipher.cs"], Sources("EncryptKeyWrapPadded("));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC16: a rotation re-wraps the two kinds of row the table holds, a
+    /// subject's key and the deployment's data key, and touches no value under either.
+    /// With the previous version retired, a subject's field and a value of no subject
+    /// wrapped under the deployment's key both read as they were written.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_AC16_AfterRetirementASubjectsValueAndAValueOfNoSubjectStillDecrypt()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] subjectKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] deploymentKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] secret = RandomNumberGenerator.GetBytes(43);
+        var field = new PersonalFieldLocation(Ahmed, "accounts", "enc_legal_name");
+        KeyEncryptionKeys first = OneVersion(1);
+
+        byte[] personal = PersonalFieldCipher.Encrypt(subjectKey, field, Plaintext, randomness);
+        byte[] held = PersonalFieldCipher.Wrap(secret, deploymentKey);
+        (int Version, byte[] Wrapped) ofSubject = PersonalFieldCipher.WrapUnderCurrent(subjectKey, Ring(first));
+        (int Version, byte[] Wrapped) ofDeployment = PersonalFieldCipher.WrapUnderCurrent(deploymentKey, Ring(first));
+
+        KeyEncryptionKeys rotating = TwoVersions(first.Current, randomness);
+
+        ofSubject = PersonalFieldCipher.WrapUnderCurrent(
+            PersonalFieldCipher.Unwrap(Scheme, ofSubject.Version, ofSubject.Wrapped, Ring(rotating)),
+            Ring(rotating));
+        ofDeployment = PersonalFieldCipher.WrapUnderCurrent(
+            PersonalFieldCipher.Unwrap(Scheme, ofDeployment.Version, ofDeployment.Wrapped, Ring(rotating)),
+            Ring(rotating));
+
+        var retired = new KeyEncryptionKeys(
+            2,
+            new Dictionary<int, ReadOnlyMemory<byte>> { [2] = rotating.Current });
+
+        Assert.Equal((2, 2), (ofSubject.Version, ofDeployment.Version));
+        Assert.Equal(
+            Plaintext,
+            PersonalFieldCipher.Decrypt(
+                PersonalFieldCipher.Unwrap(Scheme, ofSubject.Version, ofSubject.Wrapped, Ring(retired)),
+                field,
+                personal));
+        Assert.Equal(
+            secret,
+            PersonalFieldCipher.Unwrap(
+                held,
+                PersonalFieldCipher.Unwrap(Scheme, ofDeployment.Version, ofDeployment.Wrapped, Ring(retired))));
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC3 (D-183): once a version is retired a key still wrapped under it
     /// fails to unwrap as a fault, never read under another version and never a result
     /// its callers are handed; the fault carries the code, the key and the version.
@@ -303,6 +373,27 @@ public sealed class PersonalFieldCipherTests
 
         Assert.ThrowsAny<CryptographicException>(() =>
             PersonalFieldCipher.Decrypt(dataKey, field, new byte[8]));
+    }
+
+    // The library sources carrying the text outside a comment, by file name.
+    private static IReadOnlyList<string> Sources(string text)
+    {
+        var at = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (at is not null && !Directory.Exists(Path.Combine(at.FullName, "src")))
+        {
+            at = at.Parent;
+        }
+
+        return
+        [
+            .. Directory
+                .EnumerateFiles(Path.Combine(at!.FullName, "src"), "*.cs", SearchOption.AllDirectories)
+                .Where(file => File.ReadLines(file).Any(line =>
+                    !line.TrimStart().StartsWith('/') && line.Contains(text, StringComparison.Ordinal)))
+                .Select(file => Path.GetFileName(file)!)
+                .Order(StringComparer.Ordinal),
+        ];
     }
 
     // The ring a store borrows the versions from, holding these alone.
