@@ -1363,21 +1363,25 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-007 AC2: at a sign-in a suspended generator is judged as an active one
-    /// would be. The code it gives is refused <c>auth.credential.suspended</c>, a code it
-    /// does not give is refused as any wrong code is, and each is a failed attempt,
-    /// recorded and counted.
+    /// AUTH-RECOV-007 AC2: at a sign-in that still asks a second step once its first
+    /// factor is accepted, a suspended generator is judged as an active one would be.
+    /// The code it gives is refused <c>auth.credential.suspended</c>, a code it does not
+    /// give is refused as any wrong code is, and each is a failed attempt, recorded and
+    /// counted.
     /// </summary>
     [Fact]
     public async Task AUTH_RECOV_007_AC2_ASuspendedGeneratorsCodeIsRefusedSuspendedAndCountedAtASignInAsync()
     {
         SubjectId subject = await AccountAsync();
         Holds(subject, Factor.Totp);
+        Holds(subject, Factor.SecurityKey);
         Suspends(subject, Factor.Totp);
         Remembered(subject);
         string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
             .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
         SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
 
         ErrorCode? wrong = Refused(await PresentAsync(began.Challenge, Factor.Totp, Other(generated)));
         ErrorCode? right = Refused(await PresentAsync(began.Challenge, Factor.Totp, generated));
@@ -2887,36 +2891,138 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// Chapter 09 <c>POST /auth/factor</c>: where a second step is accepted before any
-    /// first factor, what is left to present is the first factors the challenge opened
-    /// with, never the second step accepted nor another; one of them, presented, then
-    /// completes the sign-in.
+    /// AUTH-FACT-002b AC7: at a sign-in a second step presented while no first factor
+    /// has been accepted on the challenge is refused <c>auth.factor.notpermitted</c>
+    /// before it is verified and before anything of the account is read: the answer is
+    /// the same for an identifier whose account holds the factor, the right value
+    /// presented, for one whose account does not, and for one no account holds, and
+    /// neither the account's state, its credentials, its password, a browser's token
+    /// nor a delay's counter is read for it.
     /// </summary>
-    [Fact]
-    public async Task PresentAsync_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync()
+    /// <param name="second">The second step presented.</param>
+    [Theory]
+    [InlineData(Factor.Totp)]
+    [InlineData(Factor.RecoveryCodes)]
+    [InlineData(Factor.SecurityKey)]
+    [InlineData(Factor.PhoneCode)]
+    public async Task AUTH_FACT_002b_AC7_ASecondStepBeforeAFirstFactorIsRefusedBeforeAnythingOfTheAccountIsReadAsync(
+        Factor second)
+    {
+        SubjectId holding = await AccountAsync();
+        var bare = new SubjectId(Guid.NewGuid());
+
+        _accounts.Stands(bare, AccountState.Active);
+        _ = _identifiers.Verified(bare, IdentifierKind.Email, Second);
+
+        Enables(Factor.PhoneCode);
+        Holds(holding, Factor.Totp);
+        Holds(holding, Factor.SecurityKey);
+        Holds(holding, Factor.PhoneCode);
+
+        string known = await KnownAsync(holding, trusted: true);
+        string value = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInChallenge held = await BeganAsync(Address);
+        SignInChallenge lacking = await BeganAsync(Second);
+        SignInChallenge nobody = await BeganAsync(Elsewhere);
+
+        (int States, int Credentials, int Passwords, int Browsers, int Delays, int Opened) before =
+            (_accounts.StateReads, _authenticators.Reads, _passwords.Reads, _devices.LookedUp, _throttle.Reads, _work.Opened);
+
+        string[] answers =
+        [
+            await RefusedFromAsync(held.Challenge),
+            await RefusedFromAsync(lacking.Challenge),
+            await RefusedFromAsync(nobody.Challenge),
+        ];
+
+        Assert.All(answers, answer => Assert.Equal(Shape(Error.From(ErrorCodes.FactorNotPermitted)), answer));
+        Assert.Equal(
+            before,
+            (_accounts.StateReads, _authenticators.Reads, _passwords.Reads, _devices.LookedUp, _throttle.Reads, _work.Opened));
+        Assert.False(_work.Open);
+
+        async ValueTask<string> RefusedFromAsync(string challenge) =>
+            Shape((await Service.PresentAsync(
+                    challenge,
+                    new FactorPresentation(second) { Value = value },
+                    new SessionOrigin(Source, Browser),
+                    remembered: null,
+                    known,
+                    TestContext.Current.CancellationToken))
+                .Match(_ => (Error?)null, error => error));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, AUTH-FACT-002b AC7: a second step refused at a sign-in before a
+    /// first factor is no failed attempt. No counter moves, under the source, the
+    /// identifier or the account, no failed authentication is recorded and no event is
+    /// published, whether the value presented is right or wrong; a wrong password
+    /// presented after it is counted and recorded as it always is.
+    /// </summary>
+    /// <param name="right">Whether the generated code presented is the right one.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_ABUSE_001_ASecondStepRefusedBeforeAFirstFactorCountsAndRecordsNothingAsync(bool right)
     {
         SubjectId subject = await AccountAsync();
 
         Holds(subject, Factor.Totp);
-        Holds(subject, Factor.SecurityKey);
+
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInChallenge began = await BeganAsync(Address);
+        int published = _events.Published.Count;
+
+        ErrorCode? second = Refused(
+            await PresentAsync(began.Challenge, Factor.Totp, right ? generated : Other(generated)));
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, second);
+        Assert.Empty(_throttle.Counted);
+        Assert.Empty(_throttle.Failures);
+        Assert.Empty(_audit.Failed);
+        Assert.Equal(published, _events.Published.Count);
+
+        ErrorCode? first = Refused(await PresentAsync(began.Challenge, Factor.Password, "wrong" + Secret));
+
+        Assert.Equal(ErrorCodes.FactorRejected, first);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Password)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC7: the refusal of a second step presented before a first factor
+    /// leaves the challenge as it was: nothing is accepted on it, and the same second
+    /// step, presented once a first factor has been accepted, completes the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC7_ASecondStepIsAcceptedOnlyOnceAFirstFactorHasBeenAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
         Remembered(subject);
 
         SignInChallenge began = await BeganAsync(Address);
         string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
             .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
 
+        ErrorCode? before = Refused(await PresentAsync(began.Challenge, Factor.Totp, generated));
+        SignInProgress first = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
         SignInProgress second = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
-        SignInProgress first = Reached(await PresentAsync(began.Challenge, second.Required[0], Secret));
 
-        Assert.Equal(SignInStatus.FactorRequired, second.Status);
-        Assert.Equal(AssuranceLevel.Delegated, second.AssuranceLevel);
-        Assert.Equal(began.Available, second.Required);
-        Assert.Equal(Factor.Password, second.Required[0]);
-        Assert.DoesNotContain(Factor.Totp, second.Required);
-        Assert.DoesNotContain(Factor.SecurityKey, second.Required);
-        Assert.Equal(SignInStatus.Complete, first.Status);
-        Assert.Equal(AssuranceLevel.Aal2, first.AssuranceLevel);
-        Assert.Empty(first.Required);
+        Assert.Equal(ErrorCodes.FactorNotPermitted, before);
+        Assert.Equal(SignInStatus.FactorRequired, first.Status);
+        Assert.Equal(AssuranceLevel.Aal1, first.AssuranceLevel);
+        Assert.Equal([Factor.Totp], first.Required);
+        Assert.Equal(SignInStatus.Complete, second.Status);
+        Assert.Equal(AssuranceLevel.Aal2, second.AssuranceLevel);
     }
 
     /// <summary>
@@ -3914,7 +4020,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002 AC8: a text code asked for at a sign-in on whose challenge a
-    /// generated code was accepted and no first factor is an ask before a first
+    /// generated code was presented and refused, no first factor having been accepted
+    /// (AUTH-FACT-002b AC7), is an ask before a first
     /// factor. It asks no signal, issues no code, sends nothing and is answered as
     /// every ask is, the same whatever the account holds: a number whose signal is
     /// clear, one whose signal answers <c>risk</c>, a suspended one, or none.
@@ -3927,7 +4034,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     [InlineData(true, false, PhoneSignal.Risk)]
     [InlineData(true, true, PhoneSignal.Clear)]
     [InlineData(false, false, PhoneSignal.Clear)]
-    public async Task AUTH_FACT_002_AC8_AnAskAfterASecondStepAndBeforeAnyFirstFactorAsksNoSignalAndSendsNothingAsync(
+    public async Task AUTH_FACT_002_AC8_AnAskAfterASecondStepRefusedBeforeAnyFirstFactorAsksNoSignalAndSendsNothingAsync(
         bool holds,
         bool suspended,
         PhoneSignal answered)
@@ -3960,13 +4067,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
             .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
 
-        SignInProgress presented = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
+        ErrorCode? presented = Refused(await PresentAsync(began.Challenge, Factor.Totp, generated));
         int counted = _throttle.Counted.Count;
 
         Result<SignInProgress?> asked = await AskedAsync(began.Challenge, stepping: null);
 
-        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
-        Assert.Equal(began.Available, presented.Required);
+        Assert.Equal(ErrorCodes.FactorNotPermitted, presented);
         Assert.True(asked.Match(offered => offered is null, _ => false));
         Assert.Equal(0, signalled);
         Assert.Empty(_considered.Records);

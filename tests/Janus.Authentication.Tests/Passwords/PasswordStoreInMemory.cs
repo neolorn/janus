@@ -34,9 +34,18 @@ internal sealed class PasswordStoreInMemory : IPasswordStore
             meetsSingleFactorFloor: true,
             at);
 
+    /// <summary>
+    /// How many times an account's password was read.
+    /// </summary>
+    public int Reads { get; private set; }
+
     /// <inheritdoc/>
-    public ValueTask<Password?> FindAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_passwords.GetValueOrDefault(subject));
+    public ValueTask<Password?> FindAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Reads++;
+
+        return ValueTask.FromResult(_passwords.GetValueOrDefault(subject));
+    }
 
     /// <inheritdoc/>
     public ValueTask SetAsync(Password password, CancellationToken cancellationToken)

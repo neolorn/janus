@@ -273,9 +273,9 @@ internal sealed class AuthenticationService(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
     /// Implements AUTH-FACT-002 AC6 to AC8 and AUTH-FACT-002b AC6. A handle that opens
-    /// nothing, a sign-in no first factor has been accepted for, a second step accepted
-    /// on its challenge or not (D-195), an account holding no such credential and a
-    /// policy that does not permit it are sent nothing and answered as an ask that sent
+    /// nothing, a sign-in no first factor has been accepted for (D-195), an account
+    /// holding no such credential and a policy that does not permit it are sent
+    /// nothing and answered as an ask that sent
     /// its code; an ask before a first factor reads nothing of the account, so it asks
     /// no signal. A number whose signal answers <c>risk</c> after a first factor is
     /// sent nothing either, and the sign-in is told what is left to present, which an
@@ -602,6 +602,16 @@ internal sealed class AuthenticationService(
         ArgumentNullException.ThrowIfNull(origin);
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+
+        // AUTH-FACT-002b AC7 (D-197): a second step is second to a first factor accepted
+        // on the challenge. One presented before is refused here, unverified, on what the
+        // challenge alone holds: nothing of the account is read, no delay is asked and
+        // nothing is counted or recorded, nothing having been judged, so the answer is
+        // the same for every identifier (AUTH-ABUSE-001, AUTH-ABUSE-003).
+        if (open is not null && SecondOnly(presented.Factor) && !FirstAccepted(open))
+        {
+            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorNotPermitted));
+        }
 
         // AUTH-ABUSE-001 AC5: only a token that stands for this sign-in's account
         // recognises the browser; carrying one proves nothing.
@@ -1731,27 +1741,6 @@ internal sealed class AuthenticationService(
         Assurance reached = Assurance.Reached(Properties(open.Presented))
             ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
 
-        // 09 POST /auth/factor (D-194): a second step accepted before any first factor
-        // reaches no level, and what is left to present is the first factors the
-        // challenge opened with, never the second step accepted nor another. A sign-in
-        // left with none is refused, never completed.
-        if (!FirstAccepted(open))
-        {
-            List<Factor> first = (await FirstFactorsAsync(cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Withheld<List<Factor>>(error, ref failure));
-
-            if (failure is not null || first.Count is 0)
-            {
-                return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
-            }
-
-            return Result.Success(new SignInOutcome(
-                Left(reached, first, changeRequired),
-                Session: null,
-                Remembered: null,
-                Trusted: null));
-        }
-
         bool trusts = trusted is not null
             && await devices.TrustsAsync(subject, trusted, cancellationToken).ConfigureAwait(false);
 
@@ -1874,6 +1863,12 @@ internal sealed class AuthenticationService(
     private static bool FirstAccepted(Challenge open) =>
         open.Presented.Any(factor => FactorCatalogue.Of(factor).CanBePrimary);
 
+    // Whether an entry is one the catalogue registers as a second factor and never as
+    // one that begins an authentication (AUTH-FACT-001), a single-use code included.
+    private static bool SecondOnly(Factor factor) =>
+        FactorCatalogue.Entries.TryGetValue(factor, out FactorProperties? properties)
+        && properties is { CanBeSecondFactor: true, CanBePrimary: false };
+
     // A sign-in that has more to present: what the factors accepted reach so far and
     // what is left (09 POST /auth/factor).
     private static SignInProgress Left(Assurance reached, List<Factor> required, bool changeRequired) =>
@@ -1886,12 +1881,6 @@ internal sealed class AuthenticationService(
             Session: null,
             Requirement: null,
             changeRequired);
-
-    // 09 POST /auth/factor (D-194): the first factors of the challenge's available,
-    // read as the challenge's opening read them.
-    private async ValueTask<Result<List<Factor>>> FirstFactorsAsync(CancellationToken cancellationToken) =>
-        (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
-        .Match(system => Result.Success(Available(system)), Result.Failure<List<Factor>>);
 
     // The account's own second step raises what a sign-in has to reach above the
     // policy's floor: enrolling one is asking to be asked (AUTH-FACT-002b). A trusted

@@ -394,16 +394,17 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// `09` `POST /auth/factor`, AUTH-FACT-002 AC8: where a generated code is accepted
-    /// before any first factor, the call that presented it is answered 200
-    /// <c>factorRequired</c> with <c>required</c> naming the first factors of the
-    /// <c>available</c> the challenge opened with; a text code asked for after it is
-    /// still an ask before a first factor, answered 202 and sent nothing, whatever the
-    /// number's signal would answer; a first factor then completes the sign-in.
+    /// AUTH-FACT-002b AC7, `09` `POST /auth/factor`: a second step presented at a
+    /// sign-in before a first factor has been accepted on the challenge is answered 422
+    /// <c>auth.factor.notpermitted</c>, the same for an identifier whose account holds
+    /// the generator and presents its right code and for one no account holds, with no
+    /// failed authentication recorded; a text code asked for after it is still an ask
+    /// before a first factor, answered 202 and sent nothing (AUTH-FACT-002 AC8); and
+    /// the password and then the same code complete the sign-in.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PostFactor_ASecondStepAcceptedBeforeAnyFirstFactor_RequiresTheFirstFactorsOfAvailableAsync()
+    public async Task AUTH_FACT_002b_AC7_ASecondStepBeforeAFirstFactorIsAnswered422TheSameForEveryIdentifierAsync()
     {
         await using var reporting = new Deployment(
             signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
@@ -431,43 +432,48 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
         _ = await browser.SendAsync("GET", "/auth/session");
 
-        Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
-        string challenge = began.Text("challengeId");
-        string?[] available = Named(began, "available");
+        string held = (await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address)))
+            .Text("challengeId");
+        string nobody = (await browser.SendAsync("POST", "/auth/begin", ("identifier", "nobody@example.test")))
+            .Text("challengeId");
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(reporting.Clock.GetUtcNow().UtcDateTime);
         int sent = reporting.Sms.Taken.Count;
+        int failed = reporting.SessionAudit.Failed.Count;
 
-        Answer second = await browser.SendAsync(
-            "POST",
-            "/auth/factor",
-            ("challengeId", challenge),
-            ("factor", "totp"),
-            ("value", new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
-                .ComputeTotp(reporting.Clock.GetUtcNow().UtcDateTime)));
+        Answer before = await PresentedAsync(held, "totp", generated);
+        Answer unknown = await PresentedAsync(nobody, "totp", generated);
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, before.Status);
+        Assert.Equal("auth.factor.notpermitted", before.Text("code"));
+        Assert.Equal(before.Status, unknown.Status);
+        Assert.Equal(before.Text("code"), unknown.Text("code"));
+        Assert.Equal(failed, reporting.SessionAudit.Failed.Count);
+
         Answer asked = await browser.SendAsync(
             "POST",
             "/auth/factor",
-            ("challengeId", challenge),
+            ("challengeId", held),
             ("factor", "phoneCode"));
-        Answer first = await browser.SendAsync(
-            "POST",
-            "/auth/factor",
-            ("challengeId", challenge),
-            ("factor", "password"),
-            ("value", Flow.Password));
+        Answer first = await PresentedAsync(held, "password", Flow.Password);
+        Answer second = await PresentedAsync(held, "totp", generated);
 
-        Assert.Contains("password", available);
-        Assert.Equal(StatusCodes.Status200OK, second.Status);
-        Assert.Equal("factorRequired", second.Text("status"));
-        Assert.Equal("delegated", second.Text("assuranceLevel"));
-        Assert.Equal(available, Named(second, "required"));
         Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
         Assert.Equal(sent, reporting.Sms.Taken.Count);
         Assert.Equal(StatusCodes.Status200OK, first.Status);
-        Assert.Equal("complete", first.Text("status"));
-        Assert.Equal("aal2", first.Text("assuranceLevel"));
+        Assert.Equal("factorRequired", first.Text("status"));
+        Assert.Equal("aal1", first.Text("assuranceLevel"));
+        Assert.Equal(StatusCodes.Status200OK, second.Status);
+        Assert.Equal("complete", second.Text("status"));
+        Assert.Equal("aal2", second.Text("assuranceLevel"));
 
-        static string?[] Named(Answer answer, string member) =>
-            [.. answer.Json().GetProperty(member).EnumerateArray().Select(factor => factor.GetString())];
+        Task<Answer> PresentedAsync(string challenge, string factor, string value) =>
+            browser.SendAsync(
+                "POST",
+                "/auth/factor",
+                ("challengeId", challenge),
+                ("factor", factor),
+                ("value", value));
 
         Authenticator Held(Factor factor, string named) =>
             Authenticator.Existing(
@@ -489,7 +495,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002 AC8, `09` `POST /auth/factor`: a text code asked for at a sign-in
-    /// on whose challenge a generated code was accepted and no first factor is answered
+    /// on whose challenge a generated code was presented and refused, no first factor
+    /// having been accepted (AUTH-FACT-002b AC7), is answered
     /// 202, asks no signal and sends nothing, whether the number it would go to is
     /// active or suspended.
     /// </summary>
@@ -498,7 +505,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AUTH_FACT_002_AC8_ATextCodeAskedAfterASecondStepAndBeforeAnyFirstFactorIsAnswered202AndSendsNothingAsync(
+    public async Task AUTH_FACT_002_AC8_ATextCodeAskedAfterASecondStepRefusedBeforeAnyFirstFactorIsAnswered202AndSendsNothingAsync(
         bool suspended)
     {
         int signalled = 0;
@@ -561,8 +568,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
             ("challengeId", challenge),
             ("factor", "phoneCode"));
 
-        Assert.Equal(StatusCodes.Status200OK, second.Status);
-        Assert.Equal("factorRequired", second.Text("status"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, second.Status);
+        Assert.Equal("auth.factor.notpermitted", second.Text("code"));
         Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
         Assert.Equal(before, signalled);
         Assert.Equal(sent, clear.Sms.Taken.Count);
@@ -741,7 +748,8 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-DESIGN-006 and AUTH-ABUSE-001: a generator's code presented a second time
-    /// is answered 422 `auth.code.replayed` at a step-up and at a sign-in alike, a code
+    /// is answered 422 `auth.code.replayed` at a step-up and, once a first factor is
+    /// accepted, at a sign-in alike, a code
     /// each route declares with the rest of the failed attempts chapter 09 lists.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -789,6 +797,17 @@ public sealed class SignInFlowTests : IAsyncDisposable
         async Task<Answer> PresentedAsync(Browser browser, string route)
         {
             Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+
+            // AUTH-FACT-002b AC7: at a sign-in a second step follows a first factor.
+            if (browser == fresh)
+            {
+                _ = await browser.SendAsync(
+                    "POST",
+                    "/auth/factor",
+                    ("challengeId", began.Text("challengeId")),
+                    ("factor", "password"),
+                    ("value", Flow.Password));
+            }
 
             return await browser.SendAsync(
                 "POST",

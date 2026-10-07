@@ -43,15 +43,24 @@ internal sealed class ThrottleLedgerInMemory : IThrottleLedger
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// How many times a scope's counter was read, which is what asking a delay does.
+    /// </summary>
+    public int Reads { get; private set; }
+
     /// <inheritdoc/>
     public ValueTask<ThrottleCounter?> FindAsync(
         ThrottleScope scope,
         string key,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(
+        CancellationToken cancellationToken)
+    {
+        Reads++;
+
+        return ValueTask.FromResult(
             _counters.TryGetValue((scope, key), out ThrottleCounter counter)
                 ? counter
                 : (ThrottleCounter?)null);
+    }
 
     /// <inheritdoc/>
     public ValueTask FailedAsync(

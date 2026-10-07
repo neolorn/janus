@@ -39,11 +39,20 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     /// </summary>
     public Action<Authenticator>? Locking { get; set; }
 
+    /// <summary>
+    /// How many times a credential, or an account's credentials, were read.
+    /// </summary>
+    public int Reads { get; private set; }
+
     /// <inheritdoc/>
     public ValueTask<Authenticator?> FindAsync(
         AuthenticatorId id,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_held.GetValueOrDefault(id));
+        CancellationToken cancellationToken)
+    {
+        Reads++;
+
+        return ValueTask.FromResult(_held.GetValueOrDefault(id));
+    }
 
     /// <inheritdoc/>
     public ValueTask<Authenticator?> FindForUpdateAsync(
@@ -61,10 +70,14 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     /// <inheritdoc/>
     public ValueTask<Authenticator?> ByCredentialAsync(
         ReadOnlyMemory<byte> credentialId,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_held.Values.FirstOrDefault(credential =>
+        CancellationToken cancellationToken)
+    {
+        Reads++;
+
+        return ValueTask.FromResult(_held.Values.FirstOrDefault(credential =>
             credential.WebAuthn is not null
             && credential.WebAuthn.CredentialId.Span.SequenceEqual(credentialId.Span)));
+    }
 
     /// <inheritdoc/>
     public ValueTask<Authenticator?> ByProviderAsync(
@@ -90,9 +103,13 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Authenticator>> OfAsync(
         SubjectId subject,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult<IReadOnlyList<Authenticator>>(
+        CancellationToken cancellationToken)
+    {
+        Reads++;
+
+        return ValueTask.FromResult<IReadOnlyList<Authenticator>>(
             [.. _held.Values.Where(credential => credential.Subject == subject)]);
+    }
 
     /// <inheritdoc/>
     public ValueTask AddAsync(Authenticator authenticator, CancellationToken cancellationToken)

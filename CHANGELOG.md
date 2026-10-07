@@ -50,16 +50,14 @@ against the public contract of LIB-API-001.
   longer, are no longer declared. Their identifiers and their names are given to no
   other event of that log, so a query or an alert kept on any of them matches
   nothing from now on.
-- `POST /auth/factor` at a sign-in where a second step is accepted before any first
-  factor answers 200 `factorRequired` with `required` naming the first factors of the
-  `available` that `POST /auth/begin` answered, where it named every usable second
-  step the account holds, the one just accepted among them. A text code asked for at
-  a sign-in while no first factor has been accepted on its challenge, a second step
-  accepted on it or not, is an ask before a first factor: it is answered 202, no
-  phone signal is asked and nothing is sent, whatever the account holds. Before, an
-  ask after a second step accepted first sent the code, or was answered 200 or 422
-  `auth.factor.rejected` where the number's signal withheld it, or 422
-  `auth.credential.suspended` for a suspended number.
+- At a sign-in a second step (a generated code, a security key under two-step, a text
+  code or a recovery code) is accepted only once a first factor has been accepted on
+  the challenge. Presented before, `POST /auth/factor` answers 422
+  `auth.factor.notpermitted` without verifying it and without reading anything of the
+  account: the answer is the same for every identifier, no delay is asked, nothing is
+  counted and no failed authentication is recorded. A text code asked for at a
+  sign-in while no first factor has been accepted on its challenge is answered 202,
+  no phone signal is asked and nothing is sent, whatever the account holds.
 - A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
   Information, by the code the browser is returned with and the one the refusal
   carried inside. A refused authorization response no longer writes event 10 as
