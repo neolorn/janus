@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -952,6 +953,106 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005 AC8: the mailbox the subject holds and the one it last held, its
+    /// membership having ended, both lose their fingerprint to the neutralised value,
+    /// and both rows stay, still naming who held them. Another account's mailbox is
+    /// untouched.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC8_TheMailboxHeldAndTheOneLastHeldAreNeutralisedAndRemainAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await DeletingAccountAsync();
+        Mailbox held = Reserved("held");
+        Mailbox lastHeld = Reserved("last-held");
+        Mailbox kept = Reserved("kept");
+
+        held.Hold(subject);
+        lastHeld.Hold(subject);
+        lastHeld.Retire(Noon);
+        kept.Hold(other);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Mailboxes(writing).AddAsync(held, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(lastHeld, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(kept, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        List<MailboxRecord> rows = await reading.Mailboxes
+            .AsNoTracking()
+            .Where(row => row.Holder == subject)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        MailboxRecord untouched = await reading.Mailboxes
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == kept.Id.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { held.Id.Value, lastHeld.Id.Value }.Order(),
+            rows.Select(row => row.Id).Order());
+        Assert.All(rows, row => Assert.True(Fingerprint.IsNeutralised(row.Fingerprint)));
+        Assert.False(Fingerprint.IsNeutralised(untouched.Fingerprint));
+
+        // The class shares one database and reads every mailbox still standing for an
+        // address, so the one kept for comparison goes with its holder in turn.
+        await EraseAsync(other, ErasureReason.ErasureRequest);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC17: the secret of an account's TOTP enrolment is held under the
+    /// account's subject key, so the store reads it back while the key stands and, the
+    /// row and its ciphertext being where they were, reads nothing once the erasure has
+    /// destroyed the key. Another account's secret still reads.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC17_ATotpSecretIsUnderTheSubjectKeyAndUnreadableAfterErasureAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        byte[] secret = RandomNumberGenerator.GetBytes(20);
+        byte[] kept = RandomNumberGenerator.GetBytes(20);
+        AuthenticatorId enrolled = await EnrolledAsync(subject, secret);
+        AuthenticatorId standing = await EnrolledAsync(other, kept);
+
+        byte[] stored;
+
+        await using (StoreContext before = database.Context())
+        {
+            stored = (await before.Authenticators
+                .AsNoTracking()
+                .SingleAsync(row => row.Id == enrolled, TestContext.Current.CancellationToken)).TotpSecret!;
+
+            Assert.Equal(PersonalDataFormat.Marker, stored[0]);
+            Assert.Equal(-1, stored.AsSpan().IndexOf(secret));
+            Assert.Equal(
+                secret,
+                (await Authenticators(before).FindAsync(enrolled, TestContext.Current.CancellationToken))!
+                    .Totp!.Secret.ToArray());
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuthenticatorRecord row = await reading.Authenticators
+            .AsNoTracking()
+            .SingleAsync(held => held.Id == enrolled, TestContext.Current.CancellationToken);
+
+        Assert.Equal(stored, row.TotpSecret);
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await Authenticators(reading).FindAsync(enrolled, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            kept,
+            (await Authenticators(reading).FindAsync(standing, TestContext.Current.CancellationToken))!
+                .Totp!.Secret.ToArray());
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a and PRIV-RIGHT-005c: the provider's subject identifier a linked
     /// identity is found by is the holder's, so its fingerprint is neutralised with the
     /// rest, the provider's events find the account no longer, and the identity can be
@@ -1032,14 +1133,14 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005 AC1, PRIV-RIGHT-005a, AUTH-ABUSE-004: a message admitted for the
+    /// PRIV-RIGHT-005a AC15, PRIV-RIGHT-005, AUTH-ABUSE-004: a message admitted for the
     /// subject and not yet carried is unreadable once the erasure commits. Its row's key
     /// is the erased value, 32 zero bytes with no marker, the row reads as erased and
     /// names only the hash of its reference, and reading its message is refused before
     /// the unwrap is tried. A message for another subject is untouched.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync()
+    public async Task PRIV_RIGHT_005a_AC15_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync()
     {
         SubjectId subject = await DeletingAccountAsync();
         SubjectId other = await _deployment.AccountAsync(Noon);
@@ -1610,6 +1711,27 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         return await new GrantStore(reading, new DataConnections(reading))
             .VersionAsync(subject, TestContext.Current.CancellationToken);
     }
+
+    // A TOTP enrolment of the account's, written through the store as an enrolment is.
+    private async ValueTask<AuthenticatorId> EnrolledAsync(SubjectId subject, byte[] secret)
+    {
+        Assert.True(CredentialLabel.TryParse("this phone", out CredentialLabel label));
+
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await using StoreContext writing = database.Context();
+
+        await Authenticators(writing).AddAsync(
+            Authenticator.EnrollingTotp(id, subject, label, secret, Noon),
+            TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
+    // A mailbox reserved at an address no other test names.
+    private static Mailbox Reserved(string name) =>
+        Mailbox.Reserved(Parsed(name + "-" + Guid.NewGuid().ToString("N")[..12] + "@example.test"), Noon);
 
     private static EmailAddress Parsed(string value)
     {

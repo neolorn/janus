@@ -183,11 +183,11 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// PRIV-RIGHT-004: a restriction decided while the account is in a takedown's window
+    /// PRIV-RIGHT-004 AC4: a restriction decided while the account is in a takedown's window
     /// is held in the row, once, and the reversal brings the account back restricted.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_004_ARestrictionIsHeldThroughATakedownAsync()
+    public async Task PRIV_RIGHT_004_AC4_ARestrictionIsHeldThroughATakedownAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
