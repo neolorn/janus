@@ -207,6 +207,25 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004 AC4: a restricted account keeps its restriction through a
+    /// suspension and comes back restricted, with nothing held, when it is reactivated.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_004_AC4_ARestrictionIsHeldThroughASuspension()
+    {
+        var account = Account.Create(Ahmed, Noon);
+
+        account.Restrict();
+        account.Suspend();
+
+        Assert.Equal((AccountState.Suspended, true), (account.State, account.RestrictionHeld));
+
+        account.Reactivate();
+
+        Assert.Equal((AccountState.Restricted, false), (account.State, account.RestrictionHeld));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC4: a takedown passes the account through suspension into the
     /// grace window in one transaction, recording that a takedown put it there.
     /// </summary>

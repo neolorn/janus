@@ -389,6 +389,30 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004 AC5: a restriction held while the account is in its deletion
+    /// window is not one in force, so the lift is refused as a conflict of state that
+    /// names the window, and the account leaves the window restricted as it entered.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AC5_ARestrictionHeldThroughADeletionWindowIsNotLiftedAsync()
+    {
+        _directory.Stands(_member, AccountState.Restricted);
+        await _directory.BeginDeletionAsync(_member, Noon, TestContext.Current.CancellationToken);
+
+        Error deleting = Refusal(await LiftAsync(_member));
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, deleting.Code);
+        Assert.Equal("deleting", deleting.Details["state"].GetString());
+        Assert.Equal(AccountState.Deleting, await StateAsync(_member));
+        Assert.Empty(_directory.Lifted);
+        Assert.Empty(_audit.Administered);
+
+        await _directory.CancelDeletionAsync(_member, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AccountState.Restricted, await StateAsync(_member));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003: a window an out-of-band erasure request began is cancelled on the
     /// subject's behalf and recorded against that request, and the account comes back
     /// as it stood.
