@@ -500,6 +500,54 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         Assert.Equal(organization.Value.ToString(), group["organization"]);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-003 AC4: one account holding a revoked grant, a grant in an
+    /// organization it holds no membership of, a group membership and an ended
+    /// membership exports all four, the revoked grant and the ended membership each
+    /// with the instant it ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC4_TheExportCarriesAllFourAndWhenEachEndedOneEndedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId left = await _deployment.OrganizationAsync(Noon);
+        OrganizationId elsewhere = await _deployment.OrganizationAsync(Noon);
+
+        _ = await PlacedAsync(subject, left, until: Noon.AddHours(2));
+        GrantId revoked = await ConferredAsync(subject, left);
+        GrantId outside = await ConferredAsync(subject, elsewhere);
+        GroupId team = await GroupAsync(left, "Team");
+
+        await JoinedAsync(team, GrantSubject.Of(subject));
+        await RevokedAsync(revoked, subject, Noon.AddHours(1));
+
+        IReadOnlyDictionary<string, ExportSection> named = await SectionsAsync(subject);
+
+        IReadOnlyDictionary<string, string> membership =
+            Assert.Single(named["memberships"].Records).Values;
+
+        Assert.Equal(left.Value.ToString(), membership["organization"]);
+        Assert.Equal(Noon.AddHours(2), DateTimeOffset.Parse(membership["endedAt"], null));
+
+        Assert.Equal(
+            team.Value.ToString(),
+            Assert.Single(named["group-memberships"].Records).Values["group"]);
+
+        Assert.Equal(2, named["grants"].Records.Count);
+
+        IReadOnlyDictionary<string, string> ended = Assert.Single(
+            named["grants"].Records,
+            record => record.Values["grant"] == revoked.Value.ToString()).Values;
+        IReadOnlyDictionary<string, string> held = Assert.Single(
+            named["grants"].Records,
+            record => record.Values["grant"] == outside.Value.ToString()).Values;
+
+        Assert.Equal(Noon.AddHours(1), DateTimeOffset.Parse(ended["revokedAt"], null));
+        Assert.Equal(elsewhere.Value.ToString(), held["organization"]);
+        Assert.False(held.ContainsKey("revokedAt"));
+    }
+
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";
 
