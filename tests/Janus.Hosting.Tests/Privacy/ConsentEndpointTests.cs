@@ -23,6 +23,8 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
     private const string Performance = "performance";
 
+    private const string Recommendations = "recommendations";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private readonly Deployment _deployment = new();
@@ -264,6 +266,89 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
         Answer answered = await new Browser(_deployment).SendAsync("GET", "/privacy/consents");
 
         Assert.Equal(StatusCodes.Status401Unauthorized, answered.Status);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-011 AC2: every consent the dashboard shows is withdrawn from it, the
+    /// one given there, the one given against another document and the written one an
+    /// administrator recorded alike, each by the one request of its own purpose.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_011_AC2_EachConsentHeldIsWithdrawnFromTheDashboardAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _deployment.Documents.Hold(
+            new DocumentVersion(Janus.Privacy.Tests.Declaration.Newsletter, "1", "ar", "النص", [], Noon));
+        _deployment.Consents.Keep(
+            subject,
+            new ConsentRecord(
+                Recommendations,
+                "privacy-notice",
+                "1",
+                ConsentMechanism.Administrator,
+                ConsentKind.Written,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null));
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/newsletter/grant")).Status);
+
+        JsonElement[] shown = [.. (await browser.SendAsync("GET", "/privacy/consents")).Json().EnumerateArray()];
+
+        Assert.Equal(3, shown.Length);
+
+        foreach (JsonElement consent in shown)
+        {
+            Assert.Equal(JsonValueKind.Null, consent.GetProperty("withdrawnAt").ValueKind);
+            Assert.Equal(
+                StatusCodes.Status204NoContent,
+                (await browser.SendAsync(
+                    "POST",
+                    "/privacy/consents/" + consent.GetProperty("purpose").GetString() + "/withdraw")).Status);
+        }
+
+        JsonElement[] left = [.. (await browser.SendAsync("GET", "/privacy/consents")).Json().EnumerateArray()];
+
+        Assert.Equal(3, left.Length);
+        Assert.All(
+            left,
+            consent => Assert.NotEqual(default, consent.GetProperty("withdrawnAt").GetDateTimeOffset()));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-011 AC3: the dashboard is the subject's own. An account fresh from
+    /// registration, holding no role and no permission and with nobody having acted on
+    /// it, reads its consents and its objections and changes one of each itself.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_011_AC3_AnAccountHoldingNothingReachesItsDashboardUnaidedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/privacy/consents")).Status);
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/privacy/objections")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/withdraw")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/objections/" + Security)).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("DELETE", "/privacy/objections/" + Security)).Status);
+        Assert.Empty(_deployment.Gate.Refusals);
     }
 
     // PRIV-CONS-007: a material revision of the notice would end the consent where
