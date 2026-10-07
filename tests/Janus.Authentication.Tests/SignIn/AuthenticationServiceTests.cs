@@ -3332,6 +3332,247 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002b AC8: at a sign-in, once a password is accepted, the answer that
+    /// offers the security key carries the request options for the challenge: user
+    /// verification required, the value the sign-in was opened with, and the account's
+    /// active second-factor security keys by credential identifier and transports. A
+    /// suspended one, another account's and a passkey are not named. The security
+    /// key's assertion made from those options completes the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC8_AtASignInTheAnswerOfferingTheSecurityKeyCarriesItsRequestOptionsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var another = new SubjectId(Guid.NewGuid());
+        var key = SoftwareAuthenticator.Holding();
+        var spare = SoftwareAuthenticator.Holding();
+
+        _ = Carries(subject, Factor.SecurityKey, key, "Key", "usb", "nfc");
+        _ = Carries(subject, Factor.SecurityKey, spare, "Spare");
+        Carries(subject, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Lost", "usb")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        _ = Carries(subject, Factor.Passkey, SoftwareAuthenticator.Holding(), "Phone", "internal");
+        _ = Carries(another, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Theirs", "usb");
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress first = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        WebAuthnRequestOptions options = Assert.IsType<WebAuthnRequestOptions>(first.WebAuthn);
+
+        SignInProgress second = Reached(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.SecurityKey)
+            {
+                Assertion = key.Asserted(options.Challenge, "https://example.test", options.RelyingPartyId),
+            },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(SignInStatus.FactorRequired, first.Status);
+        Assert.Equal([Factor.SecurityKey], first.Required);
+        Assert.Equal("required", options.UserVerification);
+        Assert.Equal("example.test", options.RelyingPartyId);
+        Assert.Equal(began.WebAuthn.Challenge, options.Challenge);
+        Assert.Equal(
+            [
+                (Base64Url.EncodeToString(key.CredentialId), "usb,nfc"),
+                (Base64Url.EncodeToString(spare.CredentialId), string.Empty),
+            ],
+            Described(options));
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, true),
+            (second.Status, second.AssuranceLevel, second.PhishingResistant));
+        Assert.Null(second.WebAuthn);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC8: an answer that does not offer the security key carries no
+    /// request options: one that offers another second step, on an account whose only
+    /// security key is suspended, and the one that completes the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC8_AnAnswerThatDoesNotOfferTheSecurityKeyCarriesNoRequestOptionsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Carries(subject, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Lost", "usb")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress first = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        SignInProgress second = Reached(await PresentAsync(began.Challenge, Factor.Totp, generated));
+
+        Assert.Equal(SignInStatus.FactorRequired, first.Status);
+        Assert.Equal([Factor.Totp], first.Required);
+        Assert.Null(first.WebAuthn);
+        Assert.Equal(SignInStatus.Complete, second.Status);
+        Assert.Null(second.WebAuthn);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC8, AUTH-ABUSE-003: the challenge a sign-in opens with names no
+    /// credential. For an account holding a security key and a passkey it carries the
+    /// relying party and the value to sign and nothing else, as it does for an
+    /// identifier no account holds, and no credential is read for it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC8_TheChallengeASignInOpensWithNamesNoCredentialAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _ = Carries(subject, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Key", "usb");
+        _ = Carries(subject, Factor.Passkey, SoftwareAuthenticator.Holding(), "Phone", "internal");
+
+        int read = _authenticators.Reads;
+
+        SignInChallenge held = await BeganAsync(Address);
+        SignInChallenge nobody = await BeganAsync(Elsewhere);
+
+        Assert.Equal(read, _authenticators.Reads);
+        Assert.Equal(new WebAuthnChallenge("example.test", held.WebAuthn.Challenge), held.WebAuthn);
+        Assert.Equal(new WebAuthnChallenge("example.test", nobody.WebAuthn.Challenge), nobody.WebAuthn);
+        Assert.Equal(
+            ["Challenge", "RelyingPartyId"],
+            typeof(WebAuthnChallenge).GetProperties().Select(member => member.Name).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC8: at a step-up no answer carries the request options until a
+    /// factor has been presented on its challenge; once the password has been, the
+    /// answer that offers the security key carries them, and since it offers the
+    /// passkey too it names the account's active passkeys beside its security keys, so
+    /// that a passkey answers from those options. A suspended passkey is not named.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC8_AtAStepUpTheRequestOptionsFollowAFactorAndNameThePasskeysOfferedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+        var passkey = SoftwareAuthenticator.Holding();
+        var gate = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+
+        _ = Carries(subject, Factor.SecurityKey, key, "Key", "usb");
+        _ = Carries(subject, Factor.Passkey, passkey, "Phone", "internal", "hybrid");
+        Carries(subject, Factor.Passkey, SoftwareAuthenticator.Holding(), "Lost", "internal")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        Holds(subject, Factor.PhoneCode);
+        Declares(gate, gate, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        SignInProgress before = await LeftAsync();
+        SignInProgress first = Reached(await SteppedAsync(new FactorPresentation(Factor.Password) { Value = Secret }));
+        SignInProgress after = await LeftAsync();
+        WebAuthnRequestOptions options = Assert.IsType<WebAuthnRequestOptions>(first.WebAuthn);
+
+        SignInProgress second = Reached(await SteppedAsync(new FactorPresentation(Factor.Passkey)
+        {
+            Assertion = passkey.Asserted(
+                options.Challenge,
+                "https://example.test",
+                options.RelyingPartyId,
+                userHandle: WebAuthnService.Handle(subject)),
+        }));
+
+        Assert.Equal(SignInStatus.FactorRequired, before.Status);
+        Assert.Contains(Factor.SecurityKey, before.Required);
+        Assert.Null(before.WebAuthn);
+        Assert.Equal(SignInStatus.FactorRequired, first.Status);
+        Assert.Equal([Factor.Passkey, Factor.SecurityKey], first.Required.Order());
+        Assert.Equal("required", options.UserVerification);
+        Assert.Equal("example.test", options.RelyingPartyId);
+        Assert.Equal(began.WebAuthn.Challenge, options.Challenge);
+        Assert.Equal(
+            new[]
+            {
+                (Base64Url.EncodeToString(key.CredentialId), "usb"),
+                (Base64Url.EncodeToString(passkey.CredentialId), "internal,hybrid"),
+            }.Order(),
+            Described(options).Order());
+        Assert.Equal(first.Required, after.Required);
+        Assert.Equal(options.Challenge, Assert.IsType<WebAuthnRequestOptions>(after.WebAuthn).Challenge);
+        Assert.Equal(Described(options), Described(after.WebAuthn!));
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, true),
+            (second.Status, second.AssuranceLevel, second.PhishingResistant));
+        Assert.Null(second.WebAuthn);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(FactorPresentation presented) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                presented,
+                Source,
+                TestContext.Current.CancellationToken);
+
+        async ValueTask<SignInProgress> LeftAsync() =>
+            Assert.IsType<SignInProgress>((await AskedAsync(began.Challenge, subject, session)).Match(
+                progress => progress,
+                error => throw new Xunit.Sdk.XunitException(error.Code.ToString())));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC8: at a step-up that does not offer the passkey, the account's
+    /// only one being suspended, the request options name the account's active
+    /// security keys and no passkey; the security key, presented after the password of
+    /// its combination, answers from those options and the two reach <c>aal2</c>,
+    /// phishing-resistant.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC8_AtAStepUpThatOffersNoPasskeyTheRequestOptionsNameTheSecurityKeysAloneAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+        var gate = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+
+        _ = Carries(subject, Factor.SecurityKey, key, "Key", "usb", "nfc");
+        Carries(subject, Factor.SecurityKey, SoftwareAuthenticator.Holding(), "Spare", "usb")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        Carries(subject, Factor.Passkey, SoftwareAuthenticator.Holding(), "Phone", "internal")
+            .Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        Declares(gate, gate);
+
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        SignInProgress first = Reached(await SteppedAsync(new FactorPresentation(Factor.Password) { Value = Secret }));
+        WebAuthnRequestOptions options = Assert.IsType<WebAuthnRequestOptions>(first.WebAuthn);
+
+        SignInProgress second = Reached(await SteppedAsync(new FactorPresentation(Factor.SecurityKey)
+        {
+            Assertion = key.Asserted(options.Challenge, "https://example.test", options.RelyingPartyId),
+        }));
+
+        Assert.Equal(SignInStatus.FactorRequired, first.Status);
+        Assert.Equal([Factor.SecurityKey], first.Required);
+        Assert.Equal("required", options.UserVerification);
+        Assert.Equal(began.WebAuthn.Challenge, options.Challenge);
+        Assert.Equal([(Base64Url.EncodeToString(key.CredentialId), "usb,nfc")], Described(options));
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, true),
+            (second.Status, second.AssuranceLevel, second.PhishingResistant));
+        Assert.Null(second.WebAuthn);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(FactorPresentation presented) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                presented,
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// Chapter 09 <c>POST /auth/factor</c>: in the usual order a first factor is
     /// accepted and what is left to present is the second steps the challenge offers,
     /// the factor accepted never among them; one of them, presented, then completes
@@ -4951,6 +5192,49 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         return (began.Challenge, Token(), browser.Value);
     }
+
+    // A WebAuthn credential of the account, a passkey or a second-factor security key,
+    // as the enrolment of the authenticator that holds it left it: its identifier, its
+    // key and the transports the browser reported.
+    private Authenticator Carries(
+        SubjectId subject,
+        Factor factor,
+        SoftwareAuthenticator authenticator,
+        string named,
+        params string[] transports)
+    {
+        var held = Authenticator.Existing(
+            AuthenticatorId.New(_clock),
+            subject,
+            factor,
+            CredentialLabel.TryParse(named, out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            new WebAuthnMaterial(
+                authenticator.CredentialId,
+                authenticator.PublicKey,
+                SoftwareAuthenticator.Es256,
+                "example.test",
+                null,
+                false,
+                false,
+                transports),
+            isPreferred: false);
+
+        _authenticators.Hold(held);
+
+        return held;
+    }
+
+    // The credentials a request names, each as its identifier and its transports.
+    private static (string Id, string Transports)[] Described(WebAuthnRequestOptions options) =>
+        [.. options.AllowCredentials.Select(named => (named.Id, string.Join(',', named.Transports)))];
 
     // A passkey of the account whose public key is the given one, as its enrolment
     // left it, under the relying party and the algorithm it was enrolled with.

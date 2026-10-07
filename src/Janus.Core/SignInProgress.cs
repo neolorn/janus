@@ -24,8 +24,9 @@ namespace Janus.Core;
 /// on the blocklist or below its floor sets.
 /// </param>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-016, AUTH-FACT-017 and AUTH-SESS-002. The
-/// properties reached are reported, never which factor produced them (`09` section 3).
+/// Implements AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-016, AUTH-FACT-017 and
+/// AUTH-SESS-002. The properties reached are reported, never which factor produced them
+/// (`09` section 3).
 /// </remarks>
 public sealed record SignInProgress(
     SignInStatus Status,
@@ -35,4 +36,14 @@ public sealed record SignInProgress(
     bool TrustDeviceOffered,
     SessionId? Session,
     PolicyRequirement? Requirement,
-    bool PasswordChangeRequired);
+    bool PasswordChangeRequired)
+{
+    /// <summary>
+    /// The WebAuthn request options for the challenge, where <see cref="Required"/>
+    /// names the second-factor security key: at a sign-in once a first factor is
+    /// accepted, at a step-up once a factor has been presented on its challenge. Nothing
+    /// anywhere else, so that no answer before a first factor names a credential
+    /// (AUTH-FACT-002b).
+    /// </summary>
+    public WebAuthnRequestOptions? WebAuthn { get; init; }
+}

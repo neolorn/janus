@@ -85,6 +85,61 @@ internal sealed class WebAuthnService(
         Base64Url.EncodeToString(subject.Value.ToByteArray(bigEndian: true));
 
     /// <summary>
+    /// The request options an answer carries where the factors it offers include a
+    /// WebAuthn credential its authenticator does not keep, which answers only a
+    /// request that names it.
+    /// </summary>
+    /// <param name="subject">Whose credentials.</param>
+    /// <param name="challenge">The value the challenge was opened with.</param>
+    /// <param name="offered">The factors the answer offers.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The options, naming each active credential of the account that is of a WebAuthn
+    /// entry offered; or nothing where no entry offered is a credential that has to be
+    /// named.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-002b AC8. A request that names credentials is answered by
+    /// those alone, so where the answer offers the discoverable entry too, its
+    /// credentials are named beside the others and can still answer. Which entries
+    /// those are is read from the catalogue; a suspended credential is not named.
+    /// </remarks>
+    public async ValueTask<WebAuthnRequestOptions?> RequestAsync(
+        SubjectId subject,
+        string challenge,
+        IReadOnlyCollection<Factor> offered,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(offered);
+
+        if (!offered.Any(factor => FactorCatalogue.Of(factor) is { IsWebAuthn: true, IsDiscoverable: false }))
+        {
+            return null;
+        }
+
+        RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new WebAuthnRequestOptions(
+            party.Id,
+            challenge,
+            [.. enrolled
+                .Where(credential => credential.IsUsable
+                    && offered.Contains(credential.Factor)
+                    && FactorCatalogue.Of(credential.Factor).IsWebAuthn)
+                .Select(credential => credential.WebAuthn)
+                .OfType<WebAuthnMaterial>()
+                .Select(held => new WebAuthnCredentialDescriptor(
+                    Base64Url.EncodeToString(held.CredentialId.Span),
+                    held.Transports))]);
+    }
+
+    /// <summary>
     /// Records the credential a completed ceremony produced.
     /// </summary>
     /// <param name="subject">Whose credential.</param>
