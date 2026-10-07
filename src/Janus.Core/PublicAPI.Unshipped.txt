@@ -4088,6 +4088,7 @@ static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCo
 static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupRedirectClient.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupRelyingPartyId.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupRequestLogging.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupSchemaMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupSecretUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupSubscriberName.get -> Janus.Core.ErrorCode

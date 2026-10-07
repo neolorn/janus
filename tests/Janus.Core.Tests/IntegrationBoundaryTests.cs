@@ -51,9 +51,9 @@ public sealed class IntegrationBoundaryTests
         "Mailcow",
     ];
 
-    // The caches a deployment might put behind the cache extension point, and the
-    // clients that reach them. Chapter 07 ships one of them by default, and the core
-    // contract still names none.
+    // The caches a deployment might one day put in front of its database, and the
+    // clients that reach them. Version 1 has no cache and no extension point for one
+    // (INF-CACHE-001), and the core contract names none.
     private static readonly string[] Caches =
     [
         "Redis",
@@ -135,8 +135,9 @@ public sealed class IntegrationBoundaryTests
 
     /// <summary>
     /// LIB-EXT-001 AC3: no product of any extension point is named in a core
-    /// namespace, <c>Janus.Core</c> or an area project: no gateway or mail transport, no mail server, no cache and no secrets
-    /// manager. Google and Apple are not searched for, since they are factors of the
+    /// namespace, <c>Janus.Core</c> or an area project: no gateway or mail transport,
+    /// no mail server and no secrets manager, and no cache, which version 1 does not
+    /// have (INF-CACHE-001). Google and Apple are not searched for, since they are factors of the
     /// catalogue chapter 02 fixes rather than a product behind an extension point, and
     /// neither is PostgreSQL, which LIB-API-004 has the contract name.
     /// </summary>

@@ -15,9 +15,13 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Sending;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Xunit;
 
@@ -65,6 +69,12 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     private const string Unmigrated = "behind";
 
     private const string Unserved = "unserved";
+
+    // BFF-LOG-002: the category the server writes its per-request entries under.
+    private const string RequestEntries = "Microsoft.AspNetCore.Hosting.Diagnostics";
+
+    // The category the application of a test writes under as it handles a request.
+    private const string Handling = "Handling";
 
     private static readonly string Declaring =
         "INSERT INTO identity.settings (key, value) VALUES ('"
@@ -1266,6 +1276,228 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         finally
         {
             await WriteAsync(Located(HostingLocation.Inside), cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: the service's name is a conditional declaration. A deployment
+    /// that screens passwords against its own name and never said what that name is
+    /// is stopped by that key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_ScreeningAgainstTheContextWithoutTheServiceNameIsRefusedAsync()
+    {
+        StartupException refused = await RefusedHoldingAsync(
+            Settings.PasswordBlocklistSources.Key,
+            Settings.PasswordBlocklistSources.Write(new HashSet<BlocklistRejectionSource>
+            {
+                BlocklistRejectionSource.Leaked,
+                BlocklistRejectionSource.Context,
+            }));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("service.name", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: the address of a corpus the deployment hosts itself is a
+    /// conditional declaration. A deployment that chose that source and never said
+    /// where it answers is stopped by that key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_ASelfHostedCorpusWithoutItsAddressIsRefusedAsync()
+    {
+        StartupException refused = await RefusedHoldingAsync(
+            Settings.PasswordBlocklistSource.Key,
+            Settings.PasswordBlocklistSource.Write(BlocklistSource.SelfHosted));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("password.blocklist.selfhosted.address", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// BFF-LOG-002 AC4: a deployment that registers the library and writes no logging
+    /// rule of its own starts, the server writes none of its per-request entries, which
+    /// carry the query string, and what each request logs still carries that request's
+    /// <c>RequestId</c>, from the scope the server opens around it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_LOG_002_AC4_WithNoOtherRuleNoRequestEntryIsWrittenAndEachEntryCarriesItsRequestAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using var entries = new EntriesInMemory();
+        using var server = new ServerInMemory();
+        using IHost deployment = new HostBuilder()
+            .ConfigureWebHost(web => web
+                .UseServer(server)
+                .Configure(application => application.Run(context =>
+                {
+                    context.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger(Handling)
+                        .Log(LogLevel.Warning, default, context.Request.Path.Value, exception: null, (path, _) => path ?? string.Empty);
+
+                    return Task.CompletedTask;
+                })))
+            .ConfigureServices(services => Declared(services).AddLogging(logging => logging.AddProvider(entries)))
+            .Build();
+
+        await deployment.StartAsync(cancellationToken);
+
+        Answer first = await server.SendAsync("GET", "/first", "?code=c0de&state=st4te");
+        Answer second = await server.SendAsync("GET", "/second");
+
+        await deployment.StopAsync(cancellationToken);
+
+        EntriesInMemory.Entry[] handled = [.. entries.Written.Where(entry => entry.Category == Handling)];
+
+        Assert.Equal(StatusCodes.Status200OK, first.Status);
+        Assert.Equal(StatusCodes.Status200OK, second.Status);
+        Assert.DoesNotContain(
+            entries.Written,
+            entry => entry.Category == RequestEntries && entry.Level < LogLevel.Warning);
+        Assert.DoesNotContain(entries.Written, entry => entry.Line.Contains("c0de", StringComparison.Ordinal));
+        Assert.Equal(["/first", "/second"], handled.Select(entry => entry.Line));
+        Assert.All(handled, entry => Assert.False(string.IsNullOrEmpty(entry.Scope.GetValueOrDefault("RequestId"))));
+        Assert.NotEqual(handled[0].Scope["RequestId"], handled[1].Scope["RequestId"]);
+    }
+
+    /// <summary>
+    /// BFF-LOG-002 AC4: a rule of the host's that enables the category of the server's
+    /// per-request entries at Information, or below it, in every provider stops the
+    /// deployment as it starts, before the server has served anything.
+    /// </summary>
+    /// <param name="level">The level the host's rule enables the category at.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(LogLevel.Information)]
+    [InlineData(LogLevel.Debug)]
+    [InlineData(LogLevel.Trace)]
+    public async Task BFF_LOG_002_AC4_ARuleEnablingTheRequestEntriesAtInformationIsRefusedAsync(LogLevel level)
+    {
+        Error? refused = await StartedLoggingAsync(logging => logging
+            .AddProvider(new EntriesInMemory())
+            .AddFilter(RequestEntries, level));
+
+        Assert.Equal(ErrorCodes.StartupRequestLogging, refused?.Code);
+    }
+
+    /// <summary>
+    /// BFF-LOG-002 AC4: a rule that enables the category at Information in one
+    /// provider alone stops the deployment too, whatever the others are left at.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_LOG_002_AC4_ARuleEnablingTheRequestEntriesInOneProviderIsRefusedAsync()
+    {
+        Error? refused = await StartedLoggingAsync(logging => logging
+            .AddProvider(new EntriesInMemory())
+            .AddProvider(new LogsInMemory())
+            .AddFilter<EntriesInMemory>(RequestEntries, LogLevel.Information));
+
+        Assert.Equal(ErrorCodes.StartupRequestLogging, refused?.Code);
+    }
+
+    /// <summary>
+    /// BFF-LOG-002 AC4: a rule that disables the category in every provider would have
+    /// the server open no scope around a request, so it stops the deployment.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_LOG_002_AC4_ARuleDisablingTheRequestEntriesInEveryProviderIsRefusedAsync()
+    {
+        Error? refused = await StartedLoggingAsync(logging => logging
+            .AddProvider(new EntriesInMemory())
+            .AddProvider(new LogsInMemory())
+            .AddFilter(RequestEntries, LogLevel.None));
+
+        Assert.Equal(ErrorCodes.StartupRequestLogging, refused?.Code);
+    }
+
+    /// <summary>
+    /// BFF-LOG-002 AC4: a rule that disables the category in one provider and leaves
+    /// it where the library set it in another starts, since the server still opens the
+    /// scope; and so does a rule that sets it above Warning.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_LOG_002_AC4_ARuleThatLeavesTheRequestScopeOpenStartsAsync()
+    {
+        Error? inOneProvider = await StartedLoggingAsync(logging => logging
+            .AddProvider(new EntriesInMemory())
+            .AddProvider(new LogsInMemory())
+            .AddFilter<EntriesInMemory>(RequestEntries, LogLevel.None));
+
+        Error? aboveWarning = await StartedLoggingAsync(logging => logging
+            .AddProvider(new EntriesInMemory())
+            .AddFilter(RequestEntries, LogLevel.Critical));
+
+        Assert.Null(inOneProvider);
+        Assert.Null(aboveWarning);
+    }
+
+    // BFF-LOG-002: the deployment started with the logging its host wrote after
+    // registering the library: nothing where it started, or what stopped it, which
+    // stops it before the web server registered after the library has served anything.
+    private async Task<Error?> StartedLoggingAsync(Action<ILoggingBuilder> logging)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        var served = new ServerStandIn();
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served)).AddLogging(logging))
+            .Build();
+
+        try
+        {
+            await deployment.StartAsync(cancellationToken);
+        }
+        catch (StartupException refused)
+        {
+            Assert.False(served.Started);
+            Assert.NotNull(refused.Failure);
+
+            return refused.Failure;
+        }
+
+        await deployment.StopAsync(cancellationToken);
+
+        Assert.True(served.Started);
+
+        return null;
+    }
+
+    // LIB-HOST-001: the deployment, which starts as it stands, started again with one
+    // key holding the value that makes a conditional declaration one to name. The key
+    // goes back to its default afterwards whatever the start did.
+    private async Task<StartupException> RefusedHoldingAsync(ConfigurationKey condition, string holding)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost unconditional = Deployed())
+        {
+            await unconditional.StartAsync(cancellationToken);
+            await unconditional.StopAsync(cancellationToken);
+        }
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + condition + "', '" + holding + "');",
+            cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            return await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+        }
+        finally
+        {
+            await WriteAsync("DELETE FROM identity.settings WHERE key = '" + condition + "';", cancellationToken);
         }
     }
 

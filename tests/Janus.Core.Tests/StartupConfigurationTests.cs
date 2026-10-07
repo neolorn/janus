@@ -77,11 +77,12 @@ public sealed class StartupConfigurationTests
         Start(Named(without: Settings.HostingCrossBorderBasis.Key));
 
     /// <summary>
-    /// AUTH-PASS-004: the context source forbids the service's own name in a
-    /// password, so it is the deployment that says what that name is.
+    /// LIB-HOST-001 AC2, AUTH-PASS-004: the context source forbids the service's own
+    /// name in a password, so it is the deployment that says what that name is, and
+    /// one that does not is stopped by that key.
     /// </summary>
     [Fact]
-    public void ThrowIfIncomplete_TheContextSourceIsOn_RequiresTheServiceName()
+    public void LIB_HOST_001_AC2_ScreeningAgainstTheContextRequiresTheServiceName()
     {
         StartupException fault = Assert.Throws<StartupException>(
             () => Start(
@@ -92,6 +93,7 @@ public sealed class StartupConfigurationTests
                     BlocklistRejectionSource.Context,
                 }));
 
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, fault.Failure?.Code);
         Assert.Equal("service.name", fault.Failure?.Details["key"].GetString());
     }
 
@@ -103,17 +105,19 @@ public sealed class StartupConfigurationTests
         Start(Named(without: Settings.ServiceName.Key));
 
     /// <summary>
-    /// INT-PWD-003: a deployment that hosts the corpus itself says where it answers,
-    /// there being nowhere else to look for it.
+    /// LIB-HOST-001 AC2, INT-PWD-003: a deployment that hosts the corpus itself says
+    /// where it answers, there being nowhere else to look for it, and one that does
+    /// not is stopped by that key.
     /// </summary>
     [Fact]
-    public void ThrowIfIncomplete_TheCorpusIsSelfHosted_RequiresItsAddress()
+    public void LIB_HOST_001_AC2_ASelfHostedCorpusRequiresItsAddress()
     {
         StartupException fault = Assert.Throws<StartupException>(
             () => Start(
                 Named(without: Settings.PasswordBlocklistSelfHostedAddress.Key),
                 blocklistSource: BlocklistSource.SelfHosted));
 
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, fault.Failure?.Code);
         Assert.Equal(
             "password.blocklist.selfhosted.address",
             fault.Failure?.Details["key"].GetString());

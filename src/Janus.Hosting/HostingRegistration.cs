@@ -112,6 +112,13 @@ public static class HostingRegistration
         // instead of writing a bare status the pipeline never sees.
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 
+        // BFF-LOG-002 (D-197): the server's own entries for a request write its query
+        // string at Information, so their category is held to Warning, which still has
+        // the server open the scope that carries the request identifier (CONV-LOG-002).
+        _ = services.AddLogging(logging => logging.AddFilter(
+            RequestLoggingValidationService.Category,
+            LogLevel.Warning));
+
         // BFF-OWN-001: the browser boundary is the library's, so what issues a cookie
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
@@ -354,6 +361,11 @@ public static class HostingRegistration
         // longer names is stamped superseded once the declaration has been checked, and
         // before the server serves.
         services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
+
+        // BFF-LOG-002 (D-197): what the host's logging makes of the server's per-request
+        // entries is read once the host has written every rule it will, and before the
+        // server serves.
+        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

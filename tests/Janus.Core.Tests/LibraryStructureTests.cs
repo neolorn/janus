@@ -147,9 +147,7 @@ public sealed class LibraryStructureTests
         "OpenIddict.Server",
         "OpenIddict.Validation",
         "Otp.NET",
-        "StackExchange.Redis",
         "Testcontainers.PostgreSql",
-        "Testcontainers.Redis",
         "xunit.v3",
     ];
 
