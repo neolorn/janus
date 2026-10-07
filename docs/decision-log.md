@@ -213,8 +213,10 @@ open.
 
 ## D-007 — Session and token model
 
-
 > **Superseded in part.** Step-up is per recency window (15 minutes), not once per session — AUTH-STEP-002, D-123, D-135. Session lifetimes are D-123/D-130.
+
+> **Amended.** Version 1 runs with no cache: the session record, and the grant rows and group set D-043 and D-079 cache, are read from PostgreSQL, permission inputs held for one request; a cache in front of PostgreSQL, INF-CACHE-001, is deferred (D-197).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Follows from:** D-005
 
 **Decision.** A server-side session record is the spine; every credential derives
@@ -524,6 +526,8 @@ change to every rule in the system. Directly serves the built-to-grow requiremen
 ---
 
 ## D-013 — Abuse controls
+
+> **Amended.** The one window per number was replaced by named restrictions (D-146 item 17); a text to a number now waits for the last one under `sms.resend`, 1 per 3 minutes, its one count released when every text of the send fails for good, when any text of a `secondfactor` send is reported delivered, or when its code is presented right or its link pressed (D-197).
 
 **Date:** 2026-08-25 · **Status:** accepted
 
@@ -1549,8 +1553,10 @@ belong in the enumeration for RoPA completeness; no code branches on them.
 
 ## D-033 — Session cluster: lifetimes, CSRF, logout, rotation
 
-
 > **Superseded in part.** The 30-day AAL1 absolute lifetime is replaced by 90-day inactivity / 365-day absolute for customers — D-123, D-130.
+
+> **Amended.** 33.1: no organization holds lifetimes of its own; the AAL2 lifetimes, shorter or longer, are the deployment's, through `session.aal2.*` (D-197).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Resolves:** R-06, R-07, R-08, R-09 · **Amends:** D-007
 
 **TL;DR.** Four standard things every login system needs that D-007 left out: how
@@ -2055,6 +2061,8 @@ in CI** and fails the build on detection.
 ---
 
 ## D-043 — Derived grants
+
+> **Amended.** Version 1 holds no cache across requests: the grant rows and group set are read from PostgreSQL and held for one request, and INF-CACHE-001 is deferred (D-197).
 
 **Date:** 2026-08-25 · **Status:** accepted · **Extends:** D-015 · **Amends:** D-007's caching rule
 
@@ -4058,6 +4066,8 @@ a side, and it stops the frontend hiding controls a person is entitled to use.
 
 ## D-079 — Cache holds inputs, not outcomes
 
+> **Amended.** Version 1 holds no cache across requests: the inputs are read from PostgreSQL and held for one request; a cache in front of PostgreSQL, INF-CACHE-001, is deferred (D-197).
+
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-007 · **Resolves:** F-16
 
 **TL;DR.** The specification said "resolved permissions" are cached under a
@@ -5004,6 +5014,8 @@ provider, hold a written agreement, and not instruct unlawful processing — all
 ## D-092 — Low-severity sweep: L1 to L8
 
 > **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
+> **Amended.** L3: version 1 has no cache, INF-CACHE-001 being deferred; an outage of PostgreSQL, from which every record is read, never permits: where it cannot answer, the request is denied, as AUTH-PRIN-001 criterion 1 states (D-197).
 
 **Date:** 2026-08-27 · **Status:** accepted · **Resolves:** L1–L8
 
@@ -7267,6 +7279,8 @@ log (D-062, D-117, D-129, D-130).
 
 > **Amended.** A suspended authenticator presented anyway is answered `auth.credential.suspended` only once what it presented verifies, and a `phoneCode` ask after a first factor or under a session naming a suspended number is answered so too, counting nothing; `auth.lossreport.pending` also answers a report on an authenticator a removal already suspended (D-190).
 
+> **Amended.** Item 5: a `phoneCode` credential whose number left the account, whatever suspended it, is notified with no cancel link, by the message kind `credential-unbound`, and no cancel returns it (D-197).
+
 **Date:** 2026-09-05 · **Status:** accepted · **Supersedes:** D-128 on the evaluation rule (the social carve-out stands) · **Amends:** D-134 on the trusted-device offer, D-009/D-022 (AUTH-RECOV-007 generalised), D-114 (AUTH-PASS-001a restated as a property) · **Resolves:** review-4, H-1
 
 **TL;DR.** Review-4 H-1: a customer whose only passkey died could not remove it —
@@ -7522,6 +7536,8 @@ the library* — the library supports both bases; the choice is the host's.
 ## D-146 — The account has a shape and registration is a session; the sending rules become restrictions
 
 > **Amended.** A restriction carries a channel (`sms` · `email` · `any`); a notice to a holder answers to `notification` restrictions only; every edit of the restriction set carries a reason (D-166).
+
+> **Amended.** Item 18: the `phoneCode` second step is enrolled by `begin` and `confirm`, bound to the number it was confirmed on, and stays off by default; item 17: the shipped restrictions gain `sms.resend` (1 per 3 minutes, sliding, marked `resend`), which judges and counts a send once whatever its languages, its one count released when every text of the send fails for good, when any text of a `secondfactor` send is reported delivered, or when its code is presented right or its link pressed (D-197).
 
 **Date:** 2026-09-17 · **Status:** accepted · **Amends:** D-006, D-009, D-011, D-012, D-013, D-027, D-031, D-035, D-039, D-055, D-114, D-144 · **Resolves:** review-4 M-5 and M-6 · **Renders:** new chapter `20-registration-and-account.md`
 
@@ -7892,6 +7908,8 @@ dashes) · `10` (sections 1, 3, 4.1a, 4.3, 5.15, 5a) · `11` (sections 3, 4, 7) 
 ## D-149 — Every design and code choice is fixed; the implementer decides nothing
 
 > **Amended.** Item 9: the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`, which `Janus.Storage` references at the version of `Microsoft.EntityFrameworkCore` (D-184).
+
+> **Amended.** Item 9: the framework OIDC client left the list (D-166 item 351); the analyser-authoring packages and `Microsoft.Testing.Platform` joined it; `StackExchange.Redis` and `Testcontainers.Redis` leave it; CONV-DESIGN-008's table is the list of record (D-197).
 
 **Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-135 (`InternalsVisibleTo` grants), CONV-LAYOUT-001 (Storage dependencies) · **Extends:** D-017, D-026.4, D-046, D-106
 
@@ -9009,6 +9027,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 > **Amended.** 382 (3): `Accepts` is added only where a route reads a typed body, not on the photo or the provider callbacks (D-188).
 
 > **Amended.** 328: the host's assurance report gives the instant each level and phishing resistance was last reached (`Aal1At`, `Aal2At`, `Aal3At`, `PhishingResistantAt`) beside `Reachable`, in place of `Level`, `PhishingResistant` and `AttainedAt`, and the gate is judged from it as a session is (D-191).
+
+> **Amended.** Item 114: the list is drawn by the script under `tools/leaked-passwords/`, run at each release by a manually dispatched workflow that Milestone 2 step 1 builds; item 235: a restriction marked `resend` judges and counts a send once, whatever the number of its languages (D-197).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -12786,6 +12806,8 @@ line); `10` section 1 (`config.value.notallowed`), section 4 (`token.signing.alg
 
 ## D-182 — Questions park their item, not the run; independent parts run in parallel
 
+> **Amended.** The last corrections run of Milestone 1: a Tier 2 question parks its item and is carried into Milestone 2 as a known issue, unanswered before the exit gate; a Tier 3 question is still answered at once (D-197).
+
 **Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-161 (item 4, as D-166 left it), D-166 (section B and rule X5, the stop at each question), D-167 (items 4 and 5)
 
 **TL;DR.** A Tier 2 or Tier 3 question is still written up, asked and never decided by the
@@ -12853,6 +12875,8 @@ rules and the stop conditions, the report); `08` the preamble, CONV-VCS-001, CON
 > **Amended.** Question 58: a fault of the library's own inside a sign-in is no failed attempt and is neither counted nor recorded (D-188).
 
 > **Amended.** Question 46: the truth table's step-up rows cover a bound action judged from the library's session too, and CONV-VCS-004 names that judgement as permission logic (D-192).
+
+> **Amended.** Question 36: at a sign-in a second step presented before any first factor is refused `auth.factor.notpermitted` before it is verified and before anything of the account is read, counting and recording nothing (D-197).
 
 **Date:** 2026-10-01 · **Status:** accepted · **Amends:** D-108 (the sensitive-data categories are no seeded table), D-166 (the items, rules and sections its D-183 note lists), D-171 (item 1, where the key ring is registered), D-176 (where the key ring and the mail server in use are registered)
 
@@ -13240,6 +13264,8 @@ REG-SESS-001, REG-SESS-003, REG-SESS-005, REG-SESS-007, REG-IDENT-007, REG-DOM-0
 
 ## D-184 — Corrections-4 question 67: the EF Core relational layer at EF Core's version, and the toolchain at its current releases
 
+> **Amended.** The analyser-authoring packages: `Microsoft.CodeAnalysis.CSharp` at 5.0.0, the compiler of SDK 10.0.100, and `Microsoft.CodeAnalysis.Analyzers` at 5.6.0 (D-197).
+
 **Date:** 2026-10-03 · **Status:** accepted · **Amends:** D-149 (item 9, the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`), D-046 and D-110 (two kinds of update are not taken one by one as they arrive) · **Extends:** D-149 (item 1, the SDK in `global.json` and the tool manifest)
 
 **TL;DR.** The provider `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3 asks for EF Core's
@@ -13615,6 +13641,8 @@ REG-SESS-005 (body, criterion 4), REG-MAIL-002 (body).
 
 > **Amended.** Question 83: a Hosting type reaches a member no public contract declares through an internal contract the owning project declares, never the implementation, and `AccessGate` implements the unscoped refusal itself; 93: the suite's step-up scenarios run on a deployment the host's factory builds with the suite's provider; 94: at a step-up the ask on `risk` is answered as `/auth/factor` answers it, 200 with `required` empty where the gate is already met, and no truth-table row is owed; 97, 98 and 118: every public member that carries such a name or identifier takes the type; 115: an undo is never refused for pending adds, whose verification judges the maximum again, 409 where verified identifiers fill the kind; 116: the sweep locks its candidates and judges again, and a press that finds no record is `auth.code.expired` and counted; 119: section 8's text gives `authz.restricted` to the modifying `/admin` routes and the step-up route lists the shape's refusals (D-188).
 
+> **Amended.** Question 94: a step-up judges step 1 against the strictest of the policy's gates, offers every combination that reaches the weakest of them, field by field, judges step 3 against that weakest gate, and answers `factorRequired` until the strictest is reached (D-197).
+
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-166 (X3, a decision on a value no one row holds is made under a lock on the value; 115 (2), the holder is an unkeyed hash; 209 (2), the UTS #46 checks; 265, the drift check's audit record; 306, what the sweep waits for and what it removes; section E item 4, what `AddJanus` registers), D-183 (questions 24 and 53, names and identifiers as value types; 25, both directions; 27, 38 and 63, a send's counters taken after the value locks too; 31, where an add is staged and the lock a value is judged under; 39, an invitation's erased value; 40, every site that raises an event; 46, the filter of an unmet step-up row and the suite's step-up scenarios; 50 and 51, the codes a section's text gives; 56, a token not yet valid; 57, the registrations that stay in Hosting)
 
 **TL;DR.** The library's own UTS #46 processing is nontransitional with every check of the
@@ -13941,6 +13969,8 @@ criterion 13).
 ## D-188 — Corrections-4 questions 127 to 160: the answers after D-186 and D-187 were built
 
 > **Amended.** Question 128: the rule covers the seams alone (the access gate, the key ring, the mail server in use), and the OIDC handlers stay in `Janus.Hosting` with `OidcService`; 130: the rules set aside are pinned by a test, not logged; 134: an authentication code presented right is spent whatever refusal follows, and the lock on the sign-in's address is judged after every factor's verification; 135: a fault at a step-up is no failed attempt either, and the codes that refuse a factor are listed; 136: the defence stands before the invitation is judged, and the range signal reads the whole address; 139: the report that completes an enrolment session is admitted for a restricted account; 140: a registration's set takes the security step's instant; 144: the run refuses an unbound case, the factory is optional, and the gate's values are the policy's; 145: the outcome AUTH-STEP-002 gives; 150: a row with no immediate attempt is due at its admission; 151: every code and press waits out the delay, and one refused as wrong, past its lifetime, naming nothing held or opening nothing is counted; 152: an undo onto a standing identifier is never refused for the maximum; 153: a repeated replace is a resend; 155: the cookie is refused once the rate limit admits the request; 156: the step-up refers to every refusal of a factor `/auth/factor` lists; 157: the enrolment session is no session on other routes, and ends at the export's report where its second step showed codes (D-189).
+
+> **Amended.** Question 145: what a step-up's ask offers, and whether any combination is left, is judged against the weakest of the policy's gates, field by field; with none left the ask is answered `complete` where the factors accepted on the challenge reach that gate, and otherwise `auth.stepup.required`; `required` is empty where the session meets the strictest (D-197).
 
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-186 (question 112, where the after-commit catch sits; question 114, a claim only on a due row, for a new send row's immediate attempt, and a send row's languages), D-187 (question 83, how a Hosting type reaches a member no public contract declares; question 93, how the suite sets its provider; question 94, what the ask answers where the session meets the gate, and no truth-table row; questions 97, 98 and 118, how far the value types reach; question 115, an undo against pending adds; question 116, the sweep against a resend and a press that finds no record; question 119, the codes the sections give the `/admin` routes and the step-up route), D-166 (382 (3), `Accepts` on a route that reads a raw body), D-183 (question 58, a fault is no failed attempt)
 
@@ -14958,6 +14988,8 @@ BFF-ERR-001 (body, new criterion 4), BFF-ABUSE-001 (body, criterion 4); `18` FE-
 
 > **Amended.** Question 221: a link's return whose session has ended finds no attempt and is answered 403 `auth.session.csrfinvalid`, so `auth.session.expired` is no longer listed for it; 225 and 226: at the sign-on's push every error is a fault, and at its exchange every error but `invalid_grant`, and an authorization response's `server_error` or `temporarily_unavailable`, the code a refusal carried inside being logged (D-194).
 
+> **Amended.** Question 218: the `phoneCode` credential is enrolled by `begin` and `confirm` and bound to the number it was confirmed on, which closes the enrolment gap recorded for the exit review (D-197).
+
 **Date:** 2026-10-05 · **Status:** accepted · **Amends:** D-192 (question 212, where a link's gate is asked, the codes a registration's return carries, what a provider that cannot be read is, that a navigation route binds no typed value, and that a fault on a navigation stays a fault; question 211, which credential a code names)
 
 **TL;DR.** Building D-192 raised eleven questions; none reverses it. A link's gate is
@@ -15100,6 +15132,8 @@ BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7
 
 > **Amended.** Question 234: an authorization response's `error` is logged only where it reads as RFC 6749 Appendix A.7 defines one and is at most 64 characters; any other value makes the return a refusal logged as `api.request.malformed` (D-196).
 
+> **Amended.** Question 229: at a sign-in a second step presented before a first factor is refused before it is verified, so `required` after a second step accepted first no longer arises (D-197).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-193 (question 221, a link's return after the session ended; questions 225 and 226, which answers at the sign-on's push and exchange are refusals), D-192 (question 212, a redirect's `error` carries only codes its route declares, and a link's return whose session has ended is answered 403)
 
 **TL;DR.** Building D-193 raised seven questions, each answered narrowly; one corrects a
@@ -15200,6 +15234,8 @@ BFF-SESS-006 (body), BFF-ERR-001 (body, criterion 5).
 
 > **Amended.** Question 239: an identity token that carries no session identifier in `sid` is a fault too, and one whose `sid` names a session not found is a refusal, as one ended; 241: a fault of the sign-on is logged at Error and at no other level, and its log names what failed, the faults of a secret or keys that cannot be read, or of a token that does not hold up, carrying what the read or the validation failed with, and a client in no registry and a token carrying no session identifier in `sid` each adding an entry at Error; 242: an entry left with no writer is removed, entry 10 now, and neither its event identifier nor its event name is ever given to another entry of its class (D-196).
 
+> **Amended.** Questions 236 and 238: a second step can no longer be accepted before a first factor at a sign-in, so "a second step accepted on it or not", and `required` after one, no longer arise (D-197).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-194 (question 229, `required` after a second step accepted first applies to a presenting call alone; questions 233 and 234, the sign-on's remaining failures and what a refusal and a fault log)
 
 **TL;DR.** Building D-194 raised seven questions, each answered narrowly. At a sign-in, an
@@ -15275,6 +15311,8 @@ carry the full rule.
 ---
 
 ## D-196 — Corrections-4 questions 243 to 247: the answers after D-195 was built
+
+> **Amended.** Question 247: the framework's request log is answered: `AddJanus` sets `Microsoft.AspNetCore.Hosting.Diagnostics` to Warning, and a host that enables it at Information, or disables it in every provider, fails startup with `model.startup.requestlogging` (D-197).
 
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-195 (question 239, an identity token carrying no session identifier in `sid`; question 241, the level a fault of the sign-on is logged at and what names the failure; question 242, the log entries left with no writer), D-194 (question 234, an authorization response's `error` in the log)
 
@@ -15391,6 +15429,300 @@ reached it is now a 202, so no sign-in test is owed, and the step-up tests hold 
 (body, new Source line); `09` `GET /auth/signon` · `GET /auth/signon/return`; `10`
 `auth.session.expired`, `api.request.malformed`; `11` section 7.5; `17` BFF-SESS-006
 (body), BFF-ERR-001 (body, criterion 5).
+
+---
+
+## D-197 — The Milestone 1 review: the owner's decisions and the last corrections run
+
+**Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-146 (item 18, the `phoneCode` second step: its enrolment; item 17, the shipped restrictions gain `sms.resend`), D-193 (question 218, the enrolment gap closed and the number bound), D-196 (question 247, the framework's request log), D-195 (questions 236 and 238, a second step accepted before a first factor no longer arises), D-194 (question 229, a second step presented before a first factor at a sign-in), D-188 (question 145, what a step-up's ask offers), D-187 (question 94, what a step-up offers), D-184 (the analyser-authoring packages), D-183 (question 36, where `auth.factor.notpermitted` is judged), D-182 (the last corrections run's questions), D-166 (item 114, where the leaked-password draw runs; item 235, a `resend` restriction counts a send once), D-149 (item 9, the permitted packages), D-141 (item 5, a suspension no cancel returns), D-092 (L3, a cache outage), D-079 and D-043 (the permission cache), D-033 (33.1, staff lifetimes), D-013 (the resend window), D-007 (the session record held in PostgreSQL alone)
+
+**TL;DR.** The run that built D-196 raised no question, so the Milestone 1 review ran: the
+report against the decisions, the code against the chapters it builds, every acceptance
+criterion against a test, and the open points kept for the review. The owner decided three
+things. The `phoneCode` second step gets its enrolment (`begin` and `confirm`, as TOTP
+has), bound to the number it was confirmed on, and stays off by default until a host's
+policy enables it. A text to a number waits 3 minutes after the last one, or less where
+the last one fails to go out, or, for a second-step code, is reported delivered; a
+delivered report shortens the wait for no other text, because for a sign-in link, a
+recovery link or a registration's code an early release would tell an asker that a text
+went out, and so whether the number has an account (AUTH-ABUSE-003). And the corrections
+run this entry opens is Milestone 1's last: a Tier 2 question it raises is parked and
+carried as a known issue into Milestone 2, never answered by a new round; a Tier 3
+question is still answered at once. The review found that WebAuthn is verified by
+hand-written code instead of the package CONV-DESIGN-008 names, skipping most of WebAuthn
+Level 3's checks and refusing the default EdDSA; that a security key held as a second step
+can never be asked for, since no answer names its credential; that about 350 acceptance
+criteria have neither a test carrying their identifier nor a record of why; that a sign-in
+verifies a second step presented before any first factor; that the framework's own request
+log writes a navigation's `code` and `state`; and that a step-up cannot offer password
+plus TOTP once any gate of the policy asks phishing resistance. Each is answered below,
+with nine small gaps. Redis leaves version 1.
+
+**The questions.** None: the run reported no question. What follows is the review and the
+owner's answers to what it brought him.
+
+**The owner's decisions.**
+
+- **The `phoneCode` second step gets its enrolment.** A person enrols it as TOTP is
+  enrolled, in two calls: `POST /account/factors/phonecode/begin` names one of the
+  account's verified phone identifiers and a label, asks the number's SIM-change signal
+  (AUTH-FACT-002b criterion 6; on `risk` nothing is sent and `begin` is refused
+  `auth.factor.notpermitted`) and texts a code to that number;
+  `POST /account/factors/phonecode/confirm` presents the code, and a right one makes the
+  credential active; a wrong one is refused `auth.code.invalid` and counts against the
+  code's own `code.signin.attempts` and nothing else. The credential is bound to the
+  number it was confirmed on, and every `phoneCode` code from then on is texted to that
+  number, never to the primary phone as built. The number leaving the account (its
+  identifier removed, or its value replaced) takes the credential out of use at once, so
+  that, as NIST SP 800-63B-4 section 3.1.3.3 requires, a change of the number is the
+  binding of a new authenticator: an active credential is removed where that leaves the
+  account's reachable assurance unchanged, and otherwise suspended and invalidated after
+  `recovery.invalidation.window`, as AUTH-RECOV-007's removal of an authenticator is, and
+  one a loss report or an assurance-lowering removal has already suspended stays
+  suspended, keeping its invalidation instant. From then on no cancel returns it to
+  `active`: a suspended one is notified when the number leaves and then on its
+  suspension's schedule by a new message kind, `credential-unbound`, carrying no link,
+  `GET /account/credentials` lists it as not `cancellable`, and a cancel of it is answered
+  404 `auth.credential.notfound`; a right code sent to the number before it left is
+  refused as one sent to an address given up since (AUTH-FACT-004); a pending enrolment
+  bound to the number ends with it and no undo revives it, `begin` and `confirm` judging
+  the number under the identifier's row lock, which every writer that removes or displaces
+  the number takes; a `begin` whose signal did not answer `risk` and whose identifier no
+  longer holds the number it read before its unit of work began is refused
+  `identity.identifier.invalid`; and an ask at a sign-in or step-up judges under the same
+  lock, once the signal has answered, that the credential is still active and its number
+  still the account's, and otherwise sends nothing and is answered
+  `auth.credential.suspended` where the credential is now suspended, or as at `risk`. An
+  undo of that change restores the number, never the credential. Confirming retires any
+  other `phoneCode` credential of the account in the same unit of work, since an account
+  holds one at most (D-193), and the label is judged without the credential it retires.
+  `phoneCode` stays off by default in `loginFactors` (D-146), and `begin` is refused where
+  the policy in force does not permit it. The rest is the shape every enrolment has: the
+  `factor:enrol` gate (AUTH-STEP-007), refusal on an account with no password
+  (AUTH-FACT-002b), the restricted account and break-glass refusals, the send judged by
+  the restrictions, and notice to every recorded channel but the enrolling session. It is
+  not offered at registration's security step, since it names a phone identifier of an
+  account that exists. *Rejected:* taking `phoneCode` out of version 1 (the owner's
+  choice); texting the primary phone (a change of the primary would move the factor to
+  another number with no binding).
+- **A text to a number waits for the last one.** The shipped restrictions gain
+  `sms.resend`: key `destination`, purpose `any`, channel `sms`, one bucket of 1 per 3
+  minutes, sliding, marked `resend`. A restriction marked `resend` times sends rather than
+  texts: it judges and counts a send once, whatever the number of languages it goes out in
+  (AUTH-ABUSE-004, every declared language). That one count is released when every text of
+  the send fails for good, a failure report being one way (AUTH-ABUSE-004); for a send of
+  purpose `secondfactor`, also when any text of it is reported delivered; and, for any
+  send, when its code is presented right or its link pressed, which proves the text
+  arrived and tells the asker nothing new. A delivered report releases nothing else,
+  because an ask of a sign-in link, a recovery or a held value's code sends nothing and
+  yet counts (AUTH-ABUSE-004, an ask that sends nothing), so a count released by delivery
+  would show an asker that a text went out. A failure report of one text still releases
+  that text's count from every other restriction. The 3 per 24 hours of `sms.destination`
+  stands. A refused send's `retryAt` is the earliest instant at which every bucket it
+  exceeds has room for it, which the frontend shows as the wait (AUTH-ABUSE-002).
+  *Rejected:* a delivered report releasing the wait for every send (it would tell anyone
+  whether a number has an account); counting `sms.resend` per text (with two declared
+  languages every send would weigh 2 against its 1 and none would ever pass).
+- **This is the last corrections run of Milestone 1.** After it come the review of its
+  report and the exit gate. A Tier 2 question it raises parks its item as the working
+  guide says, and the report lists it under known issues; `implementation-plan.md` section
+  4 carries those into Milestone 2, and that accounts for the parked item's criteria at
+  the exit gate. It gets no answer before the exit gate, and release 1.0.0 (Milestone 2
+  step 12) waits until each known issue is answered by a decision and built or deferred. A
+  Tier 3 question is reported at once and answered, since a known security defect does not
+  ship. *Rejected:* a round of answers for every batch (the loop the owner stopped).
+
+**What the review found in the build.**
+
+- **WebAuthn is verified by the package the chapters name.** CONV-DESIGN-008 names `Fido2`
+  (Fido2NetLib) for WebAuthn and CONV-CODE-007 forbids deriving a primitive a permitted
+  package provides, but no project references it: the ceremonies are checked by hand from
+  the browser's `getPublicKey()` key, with no attestation object, and of WebAuthn Level 3
+  sections 7.1 and 7.2 they skip `crossOrigin` and `topOrigin`, the attestation object and
+  statement, the binding of the stored credential identifier and key to the attested
+  credential data, the BE and BS checks and the backup state's update, the credential
+  identifier's length and the extensions; they refuse EdDSA, the first algorithm of the
+  default list, so an authenticator that chooses it fails enrolment; and they admit
+  `webauthn.origins` alone, though AUTH-FACT-010 matches related origins too. No decision
+  records the choice. Both ceremonies move onto `Fido2`: `begin` answers the options it
+  builds, attestation conveyance `none`; `complete` takes `credential`, the
+  `RegistrationResponseJSON` that `PublicKeyCredential.toJSON()` gives (WebAuthn Level 3
+  section 5.1), and an assertion is the `AuthenticationResponseJSON` it gives, as a JSON
+  object. The package verifies the attestation statement of a format it knows, none being
+  required to chain to a trust anchor (AUTH-FACT-014), and the steps of sections 7.1 and
+  7.2 it leaves to its caller are the library's: client data whose `crossOrigin` is true
+  is refused, an assertion whose BE flag differs from the stored `backupEligible` is
+  refused, extension outputs the library did not ask for are ignored, and each assertion
+  stores the counter and `backupState` the package returns. The credential's public key
+  and transports are stored as the attested credential data and the response give them;
+  nothing is released, so no stored credential is converted. `Fido2` brings
+  `NSec.Cryptography`, which verifies EdDSA. A refusal at a step the verification adds is
+  `auth.factor.rejected`, and every other refusal keeps the code it has today. *Rejected:*
+  completing the hand-written verifier (it would rebuild the package the chapters chose,
+  against CONV-CODE-007); dropping EdDSA from the default (the default is the three
+  algorithms every major provider produces, AUTH-FACT-014).
+- **A security key held as a second step can be asked for.** It is a non-discoverable
+  credential (AUTH-FACT-002b), which an authenticator answers only where the request names
+  it, yet no answer names one: `POST /auth/begin` names none, rightly, since a credential
+  named there would disclose the account (AUTH-ABUSE-003), and nothing does after. A
+  `factorRequired` answer that offers `securityKey`, at a sign-in once a first factor is
+  accepted or at a step-up once a factor has been presented on its challenge, now carries
+  `webauthn`, the request options for the challenge, with `userVerification` `required`
+  and `allowCredentials` naming each of the account's active second-factor security keys
+  by credential identifier and transports, and, at a step-up that also offers `passkey`,
+  each of its active passkeys, so that a passkey can still answer. At a step-up a security
+  key is presented after another factor of its combination.
+- **Every acceptance criterion is accounted for.** The exit gate asks a passing test
+  carrying the identifier of every acceptance criterion of chapters 01 to 10, 17 and 20
+  and of the code-side items of 06, 12 and 19, a criterion no test can decide being named
+  in a report with how it was verified (CONV-TEST-007). Matching test names and report
+  tables against the chapters finds about 350 criteria with neither, about 280 of them in
+  chapters 01 to 09, 17 and 20 and the rest in 12 and 19, most of those Milestone 2's:
+  some are tested under another item's name or under the wrong criterion number, some are
+  Milestone 2 by the plan, some are untested. The run accounts for every one: a test
+  carrying its identifier, an existing test renamed to carry it, a row of the report's
+  table of criteria a test cannot decide, a line naming it Milestone 2 by
+  `implementation-plan.md` section 3, or a known issue section 4 carries; and writes the
+  tests that are missing.
+
+**What the review found in the chapters.**
+
+- **A second step presented before a first factor at a sign-in.** It was verified, so a
+  caller who knows no password could test second-step codes and learn what the account
+  holds, which `09` `POST /auth/begin` keeps from a caller not yet authenticated. At a
+  sign-in a second step is accepted only once a first factor has been accepted on the
+  challenge; one presented before is refused 422 `auth.factor.notpermitted` before it is
+  verified and before anything of the account is read, the same answer for every
+  identifier, counting and recording nothing, since nothing was judged. D-194's `required`
+  after a second step accepted first falls with it, and a `phoneCode` ask before a first
+  factor stays a 202 (AUTH-FACT-002 criterion 8). *Rejected:* verifying it and refusing
+  after (the answer would differ by what the account holds).
+- **The framework's request log.** ASP.NET Core's own entries for a request ("Request
+  starting" and "Request finished", category `Microsoft.AspNetCore.Hosting.Diagnostics`,
+  at Information) carry the request's query string, which on a navigation's return holds
+  an authorization `code` and `state` (CONV-LOG-003, BFF-ERR-001). `AddJanus` sets that
+  category's minimum level to Warning, which keeps the request scope carrying `RequestId`
+  (CONV-LOG-002), opened while the category is enabled at any level. A host whose logging
+  still enables the category at Information, through any provider, fails startup with the
+  new code `model.startup.requestlogging`, and so does one whose logging disables it in
+  every provider, which would drop that scope. *Rejected:* a note to hosts alone (a
+  default host writes the query).
+- **A step-up offers what any gate accepts.** A step-up names no action, so it offered
+  only the combinations that reach the strictest of the policy's gates (D-187 question
+  94). Where one gate asks phishing resistance, password plus TOTP was never offered, and
+  a person holding only those could pass no `aal2` gate, against AUTH-STEP-008 invariant
+  3. At a step-up, step 1 judges the session against the strictest of the policy's gates,
+  field by field, as before; step 2 offers every combination that reaches the weakest of
+  them, field by field, and step 3 judges against that weakest gate, whose values a
+  refusal of the step-up carries; and the step-up answers `factorRequired` until the
+  strictest is reached and `complete` once it is or once no combination still offered can
+  be completed. The request is judged again by its own gate when it is repeated, as before
+  (D-191). *Rejected:* the step-up naming its gate in its request (a change to the
+  request's shape where the offer alone was wrong).
+- **Redis leaves version 1.** No project references a cache client, and nothing needs one:
+  sessions, challenges, counters and grants are read from PostgreSQL, and the permission
+  cache lives for one request. `StackExchange.Redis` and `Testcontainers.Redis` leave the
+  permitted packages, the cache leaves the host's declaration and the extension points,
+  the integration tests run against PostgreSQL alone, AUTH-SESS-001 reads its record from
+  PostgreSQL, and a cache in front of PostgreSQL (INF-CACHE-001) is deferred until session
+  or permission reads are among the slowest queries the deployment measures.
+- **The analysers load in every .NET 10 SDK.** A compiler older than the one the analysers
+  were built against refuses them (CONV-DESIGN-008), and a host may build with any .NET 10
+  SDK. `Microsoft.CodeAnalysis.CSharp` is referenced at 5.0.0 (published 2025-11-18), the
+  compiler of SDK 10.0.100, the first .NET 10 SDK (released 2025-11-11);
+  `Microsoft.CodeAnalysis.Analyzers` stays at 5.6.0, since it checks the analysers' own
+  code in the library's build and is no dependency of the package. Their row admits the
+  analysers' test project too, which references `Microsoft.CodeAnalysis.CSharp` to compile
+  the code it tests.
+
+**Small gaps.**
+
+- The host's required values are eighteen, six of them conditional, not eleven and three
+  (`implementation-plan.md` section 2); `10` section 4 reads "a conditional one" where it
+  read "the conditional one", and LIB-HOST-001 lists `service.name` and
+  `password.blocklist.selfhosted.address` with the others.
+- `janus-explained.md` called three settled points open (a username after erasure, an
+  existing account accepting an invitation, the domain lock's re-check); they read as its
+  section 11 settles them.
+- REG-SESS-002 criterion 2 lists the verification-code records a registration writes
+  (AUTH-FACT-004).
+- A replaced OIDC client secret's overlap end is stored at its replacement, and the secret
+  is removed at the first read of the client's secrets after that end, as a retired
+  signing key's private key is (OPS-SEC-002, AUTH-KEY-001).
+- `token.signing.rotation` has a floor of one day, and lengthening it is the loosening.
+- Every `Janus.Cli` command reports as `bootstrap` does: exit code 0, or 1 with one JSON
+  line on standard error.
+- AUTH-SESS-005's staff lifetimes are the deployment's, through `session.aal2.*`; no
+  organization holds lifetimes of its own.
+- A grant a person, an acknowledgement or bootstrap creates is audited
+  `authz.grant.created`, and a revocation a person makes `authz.grant.revoked`
+  (AUTHZ-GRANT-003).
+- A repeated identifier add from a session other than the one that staged it stages it
+  afresh, as a replace does (REG-IDENT-004, D-190 question 199).
+
+**Known issue for Milestone 2.** A social-only session downgraded since it reached
+`delegated` (AUTH-SESS-009) cannot meet a `delegated` gate by a step-up, which offers no
+social credential, and step 3 answers it `report-loss`; the way out is a new sign-in with
+the provider, which no chapter states. `implementation-plan.md` section 4 carries it, and
+AUTH-STEP-008 points to it.
+
+**What the run reported besides.** An empty `error` beside a `code` is a value that does
+not read, as built (D-196). The changelog line that records removing entry 10 is taken
+out: until a version is released the changelog records what the first version holds, under
+`Added` alone (CONV-VCS-005). The sign-on test helper's assertion on entries 10 and 11,
+which can no longer fail, is removed. No guard on the family of the code a secret's or
+keys' fault carries is owed (D-196 question 246). The four phase 10 defects the review
+found no later report naming were answered by D-166 (its section on the phase 10 report).
+
+**Records.** The leaked-password list (D-166 item 114) is drawn by the script under
+`tools/leaked-passwords/`, which streams the ranges and keeps a running top 100,000, run
+at each release by a manually dispatched workflow on a hosted runner that Milestone 2 step
+1 builds, the list taken from the run's artifact; the first draw was run locally on
+2026-09-26 with the owner's leave. D-149 item 9's list is CONV-DESIGN-008's table: the
+framework OIDC client left it (D-166 item 351), the analyser-authoring packages and
+`Microsoft.Testing.Platform` joined it, and Redis leaves it now.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `00` section 2.1 (the stack), section 2.2, section 7.3 (a cache
+deferred), section 8 (Restriction); `02` AUTH-PRIN-001 (criterion 1), AUTH-FACT-001 (body,
+criterion 6), AUTH-FACT-002 (values, new enrolment paragraph, criteria 6 to 8, new 9 to
+11), AUTH-FACT-002b (body, criterion 6, new criteria 7 and 8), AUTH-FACT-004 (body,
+criteria 6 and 7), AUTH-FACT-014 (new verification paragraph, new criteria 6 to 8),
+AUTH-SESS-001 (body, criterion 2), AUTH-SESS-005 (body, criterion 6), AUTH-SESS-005b
+(body), AUTH-STEP-002 (steps 2 and 3, the refusal at a sign-in, criteria 3, 4a, 4b, new
+4f, 6), AUTH-STEP-008 (the known issue), AUTH-RECOV-007 (body, the notices, the values of
+D-190, criteria 2 and 3), AUTH-ABUSE-001 (what a sign-in's refused factors count),
+AUTH-ABUSE-004 (body, shipped defaults, criteria 1, 2 and 16, new criterion 20); `03`
+AUTHZ-GRANT-003 (body, new criterion 6), AUTHZ-CACHE-001 (body); `05` INT-GEN-003 (body,
+criterion 2), INT-SMS-005 (body, criterion 3); `06` OPS-SEC-001 (the command line's
+refusals), OPS-CFG-004 (criterion 3), OPS-SEC-002 (body, criterion 3); `07` LIB-HOST-001
+(connection details, password screening sources, the kinds of declaration), LIB-EXT-001
+(the cache); `08` CONV-LAYOUT-001 (`tools/leaked-passwords`), CONV-DESIGN-008 (the cache,
+WebAuthn, analyser and test rows, criterion 1), CONV-TEST-002 (the integration row),
+CONV-LOG-005 (values); `09` API-CONV-002 (`retryAt`), `POST /recovery/report-loss` · its
+cancel, `POST /auth/factor`, `POST /auth/step-up`, `POST /auth/webauthn/register/begin` ·
+`complete`, `POST /account/identifiers`, `POST /account/identifiers/{id}/verify`,
+`DELETE /account/identifiers/{id}`, its undo, `PUT /account/identifiers/{id}/replace`,
+`GET /account/credentials` (`invalidatesAt`, `cancellable`),
+`POST /account/factors/phonecode/begin` · `/confirm` (new), `GET /admin/restrictions` ·
+`GET|PUT|DELETE /admin/restrictions/{name}`, section 10 (delivery reports, criterion 2);
+`10` `identity.identifier.invalid`, `auth.code.expired`, `auth.factor.notpermitted`,
+`auth.credential.suspended`, `auth.lossreport.pending`, `auth.factor.rejected`,
+`auth.factor.passwordrequired`, `auth.restriction.exceeded`,
+`model.startup.requestlogging` (new), section 4 (the required values, Direction,
+`restrictions`, `sms.resend`, `code.signin.lifetime`, `code.signin.attempts`,
+`notification.languages`, `recovery.invalidation.window`,
+`recovery.invalidation.noticeinterval`, `token.signing.rotation`), section 5.16a (new),
+section 5.24 (`auth.authentication.failed`, `authz.grant.created`, `authz.grant.revoked`),
+section 5.25 (`secondstep-code`, `credential-suspended`, `credential-unbound` new),
+section 5b (`CredentialSuspended`); `13` R-A12, R-A18, R-M02, R-M11; `15` section 3.2 (a
+SIM swap), section 4 (provider callbacks); `17` BFF-MACH-003 (body, criterion 1),
+BFF-LOG-002 (body, new criterion 4); `18` FE-API-004 (body, criteria 2 and 6), FE-SEC-001
+(body, new criterion 7); `19` INF-TLS-004, INF-CACHE-001 (deferred), section 9; `20`
+REG-IDENT-004 (body, new criterion 8), REG-IDENT-006, REG-IDENT-007, REG-SESS-002
+(criterion 2), REG-SESS-006; `implementation-plan.md` (the opening, sections 1 to 4);
+`janus-explained.md` (sections 2, 3.1, 3.2, 7.3, 8.2 and 9).
 
 ---
 
@@ -15600,6 +15932,7 @@ reached it is now a 202, so no sign-in test is owed, and the step-up tests hold 
 | Corrections-4 questions 229 to 235: the answers after D-193 was built | D-194 |
 | Corrections-4 questions 236 to 242: the answers after D-194 was built | D-195 |
 | Corrections-4 questions 243 to 247: the answers after D-195 was built | D-196 |
+| The Milestone 1 review: the owner's decisions and the last corrections run | D-197 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
@@ -15650,3 +15983,4 @@ Per P-003 — nothing deferred silently.
 | District-level boundary polygons (D-061) | If city-level preselection proves too coarse |
 | Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
 | Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
+| A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |

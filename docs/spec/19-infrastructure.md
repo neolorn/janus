@@ -125,13 +125,15 @@ rejected at startup.
 report arrives over plain HTTP with parameters in the query string. Confirm whether the
 gateway supports an HTTPS callback URL; **if it does, use it and this exception
 lapses.** This confirmation is the set's one open item (R-A12, §11), closed when the
-gateway integration is built. If it does not, that single path is exempt from INF-TLS-001, and the
-compensating controls are the unguessable reference, rate limiting, and the fact that
-the callback advances no authoritative state (BFF-MACH-003).
+gateway integration is built. If it does not, that single path is exempt from
+INF-TLS-001, and the compensating controls are the unguessable reference, rate limiting,
+and the fact that the callback advances no authoritative state save the releases
+INT-SMS-005 allows, each of which can only make a person less restricted (BFF-MACH-003,
+D-197).
 
 The report carries a delivery status against an opaque reference and no personal data.
 
-*Source: D-092*
+*Source: D-092, D-197*
 
 *Source: INT-GEN-001, D-162, D-166*
 
@@ -312,16 +314,9 @@ only.
 
 ## 5. Cache
 
-**INF-CACHE-001** — Redis SHALL be available for session and permission caching, and
-its loss SHALL degrade rather than deny.
-
-*Source: AUTH-SESS-001, AUTHZ-CACHE-001*
-
-PostgreSQL holds the durable copy. Losing the cache costs latency, not access.
-
-**Acceptance criteria**
-1. Flushing the cache does not sign anyone out.
-2. Sessions reload from the durable store.
+**INF-CACHE-001** — *Deferred by D-197. Version 1 runs without a cache: every record is
+read from PostgreSQL. A cache returns, as an item of its own, when session or permission
+reads are among the slowest queries the deployment measures.*
 
 ---
 
@@ -490,6 +485,7 @@ Recorded so they are decisions rather than surprises.
 | Warm standby | When a day's downtime costs more than a second host | D-044 |
 | Object storage | Customer photos, or any large artifact | D-060 |
 | Separate hosts per application | When host compromise becomes a threat worth defending | INF-HOST-002 |
+| A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001) | When session or permission reads are among the slowest queries the deployment measures | D-197 |
 
 ---
 

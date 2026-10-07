@@ -510,7 +510,7 @@ break-glass session (AUTH-STEP-004).
 This list and `10` section 4.8 are the same list; a key marked protected in `10`
 appears in both or in neither (D-152).
 
-*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176, D-181*
+*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176, D-181, D-197*
 
 The selection test is not "how sensitive is this setting" but **"does turning this
 off blind us to the person turning it off."** The governing language is protected on a
@@ -533,7 +533,8 @@ section 4.8 are one (D-152).
    `config.value.notallowed` (`token.signing.algorithm` admits `ES256` alone,
    AUTH-KEY-001); a change that the start's own checks would refuse (the relying-party
    rule, the endpoint rule of INT-GEN-001, the client registry) is refused with their
-   code; nothing of a refused change is written.
+   code; nothing of a refused change is written, and a refusal is reported as every
+   `Janus.Cli` command reports one (OPS-SEC-001).
 
 ---
 
@@ -1281,9 +1282,12 @@ from one JSON document on standard input, the same document the secret source se
 SHALL refuse to run where standard input is a terminal, SHALL take none of them as an
 argument, a file or an environment variable, and SHALL clear every key when it ends. A
 command the executable does not carry is refused with one JSON line
-`api.request.malformed` naming it on standard error, and exit code 1.
+`api.request.malformed` naming it on standard error, and exit code 1. Every `Janus.Cli`
+command exits 0 on success and 1 on a refusal, writing the refusal as one JSON line
+`{"code": ..., "details": {...}}` on standard error and nothing on standard output, as
+`bootstrap` does (OPS-BOOT-001, D-197).
 
-*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183*
+*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197*
 
 **Acceptance criteria**
 1. No secret value appears in any repository file or image layer.
@@ -1319,18 +1323,22 @@ the ceiling of `session.default.absolute` (AUTH-KEY-001).
 
 **Client secrets (D-166).** The library generates the secret of every client in the
 registry when the client is registered (32 random bytes, base64url), holds it wrapped
-under the deployment's data key (PRIV-RIGHT-005a) as it holds a signing key, and
-rotates it with the signing keys: the first read of a secret issued
-`token.signing.rotation` ago or more replaces it, and the replaced secret is accepted
-for `oidc.accesstoken.lifetime` plus 5 minutes. The library's own client middleware
-reads its application's current secret from the registry at each code exchange
-(BFF-SESS-006) and at each provider probe of the conformance suite (LIB-TEST-001, D-172). No deployment supplies, stores or restarts for a client secret, and no
-sign-on secret exists; the key-encryption key's rotation re-wraps the key it sits
-under (OPS-SEC-003). A provider credential that expires is renewed by the library
-where the provider lets the client sign it (IDN-LIFE-012); no calendar renewal is a
+under the deployment's data key (PRIV-RIGHT-005a) as it holds a signing key, and rotates
+it with the signing keys: the first read of a secret issued `token.signing.rotation` ago
+or more replaces it, and the replaced secret is accepted for `oidc.accesstoken.lifetime`
+plus 5 minutes. At the replacement, the end of the replaced secret's overlap is stored
+beside it, and no later change of a setting moves it; the replaced secret and that end
+are removed at the first read of the client's secrets after that end, as a retired
+signing key's private key is (AUTH-KEY-001, D-181, D-197). The library's own client
+middleware reads its application's current secret from the registry at each code
+exchange (BFF-SESS-006) and at each provider probe of the conformance suite
+(LIB-TEST-001, D-172). No deployment supplies, stores or restarts for a client secret,
+and no sign-on secret exists; the key-encryption key's rotation re-wraps the key it sits
+under (OPS-SEC-003). A provider credential that expires is renewed by the library where
+the provider lets the client sign it (IDN-LIFE-012); no calendar renewal is a
 maintenance task.
 
-*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181*
+*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181, D-197*
 
 **Acceptance criteria**
 1. Rotation completes without restart or manual action.
@@ -1339,7 +1347,8 @@ maintenance task.
    until the end of the key's keeping (AUTH-KEY-001 criteria 2 and 6).
 3. A client secret older than `token.signing.rotation` is replaced at its next use with
    no restart and no command, and the secret it replaced authenticates the client until
-   `oidc.accesstoken.lifetime` plus 5 minutes have passed.
+   `oidc.accesstoken.lifetime` plus 5 minutes have passed, and is removed from storage
+   by the first read of the client's secrets after that.
 4. No client secret is held in the clear in the database, the secrets manager,
    configuration or a command's arguments.
 

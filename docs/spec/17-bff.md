@@ -574,7 +574,9 @@ does not match the signed bytes.
 ---
 
 **BFF-MACH-003** — Where signing is **not available**, the callback SHALL be treated as
-a **hint that triggers verification against the provider's API** — never as a fact.
+a **hint that triggers verification against the provider's API** — never as a fact. The
+SMS delivery report is the exception: the releases INT-SMS-005 allows are made
+unconfirmed, since each can only make a person less restricted (INT-SMS-005, D-197).
 
 **Values (D-153).** The endpoints accept `integration.callback.ratelimit` requests per
 source per minute; `alerting.callback.threshold` rejected callbacks from one source in
@@ -584,21 +586,22 @@ it; the host's route is reached only once the host's confirmation succeeds.
 `ICallbackReferences` is a seam, not an operation of LIB-API-005: it joins the host's
 transaction, so it has no endpoint and takes no access context.
 
-*Source: D-070, INT-GEN-003, D-166*
+*Source: D-070, INT-GEN-003, D-166, D-197*
 
 Of the library's own callbacks, the SMS gateway calls over plain HTTP with parameters in
 the query string, which cannot carry a signature meaningfully (R-A12). A host records
 for each of its own processors whether it signs.
 
-**This is the primary control for unsigned callbacks**, not a secondary one. A record
-is not advanced because something said so; the provider is asked.
+**This is the primary control for unsigned callbacks**, not a secondary one. A record is
+not advanced because something said so; the provider is asked, save the releases
+INT-SMS-005 allows.
 
 Supporting controls: unguessable correlation references, rate limiting, and source
 restriction where the provider publishes ranges.
 
 **Acceptance criteria**
-1. No unsigned callback advances authoritative state without independent
-   confirmation.
+1. No unsigned callback advances authoritative state without independent confirmation,
+   save the releases of INT-SMS-005.
 2. A forged callback with a guessed reference is rejected and logged.
 3. Repeated verification failures raise an alert.
 
@@ -844,7 +847,18 @@ Body logging is off for a marked endpoint whatever the setting. Every endpoint t
 library maps carries the mark. A request whose endpoint is not known when the request
 logging reads it is treated as marked. The library turns no body logging on.
 
-*Source: CONV-LOG-003, PRIV-SENS-001, D-166*
+**The framework's request entries (D-197).** The server's own entries for each request
+("Request starting" and "Request finished", category
+`Microsoft.AspNetCore.Hosting.Diagnostics`, at Information) write the request's query
+string, which on a navigation's return carries an authorization `code` and `state`
+(CONV-LOG-003, BFF-ERR-001). `AddJanus` sets that category's minimum level to Warning,
+which keeps the request scope that carries `RequestId` (CONV-LOG-002), opened while the
+category is enabled at any level; a host whose logging still enables the category at
+Information, through any provider, fails startup with `model.startup.requestlogging`,
+and so does a host whose logging disables the category in every provider, which would
+drop the scope carrying `RequestId`.
+
+*Source: CONV-LOG-003, PRIV-SENS-001, D-166, D-197*
 
 A marked body carries data the host has declared sensitive. Body logging at the
 boundary is the most likely place for it to leak, because it looks like ordinary
@@ -854,6 +868,11 @@ diagnostics.
 1. Body logging is off by default and cannot be enabled for a marked endpoint.
 2. A test asserts no log entry contains a field of a marked endpoint's body.
 3. A request logged before its endpoint is known has no body in any log entry.
+4. With `AddJanus` and no other logging rule, no entry of category
+   `Microsoft.AspNetCore.Hosting.Diagnostics` is written at Information and every
+   request's entries still carry `RequestId`; a host rule enabling that category at
+   Information, or disabling it in every provider, fails startup with
+   `model.startup.requestlogging`.
 
 ---
 

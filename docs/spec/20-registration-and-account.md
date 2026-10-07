@@ -183,9 +183,13 @@ identifier again (D-187). A resend of a code holds the pending verification's ro
 (`SKIP LOCKED`) and judges each again before it deletes, so a resend in flight keeps its
 record (D-188); a repeated add whose pending verification is gone under that lock
 proceeds as a fresh add, judged under the value's lock and against the maximum, staged
-and its code sent (D-189).
+and its code sent (D-189). A repeated add naming the value already pending is a resend
+only from the session that staged it; from any other session it stages the add afresh
+for the asking session, the records staged before it answering nothing from then on,
+each new one a send the restrictions count, as a replace does (REG-IDENT-007, D-190,
+D-197).
 
-*Source: D-146, D-166, D-187, D-188, D-189; amends D-035*
+*Source: D-146, D-166, D-187, D-188, D-189, D-197; amends D-035*
 
 **Acceptance criteria**
 1. `POST /account/identifiers` without step-up at the gate's level returns the step-up
@@ -205,6 +209,9 @@ and its code sent (D-189).
 7. Two accounts that add one value no account holds and each present their code end with
    one identifier, on the account that verified first; the second presentation writes
    nothing and is answered 422 `auth.code.expired`, its pending add left to the sweep.
+8. A repeated add naming the pending value from another session stages it afresh for
+   that session: the codes and links sent before it answer nothing, and a press of the
+   new link verifies only in the asking session's browser.
 
 ---
 
@@ -257,15 +264,19 @@ is reserved to (an add's verification, a replace's swap, a corporate address tak
 an acknowledgement) ends the reservation, and the undo is then answered as one past its
 window (422 `identity.change.windowelapsed`). A sign-in link or email code sent to the
 identifier before its removal SHALL NOT sign in; it is refused with
-`auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is removed,
-and every session of the account SHALL end at an undo, which completes under no session
-(IDN-LIFE-008, D-190). A pending add listed on the account (REG-IDENT-004) is not an
-identifier this item removes: a removal naming it, admitted at the same gate, ends its
-pending verification as `POST /account/identifiers/{id}/abandon` does, with no undo,
-reservation, notice or session ended (D-187).
+`auth.factor.rejected`. Removing a phone identifier takes a `phoneCode` credential bound
+to that number out of use, as AUTH-FACT-002 states; an undo restores the number, never
+the credential; where an undo displaces a number a `phoneCode` credential is bound to,
+that credential is taken out of use as at a replace (AUTH-FACT-002, D-197). Other
+sessions SHALL end when a sign-in identifier is removed, and every session of the
+account SHALL end at an undo, which completes under no session (IDN-LIFE-008, D-190). A
+pending add listed on the account (REG-IDENT-004) is not an identifier this item
+removes: a removal naming it, admitted at the same gate, ends its pending verification
+as `POST /account/identifiers/{id}/abandon` does, with no undo, reservation, notice or
+session ended (D-187).
 
-*Source: D-146, D-162, D-166, D-187, D-188, D-189, D-190; amends D-035 (old-address
-confirmation retired except in REG-IDENT-007); IDN-LIFE-008 applies*
+*Source: D-146, D-162, D-166, D-187, D-188, D-189, D-190, D-197; amends D-035
+(old-address confirmation retired except in REG-IDENT-007); IDN-LIFE-008 applies*
 
 Why the undo goes to the remaining set and never to the removed address: an undo that
 reaches the removed address lets a compromised mailbox re-attach itself. A stolen session
@@ -308,41 +319,44 @@ usable.
 
 **REG-IDENT-007** — Where a kind's maximum is `1`, a change SHALL be a **replace** in
 one operation: step-up, the new identifier verifies, the swap applies at once, and the
-undo goes to the remaining channels of the account. **Only where no other channel exists
-at all** SHALL the old address confirm before the swap, except within an admin-assisted
-enrolment session (AUTH-RECOV-002), where the approver's recorded confirmation stands in
-for the old address and the new address confirms alone. The confirmation is the message
-`identifier-change-confirm` under the sending purpose `verification`, as the new
-address's code is: the person making the change asked for it, and it is not a notice
-(AUTH-ABUSE-004). Whether the new value is held or reserved SHALL be judged again inside
-the transaction that would apply the swap, under the lock of REG-SESS-005 on each value
-the swap writes, as at an add (REG-IDENT-004): where an identifier has come to hold it
-or an undo to reserve it since the replace was staged, nothing is written and the
-presentation is answered 422 `auth.code.expired`; the replace stays staged until it is
-swept or abandoned. The confirmation SHALL be held in a verification-code record of its
-own (AUTH-FACT-004), living `code.verification.lifetime` from its send, and a press
-after that changes nothing and is answered 422 `auth.code.expired`, as a verification
-link past its lifetime is. A replace whose swap has not applied SHALL be swept
-(OPS-OBS-003) once every record it holds is spent or past its lifetime, the new
-address's code and, where the old address must confirm, that confirmation, leaving the
-identifier as it stood (D-187). A repeated replace naming the value already staged, from
-the session that staged it (the browser REG-SESS-003 binds it to, or the enrolment
-session that staged it), is a resend: it sends again each of the replace's records not
-yet spent (the new address's code, and the old address's confirmation where it must
-confirm and has not), each a send of its purpose counted by the restrictions
-(AUTH-ABUSE-004), holding the staged replace's row while it writes, as REG-IDENT-004's
-resend does (D-188, D-189); from any other session it stages the replace afresh for the
-asking session, the records staged before it answering nothing from then on, each new
-one a send counted by the restrictions (D-190), and a press judges its link again once
-the replace's row is locked, one that no longer matches answered 422 `auth.code.expired`
-and counted against the source (AUTH-ABUSE-001, D-191); a replace naming another value
-is refused `identity.change.pending`. In an enrolment session, the new address's link of
-the replace that session staged lands on the authentication application, where that
-session is held, and a press of it there verifies, as a press in the browser that staged
-any replace does (REG-SESS-003, D-190).
+undo goes to the remaining channels of the account. When the swap applies, replacing a
+phone identifier's value takes a `phoneCode` credential bound to the number replaced out
+of use, as AUTH-FACT-002 states; an undo restores the number, never the credential
+(D-197). **Only where no other channel exists at all** SHALL the old address confirm
+before the swap, except within an admin-assisted enrolment session (AUTH-RECOV-002),
+where the approver's recorded confirmation stands in for the old address and the new
+address confirms alone. The confirmation is the message `identifier-change-confirm`
+under the sending purpose `verification`, as the new address's code is: the person
+making the change asked for it, and it is not a notice (AUTH-ABUSE-004). Whether the new
+value is held or reserved SHALL be judged again inside the transaction that would apply
+the swap, under the lock of REG-SESS-005 on each value the swap writes, as at an add
+(REG-IDENT-004): where an identifier has come to hold it or an undo to reserve it since
+the replace was staged, nothing is written and the presentation is answered 422
+`auth.code.expired`; the replace stays staged until it is swept or abandoned. The
+confirmation SHALL be held in a verification-code record of its own (AUTH-FACT-004),
+living `code.verification.lifetime` from its send, and a press after that changes
+nothing and is answered 422 `auth.code.expired`, as a verification link past its
+lifetime is. A replace whose swap has not applied SHALL be swept (OPS-OBS-003) once
+every record it holds is spent or past its lifetime, the new address's code and, where
+the old address must confirm, that confirmation, leaving the identifier as it stood
+(D-187). A repeated replace naming the value already staged, from the session that
+staged it (the browser REG-SESS-003 binds it to, or the enrolment session that staged
+it), is a resend: it sends again each of the replace's records not yet spent (the new
+address's code, and the old address's confirmation where it must confirm and has not),
+each a send of its purpose counted by the restrictions (AUTH-ABUSE-004), holding the
+staged replace's row while it writes, as REG-IDENT-004's resend does (D-188, D-189);
+from any other session it stages the replace afresh for the asking session, the records
+staged before it answering nothing from then on, each new one a send counted by the
+restrictions (D-190), and a press judges its link again once the replace's row is
+locked, one that no longer matches answered 422 `auth.code.expired` and counted against
+the source (AUTH-ABUSE-001, D-191); a replace naming another value is refused
+`identity.change.pending`. In an enrolment session, the new address's link of the
+replace that session staged lands on the authentication application, where that session
+is held, and a press of it there verifies, as a press in the browser that staged any
+replace does (REG-SESS-003, D-190).
 
-*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, D-191, amends D-035 and
-restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
+*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, D-190, D-191, D-197, amends
+D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
 undo a hostile change. If that address is lost or compromised, administrative recovery
@@ -634,7 +648,7 @@ account application in the new session. There SHALL be **no Back navigation**; e
 correction is made in place through a per-identifier Change (REG-IDENT-010) or by editing
 the field later.
 
-*Source: D-148; D-146, D-162, D-166*
+*Source: D-148; D-146, D-162, D-166, D-197*
 
 | # | Step | Kind | What it must achieve |
 |---|---|---|---|
@@ -665,8 +679,9 @@ a skip otherwise is refused with `identity.registration.incomplete`.
    `identity.registration.incomplete`.
 2. Before step 6 completes, no account, identifier, credential or consent exists outside
    the session store; the only other writes are the records of the abuse controls
-   (AUTH-ABUSE-001, AUTH-ABUSE-004), the messages sent, and the spending of an
-   invitation's link (REG-INV-001).
+   (AUTH-ABUSE-001, AUTH-ABUSE-004), the verification-code records of its identifiers
+   (AUTH-FACT-004), the messages sent, and the spending of an invitation's link
+   (REG-INV-001).
 3. Steps 7 and 8 can each be skipped and the account is unaffected; step 3 can be
    skipped where `registration.phone` is `optional` and cannot where it is `required` or
    an invitation bound a phone.
@@ -833,22 +848,23 @@ for a duplicate would be an oracle.
 
 ### 4.5 The security step
 
-**REG-SESS-006** — The security step SHALL offer every method the applicable policy's
-`loginFactors` allows, on one screen, and SHALL complete only when the account would
-have **at least one primary sign-in method**: a password, a passkey, a linked provider,
-or a confirmed email or phone where the matching link or one-time-code factor
-(`emailLink`, `emailCode`, `phoneLink`) is enabled. Passwords SHALL be refused for the
-floor (AUTH-PASS-001, AUTH-PASS-001a), for a length over `password.maximum`
-(`auth.password.toolong`, nothing truncated) and for a hit of the screening of
-AUTH-PASS-004 only; strength feedback is advisory (AUTH-PASS-005). A password below the
-single-factor floor SHALL make a second step mandatory on the same screen, and
-lengthening it SHALL lift that in place. When a second step is enrolled beside a
-password, recovery codes SHALL be generated and shown (AUTH-RECOV-006), and the instant
-the step's response returns them is staged on the session and carried into the set's
-`viewedAt` at the terms step (AUTH-FACT-008, D-189). Every WebAuthn and TOTP enrolment
-SHALL take a label (AUTH-FACT-001).
+**REG-SESS-006** — The security step SHALL offer, on one screen, every method the
+applicable policy's `loginFactors` allows, save `phoneCode`, which is enrolled from the
+account once it exists (`POST /account/factors/phonecode/begin`, AUTH-FACT-002, D-197),
+and SHALL complete only when the account would have **at least one primary sign-in
+method**: a password, a passkey, a linked provider, or a confirmed email or phone where
+the matching link or one-time-code factor (`emailLink`, `emailCode`, `phoneLink`) is
+enabled. Passwords SHALL be refused for the floor (AUTH-PASS-001, AUTH-PASS-001a), for a
+length over `password.maximum` (`auth.password.toolong`, nothing truncated) and for a
+hit of the screening of AUTH-PASS-004 only; strength feedback is advisory
+(AUTH-PASS-005). A password below the single-factor floor SHALL make a second step
+mandatory on the same screen, and lengthening it SHALL lift that in place. When a second
+step is enrolled beside a password, recovery codes SHALL be generated and shown
+(AUTH-RECOV-006), and the instant the step's response returns them is staged on the
+session and carried into the set's `viewedAt` at the terms step (AUTH-FACT-008, D-189).
+Every WebAuthn and TOTP enrolment SHALL take a label (AUTH-FACT-001).
 
-*Source: D-146, D-162, D-166, D-189; AUTH-PASS-001a, AUTH-RECOV-006*
+*Source: D-146, D-162, D-166, D-189; AUTH-PASS-001a, AUTH-RECOV-006, D-197*
 
 A provider-only registration yields a `delegated` account (D-141). A passkey-only
 account has no password and no recovery codes.

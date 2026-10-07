@@ -63,7 +63,7 @@ never rendered prose.
 }
 ```
 
-*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183*
+*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183, D-197*
 
 The host renders the message in the user's language from the code. `details` carries
 structured context: never a sentence. Every free-text request field (`reason`, `detail`,
@@ -76,15 +76,16 @@ document or of its translation (PRIV-CONS-005) are not free text (D-183). A free
 member that is blank or longer is refused **400** `api.request.malformed` naming the
 member; a reason the operation requires, absent or blank, is refused with that reason's
 own code where `10` names one (`config.change.reasonrequired`,
-`auth.recovery.reasonrequired`, `authz.grant.reasonrequired`) (D-166). Where
-an endpoint below describes a response in prose and names no field, the field is the
-camelCase of the noun in the vocabulary this chapter already uses: `id`, `label`,
-`createdAt`, `lastUsedAt`, `expiresAt`, `signedInAt`, `device`, `location`, `current`
-(D-153). A refused send (`auth.restriction.exceeded`,
-AUTH-ABUSE-004) carries `retryAt` in `details`: the earliest time a bucket lifts, and
-the same value whether or not the address is registered (AUTH-ABUSE-002). A throttled
-refusal (`auth.throttled`) carries `retryAt` in `details` the same way, the instant the
-next attempt is looked at, built by one builder wherever it is answered (D-166).
+`auth.recovery.reasonrequired`, `authz.grant.reasonrequired`) (D-166). Where an endpoint
+below describes a response in prose and names no field, the field is the camelCase of
+the noun in the vocabulary this chapter already uses: `id`, `label`, `createdAt`,
+`lastUsedAt`, `expiresAt`, `signedInAt`, `device`, `location`, `current` (D-153). A
+refused send (`auth.restriction.exceeded`, AUTH-ABUSE-004) carries `retryAt` in
+`details`: the earliest instant at which every bucket the send exceeds has room for it,
+and the same value whether or not the address is registered (AUTH-ABUSE-002, D-197). A
+throttled refusal (`auth.throttled`) carries `retryAt` in `details` the same way, the
+instant the next attempt is looked at, built by one builder wherever it is answered
+(D-166).
 
 **Acceptance criteria**
 1. No error body contains a user-facing sentence.
@@ -551,14 +552,25 @@ assurance.
   "assuranceLevel": "aal2",          // delegated | aal1 | aal2 | aal3 (10 §5.4)
   "phishingResistant": true,
   "required": [],                    // populated when status is factorRequired
+  "webauthn": { },                   // where required names securityKey (AUTH-FACT-002b)
   "trustDeviceOffered": true         // AUTH-FACT-015: policy permits trusting this browser
 }
 ```
 
 `required` names what is left to present, never a factor already accepted on the
 challenge: at a sign-in, the second steps the challenge offers once a first factor is
-accepted, and where a presenting call accepted a second step before any first factor,
-the first factors of the challenge's `available` (D-193, D-194, D-195).
+accepted (D-193, D-197). A `factorRequired` **200** whose `required` names
+`securityKey`, at a sign-in once a first factor is accepted or at a step-up once a
+factor has been presented on its challenge, carries `webauthn`, the request options for
+the challenge, with `userVerification` `required` and `allowCredentials` naming each
+active second-factor security key of the account by credential identifier and transports
+and, at a step-up that also offers `passkey`, each active passkey of the account
+(AUTH-FACT-002b, D-197).
+
+At a sign-in, a second step presented before a first factor has been accepted on the
+challenge is refused **422** `auth.factor.notpermitted` before it is verified and before
+anything of the account is read, the same answer for every identifier, counting and
+recording nothing (AUTH-FACT-002b, D-197).
 
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
@@ -568,20 +580,23 @@ is false and `trustDevice` is not honoured: the account signs in and reads, and 
 no credential (IDN-ACCT-007).
 
 **422** — `auth.factor.rejected`, `auth.factor.notpermitted` (verification-only factor
-offered), `identity.identifier.domainnotallowed` (a factor succeeded and the sign-in
-email is outside a domain lock the account is under, REG-DOM-001; a pending link or open
+offered, or a second step presented at a sign-in before a first factor),
+`identity.identifier.domainnotallowed` (a factor succeeded and the sign-in email is
+outside a domain lock the account is under, REG-DOM-001; a pending link or open
 challenge whose email the account no longer holds is `auth.factor.rejected`),
 `auth.code.invalid` and `auth.code.expired` (a sign-in code, below),
 `auth.code.replayed` (a TOTP code already used, AUTH-FACT-005),
-`auth.credential.suspended` (a suspended authenticator whose proof verified, or a
-`phoneCode` ask after a first factor naming a suspended number where the policy permits
-`phoneCode`, AUTH-RECOV-007), and `auth.webauthn.algorithmnotallowed`,
-`auth.webauthn.countermismatch`, `auth.webauthn.rpidchanged` and
-`auth.webauthn.userverificationrequired` (an assertion refused, AUTH-FACT-011,
-AUTH-FACT-014); each that refuses a presented factor is a failed attempt, save
-`identity.identifier.domainnotallowed`, which counts no failure (AUTH-FACT-004), and a
-`phoneCode` ask refused where no factor is left, or naming a suspended number, counts
-nothing (AUTH-FACT-002, AUTH-ABUSE-001, D-189, D-190).
+`auth.credential.suspended` (a suspended authenticator whose proof verified, save a
+right `phoneCode` code whose credential's number left the account, which is
+`auth.factor.rejected`, AUTH-FACT-004; or a `phoneCode` ask after a first factor naming
+a suspended number where the policy permits `phoneCode`, AUTH-RECOV-007), and
+`auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
+`auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` (an assertion
+refused, AUTH-FACT-011, AUTH-FACT-014); each that refuses a presented factor is a failed
+attempt, save `identity.identifier.domainnotallowed`, which counts no failure
+(AUTH-FACT-004), and the refusal of a second step before a first factor, which counts
+nothing (AUTH-FACT-002b, D-197); a `phoneCode` ask refused where no factor is left, or
+naming a suspended number, counts nothing (AUTH-FACT-002, AUTH-ABUSE-001, D-189, D-190).
 Never 401: that code is session death only (API-CONV-003, D-125).
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
@@ -607,17 +622,22 @@ Where the number's signal answers `risk`, nothing is sent and the call is answer
 the challenge as it then stands: **200** `factorRequired` with `required` naming neither
 `phoneCode` nor a factor already accepted on the challenge (D-193), or **422**
 `auth.factor.rejected` where no factor is left (AUTH-FACT-002b). An ask at a sign-in
-before a first factor, while no first factor has been accepted on its challenge, a
-second step accepted on it or not, is **202** and sends nothing, whatever the account
-holds (D-195); after one, an ask naming a suspended number sends nothing and is **422**
-`auth.credential.suspended`, counting nothing, where the policy in force permits
-`phoneCode`, and **202** otherwise (AUTH-RECOV-007, IDN-LIFE-009b, D-190, D-191).
+before a first factor, while no first factor has been accepted on its challenge, is
+**202** and sends nothing, whatever the account holds (D-195); after one, an ask naming
+a suspended number sends nothing and is **422** `auth.credential.suspended`, counting
+nothing, where the policy in force permits `phoneCode`, and **202** otherwise
+(AUTH-RECOV-007, IDN-LIFE-009b, D-190, D-191). Where the credential is taken out of use,
+or its number leaves the account, between the credential's read and the code's issue,
+nothing is sent or counted, and the ask is **422** `auth.credential.suspended` where the
+credential is now suspended and otherwise answered as at `risk` (AUTH-FACT-002, D-197).
 
 **Passkey assertions.** The assertion carries the user handle the authenticator
 returned. A handle naming an account other than the credential's owner, or none the
 library issued, is refused `auth.factor.rejected`; a passkey sign-in opened without an
 identifier refuses an assertion with no handle the same way (WebAuthn Level 3 section
-7.2, REG-PM-001, D-166).
+7.2, REG-PM-001, D-166). The `value` of a `passkey` or `securityKey` factor is the
+`AuthenticationResponseJSON` object that `PublicKeyCredential.toJSON()` gives (WebAuthn
+Level 3 section 5.1), as a JSON object, not a string (D-197).
 
 **New-device check** (AUTH-FACT-016). Where the factors presented would complete a
 sign-in at reachable assurance AAL1 from a browser the account has not seen, the call
@@ -636,7 +656,7 @@ carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
 requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
-AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195*
+AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -697,33 +717,47 @@ reports what they reach in `assuranceLevel` and `phishingResistant`: `factorRequ
 with the factors still offered, until the strictest of the policy's gates is reached,
 and `complete` once it is or once no combination still offered can be completed with the
 factors accepted, which ends the challenge; the request the step-up was for is judged
-again by its own gate when it is repeated (AUTH-STEP-002, D-191). A call that presents
-no factor, a `phoneCode` ask, writes nothing into the session record; its **200**, as
-every **200** of the route does, reports what the factors accepted on the challenge
-reach together, `delegated`, not phishing-resistant, where they reach no level (none
-yet, or a second factor alone, D-192). A factor the policy in force for the account does
-not permit is refused `auth.factor.notpermitted` before it is verified, and counted
-(AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask whose number answers `risk` is
-answered as `/auth/factor` answers it: **200** `factorRequired` with the combinations
-the challenge still offers, judged against the strictest of the policy's gates field by
-field, since the step-up names no action, `required` leaving out the factors already
-accepted (D-193); **403** `auth.stepup.required` with the outcome AUTH-STEP-002 gives
-where none is left (`report-loss`, `enrol`, or `pending` with `pendingUntil`, D-189);
-and **200** with `required` empty where the session already meets that gate as
-AUTH-STEP-002 step 1 judges it (AUTH-FACT-002, AUTH-FACT-002b, D-187, D-188). The
-shape's refusals of a presented factor are this route's too: **422** with each code
-`/auth/factor` lists as a failed attempt (AUTH-ABUSE-001, D-188, D-189), and **422**
-`identity.identifier.domainnotallowed` where a right email code sent to an address the
-domain lock now refuses is presented: judged after the code, it counts no failure
-(REG-DOM-001, AUTH-FACT-004, D-190). A `phoneCode` ask naming a suspended number sends
-nothing and is **422** `auth.credential.suspended`, counting nothing, where the policy
-in force permits `phoneCode`, and **202** otherwise (AUTH-RECOV-007, D-190, D-191).
+again by its own gate when it is repeated (AUTH-STEP-002, D-191). A **403**
+`auth.stepup.required` the step-up itself answers carries in `details` the values of the
+weakest of the policy's gates, field by field, which step 3 judged (AUTH-STEP-002,
+D-197). A `factorRequired` **200** that offers `securityKey` once a factor has been
+presented on the challenge carries `webauthn` as `/auth/factor`'s does, with the
+account's active passkeys in `allowCredentials` too where `passkey` is offered
+(AUTH-FACT-002b, D-197). A call that presents no factor, a `phoneCode` ask, writes
+nothing into the session record; its **200**, as every **200** of the route does,
+reports what the factors accepted on the challenge reach together, `delegated`, not
+phishing-resistant, where they reach no level (none yet, or a second factor alone,
+D-192). A factor the policy in force for the account does not permit is refused
+`auth.factor.notpermitted` before it is verified, and counted (AUTH-STEP-002,
+IDN-LIFE-009b). A `phoneCode` ask whose number answers `risk` is answered as
+`/auth/factor` answers it: **200** `factorRequired` with the combinations the challenge
+still offers, judged against the weakest of the policy's gates field by field, since the
+step-up names no action (AUTH-STEP-002, D-197), `required` leaving out the factors
+already accepted (D-193); with none left, answered as AUTH-STEP-002 step 2 answers a
+call after which no combination still offered can be completed: **200** `complete` where
+the factors accepted on the challenge reach the weakest of the policy's gates (D-197),
+and otherwise **403** `auth.stepup.required` with the outcome AUTH-STEP-002 gives
+(`report-loss`, `enrol`, or `pending` with `pendingUntil`, D-189); and **200** with
+`required` empty where the session already meets the strictest of the policy's gates,
+field by field, as AUTH-STEP-002 step 1 judges it (AUTH-FACT-002, AUTH-FACT-002b, D-187,
+D-188). The shape's refusals of a presented factor are this route's too: **422** with
+each code `/auth/factor` lists as a failed attempt (AUTH-ABUSE-001, D-188, D-189), and
+**422** `identity.identifier.domainnotallowed` where a right email code sent to an
+address the domain lock now refuses is presented: judged after the code, it counts no
+failure (REG-DOM-001, AUTH-FACT-004, D-190). A `phoneCode` ask naming a suspended number
+sends nothing and is **422** `auth.credential.suspended`, counting nothing, where the
+policy in force permits `phoneCode`, and **202** otherwise (AUTH-RECOV-007, D-190,
+D-191). A `phoneCode` ask whose credential is taken out of use, or whose number leaves
+the account, between the credential's read and the code's issue is answered as
+`/auth/factor` answers it: **422** `auth.credential.suspended` where the credential is
+now suspended, and otherwise as a `risk` ask is answered on this route (AUTH-FACT-002,
+D-197).
 
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191, D-192, D-193*
+D-191, D-192, D-193, D-197*
 
 Rotates the session identifier on success.
 
@@ -866,16 +900,21 @@ browser is sent nowhere
 
 ### `POST /auth/webauthn/register/begin` · `POST /auth/webauthn/register/complete`
 
-Registration ceremony. `begin` takes the **kind** being created, `{ "kind": "passkey" |
-"securityKey", "label": "..." }` (the AUTH-FACT-002 identifiers): a passkey
-(`residentKey: required`, `userVerification: required`) or a second-factor security
-key (`residentKey: discouraged`), per AUTH-FACT-002b; a security key under two-step is
-refused on an account with no password, with 409 `auth.factor.passwordrequired`.
-`complete` takes the credential and a **label** (1 to 64, unique per kind per account,
-defaulting to the client's device description, AUTH-FACT-001) and records the relying
-party identifier, `backupEligible` and `backupState`, `addedAt` and the label. During
-registration step 5 the ceremony runs against the registration session and its
-provisional user handle (REG-SESS-001). `begin` answers the creation options with
+Registration ceremony. `begin` takes the **kind** being created,
+`{ "kind": "passkey" | "securityKey", "label": "..." }` (the AUTH-FACT-002 identifiers):
+a passkey (`residentKey: required`, `userVerification: required`) or a second-factor
+security key (`residentKey: discouraged`), per AUTH-FACT-002b; a security key under
+two-step is refused on an account with no password, with 409
+`auth.factor.passwordrequired`. `complete` takes `credential`, the
+`RegistrationResponseJSON` that `PublicKeyCredential.toJSON()` gives (WebAuthn Level 3
+section 5.1; its `response` carries `clientDataJSON`, `attestationObject` and
+`transports`), and a **label** (1 to 64, unique per kind per account, defaulting to the
+client's device description, AUTH-FACT-001); it verifies the credential by `Fido2` and
+records the credential identifier, its public key and its `transports`, the relying
+party identifier, `backupEligible` and `backupState`, `addedAt` and the label
+(AUTH-FACT-014, D-197). During registration step 5 the ceremony runs against the
+registration session and its provisional user handle (REG-SESS-001). `begin` answers the
+creation options with attestation conveyance `none` (AUTH-FACT-014, D-197) and with
 `user`: `{ "id": "<the subject identifier as a WebAuthn user handle>", "name": "<the
 primary email>", "displayName": "<the display name, or empty>" }`; during registration
 `id` is the registration session's provisional subject identifier, which becomes the
@@ -887,12 +926,13 @@ an enrolment by a restricted account, save one that sets a credential by recover
 enrolment session or one a policy hold requires (IDN-ACCT-007, AUTH-FACT-017, D-189);
 `authz.denied` from the break-glass session or a session another application opened from
 it (`factor:enrol`, OPS-BOOT-002)
-**422**: `auth.webauthn.algorithmnotallowed`,
-`auth.webauthn.userverificationrequired`, `auth.credential.labelinvalid`
-(AUTH-FACT-001)
+**422**: `auth.webauthn.algorithmnotallowed`, `auth.webauthn.userverificationrequired`,
+`auth.credential.labelinvalid` (AUTH-FACT-001), and `auth.factor.rejected` for a
+credential refused at a step the `Fido2` verification adds, every other refusal keeping
+its code (AUTH-FACT-014, D-197)
 
 *Source: AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-011, AUTH-FACT-013, AUTH-FACT-014,
-D-146, D-162, D-166, D-183, D-187, D-189*
+D-146, D-162, D-166, D-183, D-187, D-189, D-197*
 
 Where the credential is device-bound, the response indicates a second enrolment is
 prompted — advisory for public users, required for administrative-organization
@@ -986,19 +1026,21 @@ and suspends it at once; or cancels a pending report.
 
 **Accepts a session that has presented one usable factor, or one unused recovery
 code** — no step-up (AUTH-RECOV-007). The request exists for someone who has lost the
-factor a gate would ask for and cannot hold a complete session. Cancellation accepts
-the same, any full session of the account, or the link carried in every
-notification.
+factor a gate would ask for and cannot hold a complete session. Cancellation accepts the
+same, any full session of the account, or the link carried in every
+`credential-suspended` notification (AUTH-RECOV-007).
 
 **202** — accepted; the authenticator is `suspended`; body carries `invalidatesAt`
 **404**: `auth.credential.notfound` for an authenticator invalidated, or not the
-account's (D-190), and for a social credential a provider's security event holds
-(IDN-LIFE-012a, D-191)
+account's (D-190), for a social credential a provider's security event holds
+(IDN-LIFE-012a, D-191), and, at the cancel, for a `phoneCode` credential whose number
+left the account, whatever suspended it, which no cancel returns (AUTH-FACT-002, D-197)
 **409** — `auth.lossreport.notpermitted` (administrative-organization member);
 `auth.lossreport.pending` (already reported, or already suspended by a removal that
-would lower reachable assurance, AUTH-RECOV-007, D-190)
+would lower reachable assurance, or, for a `phoneCode` credential, by the number it is
+bound to leaving the account, AUTH-RECOV-007, D-190, D-197)
 
-*Source: AUTH-RECOV-007, AUTH-RECOV-008, D-141, D-186, D-190, D-191*
+*Source: AUTH-RECOV-007, AUTH-RECOV-008, D-141, D-186, D-190, D-191, D-197*
 
 Invalidation is automatic after `recovery.invalidation.window` and is **held** if no
 notification was taken at its immediate attempt (AUTH-RECOV-007, AUTH-ABUSE-004).
@@ -1156,7 +1198,10 @@ Adds an email or phone (REG-IDENT-004). Step-up action `identifier:add`.
 (API-CONV-005): the add is staged, its value held on a pending verification and listed
 unverified until it verifies (REG-IDENT-004), a code and a link are sent (REG-SESS-003)
 and the security-notice set is notified. A duplicate is staged and listed alike, sends
-no code and notifies the identifier's owner (REG-SESS-005, D-076).
+no code and notifies the identifier's owner (REG-SESS-005, D-076). A repeated add naming
+the value already pending is a resend from the session that staged it, and from any
+other session stages the add afresh for the asking session, the records staged before it
+no longer answering (REG-IDENT-004, D-197).
 **403**: `auth.stepup.required`
 **429**: `auth.restriction.exceeded` with `retryAt` where a restriction refuses the
 code's send, identical for a value another account holds or an undo reserves, and
@@ -1168,7 +1213,7 @@ nothing is staged (AUTH-ABUSE-004)
 (REG-DOM-001), `identity.identifier.invalid` (a value that is not a well-formed
 identifier of its kind)
 
-*Source: D-146; REG-IDENT-004, REG-SESS-005, REG-DOM-001, D-162, D-166, D-187*
+*Source: D-146; REG-IDENT-004, REG-SESS-005, REG-DOM-001, D-162, D-166, D-187, D-197*
 
 An unverified identifier cannot sign in and receives no recovery link until verified.
 
@@ -1184,13 +1229,14 @@ to no browser, a press with its `linkToken` and `press` confirms from any browse
 the `{id}` its landing names as an `identifier` link's does, and a press after
 `code.verification.lifetime` from its send changes nothing and is answered **422**
 `auth.code.expired`. A pressed token that opens nothing (swept, abandoned, superseded by
-a restaged replace, or never issued) is **422** `auth.code.expired`, and a code whose
-`{id}` names no pending verification of the account is **422** `auth.code.invalid`.
-Every code and press here is first held to the source's delay, and every one refused as
-wrong, past its lifetime or its attempt cap, naming no pending verification or opening
-nothing is counted against the source, a wrong code against its identifier too, as at
-`POST /register/verify/{id}`; a right code refused for another cause (a value held
-since, the maximum) counts nothing and writes nothing (AUTH-ABUSE-001, D-188, D-189).
+a restaged add or replace, or never issued) is **422** `auth.code.expired`, and a code
+whose `{id}` names no pending verification of the account is **422**
+`auth.code.invalid`. Every code and press here is first held to the source's delay, and
+every one refused as wrong, past its lifetime or its attempt cap, naming no pending
+verification or opening nothing is counted against the source, a wrong code against its
+identifier too, as at `POST /register/verify/{id}`; a right code refused for another
+cause (a value held since, the maximum) counts nothing and writes nothing
+(AUTH-ABUSE-001, D-188, D-189).
 
 **204** · **200** (link opened elsewhere: nothing changes, the code is shown) ·
 **409**: `identity.identifier.maximum`, the kind full at an add's verification
@@ -1199,7 +1245,7 @@ since, the maximum) counts nothing and writes nothing (AUTH-ABUSE-001, D-188, D-
 **429**: `auth.throttled` with `retryAt`
 
 *Source: D-146; REG-IDENT-004, REG-SESS-003, REG-IDENT-007, D-183, D-187, D-188, D-189,
-D-190*
+D-190, D-197*
 
 Emits `IdentifierAdded` on success.
 
@@ -1243,11 +1289,13 @@ reservation, no session ended and no `IdentifierRemoved`.
 other refusal, so the last verified identifier of a kind answers this),
 `identity.identifier.lastofkind` (the required minimum of the kind would be unmet)
 
-*Source: D-146; REG-IDENT-006, D-166, D-187*
+*Source: D-146; REG-IDENT-006, D-166, D-187, D-197*
 
 The undo goes to the remaining set and never to the removed address, so a compromised
 mailbox cannot re-attach itself. The removed identifier is powerless from then on and
-behaves as unknown at every recovery path.
+behaves as unknown at every recovery path. Where the identifier is the number a
+`phoneCode` credential is bound to, the credential is taken out of use, as AUTH-FACT-002
+states (D-197).
 
 ---
 
@@ -1256,6 +1304,10 @@ behaves as unknown at every recovery path.
 Restores a removed identifier from the undo link (REG-IDENT-006). **Link-borne**: the
 account has no session that could reach this on its own after a hostile removal, so it
 accepts the link token from the undo notice, the same shape as deletion cancellation.
+Where the identifier is the number a `phoneCode` credential was bound to, the undo
+restores the number, never the credential; where an undo displaces a number a
+`phoneCode` credential is bound to, that credential is taken out of use as at a replace
+(AUTH-FACT-002, D-197).
 
 ```json
 { "linkToken": "..." }
@@ -1273,7 +1325,7 @@ it; pending adds do not refuse an undo (D-188, D-189)
 **422**: `identity.change.windowelapsed` (after `identifier.change.coolingoff`, or
 once a write of the value to the account has ended its reservation, REG-IDENT-006)
 
-*Source: D-146; REG-IDENT-006, D-187, D-188, D-189, D-190*
+*Source: D-146; REG-IDENT-006, D-187, D-188, D-189, D-190, D-197*
 
 ---
 
@@ -1310,14 +1362,16 @@ nothing is staged (AUTH-ABUSE-004)
 this identifier)
 **422**: `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`
 
-*Source: D-148; D-146, REG-IDENT-007, D-166, D-187, D-189, D-190*
+*Source: D-148; D-146, REG-IDENT-007, D-166, D-187, D-189, D-190, D-197*
 
 Also the endpoint an enrolment session opened for a lost mailbox uses to set a new
 address confirmed by the new address alone (`POST /enrol/begin`, AUTH-RECOV-002). The
 session under which the swap completes rotates and every other session of the account
 ends, the staging session included where it is not the completing one; a swap completed
 under no session (the old address's confirmation, an enrolment session) ends every
-session (IDN-LIFE-008).
+session (IDN-LIFE-008). Where the identifier is the number a `phoneCode` credential is
+bound to, the credential is taken out of use when the swap applies, as AUTH-FACT-002
+states (D-197).
 
 ---
 
@@ -1476,10 +1530,15 @@ change at next sign-in had no endpoint to change through.
 
 ### `GET /account/credentials` · `DELETE /account/credentials/{id}`
 
-Lists enrolled credentials, each with its state (`active` · `suspended` ·
-`invalidated`, AUTH-RECOV-007) and, where suspended, `invalidatesAt`; each carries
-`label`, `backupEligible`, `backupState`, `addedAt` and `lastUsedAt` (AUTH-FACT-001);
-removes one.
+Lists enrolled credentials, each with its state (`active` · `suspended` · `invalidated`,
+AUTH-RECOV-007) and, where suspended, `invalidatesAt` (null for a social credential a
+provider's security event holds, which has no invalidation instant, `10` section 5.3a)
+and `cancellable`, true where a cancel returns it to `active` and false otherwise: for a
+`phoneCode` credential whose number left the account, whatever suspended it, which no
+cancel returns (AUTH-FACT-002, D-197), and for a social credential a provider's security
+event holds, which a sign-in by another factor restores (IDN-LIFE-012a, D-191); each
+carries `label`, `backupEligible`, `backupState`, `addedAt` and `lastUsedAt`
+(AUTH-FACT-001); removes one.
 
 **204**
 **202**: `auth.credential.lastsecondfactor`: removing this credential would lower
@@ -1488,7 +1547,7 @@ invalidated after the window (AUTH-RECOV-007), notified throughout. The body is 
 API-CONV-002 body, `details.invalidatesAt` carrying the instant of invalidation.
 **403**: `auth.stepup.required`
 
-*Source: D-092, D-141, D-166, D-188, D-189*
+*Source: D-092, D-141, D-166, D-188, D-189, D-191, D-197*
 
 Removal is gated at the account's reachable assurance (AUTH-STEP-002a). Removing one
 of several passkeys, or un-enrolling TOTP while a passkey remains, leaves reachable
@@ -1560,6 +1619,52 @@ Gated at the lower of the account's reachable assurance and AAL2 (AUTH-STEP-007)
 confirmation is notified to every recorded channel other than the enrolling session.
 
 *Source: AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-007, AUTH-STEP-007, D-146, D-183*
+
+---
+
+### `POST /account/factors/phonecode/begin` · `/confirm`
+
+Enrols the `phoneCode` second step as TOTP is enrolled, bound to the number it is
+confirmed on (AUTH-FACT-002, D-197). `begin` names one of the account's verified phone
+identifiers, by its `id` as `GET /account` lists it, and a **label** (AUTH-FACT-001):
+
+```json
+{ "identifier": "...", "label": "..." }
+```
+
+`begin` asks the number's signal (AUTH-FACT-002b criterion 6), stages a pending
+`phoneCode` credential bound to that number and texts a code to it (message kind
+`secondstep-code`, purpose `secondfactor`); a new `begin` replaces a pending one.
+`confirm` takes `{ "code": "..." }`: a right code makes the credential active and
+retires any other `phoneCode` credential of the account. The label is judged without the
+`phoneCode` credential `confirm` would retire (AUTH-FACT-001, D-197). Gated at the lower
+of the account's reachable assurance and AAL2 (AUTH-STEP-007, `factor:enrol`); the
+enrolment is notified to every recorded channel other than the enrolling session.
+
+**202**: `begin`, the pending credential staged and its code sent
+**200**: `confirm`, the enrolled credential as `GET /account/credentials` lists it (its
+state, `label`, `backupEligible`, `backupState`, `addedAt` and `lastUsedAt`), and the
+recovery codes with `generatedAt`, returned **once**, where AUTH-RECOV-006 gives them
+**403**: `auth.stepup.required`; `authz.restricted` and `authz.denied` as the **403** of
+`POST /auth/webauthn/register/begin` gives them (IDN-ACCT-007, OPS-BOOT-002)
+**409**: `auth.factor.passwordrequired`, the account has no password (AUTH-FACT-002b)
+**422**: `auth.factor.notpermitted` where the policy in force does not permit
+`phoneCode` (off by default) or the number's signal answers `risk` (nothing sent,
+whatever the identifier then holds); `identity.identifier.invalid` where `identifier`
+names no verified phone identifier of the account, or one that no longer holds,
+verified, the number `begin` read before its unit of work began (AUTH-FACT-002);
+`auth.credential.labelinvalid` (AUTH-FACT-001); at `confirm`, `auth.code.invalid` for a
+wrong code, which counts against the code's own `code.signin.attempts` (AUTH-FACT-004)
+and nothing else, and `auth.code.expired` for one past its lifetime or attempts or where
+no enrolment is pending
+**429**: `auth.restriction.exceeded` with `retryAt` where a restriction refuses the text
+(AUTH-ABUSE-004)
+
+*Source: AUTH-FACT-001, AUTH-FACT-002, AUTH-FACT-002b, AUTH-STEP-007, D-146, D-193,
+D-197*
+
+The number leaving the account takes the credential out of use, as AUTH-FACT-002
+states (D-197).
 
 ---
 
@@ -2308,9 +2413,9 @@ are rejected: they are not changeable through the application.
 
 The **named restriction set** that governs every send (AUTH-ABUSE-004): runtime
 configuration edited like the holiday list (D-142). `GET` lists the restrictions with
-their keys, purposes, channels and buckets, the shipped defaults included, each with
-the channel it carries (`sms.destination` and `sms.source` `sms`, `email.destination`
-`email`, `notification.destination` `any`).
+their keys, purposes, channels and buckets, the five shipped defaults included (D-197),
+each with the channel it carries (`sms.destination`, `sms.source` and `sms.resend`
+`sms`, `email.destination` `email`, `notification.destination` `any`).
 
 ```json
 {
@@ -2319,25 +2424,29 @@ the channel it carries (`sms.destination` and `sms.source` `sms`, `email.destina
   "channel": "email",                         // sms | email | any
   "buckets": [ { "max": 5, "interval": "PT1H", "window": "sliding" },
                { "max": 1, "interval": "PT60S", "window": "fixed" } ],
+  "resend": false,                            // optional; AUTH-ABUSE-004, 10 section 5.16a
   "reason": "..."
 }
 ```
 
-`purpose` and `channel` are optional, and an absent one reads as `any`. A restriction's
-name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`; a
-`{name}` outside it is refused **400** `api.request.malformed` naming `name`, on every
-route that takes one. `reason` is required on every edit, a tightening included
-(OPS-CFG-008); `DELETE` takes `{ "reason": "..." }`. A **loosening** is any change `10`
-section 4.5 does not classify as a tightening (a higher max, a shorter interval, a
-removed bucket, a deleted or renamed restriction, a change of `channel` to anything but
-`any`, among others); it requires `system:administer` and raises a Normal alert
+`purpose` and `channel` are optional, and an absent one reads as `any`. `resend` is
+optional, and absent reads as false; `GET` lists each restriction's `resend` mark,
+written `true` or `false` (AUTH-ABUSE-004, D-197). A restriction's name is 1 to 64
+lower-case letters and digits separated by single `.`, `-` or `_`; a `{name}` outside it
+is refused **400** `api.request.malformed` naming `name`, on every route that takes one.
+`reason` is required on every edit, a tightening included (OPS-CFG-008); `DELETE` takes
+`{ "reason": "..." }`. A **loosening** is any change `10` section 4.5 does not classify
+as a tightening (a higher max, a shorter interval, a removed bucket, a deleted or
+renamed restriction, a change of `channel` to anything but `any`, an added `resend`
+mark, among others); it requires `system:administer` and raises a Normal alert
 (OPS-ALERT-001).
 
 **200** / **204**
 **400**: `api.request.malformed` naming `name` where `{name}` breaks the name rule;
 naming `key`, `purpose`, `channel` or `buckets` where a key, purpose, channel or window
 is outside `10` section 5, a `max` is negative or an `interval` is not a positive ISO
-8601 duration; naming `reason` where it is longer than 1024 characters after trimming
+8601 duration; naming `resend` where it is not a boolean; naming `reason` where it is
+longer than 1024 characters after trimming
 **403**: `auth.stepup.required` (`restriction:edit`, every edit); `authz.denied` for a
 loosening by a caller without `system:administer` in the administrative organization
 **404**: `auth.restriction.notfound` where `{name}` is not in the set (`GET`, `DELETE`,
@@ -2347,7 +2456,7 @@ with no registered supplier (LIB-HOST-001, `details.supplier` naming it) or an e
 bucket list; `config.change.reasonrequired` where an edit arrives without a reason or
 with a blank one
 
-*Source: D-146; AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-008, D-162, D-166, D-183*
+*Source: D-146; AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-008, D-162, D-166, D-183, D-197*
 
 A change applies to the next send without a restart, is audited and emits
 `SendingRestrictionChanged`. Deleting a shipped default is a loosening, not an error.
@@ -2550,12 +2659,13 @@ Refresh tokens rotate on use; reuse of a consumed token revokes the session fami
 
 ## 10. Callbacks
 
-Inbound from providers. Each follows INT-GEN-003: hostile input, unguessable
-references, rate-limited; an unsigned callback never advances an authoritative state by
-itself, and a verified, signed provider security event acts as IDN-LIFE-012a states. The library
-defines two callback endpoints of its own; a host mounts its own providers' callbacks on
-the same machine-profile pipeline (BFF-MACH-002, INT-GEN-003) under paths of its
-choosing, and those paths are not part of this contract.
+Inbound from providers. Each follows INT-GEN-003: hostile input, unguessable references,
+rate-limited; an unsigned callback never advances an authoritative state by itself, save
+the releases INT-SMS-005 allows (BFF-MACH-003), and a verified, signed provider security
+event acts as IDN-LIFE-012a states. The library defines two callback endpoints of its
+own; a host mounts its own providers' callbacks on the same machine-profile pipeline
+(BFF-MACH-002, INT-GEN-003) under paths of its choosing, and those paths are not part of
+this contract.
 
 | Endpoint | Source | Never does |
 |---|---|---|
@@ -2565,7 +2675,10 @@ choosing, and those paths are not part of this contract.
 A delivery report taken is answered **200** with no body: the acknowledgement a gateway
 expects, rather than API-CONV-003's success with a body. The transport reads the report
 (INT-SMS-005); a report of anything other than a final failure, an intermediate state
-included, is read as not failed and changes nothing.
+included, is read as not failed and changes nothing, save a report that a text of a send
+of purpose `secondfactor` was delivered, which releases that send's one count from each
+restriction marked `resend` and nothing else, as AUTH-ABUSE-004 and INT-SMS-005 state
+(D-197).
 
 Google delivers the Security Event Token as the request body and follows RFC 8935: a
 carried or repeated event is answered **202** with no body; a token that fails
@@ -2598,12 +2711,13 @@ the provider delivers it again; one meeting an older unsettled claim takes it ov
 is carried (BFF-MACH-002).
 
 *Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183,
-D-187, D-188*
+D-187, D-188, D-197*
 
 **Acceptance criteria**
 1. A forged callback with a guessed reference is rejected and logged.
-2. An unsigned callback advances state only after independent confirmation; a provider
-   event advances it only once its provider's published keys verify it.
+2. An unsigned callback advances state only after independent confirmation, save the
+   releases of INT-SMS-005; a provider event advances it only once its provider's
+   published keys verify it.
 
 ---
 

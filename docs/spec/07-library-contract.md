@@ -230,7 +230,7 @@ operation that changes a relationship; and the conformance suite's provider prob
 
 | Declaration | Contents |
 |---|---|
-| **Connection details** | Database and cache |
+| **Connection details** | Database |
 | **Enabled authentication factors** and their policy | Per organization |
 | **Resource types and containment** | The only place the library learns the host's domain — including, for each encrypted field, the column identifying its subject (PRIV-RIGHT-005a) and the data category the field holds (PRIV-PRIN-001 AC2); a field whose category no purpose on its type names fails startup with `model.startup.declarationinvalid`. Each record is registered with its data subject read from its subject column (PRIV-SENS-002) |
 | **Roles** | Named bundles, and the actions that exist, each with the step-up gate and the purpose it is bound to where it has one (AUTHZ-GATE-005) |
@@ -253,6 +253,7 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup, and a change of the restriction set naming one is refused with `config.value.notallowed`, `details.supplier` naming it. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (nullable: a send no request asked for has none) (D-153) |
 | **Calendar time zone** | `privacy.calendar.timezone`: the IANA zone in which the legal clock counts days (PRIV-RIGHT-002). Required, protected (D-153) |
 | **Message languages** | `notification.languages`: the BCP 47 tags every outbound message may be sent in (IDN-ATTR-001, AUTH-ABUSE-005). Required, at least one (D-153) |
+| **Password screening sources** | Conditional: `service.name`, where `context` is among `password.blocklist.sources`, and `password.blocklist.selfhosted.address`, where `password.blocklist.source` is `selfHosted` (AUTH-PASS-004, `10` section 4) (D-197) |
 | **Email sending domain** | `notification.email.sendingdomain`, and the optional set of relay-registered domains (INT-MAIL-011). Required (D-153) |
 | **Recipients** | Optional: the processors and recipients the records of processing list (PRIV-ROPA-002), each `{ name, characterisation, dataReceived, location, agreementReference, callback }`; the library ships as the default set only the rows its own processing makes true (mail server, SMS gateway, hosting provider, password screening; `05` section 6, D-153, D-162). Every business processor, payment and shipping included, is the host's declaration |
 | **Challenge verifier** | Optional: a callback that takes a challenge token and answers pass or fail (AUTH-ABUSE-008). Absent, bot-defence signals are audited and no challenge is shown (D-153) |
@@ -273,18 +274,17 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Restore-test instance** | Optional: `IRestoreTestInstance`, which builds the throwaway instance the restore test restores into and tears it down (DR-007, DR-008). Absent, every run of the restore test fails as `unrestored` and raises `restore-test-failed` |
 | **Off-host erasure ledger** | Optional: `IErasureLedger`, which appends each completed erasure's line off the host (DR-016). Absent, erasures complete without a line, the residual R-A13 accepts; once one is registered, every erasure completed before it is appended too |
 
-Everything else has a safe default the host may override (P-001, D-107), including
-the public-holiday list, whose safe default is empty and which staff maintain at
-runtime as dates are announced (`privacy.holidays`, D-142). The
-declarations above are exactly what the library cannot know for a deployment;
-every other key in `10-reference` §4 carries a default at the safe end of its range.
-They are of three kinds. Most are required and have no default. Some may be empty: the
-preference declaration and the restriction key suppliers. The rest are required only
-where a feature the deployment uses needs them (the relationship sources, the image
-codec, a transport for a channel whose shipped transport is not in use, the mail server
-client), or are optional,
-each row stating what its absence does. A minimal configuration therefore needs only the
-required declarations and those its own features call for.
+Everything else has a safe default the host may override (P-001, D-107), including the
+public-holiday list, whose safe default is empty and which staff maintain at runtime as
+dates are announced (`privacy.holidays`, D-142). The declarations above are exactly what
+the library cannot know for a deployment; every other key in `10-reference` §4 carries a
+default at the safe end of its range. They are of three kinds. Most are required and
+have no default. Some may be empty: the preference declaration and the restriction key
+suppliers. The rest are required only where a feature the deployment uses needs them
+(the relationship sources, the image codec, a transport for a channel whose shipped
+transport is not in use, the mail server client, the password screening sources), or are
+optional, each row stating what its absence does. A minimal configuration therefore
+needs only the required declarations and those its own features call for.
 
 *Corrected three times: the list originally said "exactly four things," which four
 other requirements already contradicted; the subject-event handlers added by D-068
@@ -292,7 +292,7 @@ were still missing after that correction; and `10` then listed twenty keys with 
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
-D-179, D-180, D-183, D-189, D-190*
+D-179, D-180, D-183, D-189, D-190, D-197*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -405,7 +405,6 @@ source.
 | Notification handling (`INotificationHandler`) | Email and SMS. A replacement carries a message the library has already admitted under AUTH-ABUSE-004 and written to its outbox; it decides no restriction and counts nothing |
 | Message and content templates | A catalogue in `Janus.Hosting`, in English and Arabic: every message kind on every channel it goes out on, one text per language, each text message within its budget at its widest (AUTH-ABUSE-005, INT-SMS-003), and every link as the place `{link}`, which the library fills with the link's address (LIB-HOST-001, landing origins). A deployment that registers none is answered from it. An email owed in every declared language is composed by the library from each language's text (IDN-ATTR-001); no catalogue holds a text in more than one language |
 | Audit sink | Database |
-| Cache | Redis |
 | Authentication factors | The catalogue in `02-authentication` |
 | Record-level rules atop the permission model | None |
 | Mail server (`IMailServer`: mailbox provisioning and app passwords, INT-MAIL-001) | The JMAP adapter in `Janus.Hosting`, used where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-HOST-001, CONV-DESIGN-007) |
@@ -417,7 +416,7 @@ A core namespace is `Janus.Core` or an area project's (`Janus.Identity`,
 extension point SHALL be named only in `Janus.Hosting`, where the shipped defaults and
 adapters live.
 
-*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189*
+*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197*
 
 **Acceptance criteria**
 1. Each is registered through configuration, not inheritance from a library type.

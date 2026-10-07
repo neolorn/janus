@@ -145,36 +145,40 @@ non-dead-end outcomes** beside presenting a factor: `enrol` (the frontend initia
 enrolment in place, and the original request completes afterwards); `report-loss` (the
 frontend offers to report the missing factor lost, `POST /recovery/report-loss`,
 explaining that the action becomes available when the window completes). A `pending`
-outcome shows the completion time (`pendingUntil`) and the cancel option; it is a
+outcome shows the completion time (`pendingUntil`) and, for a credential
+`GET /account/credentials` lists as `cancellable`, the cancel option (D-197); it is a
 status, not an error, though it arrives as a 403 because the operation did not proceed
 (`09` `/auth/step-up`). A `phoneCode` ask at the step-up that is answered 200
-`factorRequired` re-presents the combinations offered, and one answered 200 with
-`required` empty retries the original request (D-188). A factor presented at the step-up
-and answered 200 is followed by the next factor of the chosen combination, one at each
-call, until what the 200 reports (`assuranceLevel`, `phishingResistant`) meets the gate
-the 403 named, and the original request is then retried, whether the answer was
-`factorRequired` or `complete`; a 200 `complete` whose report does not meet that gate
-ends the prompt, and the original request is retried and answered by its own gate
-(AUTH-STEP-002, D-190, D-191).
+`factorRequired` re-presents those of the combinations it offers that the 403's
+`details.options` lists, since a step-up offers what the weakest of the policy's gates
+accepts (AUTH-STEP-002, D-197), and one answered 200 with `required` empty retries the
+original request (D-188). A factor presented at the step-up and answered 200 is followed
+by the next factor of the chosen combination, one at each call, until what the 200
+reports (`assuranceLevel`, `phishingResistant`) meets the gate the 403 named, and the
+original request is then retried, whether the answer was `factorRequired` or `complete`;
+a 200 `complete` whose report does not meet that gate ends the prompt, and the original
+request is retried and answered by its own gate (AUTH-STEP-002, D-190, D-191).
 
 *Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188, D-190,
-D-191*
+D-191, D-197*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after
    re-authentication with its data intact.
 1a. A staff member returning after an idle expiry restores the session with a single
    passkey tap and lands on the page they left.
-2. The prompt states what is required in terms of assurance, never a factor name;
-   the options it lists are the server's `details.options`, unfiltered and unextended.
+2. The prompt states what is required in terms of assurance, never a factor name; the
+   options it lists are the server's `details.options`, unfiltered and unextended, save
+   that after a `phoneCode` ask answered `factorRequired` it lists those of them the
+   answer still offers (D-197).
 3. A subject who can reach AAL2 chooses among every combination that reaches it; a
    subject holding password and TOTP is shown password + TOTP, never the password
    alone.
 4. A subject with no usable combination is offered enrolment or a loss report, and
    the original request completes afterwards where the gate can still be met.
 5. Social sign-in never appears as a step-up option.
-6. A pending loss report is shown with its completion time and a cancel option, not
-   as an error.
+6. A pending loss report is shown with its completion time, and a cancel option where
+   its credential is `cancellable`, not as an error.
 
 ---
 
@@ -800,20 +804,28 @@ steps, 6 digits), and SHALL require one code before activation (AUTH-FACT-007).
 
 **FE-SEC-001** — The **passkey** dialog SHALL request `residentKey: "required"` and
 `userVerification: "required"`; the **security-key** (second-factor) dialog under
-two-step SHALL request `residentKey: "discouraged"`. Every WebAuthn and TOTP enrolment
-SHALL prompt for a **label**, defaulting to the client's description of the device
-(AUTH-FACT-001). A second-factor security key SHALL offer an **upgrade to a passkey**
+two-step SHALL request `residentKey: "discouraged"`. A second-step security key is asked
+for by passing to `navigator.credentials.get` the request options `webauthn` the answer
+offering it carries, their `allowCredentials` and `userVerification` unchanged (`09`
+`POST /auth/factor`, `POST /auth/step-up`); the passkey sign-in keeps no
+`allowCredentials` (FE-PM-004, D-197). Every WebAuthn and TOTP enrolment SHALL prompt
+for a **label**, defaulting to the client's description of the device (AUTH-FACT-001). A
+`phoneCode` enrolment prompts for a label too, with no default (D-197). A second-factor
+security key SHALL offer an **upgrade to a passkey**
 (`POST /account/credentials/{id}/upgrade`). The two-step controls SHALL be **disabled
 until a password exists** on the account. `phoneCode` SHALL be shown with its
-**less-secure flag** wherever it is listed. **Recovery codes** SHALL be shown **once**
-with copy, download and print, and a **confirm-saved** control SHALL gate continuation
-(AUTH-RECOV-006); a copy, download or print SHALL be reported at
+**less-secure flag** wherever it is listed. A `phoneCode` enrolment calls
+`POST /account/factors/phonecode/begin` and `/confirm`, shows the limitation before the
+number is confirmed (AUTH-FACT-002b criterion 5), and shows a `begin` answered 422
+`auth.factor.notpermitted` as the method being unavailable (D-197). **Recovery codes**
+SHALL be shown **once** with copy, download and print, and a **confirm-saved** control
+SHALL gate continuation (AUTH-RECOV-006); a copy, download or print SHALL be reported at
 `POST /account/recoverycodes/exported`, which sets `exportedAt` (AUTH-FACT-008), save in
 an enrolment session, where the confirm-saved control alone reports the export, once,
 since that report ends the session (AUTH-RECOV-006, D-189).
 
 *Source: D-146; AUTH-FACT-002b, AUTH-FACT-001, AUTH-RECOV-006, AUTH-FACT-008, D-162,
-D-166, D-189*
+D-166, D-189, D-197*
 
 The two dialogs are the one place the frontend chooses between a credential that signs
 in and one that is a second factor; the server cannot make that choice for it. Where
@@ -837,6 +849,9 @@ the passkey dialog and the frontend does not pre-empt it.
    except by regeneration; a copy, download or print calls
    `POST /account/recoverycodes/exported`, save in an enrolment session, where the
    confirm-saved control alone calls it, once.
+7. A `factorRequired` answer offering `securityKey` leads to `navigator.credentials.get`
+   with that answer's `webauthn` options; the passkey sign-in's request carries no
+   `allowCredentials`.
 
 ---
 

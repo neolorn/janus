@@ -298,7 +298,7 @@ is the residual accepted here.
 | **Likelihood** | Certain, if the gateway offers no HTTPS callback |
 | **Impact** | Low — the report carries a delivery status against an opaque reference, no personal data |
 | **Decision** | Named exception to the TLS rule, pending confirmation — **the one open item in this set**, closed at integration time (D-125) |
-| **Source** | D-092, INF-TLS-004 |
+| **Source** | D-092, INF-TLS-004, D-197 |
 
 The SMS gateway's delivery report is a plain-HTTP GET with query parameters. INF-TLS-001
 requires no origin to serve plaintext, so one had to give.
@@ -307,7 +307,9 @@ requires no origin to serve plaintext, so one had to give.
 risk lapses entirely.
 
 **If not:** the single path is exempt, with compensating controls — an unguessable
-reference, rate limiting, and no authoritative state advanced by the callback.
+reference, rate limiting, and no authoritative state advanced by the callback, save the
+releases INT-SMS-005 allows, each of which can only make a person less restricted
+(D-197).
 
 ---
 
@@ -418,7 +420,7 @@ written; the switch is configuration, not a redeploy.
 | **Likelihood** | Low (off by default; a host must enable `phoneLink` or `phoneCode` by policy) |
 | **Impact** | Medium (SIM swap or number porting yields a sign-in, or the second step beside a password) |
 | **Decision** | Accepted as a restricted factor, off by default |
-| **Source** | D-146, AUTH-FACT-002, AUTH-FACT-002b, AUTH-FACT-003, D-162, D-166 |
+| **Source** | D-146, AUTH-FACT-002, AUTH-FACT-002b, AUTH-FACT-003, D-162, D-166, D-197 |
 
 A sign-in link by SMS (`phoneLink`) and an SMS code as a second step (`phoneCode`)
 exist in the factor catalogue and are off in `loginFactors` by default. A text reaches a
@@ -435,7 +437,9 @@ sent by text (AUTH-FACT-002b), and their absence is recorded; on a `risk` answer
 is sent to the number: a sign-in offers the account's other factors, a step-up drops the
 entry, and a request for a sign-in link or a recovery link by text is answered 202, as
 every such request is, so no caller learns the carrier's signal about a number (D-162,
-D-166); every send is governed by the restrictions of AUTH-ABUSE-004.
+D-166); a `phoneCode` credential is bound to the number it was confirmed on, its
+enrolment is refused on `risk`, and the number leaving the account takes it out of use
+(AUTH-FACT-002, D-197); every send is governed by the restrictions of AUTH-ABUSE-004.
 
 **Would change if:** the standard withdraws the channel entirely, or the host's
 population loses the need for it.
@@ -525,7 +529,7 @@ Risks addressed by design rather than accepted.
 | # | Risk | Mitigation | Source |
 |---|---|---|---|
 | R-M01 | Account enumeration | Identical responses and timing; non-existent addresses are emailed | AUTH-ABUSE-003 |
-| R-M02 | SMS toll fraud draining prepaid balance | Named sending restrictions per destination and per source (shipped: 3 per number per 24 h, 10 per source per hour); a failed delivery does not count; balance monitoring; hard stop at floor | D-013, D-146, AUTH-ABUSE-004 |
+| R-M02 | SMS toll fraud draining prepaid balance | Named sending restrictions per destination and per source (shipped: 3 per number per 24 h, 1 per number per 3 minutes, 10 per source per hour); a failed delivery does not count; balance monitoring; hard stop at floor | D-013, D-146, AUTH-ABUSE-004, D-197 |
 | R-M03 | Session fixation | New identifier on authentication, step-up, and privilege change | AUTH-SESS-006 |
 | R-M04 | Token theft via injected script | Opaque cookie, `httpOnly`; no token in browser storage | AUTH-SESS-003 |
 | R-M05 | Cross-site request forgery | Token enforced in the BFF layer; not per-endpoint | AUTH-SESS-007 |
@@ -534,7 +538,7 @@ Risks addressed by design rather than accepted.
 | R-M08 | Credential stuffing | Progressive delay per account and per source; blocklist screening; new-device check on single-factor accounts (a code to the primary email from an unrecognised browser) | D-011, D-013, D-146, AUTH-FACT-016 |
 | R-M09 | Cloned authenticator | Signature counter verified where provided | AUTH-FACT-014 |
 | R-M10 | Lookalike identifiers defeating human identity checks | Unicode normalization; mixed-script rejection | D-040 |
-| R-M11 | Forged provider callbacks | Signature verification where supported; verification-against-provider where not; an unsigned callback never advances an authoritative state by itself, and a verified, signed provider security event acts only as IDN-LIFE-012a states | INT-GEN-003, IDN-LIFE-012a, D-070, D-166 |
+| R-M11 | Forged provider callbacks | Signature verification where supported; verification-against-provider where not; an unsigned callback never advances an authoritative state by itself, save the releases INT-SMS-005 allows, each of which can only make a person less restricted, and a verified, signed provider security event acts only as IDN-LIFE-012a states | INT-GEN-003, IDN-LIFE-012a, D-070, D-166, D-197 |
 | R-M12 | Unencrypted personal data to a processor | TLS enforced at startup; plaintext endpoints rejected | INT-GEN-001 |
 | R-M13 | Permission drift between check and list | One rule, two renderings, asserted equal in tests | AUTHZ-PRIN-001 |
 | R-M14 | Admin console as a privilege escalation path | Protected-settings list unreachable from the application; direction-based friction | D-010, D-071 |

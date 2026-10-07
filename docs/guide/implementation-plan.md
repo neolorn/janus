@@ -9,12 +9,12 @@ under. It adds no requirement. Where this plan and a chapter disagree, the chapt
 rules are in the working guide; this plan is the order of work.
 
 **Two milestones.** Milestone 1 is the library: everything the implementer can build and
-prove alone against the specification with a database, a cache and a shell, with every
-external system met at its abstraction. It runs autonomously, phase by phase, on phase
-reports alone. Milestone 2 is the deployment: everything that needs the real world or
-the owner (a machine, a credential, a purchase, a physical envelope, a decision). It is
-a checklist of the owner's actions with the implementer's work between them, and it does not
-start until Milestone 1's exit gate is green.
+prove alone against the specification with a database and a shell, with every external
+system met at its abstraction. It runs autonomously, phase by phase, on phase reports
+alone. Milestone 2 is the deployment: everything that needs the real world or the owner
+(a machine, a credential, a purchase, a physical envelope, a decision). It is a
+checklist of the owner's actions with the implementer's work between them, and it does
+not start until Milestone 1's exit gate is green.
 
 ---
 
@@ -25,7 +25,8 @@ start until Milestone 1's exit gate is green.
    skeleton of the solution before any feature is written.
 2. Every requirement has an identifier, a SHALL statement and acceptance criteria. Each
    criterion becomes at least one test. A requirement is done when every criterion has a
-   passing test, not when the code exists.
+   passing test or, where no test can decide it, is named in the report with how it was
+   verified (CONV-TEST-007, D-197), not when the code exists.
 3. `10-reference` is the single place for error codes, permission strings, configuration
    keys, enumerations, step-up actions and events. When a chapter names one, its row in
    `10` is authoritative for the spelling and the default.
@@ -57,8 +58,8 @@ start until Milestone 1's exit gate is green.
 - **Generic library.** No code path, default or fixture assumes a particular host,
   product or market. Hosts declare purposes, factors, policies and preferences (LIB-HOST-001).
 - **Secure by default.** Every key ships with its `10` default; a host that configures
-  nothing but the required values (eleven, three of them conditional, `10` section 4)
-  gets a conformant deployment (OPS-CFG-003).
+  nothing but the required values (eighteen, six of them conditional, `10` section 4;
+  D-197) gets a conformant deployment (OPS-CFG-003).
 - **Stop conditions.** Any Tier 2 or Tier 3 question of the working guide parks the item
   it touches, with a report instead of a guess, among them: an acceptance criterion that
   cannot be tested as written; two chapters that disagree; a dependency the environment
@@ -78,7 +79,7 @@ running the criteria of the items listed, not by inspection.
 | 1 | Storage and identity core | Schema and migrations (library-owned, expand and contract, applied library first); accounts, subject identifier, states and transitions; organizations, membership, policy inheritance; per-subject data key and fingerprint storage; identifier list model; audit records | `06` OPS-DATA, OPS-DB, OPS-MIG; `01` sections 1 to 3, IDN-LIFE-003/003a/003b, IDN-LIFE-012 to 015, IDN-ATTR, IDN-PRIN, IDN-AUD; `04` PRIV-RIGHT-005a/005c, PRIV-RET-002/003; `20` REG-ACCT-001, REG-IDENT-001 to 003, REG-PROF-001, REG-PREF-001 | Migration applied twice against a throwaway database; an account exists only in a `10` section 5.1 state; erasure leaves keyed fields unreadable in one transaction; identifiers canonicalise and fingerprint per IDN-ACCT-004 to 006 |
 | 2 | Authorization | Grants, roles, groups, model builder, derivations, permission filter (expression and SQL fragment), single evaluation seam, capability arrays, explanation | `03` all; `07` LIB-API-004, LIB-SEAM-001/002, LIB-HOST-002/004; `10` sections 2, 3, 5.5, 5.6 | Every denial is explicable (OPS-OBS-001); host filters apply to host tables; the seam is the only evaluation path |
 | 3 | Sessions, passwords, factors | Server-side session spine and types; assurance levels; lifetimes; rotation; per-app sessions; passwords (floors, leaked-list screening with offline fallback, Argon2id); factor catalogue and properties; TOTP; WebAuthn (passkeys, second-factor keys, BE/BS, labels, upgrade); recovery codes; trusted devices; new-device check; grace period; step-up gates and reachable assurance | `02` sections 1 to 5; `05` INT-PWD; `10` sections 4.2, 4.3, 5.2 to 5.4, 5a; `17` sessions and CSRF items | AAL assigned exactly per AUTH-SESS-005a; a 12-character password without a second step is refused; a gate with `phishingResistant` refuses password plus TOTP and accepts password plus security key; new-device check holds a password-only sign-in from an unseen browser |
-| 4 | Sending and restrictions | Notification pipeline with retry; email and SMS transports behind abstractions; templates with length budgets; the restriction model (keys, purposes, buckets, grants, runtime edits, alerts); security-notice set routing | `02` section 7 (AUTH-ABUSE-004 and neighbours), AUTH-ABUSE-001 to 003, 005 to 008; `05` INT-SMS, INT-GEN-001 to 005; `06` OPS-ALERT-001 to 004a; `10` sections 4.5, 5.14 to 5.16 | Fourth SMS to one number in 24 hours refused with `retryAt`; a security notice to an existing holder is not blocked by a drained destination; a failed delivery does not count; a restriction edit applies without restart and is audited |
+| 4 | Sending and restrictions | Notification pipeline with retry; email and SMS transports behind abstractions; templates with length budgets; the restriction model (keys, purposes, buckets, grants, runtime edits, alerts); security-notice set routing | `02` section 7 (AUTH-ABUSE-004 and neighbours), AUTH-ABUSE-001 to 003, 005 to 008; `05` INT-SMS, INT-GEN-001 to 005; `06` OPS-ALERT-001 to 004a; `10` sections 4.5, 5.14 to 5.16a | Fourth SMS to one number in 24 hours refused with `retryAt`; a security notice to an existing holder is not blocked by a drained destination; a failed delivery does not count; a restriction edit applies without restart and is audited |
 | 5 | Registration and account management | Registration session bound to the pre-authentication cookie; the ten steps; code and link verification with same-browser press and elsewhere-shows-code; age screen and derived affirmation; security step rules; terms step transaction; return contract; identifier add, primary, backup, remove with undo, replace; profile; preferences store; sessions list; credential list and labels; well-known endpoints | `20` all remaining items; `09` sections 2 and 6; `17` BFF-CSRF-005a/005b; `18` FE-REG, FE-VER, FE-PM, FE-SEC, FE-ACCT (server side only; screens are the frontend's) | Abandoned registration leaves no row; a link opened in another browser verifies nothing and shows the code; duplicate identifier gives a byte-identical response and one owner notice; removing an email sends the undo to the remaining set only; `emergency` holds no identifier |
 | 6 | Recovery, sign-in links, OIDC | Admin-assisted re-enrolment and enrolment session; public recovery; loss reports and invalidation windows; credential redundancy; sign-in links (email and SMS) and `emailCode`; SMS second step flagged restricted; OIDC provider (discovery, JWKS, userinfo, code flow, refresh rotation, token lifetimes, key rotation); first-party client for the mail server; pushed authorization requests at `/oidc/par`, required; RFC 9068 access tokens; provider security events at `POST /callbacks/providers/{provider}` (D-164) | `02` sections 6, 8, 9, AUTH-FACT-002b/003/016/017, AUTH-OIDC-006; `01` IDN-LIFE-012a; `09` sections 3, 5, 9, 10; `10` section 4.4, 4.9 | Approver cannot approve own recovery; a lost passkey is invalidated after the notified window; a sign-in link never satisfies a gate; tokens signed ES256 rotate with overlap and validate throughout; `/enrol/begin` consumes only the admin-assisted link |
 | 7 | Privacy | Purposes and lawful bases, consent and objection records, written consent, notice presentation, cookie list, legal documents with governing language and translations, rights queue with working-day clock and holidays, export routine, erasure and restriction through the outbox, RoPA generation, breach queries, retention per category | `04` all; `09` section 7; `10` sections 1.4, 4.7, 5.7 to 5.12; `13` R-O items as build inputs | Registration completes with every consent unticked; withdrawal takes no more interactions than granting; a document publishes without translations and never without governing text; deadline computed on the declared working week; erasure reaches every subscriber or alerts |
@@ -86,16 +87,23 @@ running the criteria of the items listed, not by inspection.
 | 9 | Operations code | Bootstrap command (first organization, administrator, enrolment link, `emergency`); break-glass credential and session; KEK rotation command and re-wrap job; alert routing including owner destinations; maintenance log; background jobs and named principals; the restore-test job and the erasure ledger writer, run against containers | `06` OPS-BOOT, OPS-SEC, OPS-MAINT, OPS-OBS, OPS-ENV; `11` as the procedure the code must make possible; `12` DR-006a, DR-007, DR-008, DR-009a, DR-016 (the code side) | Bootstrap issues no break-glass credential; KEK rotation resumes after a forced crash; the restore-test job restores a container backup and proves a field decrypts; every `06` alert condition fires from a test |
 | 10 | Conformance and release readiness | Conformance suite a host can run; contract tests over LIB-API-001; `CHANGELOG.md` with the first version section prepared under `Unreleased`; sample host that declares only the required values, with in-memory fakes for mail and SMS | `07` LIB-TEST-001/002, LIB-VER, LIB-HOST-001/003; `08` CONV-VCS-005; `00` section 9 | Sample host passes the conformance suite with defaults; a public-surface change fails the contract test; the full gate is green on the default branch |
 
-**Corrections before the exit gate.** After phase 10, one corrections run applies
-D-166 (the review of every decision taken alone through phase 10) against the
-reconciled chapters, and ends with the full gate and a report.
+**Corrections before the exit gate.** After phase 10, one corrections run applies D-166
+(the review of every decision taken alone through phase 10) against the reconciled
+chapters, and ends with the full gate and a report. Later corrections runs applied the
+answers each raised; the run D-197 opens is Milestone 1's last, after which come the
+owner's review of its report and the exit gate. A Tier 2 question that run raises parks
+its item and is carried into Milestone 2 as a known issue (section 4), unanswered before
+the exit gate; a Tier 3 question is answered at once (D-197).
 
-**Milestone 1 exit gate.** All ten phases and the corrections of D-162 to D-166
-reported, and the owner's review of the last report done; every acceptance
+**Milestone 1 exit gate.** All ten phases and every corrections run reported, the last
+the one D-197 opens, and the owner's review of its report done; every acceptance
 criterion of every item in chapters 01 to 10, 17 and 20, and the code-side items of 06,
-12 and 19, has a passing test carrying its identifier (CONV-TEST-007); the full gate is
-green; `PublicAPI.Unshipped.txt` holds the complete surface; no spec defect is open.
-The implementer stops here and does not begin Milestone 2 on its own.
+12 and 19, has a passing test carrying its identifier, or is named in the report as one
+a test cannot decide with how it was verified, or is Milestone 2's by this section, or
+belongs to a known issue section 4 carries (CONV-TEST-007, D-197); the full gate is
+green; `PublicAPI.Unshipped.txt` holds the complete surface; no spec defect is open save
+the known issues section 4 carries into Milestone 2 (D-197). The implementer stops here
+and does not begin Milestone 2 on its own.
 
 What Milestone 1 does **not** touch: a real mail server, SMS gateway, secrets manager,
 DNS, certificates, host machine, package feed or frontend. Each is met at its
@@ -110,9 +118,9 @@ autonomous end to end.
 
 | # | Step | Who | What | Done when |
 |---|---|---|---|---|
-| 1 | Repository workflows | implementer | Pipeline definitions for the gates of CONV-GATE-001/002, release workflow (tag, MinVer, changelog check, package publish), dependency alerting, secret scanning | Every gate runs on a pull request; a tagged commit produces a versioned package |
+| 1 | Repository workflows | implementer | Pipeline definitions for the gates of CONV-GATE-001/002, release workflow (tag, MinVer, changelog check, package publish), dependency alerting, secret scanning, and the manually dispatched workflow that draws the leaked-password list with `tools/leaked-passwords/` on a hosted runner, its output the dated list CONV-VCS-005 refreshes at each release (D-197) | Every gate runs on a pull request; a tagged commit produces a versioned package; the leaked-password workflow, dispatched by hand, yields the dated list as its artifact |
 | 2 | Package feed | owner, then implementer | Owner provisions the private feed and its credential (LIB-PKG-003); implementer wires the release workflow to it | The package installs from the feed into the sample host |
-| 3 | Infrastructure definition | implementer, owner reviews | Container arrangement, reverse proxy, DNS records, volumes, certificate mechanism, pipeline target, committed per DR-017; PostgreSQL with ICU collation, Redis, secrets manager, clock sync per `19` | Owner approves the definition; DR-007 test builds from it |
+| 3 | Infrastructure definition | implementer, owner reviews | Container arrangement, reverse proxy, DNS records, volumes, certificate mechanism, pipeline target, committed per DR-017; PostgreSQL with ICU collation, secrets manager, clock sync per `19` | Owner approves the definition; DR-007 test builds from it |
 | 4 | Host and secrets | owner | Provision the host outside Egypt (INF-HOST-004), the secrets manager (INF-HOST-003), the database credentials (INF-DB-003), TLS (INF-TLS-001 to 003), alert channels (INF-OBS-001), the reachability check (INF-OBS-003) | The implementer's connectivity checks pass from the pipeline |
 | 5 | Mail server | owner, then implementer | Owner deploys the mail server and registers the sending domains (INT-MAIL-011); implementer configures the OIDC client, the mail server's `requireAudience` set to its client identifier, provisioning and reconciliation against it (INT-MAIL-001 to 010, AUTH-OIDC-006 AC3), the mail-server adapter being built in Milestone 1 (D-166) | A staff invitation creates a disabled mailbox; acknowledgement enables it; reconciliation reports no drift |
 | 6 | SMS gateway | owner, then implementer | Owner contracts the gateway and sets the balance floor; implementer wires the transport, delivery report and balance polling (INT-SMS); the delivery transports come from the shared messaging library the owner has decided on, settled before this step | A verification code arrives on a real number; a failed delivery does not count |
@@ -121,10 +129,20 @@ autonomous end to end.
 | 9 | Backups and restore | implementer, owner verifies | Continuous archiving, base backups, encryption under the backup key, the erasure ledger off host, the scheduled restore test (`12`) | First restore test passes on the real host; DR-011 rebuild rehearsed once from the envelope and the repository |
 | 10 | Frontends | implementer | Authentication, account and management applications per `18` against the real BFF; wording written natively per language (CONV-CONTENT-001) | Every FE item's criteria pass end to end against the deployed BFF |
 | 11 | Business actions | owner | The outstanding actions of the decision log (counsel confirmations, DPO, licences, permits) | Each recorded as done in the log's table |
-| 12 | Release 1.0.0 | implementer, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag, publish (CONV-VCS-005) | Version 1.0.0 on the feed; changelog and migration note published |
+| 12 | Release 1.0.0 | implementer, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag, publish (CONV-VCS-005) | Version 1.0.0 on the feed; changelog and migration note published; every known issue carried into Milestone 2 answered by a decision and built or deferred (D-197) |
 
 The frontend applications (`18`) are built in step 10 against the deployed BFF;
 Milestone 1 phases 5 and 8 deliver the server side they need.
+
+**Known issues carried into Milestone 2.**
+
+- A social-only session downgraded since it reached `delegated` (AUTH-SESS-009) cannot
+  meet a `delegated` gate by a step-up, and AUTH-STEP-002 step 3 answers it
+  `report-loss`; the way out, a new sign-in with the provider, is stated in no chapter
+  (D-197).
+
+Section 4 also carries every further known issue the report of the last corrections run
+of Milestone 1 lists (D-197).
 
 ## 5. Phase report
 

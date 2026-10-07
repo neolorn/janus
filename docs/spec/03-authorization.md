@@ -116,9 +116,12 @@ the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised g
 drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record,
 `authz.grant.materialised`, naming the system principal `derivation-driftcheck`; a grant
 the drift check takes back is recorded as `authz.grant.retracted` the same way, in the
-transaction that corrects the drift (AUTHZ-DERIVE-005, D-187).
+transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a person, an
+acknowledgement or bootstrap writes is recorded as `authz.grant.created`, and a
+revocation a person makes as `authz.grant.revoked`, each with its reason, in the
+transaction that writes it (`10` section 5.24, D-197).
 
-*Source: D-015, D-166, D-187*
+*Source: D-015, D-166, D-187, D-197*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -134,6 +137,9 @@ migration across every query later.
    `authz.grant.materialised` or `authz.grant.retracted`, naming the principal
    `derivation-driftcheck` and the reason `AUTHZ-DERIVE-005`, in the transaction that
    corrects the drift.
+6. A grant a person, an acknowledgement or bootstrap writes is recorded as
+   `authz.grant.created`, and a revocation a person makes as `authz.grant.revoked`, each
+   with its reason, in the transaction that writes it.
 
 ---
 
@@ -1029,16 +1035,17 @@ permission, so forbidden is both accurate and more useful.
 ## 6. Caching and revocation
 
 **AUTHZ-CACHE-001** — What is cached SHALL be the principal's **grant rows and
-transitive group set** — never a resolved (principal, action, resource) outcome —
-under a key incorporating a per-account version counter bumped in the **same
-transaction** as any grant or membership change.
+transitive group set** — never a resolved (principal, action, resource) outcome — under
+a key incorporating a per-account version counter bumped in the **same transaction** as
+any grant or membership change. In version 1 an entry lives for one request
+(AUTHZ-GROUP-002); a cache across requests is deferred with INF-CACHE-001 (D-197).
 
 **Role definitions, ancestry, grant expiry and account state SHALL be evaluated
 live.** So SHALL an organization's deletion request, which stops the organization's
 grants conferring (IDN-ORG-003): it is read through the effective grants view on every
 evaluation and bumps no counter (D-166).
 
-*Source: D-007, D-079, D-166*
+*Source: D-007, D-079, D-166, D-197*
 
 Caching resolved outcomes leaves stale permissions after a role's action set is
 edited, a resource is moved, a grant expires, an account is restricted, or an

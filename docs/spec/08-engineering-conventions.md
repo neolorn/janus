@@ -37,6 +37,7 @@ area**, published as a single package.
 | `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001), which asks for its provider probes through a contract in `Janus.Core` and holds no client secret; the one further project with public types, shipped as its own package | Core, Hosting |
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
 | `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154), the IDNA mapping of UTS #46 that gives a domain its ASCII form among them (REG-DOM-001): a console project outside the package, with the Unicode Character Database files and the UTS #46 IDNA mapping table and conformance test file (`IdnaTestV2.txt`, REG-DOM-001) of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
+| `tools/leaked-passwords` | The draw of the offline leaked-password list (AUTH-PASS-004, CONV-VCS-005): a script outside the package and the solution that streams the ranges and keeps a running top 100,000, run at each release by a manually dispatched workflow on a hosted runner (D-197) | nothing |
 | `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication, Privacy — it creates the first organization, administrator, enrolment link, the credential-less `emergency` account and the restore-test canary (DR-007); **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
 
 Dependencies point **inward toward Core**. Nothing points outward. The column names the
@@ -51,7 +52,7 @@ credential source of AUTH-KEY-001, with its stores in `Janus.Storage`.
 source holds (CONV-CODE-007).
 
 *Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176, D-181,
-D-183, D-187, D-189*
+D-183, D-187, D-189, D-197*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -817,16 +818,15 @@ references it.
 | Purpose | Package | Why this one |
 |---|---|---|
 | Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage only, at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for the migration bundle), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage` resolves it at EF Core's version, not at the lower floor the provider declares |
-| Cache | `StackExchange.Redis` | INF-CACHE-001; the reference client |
 | Password hashing | `Konscious.Security.Cryptography.Argon2` | Argon2id is absent from the base class library; managed implementation, MIT licence (package listing inspected 2026-09-18) |
-| WebAuthn | `Fido2` (Fido2NetLib) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
+| WebAuthn | `Fido2` (Fido2NetLib), which brings, among others, `Fido2.Models`, `System.Formats.Cbor` and `NSec.Cryptography` (which verifies EdDSA), none referenced directly (D-197) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
 | TOTP | `Otp.NET` | RFC 6238 defaults; small |
 | OIDC provider | `OpenIddict.AspNetCore`, `OpenIddict.Server`, `OpenIddict.Validation`; stores are hand-written in `Janus.Storage` over the single `DbContext` (no `OpenIddict.EntityFrameworkCore`) | The maintained free OpenID Connect server for ASP.NET Core; a hand-written provider is a security risk this library does not take; hand-written stores keep one `DbContext` (CONV-DESIGN-003) |
 | OIDC client (Google, Apple) | None: the round trip is the library's own (IDN-LIFE-012); the identity token is validated with `Microsoft.IdentityModel.JsonWebTokens`, which `OpenIddict.Server` and `OpenIddict.Validation` bring, and the provider's discovery and key-set documents are read through the document and configuration retrievers of `Microsoft.IdentityModel.Protocols`, which `OpenIddict.Validation` brings | The handler and OpenIddict's client each bind the round trip with a `SameSite=None` cookie, which BFF-SESS-002 and BFF-CSRF-005 AC3 forbid and which Apple's form-post return needs |
 | Public surface tracking | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | CONV-SETUP-003 |
-| Analyser authoring (`Janus.Analyzers` only) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The six rules the gates rely on (CONV-CODE-008); the analysers ship as a package of their own that a build loads (`07` LIB-PKG-001), and a compiler older than the one they were built against refuses them, so these two move only by a decision-log entry (CONV-DEP-004) |
+| Analyser authoring (`Janus.Analyzers` and its test project) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The six rules the gates rely on (CONV-CODE-008); the analysers ship as a package of their own that a build loads (`07` LIB-PKG-001), and a compiler older than the one they were built against refuses them, so these two move only by a decision-log entry (CONV-DEP-004); `Microsoft.CodeAnalysis.CSharp` is referenced at 5.0.0, the compiler of SDK 10.0.100, the first .NET 10 SDK, so the analysers load in every .NET 10 SDK, and `Microsoft.CodeAnalysis.Analyzers` at 5.6.0, which checks the analysers' own code in the library's build and is no dependency of the package (D-197) |
 | Versioning | `MinVer` | Version from the git tag, nothing to maintain (CONV-VCS-005) |
-| Tests | `xunit.v3`, `Microsoft.Testing.Platform` (as xunit.v3's runner), `Testcontainers.PostgreSql`, `Testcontainers.Redis` | CONV-TEST-002 |
+| Tests | `xunit.v3`, `Microsoft.Testing.Platform` (as xunit.v3's runner), `Testcontainers.PostgreSql` | CONV-TEST-002 |
 
 `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational`,
 `Microsoft.EntityFrameworkCore.Design` and the `dotnet-ef` tool (CONV-SETUP-002) SHALL
@@ -842,13 +842,14 @@ shared framework of .NET is not a package: a project takes the container's abstr
 through the reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and their package
 is never referenced.
 
-*Source: CONV-DEP-003, D-149, D-166, D-183, D-184*
+*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197*
 
 **Acceptance criteria**
 1. The set of direct package references, read from `Directory.Packages.props`, equals
    the identifiers in this table, less the packages the table names only as ones another
    package brings (`Microsoft.IdentityModel.JsonWebTokens`,
-   `Microsoft.IdentityModel.Protocols`), which are not referenced directly.
+   `Microsoft.IdentityModel.Protocols`, `Fido2.Models`, `System.Formats.Cbor`,
+   `NSec.Cryptography`), which are not referenced directly.
 2. A pull request adding a package not in the table fails a check.
 3. `Directory.Packages.props` gives `Microsoft.EntityFrameworkCore`,
    `Microsoft.EntityFrameworkCore.Relational` and `Microsoft.EntityFrameworkCore.Design`
@@ -1218,7 +1219,7 @@ shipped project. The consumer sample of LIB-API-002 AC2 SHALL live in
 | Kind | Runs against | Purpose |
 |---|---|---|
 | Unit | Nothing external | Fast, run constantly |
-| Integration | Real PostgreSQL and Redis in containers | Where most value lies — this system is about how data and permissions behave together |
+| Integration | Real PostgreSQL in containers | Where most value lies — this system is about how data and permissions behave together |
 | Contract | The public surface | Guards LIB-API-001; fails on unintended change |
 | Conformance | A host's own configuration | Shipped per LIB-TEST-001 |
 
@@ -1226,7 +1227,7 @@ A contract test that reads the library-owned schema from a migrated database (LI
 AC2, LIB-TEST-002 AC2) is of the integration kind; it compares with the committed schema
 file, leaf partitions excluded.
 
-*Source: LIB-TEST-001, LIB-TEST-002, D-166*
+*Source: LIB-TEST-001, LIB-TEST-002, D-166, D-197*
 
 **Acceptance criteria**
 1. Unit tests run without containers: no test class of the unit or contract kind takes
@@ -1468,7 +1469,7 @@ level governs: failed authentication (`auth.authentication.failed`), denied auth
 refused), configuration change (`ops.configuration.changed`), break-glass use
 (`auth.breakglass.used`).
 
-*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193*
+*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193, D-197*
 
 **Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
 press (a link token unknown or expired included, when pressed) or on a social provider's
@@ -1481,7 +1482,10 @@ step-up, which writes no `auth.stepup.failed`; a refused factor is one refused w
 code AUTH-ABUSE-001 lists (D-188, D-189). A `phoneCode` ask presents nothing: refused
 `auth.factor.rejected` where no factor is left, or `auth.credential.suspended` for a
 suspended number, it is no failed authentication and writes no `auth.stepup.failed`
-(AUTH-FACT-002, AUTH-RECOV-007, D-190).
+(AUTH-FACT-002, AUTH-RECOV-007, D-190). A second step presented at a sign-in before a
+first factor has been accepted on its challenge, refused `auth.factor.notpermitted`
+before it is verified, is no failed authentication and records nothing (AUTH-FACT-002b,
+AUTH-ABUSE-001, D-197).
 
 **Acceptance criteria**
 1. Raising the minimum log level does not suppress these.

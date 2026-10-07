@@ -98,13 +98,13 @@ Latest production-safe versions — verify current releases rather than assuming
 |---|---|
 | Backend | .NET |
 | Database | PostgreSQL |
-| Cache | Redis |
+| Cache | None in version 1: every record is read from PostgreSQL (D-197) |
 | Data access | EF Core for everything normal; Dapper for hand-written SQL |
 | Frontend (host apps) | Angular |
 | Mail | Stalwart (pluggable — not a library dependency) |
 | Infrastructure | Linux VPS, Docker, Traefik |
 
-*Source: D-017*
+*Source: D-017, D-197*
 
 ### 2.2 Reference topology
 
@@ -119,10 +119,9 @@ application with no separate authentication or account app.
 - **Account app** (app + BFF) — account management and the privacy dashboard
 - **Single database**, multiple schemas
 - **Background worker**
-- **Redis**
 - **Stalwart** mail
 
-*Source: D-033.3*
+*Source: D-033.3, D-197*
 
 ---
 
@@ -324,6 +323,7 @@ Nothing is deferred silently.
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
 | Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
+| A cache in front of PostgreSQL for sessions and permissions (INF-CACHE-001, D-197) | When session or permission reads are among the slowest queries the deployment measures |
 
 This table carries every row of the decision log's "Deferred, with reactivation
 triggers" table (D-147); a deferral recorded in the log and absent here is a defect.
@@ -348,7 +348,7 @@ triggers" table (D-147); a deferral recorded in the log and absent here is a def
 | **Model builder** | Fluent startup declaration where the host describes its resource types, containment, concealment, sensitivity and processing purposes |
 | **Organization** | A domain entity, not a tenancy boundary |
 | **Registration session** | Opaque server-side record bound to the requesting browser that stages everything registration collects and reserves nothing; the account is created in one transaction at the terms step or not at all (`20-registration-and-account` REG-SESS-001) |
-| **Restriction** | A named sending limit: a key (destination, account, source, global or host-supplied), an optional purpose, an optional channel (`sms`, `email` or `any`), and one or more (max, interval) buckets, sliding or fixed. Every send of every kind except an alert is checked against every restriction that applies to it; a security notice to an existing holder answers only to restrictions whose purpose is `notification`, and an alert only to its deduplication (`02-authentication` AUTH-ABUSE-004, D-166) |
+| **Restriction** | A named sending limit: a key (destination, account, source, global or host-supplied), an optional purpose, an optional channel (`sms`, `email` or `any`), one or more (max, interval) buckets, sliding or fixed, and an optional `resend` mark, under which a send is judged and counted once whatever its languages (AUTH-ABUSE-004, D-197). Every send of every kind except an alert is checked against every restriction that applies to it; a security notice to an existing holder answers only to restrictions whose purpose is `notification`, and an alert only to its deduplication (`02-authentication` AUTH-ABUSE-004, D-166) |
 | **RoPA** | Record of Processing Activities. Generated, not maintained by hand |
 | **Security-notice set** | The identifiers that receive security notices and recovery links: the primary of each kind plus whatever the account's backup setting adds (`20-registration-and-account` REG-IDENT-002) |
 | **Sign-in link** | A link sent by email or SMS that signs the person in at AAL1 when pressed in the browser that asked for it; never a second step. Off by default (`loginFactors` `emailLink`, `phoneLink`) |

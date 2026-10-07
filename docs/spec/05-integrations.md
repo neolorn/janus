@@ -76,8 +76,9 @@ window, raw bytes, idempotency on the event identifier.
 provider's API**, never a fact — supported by unguessable references, rate limiting,
 and source restriction where ranges are published.
 
-An unsigned callback SHALL NEVER by itself advance an authoritative state; a verified,
-signed provider security event acts as IDN-LIFE-012a states.
+An unsigned callback SHALL NEVER by itself advance an authoritative state, save the
+releases INT-SMS-005 allows (BFF-MACH-003, D-197); a verified, signed provider security
+event acts as IDN-LIFE-012a states.
 
 **The pipeline is the library's; the callbacks are mostly the host's.** The library
 ships these controls as a host-mountable machine-profile pipeline (BFF-MACH-002,
@@ -106,15 +107,16 @@ rolls back.
 
 *Source: D-070*
 
-*Source: D-013, D-030, D-164, D-166, D-183, D-186*
+*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
 unable to mark a phone verified, or to advance any state the host hangs on a callback.
 
 **Acceptance criteria**
 1. A callback with a guessed reference is rejected.
-2. An unsigned callback advances state only after the system confirms independently,
-   or is treated as a hint requiring corroboration.
+2. An unsigned callback advances state only after the system confirms independently, or
+   is treated as a hint requiring corroboration, save the releases INT-SMS-005 allows
+   (BFF-MACH-003).
 3. Rejected callbacks are logged with their source.
 4. A callback past `integration.callback.ratelimit` is answered 429 with `Retry-After`
    before any lookup; a callback refused for any other cause is answered 422 with no
@@ -803,31 +805,40 @@ refuses nothing (AUTH-ABUSE-006, D-186).
 
 ---
 
-**INT-SMS-005** — The delivery-report callback SHALL follow INT-GEN-003 and SHALL
-NOT by itself mark a phone verified. A report indicating **failed delivery** SHALL
-release the send's count from every restriction bucket it counted against, and any
-credit it spent (AUTH-ABUSE-004), and SHALL do nothing else.
+**INT-SMS-005** — The delivery-report callback SHALL follow INT-GEN-003 and SHALL NOT by
+itself mark a phone verified. A report that a text **failed delivery** SHALL release
+that text's count from every bucket it counted against but those of a restriction marked
+`resend`, and any credit it spent; once every text of its send has failed for good
+(AUTH-ABUSE-004), it SHALL release the send's one count from each restriction marked
+`resend`; a report that a text of a send of purpose `secondfactor` was delivered SHALL
+release that send's one count from each restriction marked `resend` (AUTH-ABUSE-004,
+D-197); a report SHALL do nothing else.
 
-*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183*
+*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197*
 
-The gateway calls over plain HTTP with parameters in the query string,
-unauthenticated. The deployment's SMS transport (`ISmsTransport`, INT-SMS-006) reads
-the report from the gateway's own query parameters, each name taken once; a report it
-cannot read is rejected as one carrying a guessed reference is. A report of anything
-other than a final failure, an intermediate state included, is read as not failed and
-changes nothing. Releasing a send's count and credit on a failure report is the one
-state change a report may cause: it can only make a person less restricted, never
-verified, and a forged failure report gains an attacker at most one extra send to a
-number the restriction or the credit already allowed.
+The gateway calls over plain HTTP with parameters in the query string, unauthenticated.
+The deployment's SMS transport (`ISmsTransport`, INT-SMS-006) reads the report from the
+gateway's own query parameters, each name taken once; a report it cannot read is
+rejected as one carrying a guessed reference is. A report of anything other than a final
+failure, an intermediate state included, is read as not failed and changes nothing, save
+a report that a text of a `secondfactor` send was delivered (D-197). Releasing counts
+and credit on a failure report, and a `secondfactor` send's count from each restriction
+marked `resend` on a delivery report, are the only state changes a report may cause:
+each can only make a person less restricted, never verified, and a forged failure report
+gains an attacker at most one extra send to a number the restriction or the credit
+already allowed, a forged delivery report at most one text to that number sooner than
+`sms.resend` would allow, within what every other restriction allows (D-197).
 
 **Acceptance criteria**
 1. A forged report does not verify a phone.
 2. Correlation references are unguessable.
-3. A send whose report indicates failure does not count against any restriction bucket,
-   and a credit it spent is spent no longer. A report of delivery changes nothing. A
-   report of either kind whose reference no held send answers changes nothing and is
-   rejected, recorded against its source and counted toward
-   `alerting.callback.threshold` (INT-GEN-003 AC1).
+3. A text whose report indicates failure does not count against any bucket of a
+   restriction not marked `resend`, nor its send against one marked `resend` once every
+   text of the send has failed for good, and a credit it spent is spent no longer. A
+   report of delivery releases a `secondfactor` send's count from each restriction
+   marked `resend` and changes nothing else. A report of either kind whose reference no
+   held send answers changes nothing and is rejected, recorded against its source and
+   counted toward `alerting.callback.threshold` (INT-GEN-003 AC1).
 
 ---
 
