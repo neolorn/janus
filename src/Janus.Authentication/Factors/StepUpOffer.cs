@@ -71,6 +71,22 @@ internal static class StepUpOffer
             outcome is StepUpOutcome.LossPending ? held.LossCompletes : null);
     }
 
+    /// <summary>
+    /// Whether factors accepted together reach the gate a challenge was offered
+    /// against.
+    /// </summary>
+    /// <param name="challenge">What the gate answered.</param>
+    /// <param name="accepted">The factors accepted.</param>
+    /// <returns>Whether what they prove together is the gate's level, and resists relay where it asks that.</returns>
+    /// <exception cref="ArgumentNullException">The challenge or the factors are absent.</exception>
+    public static bool ReachedBy(StepUpChallenge challenge, IReadOnlyCollection<Factor> accepted)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(accepted);
+
+        return Meets([.. accepted], challenge.Required, challenge.PhishingResistant);
+    }
+
     private static bool Meets(
         IReadOnlyList<Factor> combination,
         AssuranceLevel required,

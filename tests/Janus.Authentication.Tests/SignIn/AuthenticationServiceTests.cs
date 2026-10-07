@@ -829,6 +829,312 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC3: at a step-up, which names no action, a session is not
+    /// challenged where it last reached the level of the strictest of the policy's
+    /// gates within that gate's maximum age, and is challenged once that age has
+    /// passed, though it still meets the weakest of them.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AC3_AtAStepUpASessionThatMeetsTheStrictestOfThePolicysGatesIsNotChallengedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal1, PhishingResistant: false, TimeSpan.FromMinutes(30)));
+
+        SessionId session = Opened(subject, AssuranceLevel.Aal2);
+
+        _clock.Advance(TimeSpan.FromMinutes(4));
+
+        StepUpChallenge within = await OfferedAsync(subject, session);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        StepUpChallenge aged = await OfferedAsync(subject, session);
+
+        Assert.Equal(StepUpOutcome.Satisfied, within.Outcome);
+        Assert.Empty(within.Combinations);
+        Assert.Equal(StepUpOutcome.Present, aged.Outcome);
+        Assert.NotEmpty(aged.Combinations);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC4a: at a step-up a password with a text code is offered where
+    /// the weakest of the policy's gates asks no phishing resistance, one gate asking
+    /// it, and is not offered where the weakest asks it, every gate asking it.
+    /// </summary>
+    /// <param name="weakestAsks">Whether every gate of the policy asks phishing resistance.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_STEP_002_AC4a_AtAStepUpAPasswordWithATextCodeIsOfferedUnlessTheWeakestGateAsksPhishingResistanceAsync(
+        bool weakestAsks)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal2, weakestAsks, TimeSpan.FromMinutes(15)),
+            Factor.PhoneCode);
+
+        StepUpChallenge offered = await OfferedAsync(subject, Opened(subject));
+
+        if (weakestAsks)
+        {
+            Assert.Equal(StepUpOutcome.Enrol, offered.Outcome);
+            Assert.Empty(offered.Combinations);
+        }
+        else
+        {
+            Assert.Equal(StepUpOutcome.Present, offered.Outcome);
+            Assert.Equal([Named(Factor.Password, Factor.PhoneCode)], Named(offered));
+        }
+
+        Assert.Equal((AssuranceLevel.Aal2, weakestAsks), (offered.Required, offered.PhishingResistant));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC4b: at a step-up whose weakest gate asks <c>aal2</c> with
+    /// phishing resistance, a password with a security key and a passkey alone are
+    /// offered, and a password with a generated code is not; where one gate asks it and
+    /// the weakest does not, the password with a generated code is offered beside them.
+    /// </summary>
+    /// <param name="weakestAsks">Whether every gate of the policy asks phishing resistance.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_STEP_002_AC4b_AtAStepUpOnlyPhishingResistantCombinationsAreOfferedWhereTheWeakestGateAsksItAsync(
+        bool weakestAsks)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Holds(subject, Factor.SecurityKey);
+        Holds(subject, Factor.Passkey);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal2, weakestAsks, TimeSpan.FromMinutes(15)));
+
+        string[] offered = Named(await OfferedAsync(subject, Opened(subject)));
+
+        Assert.Contains(Named(Factor.Password, Factor.SecurityKey), offered);
+        Assert.Contains(Named(Factor.Passkey), offered);
+        Assert.DoesNotContain(Named(Factor.Password), offered);
+        Assert.Equal(!weakestAsks, offered.Contains(Named(Factor.Password, Factor.Totp)));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC4f: where one gate of the policy asks phishing resistance and
+    /// another does not, a step-up on an account holding a password and a generator
+    /// offers the password with a generated code, goes on asking after the password, and
+    /// presenting both writes <c>aal2</c> without phishing resistance into the session
+    /// and ends the step-up, no combination still offered being left to complete.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AC4f_WhereOneGateAsksPhishingResistanceAPasswordAndAGeneratedCodeAreOfferedAndWriteAal2Async()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(15)));
+
+        SessionId held = Opened(subject);
+        Session session = Assert.IsType<Session>(await _live.FindAsync(held, TestContext.Current.CancellationToken));
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        string[] offered = Named(await OfferedAsync(subject, held));
+        SignInProgress first = Reached(await SteppedAsync(new FactorPresentation(Factor.Password) { Value = Secret }));
+        SignInProgress second = Reached(await SteppedAsync(new FactorPresentation(Factor.Totp) { Value = generated }));
+
+        Assert.Equal([Named(Factor.Password, Factor.Totp)], offered);
+        Assert.Equal((SignInStatus.FactorRequired, AssuranceLevel.Aal1), (first.Status, first.AssuranceLevel));
+        Assert.Equal([Factor.Totp], first.Required);
+        Assert.Equal(
+            (SignInStatus.Complete, AssuranceLevel.Aal2, false),
+            (second.Status, second.AssuranceLevel, second.PhishingResistant));
+        Assert.Empty(second.Required);
+        Assert.Equal(AssuranceLevel.Aal2, session.Attained);
+        Assert.Equal(_clock.GetUtcNow(), session.Aal2At);
+        Assert.Null(session.PhishingResistantAt);
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.False(_work.Open);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(FactorPresentation presented) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                held,
+                began.Challenge,
+                presented,
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC6: at a step-up every combination that reaches the weakest of
+    /// the policy's gates, field by field, is offered, and none that does not: the
+    /// lowest level any gate asks, phishing resistance only where every gate asks it,
+    /// whichever gate states each.
+    /// </summary>
+    /// <param name="lowest">The lowest level a gate of the policy asks.</param>
+    /// <param name="alone">Whether a password alone is offered.</param>
+    [Theory]
+    [InlineData(GateLevel.Aal1, true)]
+    [InlineData(GateLevel.Aal2, false)]
+    public async Task AUTH_STEP_002_AC6_AtAStepUpEveryCombinationThatReachesTheWeakestGateFieldByFieldIsOfferedAndNoOtherAsync(
+        GateLevel lowest,
+        bool alone)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(30)),
+            new Gate(lowest, PhishingResistant: true, TimeSpan.FromMinutes(5)));
+
+        StepUpChallenge offered = await OfferedAsync(subject, Opened(subject));
+
+        string[] expected = alone
+            ? [Named(Factor.Password), Named(Factor.Password, Factor.Totp)]
+            : [Named(Factor.Password, Factor.Totp)];
+
+        Assert.Equal(StepUpOutcome.Present, offered.Outcome);
+        Assert.Equal(expected, Named(offered));
+        Assert.Equal(
+            (lowest is GateLevel.Aal1 ? AssuranceLevel.Aal1 : AssuranceLevel.Aal2, false, TimeSpan.FromMinutes(30)),
+            (offered.Required, offered.PhishingResistant, offered.MaximumAge));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 step 2, `09` `POST /auth/step-up`: a step-up goes on answering
+    /// <c>factorRequired</c> until the strictest of the policy's gates is reached,
+    /// though the factor accepted already reaches the weakest of them, and answers
+    /// <c>complete</c> once it is.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_AStepUpAnswersFactorRequiredUntilTheStrictestOfThePolicysGatesIsReachedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.Totp);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal1, PhishingResistant: false, TimeSpan.FromMinutes(30)));
+
+        SessionId held = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInProgress first = Reached(await SteppedAsync(new FactorPresentation(Factor.Password) { Value = Secret }));
+        Error? weakest = await PassedAsync(StepUpAction.AccountDelete);
+        Error? strictest = await PassedAsync(StepUpAction.AccountSuspend);
+        SignInProgress second = Reached(await SteppedAsync(new FactorPresentation(Factor.Totp) { Value = generated }));
+
+        Assert.Equal((SignInStatus.FactorRequired, AssuranceLevel.Aal1), (first.Status, first.AssuranceLevel));
+        Assert.Equal([Factor.Totp], first.Required);
+        Assert.Null(weakest);
+        Assert.Equal(ErrorCodes.StepUpRequired, strictest?.Code);
+        Assert.Equal((SignInStatus.Complete, AssuranceLevel.Aal2), (second.Status, second.AssuranceLevel));
+        Assert.Null(await PassedAsync(StepUpAction.AccountSuspend));
+
+        ValueTask<Error?> PassedAsync(StepUpAction action) =>
+            Guard.PassedAsync(subject, held, action, TestContext.Current.CancellationToken);
+
+        ValueTask<Result<SignInProgress>> SteppedAsync(FactorPresentation presented) =>
+            Service.StepUpAsync(
+                AccessContext.Of(subject),
+                held,
+                began.Challenge,
+                presented,
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 step 3, `09` `POST /auth/step-up`: a refusal the step-up itself
+    /// answers is judged against the weakest of the policy's gates, field by field, and
+    /// carries that gate's values: an account that reaches it and cannot present it is
+    /// told to report the loss, where the strictest gate, which asks phishing
+    /// resistance the account never held, would have told it to enrol.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002_ARefusalOfAStepUpIsJudgedAgainstAndCarriesTheWeakestOfThePolicysGatesAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(30)),
+            Factor.PhoneCode);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(subject)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("report-loss", refused.Details["outcome"].GetString());
+        Assert.Equal(
+            ("aal2", false, 1800L),
+            (
+                refused.Details["required"].GetProperty("level").GetString(),
+                refused.Details["required"].GetProperty("phishingResistant").GetBoolean(),
+                refused.Details["required"].GetProperty("maxAge").GetInt64()));
+        Assert.Empty(refused.Details["options"].Deserialize<string[][]>()!);
+        Assert.Empty(_notifications.Texts);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a text code asked for at a step-up
+    /// whose number answers <c>risk</c>, leaving no combination to complete, is answered
+    /// <c>complete</c> where the factors accepted on the challenge reach the weakest of
+    /// the policy's gates, reporting what they reach, with nothing sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationIsCompleteWhereTheAcceptedFactorsReachTheWeakestGateAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal1, PhishingResistant: false, TimeSpan.FromMinutes(30)),
+            Factor.PhoneCode);
+
+        SessionId held = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+        SignInProgress presented = Reached(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            held,
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Answers(PhoneSignal.Risk);
+
+        SignInProgress? left = (await AskedAsync(began.Challenge, subject, held)).Match(
+            progress => progress,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.FactorRequired, presented.Status);
+        Assert.Equal([Factor.PhoneCode], presented.Required);
+        Assert.Equal(SignInStatus.Complete, left?.Status);
+        Assert.Empty(Assert.IsType<SignInProgress>(left).Required);
+        Assert.Equal((AssuranceLevel.Aal1, false), (left?.AssuranceLevel, left?.PhishingResistant));
+        Assert.Null(left?.Session);
+        Assert.Empty(_notifications.Texts);
+    }
+
+    /// <summary>
     /// AUTH-STEP-002 step 2: a step-up no combination still offered can be completed at
     /// is answered <c>complete</c> with what the factors accepted reach, short of the
     /// gate, and its challenge ends.
@@ -3884,7 +4190,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// <summary>
     /// AUTH-FACT-002 AC7: a step-up left with no combination once the text code is
     /// withheld is told to report the loss, the account holding the level and being
-    /// unable to present it.
+    /// unable to present it, with the values of the weakest of the policy's gates
+    /// (AUTH-STEP-002 step 3, D-197).
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationAsksForALossReportAsync()
@@ -3902,10 +4209,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
         Assert.Equal("report-loss", refused.Details["outcome"].GetString());
 
-        Gate strictest = await StrictestAsync(subject);
+        Gate weakest = await WeakestAsync(subject);
 
         Assert.Equal(
-            ("aal2", strictest.PhishingResistant, (long)strictest.MaximumAge.TotalSeconds),
+            ("aal2", weakest.PhishingResistant, (long)weakest.MaximumAge.TotalSeconds),
             (
                 refused.Details["required"].GetProperty("level").GetString(),
                 refused.Details["required"].GetProperty("phishingResistant").GetBoolean(),
@@ -3918,7 +4225,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002 AC7, AUTH-STEP-002: a step-up left with no combination by an account
-    /// that never reached the level the strictest gate asks is offered enrolment.
+    /// that never reached what the weakest of the policy's gates asks is offered
+    /// enrolment (D-197).
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpThatNeverReachedTheGateOffersEnrolmentAsync()
@@ -3928,17 +4236,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Enables(Factor.PhoneCode);
         Holds(subject, Factor.PhoneCode);
         Answers(PhoneSignal.Risk);
-        _configuration.Set(
-            Settings.PolicyDefault,
-            Janus.Core.Policies.SystemDefault with
-            {
-                LoginFactors = new HashSet<Factor>([.. Janus.Core.Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
-                Gates = Janus.Core.Policies.SystemDefault.Gates.ToDictionary(
-                    gate => gate.Key,
-                    gate => gate.Key is StepUpAction.AccountSuspend
-                        ? new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5))
-                        : gate.Value),
-            });
+        Declares(
+            new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(15)),
+            Factor.PhoneCode);
 
         SignInChallenge began = await BeganAsync(Address);
 
@@ -3946,6 +4247,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
         Assert.Equal("enrol", refused.Details["outcome"].GetString());
+        Assert.Equal(900, refused.Details["required"].GetProperty("maxAge").GetInt64());
         Assert.True(refused.Details["required"].GetProperty("phishingResistant").GetBoolean());
         Assert.Empty(refused.Details["options"].Deserialize<string[][]>()!);
     }
@@ -4297,11 +4599,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         session.PhishingResistantAt,
     ];
 
-    // AUTH-STEP-002: what a step-up that names no action is judged against, which is
-    // the strictest of the gates of the policy in force, field by field.
-    private async ValueTask<Gate> StrictestAsync(SubjectId subject) =>
+    // AUTH-STEP-002 (D-197): what a step-up that names no action offers against and
+    // answers a refusal with, which is the weakest of the gates of the policy in force,
+    // field by field.
+    private async ValueTask<Gate> WeakestAsync(SubjectId subject) =>
         (await Policies.ForAsync(subject, TestContext.Current.CancellationToken)).Match(
-            policy => policy.Gates.Values.Aggregate(PolicyStrictness.Strictest),
+            policy => policy.Gates.Values.Aggregate(PolicyStrictness.Weakest),
             error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
     // A session of the account that proved one factor now, which is what a step-up
@@ -4342,6 +4645,35 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                     gate => gate.Key,
                     gate => gate.Key is StepUpAction.AccountSuspend ? declared : gate.Value),
             });
+
+    // AUTH-STEP-002: the system policy with one action's gate declared and every other
+    // action's declared too, so that the strictest and the weakest of its gates, field
+    // by field, are the test's own, and with the entries named permitted beside the
+    // policy's.
+    private void Declares(Gate declared, Gate others, params Factor[] permitted) =>
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>(
+                    [.. Janus.Core.Policies.SystemDefault.LoginFactors, .. permitted]),
+                Gates = Janus.Core.Policies.SystemDefault.Gates.ToDictionary(
+                    gate => gate.Key,
+                    gate => gate.Key is StepUpAction.AccountSuspend ? declared : others),
+            });
+
+    // AUTH-STEP-002: what a step-up that names no action asks of the session and
+    // offers the account.
+    private async ValueTask<StepUpChallenge> OfferedAsync(SubjectId subject, SessionId session) =>
+        (await Guard.ChallengeUnnamedAsync(subject, session, TestContext.Current.CancellationToken)).Match(
+            challenge => challenge,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+    // The combinations a challenge offers, each written as its factors in order.
+    private static string[] Named(StepUpChallenge challenge) =>
+        [.. challenge.Combinations.Select(combination => Named([.. combination]))];
+
+    private static string Named(params Factor[] combination) => string.Join('+', combination);
 
     // REG-DOM-001: the account is placed under a lock that admits no address it holds.
     private void LockedElsewhere(SubjectId subject)

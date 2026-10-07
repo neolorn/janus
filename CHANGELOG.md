@@ -236,6 +236,12 @@ against the public contract of LIB-API-001.
   200 `factorRequired`, with the factors still to present, until what was accepted
   reaches the strictest of the gates of the policy in force, and 200 `complete` then,
   where the first accepted factor ended the challenge before.
+- `POST /auth/step-up` judges the session against the strictest of the gates of the
+  policy in force, field by field, and offers every combination that reaches the
+  weakest of them, field by field: under a policy where one gate asks phishing
+  resistance and another does not, a password with a generator's code is accepted and
+  raises the session to `aal2`. A 403 `auth.stepup.required` of the route carries the
+  weakest gate's values in `required`, and its `outcome` is read against that gate.
 - Each 200 of `POST /auth/step-up` reports in `assuranceLevel` and
   `phishingResistant` what the factors accepted on the challenge reach together,
   where it reported the highest level the session had ever reached: a password alone
@@ -498,7 +504,7 @@ against the public contract of LIB-API-001.
 - A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
   `risk`, is no longer answered 202: nothing is issued, sent or counted, and the ask is
   answered 403 `auth.stepup.required` with `details` computed without the entry against
-  the strictest of the gates of the policy in force, field by field, the step-up naming
+  the weakest of the gates of the policy in force, field by field, the step-up naming
   no action; `outcome` is `report-loss` or `enrol` where no combination is left.
 - A sign-in code presented right whose sign-in a domain lock then refuses is spent in the
   one transaction that refuses it: the refusal `identity.identifier.domainnotallowed`
@@ -512,9 +518,11 @@ against the public contract of LIB-API-001.
 - A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
   `risk`, is answered as `POST /auth/factor` answers it: 200 `factorRequired` with
   `required` naming the factors of the combinations left without the entry, judged
-  against the strictest of the policy's gates; 200 with `required` empty where the
-  session already meets that gate, which used to be 202; and 403 `auth.stepup.required`
-  only where no combination is left, with `outcome` `report-loss`, `enrol` or `pending`.
+  against the weakest of the policy's gates; 200 with `required` empty where the
+  session already meets the strictest of them, which used to be 202, or where no
+  combination is left and the factors accepted on the challenge reach the weakest; and
+  403 `auth.stepup.required` only where no combination is left and they do not, with
+  `outcome` `report-loss`, `enrol` or `pending`.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised
