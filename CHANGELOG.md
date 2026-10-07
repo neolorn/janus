@@ -10,6 +10,41 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library ships a fifth restriction, `sms.resend`: key `destination`, purpose
+  `any`, channel `sms`, one send per 3 minutes sliding, marked `resend`. A second text
+  message to one number inside 3 minutes is refused with `auth.restriction.exceeded`
+  and a `retryAt` 3 minutes after the first send's admission, unless the first failed
+  for good, was a `secondfactor` send reported delivered, or had its code presented
+  right or its link pressed. A deployment that has edited its restrictions keeps the
+  set it stored.
+- A send is admitted at the instant its refusal named in `retryAt`: a sliding bucket
+  counts what was sent less than its interval ago, where it counted a send exactly one
+  interval old as well and so refused at that instant, naming it again.
+- The one count of a send against a restriction marked `resend` is also released when
+  the code the send carries is presented right or the link it carries is pressed: a
+  registration's or a held value's code or link, the link that asks a displaced
+  address to confirm, a sign-in code or link, a second step's text code, the code of
+  the new-device check, and a recovery or enrolment link once used. A wrong code, a
+  link merely opened or pressed in another browser, and a code or link no counted send
+  carries release nothing, and nothing but that one count is released.
+- A restriction marked `resend` judges and counts a send once, whatever the number of
+  languages it goes out in, where every other restriction still judges a text message
+  owed in several languages with the weight of their number and counts each. That one
+  count is released when every text of the send has failed for good, and for a send of
+  purpose `secondfactor` when a delivery report says a text of it was delivered. A
+  failure report of one text releases that text's count and credit from the
+  restrictions not marked `resend` alone, and a delivery report changes nothing else.
+  An ask that sends nothing counts once against such a restriction too.
+- A restriction may be marked `resend` (`Restriction.Resend`): `PUT
+  /admin/restrictions/{name}` takes an optional boolean `resend`, absent read as false
+  and anything else refused 400 `api.request.malformed` naming `resend`, and `GET
+  /admin/restrictions` and `GET /admin/restrictions/{name}` answer each restriction's
+  `resend`. A stored restriction without the mark reads as unmarked. Adding the mark
+  to a restriction is a loosening, so it needs `system:administer` and raises the
+  Normal alert; removing it is not.
+- A send a restriction refuses carries in `retryAt` the earliest instant at which every
+  bucket it exceeds has room for it: where it exceeds several, of one restriction or of
+  several, that is the latest of the instants they lift at.
 - A repeated `POST /account/identifiers` naming the value already pending is a resend
   only from the session that staged it. From any other session of the account it
   stages the add afresh for the asking session, under the identifier the add is listed

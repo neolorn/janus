@@ -264,13 +264,15 @@ internal sealed class SendPublisher(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        Result<IReadOnlyList<SendPlan>> judged = await admission
+        Result<SendJudgement> judged = await admission
             .JudgeAsync(delivery.Requested, weight: 1, delivery.Reference, now, cancellationToken)
             .ConfigureAwait(false);
 
-        if (judged.Match<SendPlan?>(plans => plans[0], _ => null) is SendPlan plan)
+        if (judged.Match<SendJudgement?>(admitted => admitted, _ => null) is SendJudgement admitted)
         {
-            await admission.CountAsync(delivery.Reference, plan, now, cancellationToken).ConfigureAwait(false);
+            await admission
+                .CountAsync([delivery.Reference], admitted, now, cancellationToken)
+                .ConfigureAwait(false);
 
             return Result.Success(true);
         }
@@ -290,8 +292,9 @@ internal sealed class SendPublisher(
         }
 
         // Not judged at all (a setting that does not read): it holds no count and waits
-        // as any failed attempt does, to be judged before it is next carried.
-        await admission.ReleaseAsync(delivery.Reference, cancellationToken).ConfigureAwait(false);
+        // as any failed attempt does, to be judged before it is next carried. It has not
+        // failed for good, so it stays of its send.
+        await admission.SetAsideAsync(delivery.Reference, cancellationToken).ConfigureAwait(false);
 
         return (await SettledAsync(delivery, claim, taken: false, schedule, now, cancellationToken)
                 .ConfigureAwait(false))

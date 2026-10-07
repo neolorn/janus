@@ -2015,6 +2015,15 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("reference");
 
+                b.Property<bool>("Admitted")
+                    .HasColumnType("boolean")
+                    .HasColumnName("admitted");
+
+                b.Property<byte[]>("Answer")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("answer");
+
                 b.PrimitiveCollection<byte[][]>("Counted")
                     .IsRequired()
                     .HasColumnType("bytea[]")
@@ -2023,6 +2032,25 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
+
+                b.PrimitiveCollection<byte[][]>("Resend")
+                    .IsRequired()
+                    .HasColumnType("bytea[]")
+                    .HasColumnName("resend");
+
+                b.Property<DateTimeOffset?>("ResendAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("resend_at");
+
+                b.Property<bool>("SecondFactor")
+                    .HasColumnType("boolean")
+                    .HasColumnName("second_factor");
+
+                b.Property<byte[]>("Send")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("send");
 
                 b.Property<DateTimeOffset>("SentAt")
                     .HasColumnType("timestamp with time zone")
@@ -2044,6 +2072,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Reference")
                     .HasName("pk_sends");
+
+                b.HasIndex("Answer")
+                    .HasDatabaseName("ix_sends_answer");
+
+                b.HasIndex("Send")
+                    .HasDatabaseName("ix_sends_send");
 
                 b.HasIndex("SettlesAt")
                     .HasDatabaseName("ix_sends_settles_at");

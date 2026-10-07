@@ -163,6 +163,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             Lock,
             _notifications,
+            _restrictions,
             Landing.Links,
             new NonExistenceNotice(
                 _configuration,
@@ -3975,6 +3976,133 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(SignInStatus.Complete, reached.Status);
         Assert.Equal(AssuranceLevel.Aal2, reached.AssuranceLevel);
         Assert.False(reached.PhishingResistant);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: the text that carries a second step's code is named as its
+    /// send's answer, a wrong code releases nothing, and the code presented right
+    /// releases what that send counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ASecondStepCodePresentedRightAnswersItsSendAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+        _ = await AskedAsync(began.Challenge, stepping: null);
+
+        string right = Assert.Single(_notifications.Texts).Values["code"];
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(began.Challenge, Factor.PhoneCode, Other(right))));
+        Assert.Empty(_restrictions.Answered);
+
+        _ = Reached(await PresentAsync(began.Challenge, Factor.PhoneCode, right));
+
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, AC14: the message that carries a sign-in code is named as its
+    /// send's answer and an ask that sends nothing names none; a wrong code releases
+    /// nothing, and the code presented right releases what that send counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ASignInCodePresentedRightAnswersItsSendAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+        AuthenticationCodeKeys();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Elsewhere, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.Empty(_restrictions.Carried);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Other(right))));
+        Assert.Empty(_restrictions.Answered);
+
+        _ = Reached(await PresentAsync(began.Challenge, Factor.EmailCode, right));
+
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: a sign-in link is named as its send's answer; opened, or
+    /// pressed in another browser, it releases nothing, and the press that signs in
+    /// releases what that send counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ASignInLinkPressedAnswersItsSendAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        (string challenge, string token, string browser) = await AskedAsync(subject);
+        byte[] named = OpaqueToken.Of(token).Fingerprint();
+
+        Assert.Equal(named, Assert.Single(_restrictions.Carried).Answer);
+
+        _ = await LandedAsync(challenge, browser, token, press: false);
+        _ = await LandedAsync(challenge, browser: null, token, press: true);
+
+        Assert.Empty(_restrictions.Answered);
+
+        Assert.NotNull((await LandedAsync(challenge, browser, token, press: true)).SignedIn);
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: the message that carries the code of the new-device check is
+    /// named as its send's answer, a wrong code releases nothing, and the code presented
+    /// right releases what that send counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ADeviceCodePresentedRightAnswersItsSendAsync()
+    {
+        _ = await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        string right = Code();
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyDeviceAsync(
+                began.Challenge,
+                Other(right),
+                Browser,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Empty(_restrictions.Answered);
+
+        _ = Reached(await Service.VerifyDeviceAsync(
+            began.Challenge,
+            right,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
     }
 
     /// <summary>

@@ -726,6 +726,62 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20: a recovery link is named as its send's answer, a token that
+    /// opens nothing releases nothing, and the completion that spends the link releases
+    /// what that send counted once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ARecoveryLinkUsedAnswersItsSendAsync()
+    {
+        _ = await AccountAsync();
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string token = Sent();
+        byte[] named = OpaqueToken.Of(token).Fingerprint();
+
+        Assert.Equal(named, Assert.Single(_restrictions.Carried).Answer);
+        Assert.Equal(
+            ErrorCodes.RecoveryTokenInvalid,
+            Refused(await Service.CompleteAsync(
+                "a-token-nothing-was-sent",
+                Secret,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Empty(_restrictions.Answered);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            token,
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: an enrolment link is named as its send's answer, and the
+    /// opening that spends it releases what that send counted once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_AnEnrolmentLinkOpenedAnswersItsSendAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _ = await Approving(approver, session, subject, Reason);
+
+        string token = _notifications.Mail.Last(sent => sent.Message is MessageKind.EnrolmentLink).Token();
+        byte[] named = OpaqueToken.Of(token).Fingerprint();
+
+        Assert.Equal(named, Assert.Single(_restrictions.Carried).Answer);
+        Assert.Empty(_restrictions.Answered);
+
+        Assert.NotNull(Value(await Service.BeginEnrolmentAsync(token, TestContext.Current.CancellationToken)));
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
     /// D-147 and D-148: the enrolment link opens the enrolment session and is the only
     /// thing that does; the recovery link does not, and neither opens twice.
     /// </summary>
@@ -1016,6 +1072,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
             new AdministrativeScope(_gate, _administrative),
             _notifications,
+            _restrictions,
             Landing.Links,
             new NonExistenceNotice(
                 _configuration,

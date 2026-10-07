@@ -232,6 +232,70 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 and chapter 09 section 8: the set and one restriction read each
+    /// with its <c>resend</c> mark, written <c>true</c> or <c>false</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ARestrictionReadsWithItsResendMarkAsync()
+    {
+        Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit);
+
+        Answer all = await administrator.SendAsync("GET", "/admin/restrictions/");
+        Answer one = await administrator.SendAsync("GET", "/admin/restrictions/email.destination");
+
+        Assert.All(
+            all.Json().EnumerateArray(),
+            restriction => Assert.True(
+                restriction.GetProperty("resend").ValueKind is JsonValueKind.True or JsonValueKind.False));
+        Assert.Equal(JsonValueKind.False, one.Json().GetProperty("resend").ValueKind);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC3 and chapter 10 section 5.16a: marking a restriction
+    /// <c>resend</c> counts a send in several languages once where each counted, so it
+    /// is a loosening, which <c>restriction:edit</c> alone is refused and which with
+    /// <c>system:administer</c> and a reason takes effect, is announced as one and raises
+    /// the Normal alert; a mark that is not a boolean is a malformed request naming
+    /// <c>resend</c>, and an absent one reads as unmarked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC3_AddingTheResendMarkIsALooseningAsync()
+    {
+        Browser editor = await AuthorisedAsync(Permissions.RestrictionEdit);
+
+        Answer refused = await MarkedAsync(editor, true);
+        Answer unreadable = await MarkedAsync(editor, "yes");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unreadable.Text("code"));
+        Assert.Equal("resend", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.False((await InForceAsync()).Single(one => one.Name == "notification.destination").Resend);
+
+        _deployment.Gate.Grant(
+            _deployment.Directory.Created[^1].Subject,
+            Administration,
+            Permissions.SystemAdminister);
+
+        Answer marked = await MarkedAsync(editor, true);
+
+        Assert.Equal(StatusCodes.Status204NoContent, marked.Status);
+        Assert.True((await InForceAsync()).Single(one => one.Name == "notification.destination").Resend);
+        Assert.True(Assert.Single(_deployment.Events.Of<SendingRestrictionChanged>()).Loosening);
+        Assert.Contains(
+            _deployment.Events.Of<AlertRaised>(),
+            alert => alert.Condition is AlertCondition.RestrictionLoosened);
+
+        Answer unmarked = await NarrowedAsync(editor, "any");
+
+        Assert.Equal(StatusCodes.Status204NoContent, unmarked.Status);
+        Assert.False((await InForceAsync()).Single(one => one.Name == "notification.destination").Resend);
+    }
+
+    /// <summary>
     /// Chapter 09 section 8: an empty bucket list is refused as a value the set does not
     /// admit.
     /// </summary>
@@ -620,6 +684,17 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("channel", channel),
             ("buckets", new object[] { new { max = 5, interval = "PT24H", window = "sliding" } }),
             ("reason", "texts only"));
+
+    // notification.destination as it ships, but for the resend mark given.
+    private static Task<Answer> MarkedAsync(Browser browser, object resend) =>
+        browser.SendAsync(
+            "PUT",
+            "/admin/restrictions/notification.destination",
+            ("key", "destination"),
+            ("purpose", "notification"),
+            ("buckets", new object[] { new { max = 5, interval = "PT24H", window = "sliding" } }),
+            ("resend", resend),
+            ("reason", "one count a send"));
 
     private async Task<Restriction> SmsDestinationAsync() =>
         (await InForceAsync()).Single(one => one.Name == "sms.destination");

@@ -106,7 +106,7 @@ internal static class Restrictions
         ArgumentNullException.ThrowIfNull(sends);
 
         DateTimeOffset opened = Opened(bucket, now);
-        List<DateTimeOffset> counting = [.. sends.Where(sent => sent >= opened).Order()];
+        List<DateTimeOffset> counting = [.. sends.Where(sent => Counts(bucket, sent, opened)).Order()];
 
         int over = counting.Count + weight - bucket.Maximum;
 
@@ -138,7 +138,8 @@ internal static class Restrictions
     /// <param name="now">The clock.</param>
     /// <param name="weight">How many messages the send is, each of which counts.</param>
     /// <returns>
-    /// The earliest time an exceeded bucket lifts, or nothing where none is exceeded.
+    /// The earliest time every exceeded bucket has room, which is the latest of the times
+    /// they lift at, or nothing where none is exceeded.
     /// </returns>
     /// <exception cref="ArgumentNullException">The restriction or the times are absent.</exception>
     public static DateTimeOffset? Lift(
@@ -152,7 +153,7 @@ internal static class Restrictions
         return restriction.Buckets
             .Select(bucket => Lift(bucket, sends, now, weight))
             .Where(lift => lift is not null)
-            .Order()
+            .OrderDescending()
             .FirstOrDefault();
     }
 
@@ -179,7 +180,10 @@ internal static class Restrictions
         {
             DateTimeOffset opened = Opened(bucket, now);
 
-            return Math.Clamp(sends.Count(sent => sent >= opened) + weight - bucket.Maximum, 0, weight);
+            return Math.Clamp(
+                sends.Count(sent => Counts(bucket, sent, opened)) + weight - bucket.Maximum,
+                0,
+                weight);
         });
     }
 
@@ -195,6 +199,12 @@ internal static class Restrictions
 
     private static bool Carries(RestrictionChannel channel, SendKind kind) =>
         channel is RestrictionChannel.Sms ? kind is SendKind.Sms : kind is SendKind.Email;
+
+    // AUTH-ABUSE-004 AC1: a sliding bucket counts what was sent less than its interval
+    // ago, so that it has room at the instant a refusal named, which is the instant the
+    // time that filled it is one interval old; a fixed one counts from its boundary.
+    private static bool Counts(Bucket bucket, DateTimeOffset sent, DateTimeOffset opened) =>
+        bucket.Window is BucketWindow.Sliding ? sent > opened : sent >= opened;
 
     private static DateTimeOffset Opened(Bucket bucket, DateTimeOffset now) =>
         bucket.Window is BucketWindow.Sliding

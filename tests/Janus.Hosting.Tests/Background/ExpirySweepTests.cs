@@ -43,16 +43,22 @@ public sealed class ExpirySweepTests(HostFixture host) : IClassFixture<HostFixtu
 
             await work.BeginAsync(cancellationToken);
             await scope.ServiceProvider.GetRequiredService<ISendLedger>().RecordAsync(
-                RandomNumberGenerator.GetBytes(32),
                 [
-                    new SendCount(
-                        new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, "+201001234570"),
-                        TimeSpan.FromDays(1)),
-                    new SendCount(
-                        new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.17"),
-                        TimeSpan.FromDays(1)),
+                    new CountedMessage(
+                        RandomNumberGenerator.GetBytes(32),
+                        new SendPlan(
+                            [
+                                new SendCount(
+                                    new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, "+201001234570"),
+                                    TimeSpan.FromDays(1)),
+                                new SendCount(
+                                    new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.17"),
+                                    TimeSpan.FromDays(1)),
+                            ],
+                            [])),
                 ],
-                [],
+                new SendPlan([], []),
+                secondFactor: false,
                 sent,
                 cancellationToken);
             await work.CommitAsync(cancellationToken);
@@ -122,9 +128,15 @@ public sealed class ExpirySweepTests(HostFixture host) : IClassFixture<HostFixtu
         await services.GetRequiredService<IThrottleLedger>()
             .FailedAsync(ThrottleScope.Source, source, standing: 0, at, cancellationToken);
         await services.GetRequiredService<ISendLedger>().RecordAsync(
-            RandomNumberGenerator.GetBytes(32),
-            [new SendCount(new RestrictionKey("sms.source", RestrictionKeyKind.Source, source), TimeSpan.FromHours(1))],
-            [],
+            [
+                new CountedMessage(
+                    RandomNumberGenerator.GetBytes(32),
+                    new SendPlan(
+                        [new SendCount(new RestrictionKey("sms.source", RestrictionKeyKind.Source, source), TimeSpan.FromHours(1))],
+                        [])),
+            ],
+            new SendPlan([], []),
+            secondFactor: false,
             at,
             cancellationToken);
         await services.GetRequiredService<IRegistrationSources>().RecordAsync(source, at, cancellationToken);

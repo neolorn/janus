@@ -30,9 +30,9 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     /// <returns>Whether the change is a loosening.</returns>
     /// <remarks>
     /// Implements AUTH-ABUSE-004 and OPS-CFG-002. A deleted restriction, a widened key
-    /// or purpose, a channel narrowed or moved, a higher maximum, a shorter interval and
-    /// a dropped bucket all let more through; a restriction that is new lets through
-    /// nothing that was not already getting through.
+    /// or purpose, a channel narrowed or moved, a <c>resend</c> mark added, a higher
+    /// maximum, a shorter interval and a dropped bucket all let more through; a
+    /// restriction that is new lets through nothing that was not already getting through.
     /// </remarks>
     public static bool Loosens(Restriction? before, Restriction? after)
     {
@@ -49,7 +49,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
         if (after.Key != before.Key
             || after.HostKeyName != before.HostKeyName
             || (after.Purpose is not RestrictionPurpose.Any && after.Purpose != before.Purpose)
-            || (after.Channel is not RestrictionChannel.Any && after.Channel != before.Channel))
+            || (after.Channel is not RestrictionChannel.Any && after.Channel != before.Channel)
+            || (after.Resend && !before.Resend))
         {
             return true;
         }
@@ -115,7 +116,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
                 bucket => new WrittenBucket(
                     bucket.Maximum,
                     XmlConvert.ToString(bucket.Interval),
-                    SettingText.Of(bucket.Window)))]);
+                    SettingText.Of(bucket.Window)))],
+            restriction.Resend);
 
     private Result<IReadOnlyList<Restriction>> Read(Written[] written)
     {
@@ -151,7 +153,14 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
                 buckets.Add(new Bucket(bucket.Max, interval, window));
             }
 
-            read.Add(new Restriction(name, kind, hostKeyName, purpose, buckets) { Channel = channel });
+            read.Add(new Restriction(name, kind, hostKeyName, purpose, buckets)
+            {
+                Channel = channel,
+
+                // A restriction stored before it could carry the mark is unmarked
+                // (section 5.16a).
+                Resend = restriction.Resend ?? false,
+            });
         }
 
         return Result.Success<IReadOnlyList<Restriction>>(read);
@@ -202,7 +211,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
         string? Key,
         string? Purpose,
         string? Channel,
-        WrittenBucket[]? Buckets);
+        WrittenBucket[]? Buckets,
+        bool? Resend);
 
     private sealed record WrittenBucket(int Max, string? Interval, string? Window);
 }

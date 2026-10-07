@@ -402,12 +402,18 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         var reference = SendReference.Draw(_randomness);
 
         await _ledger.RecordAsync(
-            SendReferences.Of(reference),
             [
-                new SendCount(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), TimeSpan.FromHours(24)),
-                new SendCount(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7"), TimeSpan.FromHours(24)),
+                new CountedMessage(
+                    SendReferences.Of(reference),
+                    new SendPlan(
+                        [
+                            new SendCount(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), TimeSpan.FromHours(24)),
+                            new SendCount(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7"), TimeSpan.FromHours(24)),
+                        ],
+                        [])),
             ],
-            [],
+            new SendPlan([], []),
+            secondFactor: false,
             _clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 

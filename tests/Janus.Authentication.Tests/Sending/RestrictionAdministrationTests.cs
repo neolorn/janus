@@ -490,7 +490,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             error => throw new Xunit.Sdk.XunitException($"The set was refused: {error.Code}."));
 
         Assert.Equal(
-            ["email.destination", "notification.destination", "sms.destination", "sms.source"],
+            ["email.destination", "notification.destination", "sms.destination", "sms.resend", "sms.source"],
             declared.Select(one => one.Name).Order(StringComparer.Ordinal));
     }
 

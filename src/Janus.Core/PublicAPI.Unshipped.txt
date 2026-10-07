@@ -2479,6 +2479,8 @@ Janus.Core.Restriction.Buckets.get -> System.Collections.Generic.IReadOnlyList<J
 Janus.Core.Restriction.Buckets.init -> void
 Janus.Core.Restriction.Channel.get -> Janus.Core.RestrictionChannel
 Janus.Core.Restriction.Channel.init -> void
+Janus.Core.Restriction.Resend.get -> bool
+Janus.Core.Restriction.Resend.init -> void
 Janus.Core.Restriction.Deconstruct(out string! Name, out Janus.Core.RestrictionKeyKind Key, out string? HostKeyName, out Janus.Core.RestrictionPurpose Purpose, out System.Collections.Generic.IReadOnlyList<Janus.Core.Bucket!>! Buckets) -> void
 Janus.Core.Restriction.Equals(Janus.Core.Restriction? other) -> bool
 Janus.Core.Restriction.HostKeyName.get -> string?

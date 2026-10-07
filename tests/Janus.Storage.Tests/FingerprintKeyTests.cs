@@ -175,9 +175,13 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
         var destination = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, "destination" + tag + "@example.test");
 
         await sends.RecordAsync(
-            RandomNumberGenerator.GetBytes(32),
-            [new SendCount(destination, TimeSpan.FromHours(1))],
-            [],
+            [
+                new CountedMessage(
+                    RandomNumberGenerator.GetBytes(32),
+                    new SendPlan([new SendCount(destination, TimeSpan.FromHours(1))], [])),
+            ],
+            new SendPlan([], []),
+            secondFactor: false,
             Noon,
             cancellationToken);
         await sends.GrantAsync(destination, credit: 3, cancellationToken);

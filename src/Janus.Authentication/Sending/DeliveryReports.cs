@@ -9,7 +9,10 @@ namespace Janus.Authentication.Sending;
 /// <summary>
 /// The delivery-report callback, treated as what it is: an unauthenticated request
 /// over plain HTTP with its parameters in the query string. The one state it may
-/// change is to take a send back out of the buckets it counted against.
+/// change is to take a send back out of the buckets it counted against: a text that
+/// failed out of its own, and a send out of those of the restrictions marked
+/// <c>resend</c> once every text of it has failed, or once a text of it was delivered
+/// where its purpose is <c>secondfactor</c>.
 /// </summary>
 /// <param name="admission">What counts callbacks per source and raises the alert.</param>
 /// <param name="ledger">Where the send was counted.</param>
@@ -17,7 +20,9 @@ namespace Janus.Authentication.Sending;
 /// <remarks>
 /// Implements AUTH-ABUSE-007, INT-SMS-005 and INT-GEN-003. A forged failure report
 /// gains an attacker at most one extra send to a number the restriction already
-/// allows; nothing here can mark a phone verified.
+/// allows, and a forged delivery report at most one text to that number sooner than a
+/// restriction marked <c>resend</c> would allow; nothing here can mark a phone
+/// verified.
 /// </remarks>
 internal sealed class DeliveryReports(
     CallbackAdmission admission,
@@ -60,10 +65,10 @@ internal sealed class DeliveryReports(
             return await KeptAsync(admitted, cancellationToken).ConfigureAwait(false);
         }
 
-        // A report that a message arrived advances nothing at all: the state it might
-        // seem to confirm is proved by the code the person types, never by the
-        // gateway saying so (AUTH-ABUSE-007). It is still held to a live send, so a
-        // guessed reference is refused whatever it reports (INT-GEN-003 AC1).
+        // A report that a message arrived verifies nothing: the state it might seem to
+        // confirm is proved by the code the person types, never by the gateway saying
+        // so (AUTH-ABUSE-007). It is still held to a live send, so a guessed reference
+        // is refused whatever it reports (INT-GEN-003 AC1).
         bool answered = !string.IsNullOrWhiteSpace(reference)
             && await AnsweredAsync(SendReferences.Of(reference), delivered, cancellationToken)
                 .ConfigureAwait(false);
@@ -75,11 +80,12 @@ internal sealed class DeliveryReports(
         return await KeptAsync(outcome, cancellationToken).ConfigureAwait(false);
     }
 
-    // A report of delivery is checked against the send and changes nothing of it; a
-    // report of failure releases it.
+    // INT-SMS-005: a report of delivery is checked against the send and releases what a
+    // send of purpose secondfactor counted once against the restrictions marked resend,
+    // and nothing else; a report of failure releases the text it names.
     private ValueTask<bool> AnsweredAsync(byte[] reference, bool delivered, CancellationToken cancellationToken) =>
         delivered
-            ? ledger.HoldsAsync(reference, cancellationToken)
+            ? ledger.DeliveredAsync(reference, cancellationToken)
             : ledger.ReleaseAsync(reference, cancellationToken);
 
     // CONV-DESIGN-003, INT-GEN-003: a report that was answered commits what it wrote,

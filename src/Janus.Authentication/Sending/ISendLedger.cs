@@ -26,9 +26,10 @@ internal interface ISendLedger
     /// every other key.
     /// </param>
     /// <param name="setAside">
-    /// The hash of the reference of a send being judged again, whose own count and
-    /// spent credit are released under the same hold before anything is read, or
-    /// nothing where the send is judged for the first time.
+    /// The hash of the reference of a message being judged again, whose own count and
+    /// spent credit are released under the same hold before anything is read, and whose
+    /// send's one count against a restriction marked <c>resend</c> is left out of what
+    /// is answered, or nothing where the send is judged for the first time.
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The counter of each key, empty where nothing has been counted.</returns>
@@ -51,30 +52,45 @@ internal interface ISendLedger
     ValueTask SweepAsync(CounterStaleness stale, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Counts one send from its admission, so that a failure for good can release it.
+    /// Counts the messages of one send from their admission, so that a failure for good
+    /// can release each, and counts the send once against the keys of the restrictions
+    /// marked <c>resend</c>. The messages are every message of a send at its first
+    /// admission, the first of them naming the send, or the one message of a send
+    /// judged again, which stays of the send it was first counted under: what that send
+    /// counted once is taken back and counted at this instant in its place.
     /// </summary>
-    /// <param name="reference">The hash of the send's correlation reference.</param>
-    /// <param name="counted">The keys it counts against and how long each is kept.</param>
-    /// <param name="spent">The keys whose granted credit this send consumes.</param>
+    /// <param name="messages">The messages, at least one, each with what it counts against and spends.</param>
+    /// <param name="once">What the send counts against and spends once.</param>
+    /// <param name="secondFactor">Whether the send's purpose is <c>secondfactor</c>.</param>
     /// <param name="at">When it was admitted.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
-    /// <returns>The work of counting it.</returns>
+    /// <returns>The work of counting them.</returns>
     ValueTask RecordAsync(
-        byte[] reference,
-        IReadOnlyCollection<SendCount> counted,
-        IReadOnlyCollection<RestrictionKey> spent,
+        IReadOnlyList<CountedMessage> messages,
+        SendPlan once,
+        bool secondFactor,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether a send counted under a reference is still held, which a delivery report
-    /// indicating delivery is checked against and changes nothing of.
+    /// Takes one message's count back out of every bucket it counted against and gives
+    /// back the credit it spent, while the message still waits to be judged again: it
+    /// stays of its send, and what the send counted once stands.
     /// </summary>
-    /// <param name="reference">The hash of the reference the report carried.</param>
+    /// <param name="reference">The hash of the reference the message was counted under.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of setting it aside.</returns>
+    ValueTask SetAsideAsync(byte[] reference, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether a message counted under a reference still holds the count of an
+    /// admission, which is what lets its first attempt carry it without judging it again.
+    /// </summary>
+    /// <param name="reference">The hash of the reference it was counted under.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
-    /// Whether it is; false where the reference is unknown or the send is already
-    /// settled.
+    /// Whether it does; false where the reference is unknown, the message is already
+    /// settled or its count was set aside.
     /// </returns>
     ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken);
 
@@ -88,17 +104,53 @@ internal interface ISendLedger
     ValueTask SweepSettledAsync(DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Takes one send back out of every bucket it counted against and gives back the
-    /// credit it spent, which a send that fails for good causes: a delivery report
-    /// indicating failure, attempts spent, a row removed uncarried after erasure.
+    /// Takes one message back out of every bucket it counted against and gives back the
+    /// credit it spent, which a message that fails for good causes: a delivery report
+    /// indicating failure, attempts spent, a row removed uncarried after erasure, a
+    /// retry refused. Where it was the last message of its send still counted, every
+    /// message of the send has failed for good, and what the send counted once against
+    /// the restrictions marked <c>resend</c> is taken back with it.
     /// </summary>
-    /// <param name="reference">The hash of the reference the send was counted under.</param>
+    /// <param name="reference">The hash of the reference the message was counted under.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>
     /// Whether a send was released; false where the reference is unknown or the send
     /// is already settled.
     /// </returns>
     ValueTask<bool> ReleaseAsync(byte[] reference, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes a report that a message was delivered: where the message is of a send of
+    /// purpose <c>secondfactor</c>, what the send counted once against the restrictions
+    /// marked <c>resend</c> is taken back, and nothing else changes for any send.
+    /// </summary>
+    /// <param name="reference">The hash of the reference the report carried.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>
+    /// Whether a counted message answers to the reference; false where it is unknown or
+    /// the message is already settled.
+    /// </returns>
+    ValueTask<bool> DeliveredAsync(byte[] reference, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Names what a send is answered by, the code it carries presented right or its
+    /// link pressed, so that the answer can release what the send counted once.
+    /// </summary>
+    /// <param name="reference">The hash of the reference the send was admitted under.</param>
+    /// <param name="answer">The hash that names the code or the link the send carries.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of naming it.</returns>
+    ValueTask BindAsync(byte[] reference, byte[] answer, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes back what every send answered by a code or a link counted once against the
+    /// restrictions marked <c>resend</c>, and nothing else; a code or a link no counted
+    /// send carries changes nothing.
+    /// </summary>
+    /// <param name="answer">The hash that names the code presented right or the link pressed.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of releasing it.</returns>
+    ValueTask AnsweredAsync(byte[] answer, CancellationToken cancellationToken);
 
     /// <summary>
     /// Adds credit to one key, which support does for a person an attacker or a loop

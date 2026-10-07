@@ -762,6 +762,8 @@ internal sealed class AuthenticationService(
                     .ConfigureAwait(false));
         }
 
+        await links.CheckAnsweredAsync(open.Fingerprint, code, cancellationToken).ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -1578,6 +1580,8 @@ internal sealed class AuthenticationService(
             return Result.Failure<bool>(await SpentAsync(locked, counted, cancellationToken).ConfigureAwait(false));
         }
 
+        await links.AnsweredAsync(held, cancellationToken).ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -1975,7 +1979,7 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure);
         }
 
-        _ = (await sending
+        SendReference sent = (await sending
                 .UndertakeAsync(
                     new OutboundMessage(
                         SendDestination.Of(address),
@@ -1992,7 +1996,7 @@ internal sealed class AuthenticationService(
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(_ => true, error => Withheld<bool>(error, ref failure));
+            .Match(reference => reference, error => Withheld<SendReference>(error, ref failure));
 
         if (failure is not null)
         {
@@ -2000,6 +2004,8 @@ internal sealed class AuthenticationService(
 
             return Result.Failure<SignInOutcome>(failure);
         }
+
+        await links.CheckSentAsync(sent, open.Fingerprint, code, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

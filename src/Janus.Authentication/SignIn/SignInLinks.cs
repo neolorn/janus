@@ -26,6 +26,10 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="domainLock">Whether an email address is one a member may sign in with.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="restrictions">
+/// What a send is named to by the code or the link it carries, and what releases its
+/// one count once that is answered.
+/// </param>
 /// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="nonExistence">What answers an ask no message of its own answers.</param>
 /// <param name="signals">What is known about a number before a text leans on it.</param>
@@ -50,6 +54,7 @@ internal sealed class SignInLinks(
     PolicyResolution policies,
     DomainLock domainLock,
     IGovernedSend sending,
+    ISendingRestrictions restrictions,
     LandingLinks landing,
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
@@ -323,6 +328,7 @@ internal sealed class SignInLinks(
 
         string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
         string code = VerificationCode.Draw(randomness);
+        var token = OpaqueToken.Draw(randomness);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
@@ -330,7 +336,7 @@ internal sealed class SignInLinks(
             return Result.Failure<bool>(notBegun);
         }
 
-        _ = (await sending
+        SendReference sent = (await sending
                 .UndertakeAsync(
                     new OutboundMessage(
                         SendDestination.Of(texted),
@@ -347,7 +353,7 @@ internal sealed class SignInLinks(
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(_ => true, error => Withheld<bool>(error, ref failure));
+            .Match(reference => reference, error => Withheld<SendReference>(error, ref failure));
 
         if (failure is not null)
         {
@@ -356,10 +362,14 @@ internal sealed class SignInLinks(
             return Result.Failure<bool>(failure);
         }
 
+        // AUTH-ABUSE-004: the send is named by the record its code is held on, which is
+        // what releases its one count once the code is presented right.
+        await restrictions.CarriesAsync(sent, token.Fingerprint(), cancellationToken).ConfigureAwait(false);
+
         await pending
             .ReplaceAsync(
                 PendingSignIn.Issue(
-                    OpaqueToken.Draw(randomness),
+                    token,
                     subject,
                     factor,
                     email: null,
@@ -382,18 +392,69 @@ internal sealed class SignInLinks(
     }
 
     /// <summary>
-    /// Ends one that has been used, inside the transaction the caller opened.
+    /// Ends one whose link was pressed, inside the transaction the caller opened, and
+    /// releases what the send that carried the link counted once (AUTH-ABUSE-004).
     /// </summary>
     /// <param name="held">The pending sign-in.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Nothing.</returns>
     /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
-    public ValueTask SpendAsync(PendingSignIn held, CancellationToken cancellationToken)
+    public async ValueTask SpendAsync(PendingSignIn held, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(held);
 
-        return pending.RemoveAsync(held.Fingerprint, cancellationToken);
+        await pending.RemoveAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
+        await restrictions.AnsweredAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Releases what the send that carried a code counted once, inside the transaction
+    /// in which the code was presented right, as its last write.
+    /// </summary>
+    /// <param name="held">The pending sign-in the code was held on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing.</returns>
+    /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-004. A wrong code releases nothing, and nor does a right
+    /// one that a refusal follows, whose kept writes are the ones CONV-DESIGN-003 lists.
+    /// </remarks>
+    public ValueTask AnsweredAsync(PendingSignIn held, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+
+        return restrictions.AnsweredAsync(held.Fingerprint, cancellationToken);
+    }
+
+    /// <summary>
+    /// Names the send that carried the code of the new-device check by that code and
+    /// what holds it, inside the transaction that undertook it.
+    /// </summary>
+    /// <param name="sent">The reference the send was admitted under.</param>
+    /// <param name="holder">What the code is held under.</param>
+    /// <param name="code">The code.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing.</returns>
+    public ValueTask CheckSentAsync(
+        SendReference sent,
+        [NeverLogged] byte[] holder,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken) =>
+        restrictions.CarriesAsync(sent, SendReferences.Naming(holder, code), cancellationToken);
+
+    /// <summary>
+    /// Releases what the send that carried the code of the new-device check counted
+    /// once, inside the transaction in which the code was presented right.
+    /// </summary>
+    /// <param name="holder">What the code is held under.</param>
+    /// <param name="code">The code as it was presented.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing.</returns>
+    public ValueTask CheckAnsweredAsync(
+        [NeverLogged] byte[] holder,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken) =>
+        restrictions.AnsweredAsync(SendReferences.Naming(holder, code), cancellationToken);
 
     /// <summary>
     /// Ends a pending link, whether or not the token resolves to one.
@@ -621,7 +682,7 @@ internal sealed class SignInLinks(
             return Result.Failure(notBegun);
         }
 
-        _ = (await sending
+        SendReference sent = (await sending
                 .UndertakeAsync(
                     new OutboundMessage(
                         channel.Destination,
@@ -635,7 +696,7 @@ internal sealed class SignInLinks(
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(_ => true, error => Withheld<bool>(error, ref failure));
+            .Match(reference => reference, error => Withheld<SendReference>(error, ref failure));
 
         if (failure is not null)
         {
@@ -646,6 +707,10 @@ internal sealed class SignInLinks(
             // floor tells nothing of an account. Nothing else was written.
             return failure.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(failure);
         }
+
+        // AUTH-ABUSE-004: the send is named by the record its code and its link are
+        // held on, which is what releases its one count once either is answered.
+        await restrictions.CarriesAsync(sent, token.Fingerprint(), cancellationToken).ConfigureAwait(false);
 
         await pending
             .ReplaceAsync(

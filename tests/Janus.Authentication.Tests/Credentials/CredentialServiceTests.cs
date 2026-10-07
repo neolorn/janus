@@ -1853,6 +1853,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Guard,
             new AdministrativeScope(_gate, _administrative),
             _notifications,
+            _restrictions,
             Landing.Links,
             new NonExistenceNotice(
                 _configuration,
