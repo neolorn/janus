@@ -72,11 +72,11 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// AUTH-SESS-001 AC2: the record is read from PostgreSQL and from nothing else, so
-    /// a context that has cached none of it reads every field back as it was written.
+    /// AUTH-SESS-001: the record is held in PostgreSQL and read from it, so a context
+    /// that held none of it reads every field back as it was written.
     /// </summary>
     [Fact]
-    public async Task AUTH_SESS_001_AC2_TheRecordReloadsFromTheDurableStoreAsync()
+    public async Task AUTH_SESS_001_TheRecordIsReadBackFromPostgreSqlAsItWasWrittenAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
         Session record = Record(subject, phishingResistant: true);
