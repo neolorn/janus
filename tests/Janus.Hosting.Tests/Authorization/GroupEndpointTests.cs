@@ -284,7 +284,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GROUP_001_OnlyAGroupNothingNamesIsRemovedAsync()
+    public async Task AUTHZ_GROUP_001_AC6_OnlyAGroupNothingNamesIsRemovedAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId department = Id(await CreatedAsync(administrator, "Department"));
@@ -402,7 +402,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_STEP_001_AChangeOfMembersIsAStepUpActionAsync()
+    public async Task AUTHZ_GROUP_001_AC4_AChangeOfMembersIsAStepUpActionAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
@@ -429,7 +429,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GROUP_001_AChangeThatChangesNothingRecordsNothingAsync()
+    public async Task AUTHZ_GROUP_001_AC5_AChangeThatChangesNothingRecordsNothingAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));

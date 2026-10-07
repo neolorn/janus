@@ -101,7 +101,7 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARoleIsChangedInPlaceAsync()
+    public async Task AUTHZ_GRANT_004_AC4_ARoleIsChangedInPlaceAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
 
@@ -222,7 +222,7 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARoleAnOpenInvitationNamesIsNotRemovedAsync()
+    public async Task AUTHZ_GRANT_004_AC6_ARoleAnOpenInvitationNamesIsNotRemovedAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
 
@@ -250,7 +250,7 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARoleAStandingInvitationNamesIsNotRemovedAsync()
+    public async Task AUTHZ_GRANT_004_AC6_ARoleAStandingInvitationNamesIsNotRemovedAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
 
