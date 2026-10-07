@@ -148,6 +148,46 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003a AC8: a subscriber that throws leaves its delivery unconfirmed while
+    /// the other subscriber's is confirmed in the same pass, which counts one attempt
+    /// for the row; the row is not offered again until the backoff has run, and is then
+    /// offered to the subscriber that threw and to no one who confirmed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC8_ASubscriberThatThrowsIsRetriedUnderTheBackoffWhileTheOthersGoOnAsync()
+    {
+        var host = new SubscriberInMemory("host", required: true) { Faults = true };
+        var warehouse = new SubscriberInMemory("warehouse", required: true);
+
+        _subscribers.Add(host);
+        _subscribers.Add(warehouse);
+        _configuration.Set(Settings.OutboxRetryInitial, TimeSpan.FromSeconds(30));
+        _configuration.Set(Settings.OutboxRetryFactor, 2.0m);
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
+
+        Assert.Equal(0, await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Equal(["warehouse"], _outbox.Held(delivery.Id).Confirmed);
+        Assert.Equal(1, _outbox.Held(delivery.Id).Attempts);
+        Assert.Equal(Noon.AddSeconds(30), _outbox.Held(delivery.Id).NextAttemptAt);
+
+        _clock.Advance(TimeSpan.FromSeconds(29));
+
+        Assert.Equal(0, await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Single(host.Offered);
+        Assert.Equal(1, _outbox.Held(delivery.Id).Attempts);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        host.Faults = false;
+
+        Assert.Equal(1, await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Equal(2, host.Offered.Count);
+        Assert.Single(warehouse.Offered);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC3: a subscriber that confirmed is not offered the event a
     /// second time, and the one that did not is offered the key it saw before, so
     /// handling the repeat produces the result the first attempt would have.

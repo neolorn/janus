@@ -446,7 +446,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     [InlineData(DeletionOrigin.Self)]
     [InlineData(DeletionOrigin.OutOfBandRequest)]
     [InlineData(DeletionOrigin.Takedown)]
-    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ADeletingAccountKeepsItsRunningWindowAsync(
+    public async Task IDN_LIFE_003_AC10_ADeletingAccountKeepsItsRunningWindowAsync(
         DeletionOrigin origin)
     {
         DateTimeOffset began = Noon - TimeSpan.FromDays(3);
@@ -528,7 +528,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ADeletedAccountChangesNothingAsync()
+    public async Task IDN_LIFE_003_AC10_ADeletedAccountChangesNothingAsync()
     {
         _accounts.Erases(Ahmed);
 

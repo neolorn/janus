@@ -241,7 +241,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003a_AFailedTakedownDeliveryIsCompletedByHandAsync()
+    public async Task IDN_LIFE_003a_AC9_AFailedTakedownDeliveryIsCompletedByHandAsync()
     {
         _ledger = new ErasureLedgerInMemory();
 
@@ -272,7 +272,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003a_AFailedRestrictionDeliveryIsCompletedByHandAsync()
+    public async Task IDN_LIFE_003a_AC9_AFailedRestrictionDeliveryIsCompletedByHandAsync()
     {
         _ledger = new ErasureLedgerInMemory();
 
