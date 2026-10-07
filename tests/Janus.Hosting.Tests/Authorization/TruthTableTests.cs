@@ -398,6 +398,43 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-002 AC3: the table holds the derived cases, a fact conferring a
+    /// role, a deny over one and a fact on a container above, and each decides the way
+    /// the table says through the check, the expression and the fragment alike.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_002_AC3_TheTableRunsItsDerivedCasesThroughBothPathsAsync()
+    {
+        (string Scenario, Decided Decided)[] derived =
+        [
+            .. Table.Where(row => row.Scenario.Contains("fact in the host's data", StringComparison.Ordinal)),
+        ];
+        List<(Decided Check, Decided Expression, Decided Fragment)> decided = [];
+
+        foreach ((string scenario, Decided _) in derived)
+        {
+            Case written = await WriteAsync(scenario);
+
+            decided.Add((
+                await ChecksAsync(written),
+                await ExpressionAdmitsAsync(written),
+                await FragmentAdmitsAsync(written)));
+        }
+
+        Assert.Equal(
+            [
+                ("a fact in the host's data conferring a role", Decided.Allowed),
+                ("a deny over a fact in the host's data", Decided.Denied),
+                ("a fact in the host's data on a container above", Decided.Allowed),
+            ],
+            derived);
+        Assert.Equal(
+            derived.Select(row => (row.Decided, row.Decided, row.Decided)),
+            decided);
+    }
+
+    /// <summary>
     /// AUTHZ-TEST-001 AC3, AUTHZ-DERIVE-005: the same deployment with the derivation
     /// materialised decides every case of the table the same way, through the check,
     /// the expression and the fragment alike.
