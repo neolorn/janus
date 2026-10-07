@@ -202,6 +202,30 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// INT-HOST-002 AC3: each of the four names of the hosting or its transfer, on
+    /// consent, stops the start with <c>model.purpose.hostingconsent</c> naming the
+    /// type and the purpose as declared, whatever its case and punctuation; the same
+    /// purpose on another basis starts.
+    /// </summary>
+    /// <param name="purpose">The purpose the deployment declares.</param>
+    [Theory]
+    [InlineData("hosting")]
+    [InlineData("transfer")]
+    [InlineData("hosting-transfer")]
+    [InlineData("cross-border-transfer")]
+    [InlineData("HOSTING")]
+    [InlineData("Cross.Border Transfer")]
+    public void INT_HOST_002_AC3_AConsentPurposeNamedForTheHostingOrItsTransferFailsStartup(string purpose)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Declaring(purpose, "consent")));
+
+        Assert.Equal("model.purpose.hostingconsent", refused.Failure?.Code.ToString());
+        Assert.Equal("article." + purpose, refused.Failure!.Details["key"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Declaring(purpose, "contract")));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC1: an encrypted field naming no subject column is ciphertext
     /// no erasure could reach, so the deployment stops rather than start with it.
     /// </summary>
