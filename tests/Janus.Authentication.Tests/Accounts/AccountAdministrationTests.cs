@@ -332,12 +332,12 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-004: only a restriction in force is lifted here; one held while the
+    /// PRIV-RIGHT-004 AC5: only a restriction in force is lifted here; one held while the
     /// account is suspended stays until it comes back, an account with none has nothing
     /// to lift, and without <c>account:manage</c> nothing is lifted.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_004_OnlyARestrictionInForceIsLiftedAsync()
+    public async Task PRIV_RIGHT_004_AC5_OnlyARestrictionInForceIsLiftedAsync()
     {
         var held = SubjectId.New(_randomness);
         var restricted = SubjectId.New(_randomness);
@@ -366,13 +366,13 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-004 (D-166): lifting a restriction changes another person's account, so
-    /// it is the <c>account:restrictionlift</c> step-up action, judged after the state: a
+    /// PRIV-RIGHT-004 AC5 (D-166): lifting a restriction changes another person's account,
+    /// so it is the <c>account:restrictionlift</c> step-up action, judged after the state: a
     /// session whose proof is not recent lifts nothing, and an account with no
     /// restriction is answered as one before any proof is asked.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_004_LiftingARestrictionAsksForStepUpAsync()
+    public async Task PRIV_RIGHT_004_AC5_LiftingARestrictionAsksForStepUpAsync()
     {
         _directory.Stands(_member, AccountState.Restricted);
 

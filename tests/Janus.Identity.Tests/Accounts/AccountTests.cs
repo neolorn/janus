@@ -151,12 +151,12 @@ public sealed class AccountTests
     }
 
     /// <summary>
-    /// PRIV-RIGHT-004 AC2: a restricted account keeps its restriction through a deletion
+    /// PRIV-RIGHT-004 AC4: a restricted account keeps its restriction through a deletion
     /// window it leaves and through a takedown that is reversed, and comes back
     /// restricted from both.
     /// </summary>
     [Fact]
-    public void PRIV_RIGHT_004_AC2_ARestrictionIsHeldThroughADeletionWindow()
+    public void PRIV_RIGHT_004_AC4_ARestrictionIsHeldThroughADeletionWindow()
     {
         var cancelled = Account.Create(Ahmed, Noon);
         var reversed = Account.Create(Ahmed, Noon);
@@ -177,12 +177,12 @@ public sealed class AccountTests
     }
 
     /// <summary>
-    /// PRIV-RIGHT-004: a restriction decided while the account is suspended, by either
+    /// PRIV-RIGHT-004 AC4: a restriction decided while the account is suspended, by either
     /// origin, or in its deletion window is held until it comes back, and an erasure
     /// leaves nothing held; an active account is restricted, never held.
     /// </summary>
     [Fact]
-    public void PRIV_RIGHT_004_ARestrictionDecidedAwayFromActiveIsHeld()
+    public void PRIV_RIGHT_004_AC4_ARestrictionDecidedAwayFromActiveIsHeld()
     {
         var suspended = Account.Create(Ahmed, Noon);
         var deactivated = Account.Create(Ahmed, Noon);
