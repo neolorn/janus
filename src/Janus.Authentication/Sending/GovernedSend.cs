@@ -115,6 +115,19 @@ internal sealed class GovernedSend(
         return Result.Success();
     }
 
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The answer is absent.</exception>
+    public ValueTask CarriesAsync(
+        SendReference reference,
+        [NeverLogged] byte[] answer,
+        CancellationToken cancellationToken) =>
+        admission.CarriesAsync(reference, answer, cancellationToken);
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The answer is absent.</exception>
+    public ValueTask AnsweredAsync([NeverLogged] byte[] answer, CancellationToken cancellationToken) =>
+        admission.AnsweredAsync(answer, cancellationToken);
+
     // One message undertaken inside the unit of work in progress: what was written to
     // the outbox for it, one row, or one for each declared language of a text message
     // owed in every one of them.

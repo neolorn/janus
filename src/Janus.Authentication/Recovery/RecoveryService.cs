@@ -35,6 +35,10 @@ namespace Janus.Authentication.Recovery;
 /// <param name="stepUp">What the approver's session has to have proved.</param>
 /// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="restrictions">
+/// What a send is named to by the link it carries, and what releases its one count once
+/// the link is used.
+/// </param>
 /// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="nonExistence">What answers an ask no link of its own answers.</param>
 /// <param name="signals">What is known about a number before a link is texted to it.</param>
@@ -67,6 +71,7 @@ internal sealed class RecoveryService(
     StepUpGuard stepUp,
     AdministrativeScope scope,
     IGovernedSend sending,
+    ISendingRestrictions restrictions,
     LandingLinks landing,
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
@@ -223,6 +228,10 @@ internal sealed class RecoveryService(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // AUTH-ABUSE-004: the link was used, which releases what the send that carried
+        // it counted once.
+        await restrictions.AnsweredAsync(link.Fingerprint, cancellationToken).ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -360,6 +369,10 @@ internal sealed class RecoveryService(
         link!.Spend(opened, now);
 
         await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+
+        // AUTH-ABUSE-004: the link was used, which releases what the send that carried
+        // it counted once.
+        await restrictions.AnsweredAsync(link.Fingerprint, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -547,7 +560,7 @@ internal sealed class RecoveryService(
             return Result.Failure(notBegun);
         }
 
-        _ = (await sending
+        SendReference sent = (await sending
                 .UndertakeAsync(
                     new OutboundMessage(
                         channel.Destination,
@@ -564,7 +577,7 @@ internal sealed class RecoveryService(
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(_ => true, error => Withheld<bool>(error, ref failure));
+            .Match(reference => reference, error => Withheld<SendReference>(error, ref failure));
 
         if (failure is not null)
         {
@@ -575,6 +588,10 @@ internal sealed class RecoveryService(
             // floor tells nothing of an account. Nothing else was written.
             return failure.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(failure);
         }
+
+        // AUTH-ABUSE-004: the send is named by the link it carries, which is what
+        // releases its one count once the link is used.
+        await restrictions.CarriesAsync(sent, token.Fingerprint(), cancellationToken).ConfigureAwait(false);
 
         await links
             .ReplaceAsync(
@@ -909,27 +926,37 @@ internal sealed class RecoveryService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await sending
-                .UndertakeAsync(
-                    new OutboundMessage(
-                        channel.Destination,
-                        MessageKind.EnrolmentLink,
-                        RestrictionPurpose.SignIn,
-                        source,
-                        language)
+        Result<SendReference> sent = await sending
+            .UndertakeAsync(
+                new OutboundMessage(
+                    channel.Destination,
+                    MessageKind.EnrolmentLink,
+                    RestrictionPurpose.SignIn,
+                    source,
+                    language)
+                {
+                    Subject = subject,
+                    Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                     {
-                        Subject = subject,
-                        Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
-                        {
-                            ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
-                        },
+                        ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
                     },
-                    cancellationToken)
-                .ConfigureAwait(false))
-            .Match(_ => (Error?)null, error => error) is Error refused)
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (sent.Match(_ => (Error?)null, error => error) is Error refused)
         {
             return refused;
         }
+
+        // AUTH-ABUSE-004: the send is named by the link it carries, which is what
+        // releases its one count once the link is used.
+        await restrictions
+            .CarriesAsync(
+                sent.Match(reference => reference, _ => default),
+                token.Fingerprint(),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         _ = await NotifyAsync(
                 subject,

@@ -256,6 +256,39 @@ internal sealed class SendAdmission(
         _ = await ledger.ReleaseAsync(reference, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
+    /// Names what an admitted send is answered by: the code or the link it carries.
+    /// </summary>
+    /// <param name="reference">The reference the send was admitted under.</param>
+    /// <param name="answer">What names the code or the link.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of naming it.</returns>
+    /// <exception cref="ArgumentNullException">The answer is absent.</exception>
+    public ValueTask CarriesAsync(
+        SendReference reference,
+        [NeverLogged] byte[] answer,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(answer);
+
+        return ledger.BindAsync(SendReferences.Of(reference), SendReferences.Answering(answer), cancellationToken);
+    }
+
+    /// <summary>
+    /// Releases what every send answered by a code or a link counted once against the
+    /// restrictions marked <c>resend</c>.
+    /// </summary>
+    /// <param name="answer">What names the code presented right or the link pressed.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of releasing it.</returns>
+    /// <exception cref="ArgumentNullException">The answer is absent.</exception>
+    public ValueTask AnsweredAsync([NeverLogged] byte[] answer, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(answer);
+
+        return ledger.AnsweredAsync(SendReferences.Answering(answer), cancellationToken);
+    }
+
+    /// <summary>
     /// Whether a send still holds the count of an admission, which is what lets its
     /// first attempt carry it without judging it again.
     /// </summary>

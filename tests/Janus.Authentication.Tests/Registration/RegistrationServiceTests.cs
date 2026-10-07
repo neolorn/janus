@@ -783,6 +783,51 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20: the send that carries a registration's code is named by the
+    /// link beside it, a wrong code releases nothing, and the code presented right
+    /// releases what that send counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ARegistrationsCodePresentedRightAnswersItsSendAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        byte[] named = OpaqueToken.Of(Token(IdentifierKind.Email)).Fingerprint();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string right = Code(session, IdentifierKind.Email);
+        string wrong = string.Concat(right.AsSpan(0, right.Length - 1), right[^1] == '0' ? "1" : "0");
+
+        Assert.Equal(named, Assert.Single(_restrictions.Carried).Answer);
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken)));
+        Assert.Empty(_restrictions.Answered);
+
+        _ = Ok(await Service.VerifyAsync(session, staged, right, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: a registration's link pressed in the browser that started it
+    /// releases what the send that carried it counted once; a plain open, and a press
+    /// anywhere else, release nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ARegistrationsLinkPressedAnswersItsSendAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        string token = Token(IdentifierKind.Email);
+
+        _ = Ok(await Service.LandAsync(session, token, press: false, Source, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.LandAsync(session: null, token, press: true, Source, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_restrictions.Answered);
+
+        Assert.True(Ok(await Service.LandAsync(session, token, press: true, Source, TestContext.Current.CancellationToken)).Verified);
+        Assert.Equal(OpaqueToken.Of(token).Fingerprint(), Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
     /// REG-SESS-003 AC2: opened anywhere else the page shows the code and verifies
     /// nothing, and the control beside it ends the session and the code with it.
     /// </summary>

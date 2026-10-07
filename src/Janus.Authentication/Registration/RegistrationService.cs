@@ -733,9 +733,18 @@ internal sealed class RegistrationService(
             return (Result.Failure<RegistrationState>(notBegun), false);
         }
 
+        byte[]? carried = staged.Link;
+
         staged.Verify(time.GetUtcNow());
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
+
+        // AUTH-ABUSE-004: the code was presented right, which releases what the send
+        // that carried it counted once, named by the link beside the code.
+        if (carried is not null)
+        {
+            await restrictions.AnsweredAsync(carried, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -814,6 +823,10 @@ internal sealed class RegistrationService(
         staged.Verify(now);
 
         await sessions.RecordAsync(sender, cancellationToken).ConfigureAwait(false);
+
+        // AUTH-ABUSE-004: the link was pressed, which releases what the send that
+        // carried it counted once.
+        await restrictions.AnsweredAsync(fingerprint, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -2578,6 +2591,12 @@ internal sealed class RegistrationService(
         {
             return refused;
         }
+
+        // AUTH-ABUSE-004: the send is named by the link it carries, which is what
+        // releases its one count once its code is presented right or its link pressed.
+        await restrictions
+            .CarriesAsync(sent.Match(reference => reference, _ => default), link.Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
 
         staged.Linked(link.Fingerprint());
 

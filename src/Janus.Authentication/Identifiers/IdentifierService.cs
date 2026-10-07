@@ -375,6 +375,8 @@ internal sealed class IdentifierService(
                     .ConfigureAwait(false));
         }
 
+        byte[]? carried = staged.Link;
+
         staged.Verify(now);
 
         Result settled = await SettleAsync(waiting, completing, now, source, cancellationToken)
@@ -385,6 +387,13 @@ internal sealed class IdentifierService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(unsettled);
+        }
+
+        // AUTH-ABUSE-004: the code was presented right, which releases what the send
+        // that carried it counted once, named by the link beside the code.
+        if (carried is not null)
+        {
+            await restrictions.AnsweredAsync(carried, cancellationToken).ConfigureAwait(false);
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -549,6 +558,10 @@ internal sealed class IdentifierService(
                 return Result.Failure<LinkLanding>(unsettled);
             }
 
+            // AUTH-ABUSE-004: the link was pressed, which releases what the send that
+            // carried it counted once.
+            await restrictions.AnsweredAsync(fingerprint, cancellationToken).ConfigureAwait(false);
+
             if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
             {
@@ -629,6 +642,10 @@ internal sealed class IdentifierService(
 
             return Result.Failure<LinkLanding>(unlanded);
         }
+
+        // AUTH-ABUSE-004: the link was pressed, which releases what the send that
+        // carried it counted once.
+        await restrictions.AnsweredAsync(fingerprint, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -1977,6 +1994,12 @@ internal sealed class IdentifierService(
             return refused;
         }
 
+        // AUTH-ABUSE-004: the send is named by the link it carries, which is what
+        // releases its one count once its code is presented right or its link pressed.
+        await restrictions
+            .CarriesAsync(sent.Match(reference => reference, _ => default), link.Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
+
         staged.Linked(link.Fingerprint());
 
         return null;
@@ -2012,6 +2035,12 @@ internal sealed class IdentifierService(
         {
             return refused;
         }
+
+        // AUTH-ABUSE-004: the send is named by the link it carries, which is what
+        // releases its one count once the link is pressed.
+        await restrictions
+            .CarriesAsync(sent.Match(reference => reference, _ => default), link.Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
 
         // REG-IDENT-007, D-187: the confirmation lives code.verification.lifetime from
         // its send, in a record of its own that holds no code.

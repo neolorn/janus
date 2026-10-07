@@ -215,6 +215,110 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20: the send that carries a held value's code is named by the
+    /// link beside it, a wrong code releases nothing, and the code presented right
+    /// releases what that send counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_AHeldValuesCodePresentedRightAnswersItsSendAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        SessionId session = Stepped();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId added = Named(await HeldAsync(), Third).Id;
+        byte[] named = OpaqueToken.Of(_notifications.Mail.Single(one => one.Destination.Canonical == Third).Token())
+            .Fingerprint();
+
+        Assert.Equal(named, Assert.Single(_restrictions.Carried).Answer);
+
+        string right = Code(added);
+        string wrong = string.Concat(right.AsSpan(0, right.Length - 1), right[^1] == '0' ? "1" : "0");
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(Acting, session, added, wrong, Source, TestContext.Current.CancellationToken)));
+        Assert.Empty(_restrictions.Answered);
+
+        Accepted(await Service.VerifyAsync(Acting, session, added, right, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: a held value's link pressed in the browser that staged it
+    /// releases what the send that carried it counted once; opened anywhere else it
+    /// proves nothing and releases nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_AHeldValuesLinkPressedAnswersItsSendAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        SessionId session = Stepped();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string link = _notifications.Mail.Single(one => one.Destination.Canonical == Third).Token();
+
+        Accepted(await Service.LandAsync(session: null, link, press: true, Source, TestContext.Current.CancellationToken));
+        Assert.Empty(_restrictions.Answered);
+
+        Assert.True(Landed(await Service.LandAsync(session, link, press: true, Source, TestContext.Current.CancellationToken)).Verified);
+        Assert.Equal(OpaqueToken.Of(link).Fingerprint(), Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: the message that asks a displaced address to confirm is
+    /// named by its link, and the press that confirms releases what it counted once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ADisplacedAddressesConfirmingPressAnswersItsSendAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        byte[] named = OpaqueToken.Of(
+                _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token())
+            .Fingerprint();
+
+        Assert.Contains(_restrictions.Carried, carried => carried.Answer.AsSpan().SequenceEqual(named));
+        Assert.Equal(2, _restrictions.Carried.Count);
+
+        Accepted(await Service.LandAsync(
+            session: null,
+            _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierChangeConfirm).Token(),
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
     /// REG-IDENT-004 AC3: every member of the set as it stands hears of the
     /// addition, once each.
     /// </summary>
@@ -335,6 +439,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.False(Outstanding(staged.Identifier).IsAnswerable());
         Assert.Equal(Third, Assert.Single(_restrictions.Drawn).Destination.Canonical);
         Assert.Equal(RestrictionPurpose.Verification, _restrictions.Drawn[0].Purpose);
+        Assert.Empty(_restrictions.Carried);
         Assert.Equal(
             [MessageKind.AccountExists, MessageKind.IdentifierAdded],
             _notifications.Mail

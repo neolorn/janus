@@ -1939,6 +1939,49 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20, AC2: a send named by the code or the link it carries is
+    /// released from the restriction marked <c>resend</c> once that code is presented
+    /// right or that link pressed, and from nothing else: each text's count against the
+    /// restriction not marked stands, an answer no send was named by releases nothing,
+    /// and the next send is admitted at once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_AnAnswerReleasesTheResendCountOfItsSendAloneAsync()
+    {
+        _configuration.Set(Settings.Restrictions, Paced);
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+
+        byte[] answer = RandomNumberGenerator.GetBytes(32);
+
+        Begun(await _work.BeginAsync(TestContext.Current.CancellationToken));
+
+        SendReference sent = (await Path.Send.UndertakeAsync(
+                Texted() with { Language = null },
+                TestContext.Current.CancellationToken))
+            .Match(reference => reference, error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
+
+        await Path.Send.CarriesAsync(sent, answer, TestContext.Current.CancellationToken);
+
+        Begun(await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        await AnsweredAsync(RandomNumberGenerator.GetBytes(32));
+
+        Assert.Equal([Noon], _ledger.Sends(Once));
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
+
+        await AnsweredAsync(answer);
+
+        Assert.Equal([Noon, Noon], _ledger.Sends(Each));
+        Assert.Empty(_ledger.Sends(Once));
+
+        _ = await SentAsync(Texted());
+
+        Assert.Equal(3, _sms.Taken.Count);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC14, AUTH-ABUSE-003: an ask that sends nothing is counted as its
     /// message would be, each language against a restriction not marked <c>resend</c>
     /// and the ask once against one that is, under references no report names and no
@@ -2070,6 +2113,16 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             .ReportAsync("203.0.113.9", reference, delivered, TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The report was refused: {error.Code}."));
+
+    // A code presented right or a link pressed, in a unit of work of its own.
+    private async Task AnsweredAsync(byte[] answer)
+    {
+        Begun(await _work.BeginAsync(TestContext.Current.CancellationToken));
+
+        await Path.Send.AnsweredAsync(answer, TestContext.Current.CancellationToken);
+
+        Begun(await _work.CommitAsync(TestContext.Current.CancellationToken));
+    }
 
     private async Task<int> RetriedAsync() =>
         (await Path.Publisher.RetryAsync(Carrier, TestContext.Current.CancellationToken)).Match(

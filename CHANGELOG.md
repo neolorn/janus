@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The one count of a send against a restriction marked `resend` is also released when
+  the code the send carries is presented right or the link it carries is pressed: a
+  registration's or a held value's code or link, the link that asks a displaced
+  address to confirm, a sign-in code or link, a second step's text code, the code of
+  the new-device check, and a recovery or enrolment link once used. A wrong code, a
+  link merely opened or pressed in another browser, and a code or link no counted send
+  carries release nothing, and nothing but that one count is released.
 - A restriction marked `resend` judges and counts a send once, whatever the number of
   languages it goes out in, where every other restriction still judges a text message
   owed in several languages with the weight of their number and counts each. That one
