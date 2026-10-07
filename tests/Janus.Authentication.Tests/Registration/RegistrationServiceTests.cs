@@ -288,14 +288,31 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-002 AC2: at the terms step, with every earlier step complete, the
-    /// session store is still the only place anything has been written.
+    /// REG-SESS-002 AC2: at the terms step, with every earlier step complete, no
+    /// account, identifier, credential or consent exists outside the session store. What
+    /// else the steps wrote is the verification-code record of each identifier while its
+    /// code was outstanding (AUTH-FACT-004) and the messages that carried the codes.
     /// </summary>
     [Fact]
     public async Task REG_SESS_002_AC2_NothingIsWrittenOutsideTheSessionStoreAsync()
     {
-        RegistrationSessionId session = await SecuredAsync();
+        RegistrationSessionId session = await AwaitingAsync();
         SubjectId provisional = Live(session).Provisional;
+        byte[] email = Holder(session, Identity(session, IdentifierKind.Email).Id);
+
+        byte[][] awaitingTheEmail = [.. _codes.All.Select(code => code.Holder)];
+        await VerifiedAsync(session, IdentifierKind.Email);
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Phone,
+            Number,
+            Source,
+            TestContext.Current.CancellationToken));
+        byte[] phone = Holder(session, Identity(session, IdentifierKind.Phone).Id);
+        byte[][] awaitingThePhone = [.. _codes.All.Select(code => code.Holder)];
+        await VerifiedAsync(session, IdentifierKind.Phone);
+        _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.SetPasswordAsync(session, Chosen, TestContext.Current.CancellationToken));
 
         Assert.Equal(RegistrationStep.Terms, Live(session).Step);
         Assert.Empty(_directory.Created);
@@ -304,6 +321,16 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         Assert.Empty(_live.All);
         Assert.Null(await _passwords.FindAsync(provisional, TestContext.Current.CancellationToken));
         Assert.Null(await _sets.FindAsync(provisional, TestContext.Current.CancellationToken));
+        Assert.Equal(0, _consents.Recorded);
+        Assert.Equal([email], awaitingTheEmail);
+        Assert.Equal([phone], awaitingThePhone);
+        Assert.Empty(_codes.All);
+        Assert.NotEmpty(_notifications.Sent);
+        Assert.All(
+            _notifications.Sent,
+            sent => Assert.Equal(
+                (RestrictionPurpose.Verification, MessageKind.VerificationLink),
+                (sent.Purpose, sent.Message)));
     }
 
     /// <summary>
