@@ -135,13 +135,13 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-007 AC1: a push whose answer was lost may have been applied, so a
+    /// INT-MAIL-007 AC4: a push whose answer was lost may have been applied, so a
     /// return to the state last confirmed while it is outstanding is pushed again under
     /// a key of its own, and the server ends in the state owed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task INT_MAIL_007_AC1_AReturnWhileAPushIsOutstandingIsPushedAgainAsync()
+    public async Task INT_MAIL_007_AC4_AReturnWhileAPushIsOutstandingIsPushedAgainAsync()
     {
         Mailbox held = await HeldAsync();
 
@@ -161,6 +161,37 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
 
         Assert.True(_server.Hosts(Address));
         Assert.Equal(MailboxState.Enabled, held.Pushed);
+        Assert.Null(held.Pending);
+        Assert.NotEqual(disabling, _server.Received[^1].Key);
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC4: a change to <c>removed</c> after a push the server applied
+    /// and whose answer was lost is pushed under a key of its own, and the server ends
+    /// holding no account of the mailbox.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC4_ARemovalOwedAfterALostAnswerLeavesNoAccountAsync()
+    {
+        Mailbox held = await HeldAsync();
+
+        held.Retire(_clock.GetUtcNow());
+        _server.LosesAnswers = true;
+
+        Assert.Equal(0, await PassAsync());
+
+        Assert.False(_server.Hosts(Address));
+
+        Guid disabling = _server.Received[^1].Key;
+
+        held.Replace(_clock.GetUtcNow());
+        _server.LosesAnswers = false;
+
+        Assert.Equal(1, await PassAsync());
+
+        Assert.Null(_server.Hosts(Address));
+        Assert.Equal(MailboxState.Removed, held.Pushed);
         Assert.Null(held.Pending);
         Assert.NotEqual(disabling, _server.Received[^1].Key);
     }
