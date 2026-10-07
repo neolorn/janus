@@ -445,7 +445,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_DERIVE_001_ACheckWithTheHostsRowsReadsNoGrantThroughTheLibraryAsync()
+    public async Task AUTHZ_DERIVE_001_AC5_ACheckWithTheHostsRowsReadsNoGrantThroughTheLibraryAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Nested nested = await NestAsync();
@@ -1254,7 +1254,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_PRIN_001_AC2_ACheckWithoutTheHostsRowsIsAFaultAsync()
+    public async Task AUTHZ_DERIVE_001_AC4_ACheckWithoutTheHostsRowsIsAFaultAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Nested nested = await NestAsync();
@@ -1313,7 +1313,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_PRIN_001_AC2_ACheckNoDerivationReachesNeedsNoRowsAsync()
+    public async Task AUTHZ_DERIVE_001_AC4_ACheckNoDerivationReachesNeedsNoRowsAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Nested nested = await NestAsync(allowing: [HostPermissions.Edit]);

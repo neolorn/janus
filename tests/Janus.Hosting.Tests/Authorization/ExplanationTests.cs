@@ -85,7 +85,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// AUTHZ-GATE-004 AC2, AUTHZ-DERIVE-001, AUTHZ-DERIVE-005 (D-162): an explanation
+    /// AUTHZ-GATE-004 AC5, AUTHZ-DERIVE-001, AUTHZ-DERIVE-005 (D-162): an explanation
     /// asked with the rows the derivation is evaluated over names the grant the fact
     /// produced. It carries no identifier, because no row holds it; it says it is
     /// derived; and it names the role the derivation confers and the container the
@@ -93,7 +93,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GATE_004_AC2_AnApprovalNamesTheGrantAFactProducedAsync()
+    public async Task AUTHZ_GATE_004_AC5_AnApprovalNamesTheGrantAFactProducedAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Deployed deployed = await DeployAsync(granted: false);

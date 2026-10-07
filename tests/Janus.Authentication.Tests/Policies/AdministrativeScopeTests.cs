@@ -46,7 +46,7 @@ public sealed class AdministrativeScopeTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_SCOPE_001_APermissionHeldInAnotherOrganizationIsRefusedAsync()
+    public async Task AUTHZ_SCOPE_001_AC3_APermissionHeldInAnotherOrganizationIsRefusedAsync()
     {
         _gate.Grant(Mona, Branch, Permissions.SessionRevoke);
 

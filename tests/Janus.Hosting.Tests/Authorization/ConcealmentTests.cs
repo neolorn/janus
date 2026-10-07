@@ -21,14 +21,14 @@ public sealed class ConcealmentTests(HostFixture host) : IClassFixture<HostFixtu
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
 
     /// <summary>
-    /// AUTHZ-CONCEAL-002 AC2, BFF-ERR-003, D-166: the refusal of a record the library
+    /// AUTHZ-CONCEAL-002 AC3, BFF-ERR-003, D-166: the refusal of a record the library
     /// holds no row for and the refusal of a registered record issue the same
     /// statements with the same texts, on a type the stored grants alone decide and on
     /// one a derivation reaches, asked with its sources.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_CONCEAL_002_AC2_AnAbsentRecordAndARefusedOneRunTheSameStatementsAsync()
+    public async Task AUTHZ_CONCEAL_002_AC3_AnAbsentRecordAndARefusedOneRunTheSameStatementsAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var deployment = new Deployment(host);

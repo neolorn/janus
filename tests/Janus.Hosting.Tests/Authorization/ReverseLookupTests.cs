@@ -295,7 +295,7 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_DERIVE_007_AnUnregisteredRecordIsRefusedAsTheGateRefusesAsync()
+    public async Task AUTHZ_DERIVE_007_AC3_AnUnregisteredRecordIsRefusedAsTheGateRefusesAsync()
     {
         Deployed deployed = await DeployAsync();
         var caller = AccessContext.Of(deployed.Account);
