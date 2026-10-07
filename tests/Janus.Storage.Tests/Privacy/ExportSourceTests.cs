@@ -639,7 +639,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             subject,
             Factor.Passkey,
             Label(label),
-            new WebAuthnMaterial(credentialId, publicKey, -7, "example.com", 0, true, false),
+            new WebAuthnMaterial(credentialId, publicKey, -7, "example.com", 0, true, false, []),
             Noon);
 
         credential.Confirm(Noon);

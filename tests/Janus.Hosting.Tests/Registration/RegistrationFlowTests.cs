@@ -6,12 +6,14 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -890,32 +892,17 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     // What a browser sends back from a creation ceremony: the challenge the server
     // issued, an origin the relying party admits, and a key the runtime can read.
     private static string Attested(string challenge)
-    {
-        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-
-        byte[] clientData = Encoding.UTF8.GetBytes(
-            "{\"type\":\"webauthn.create\",\"challenge\":\""
-            + challenge
-            + "\",\"origin\":\"https://identity.example.test\"}");
-
-        byte[] authenticatorData = new byte[37];
-
-        SHA256.HashData(Encoding.UTF8.GetBytes("identity.example.test")).CopyTo(authenticatorData, 0);
-
         // User present and user verified, with the two backup flags of a synced
         // credential (AUTH-FACT-013).
-        authenticatorData[32] = 0x1D;
-
-        return "{\"credential\":{\"credentialId\":\""
-            + Base64Url.EncodeToString(Guid.NewGuid().ToByteArray())
-            + "\",\"clientDataJson\":\""
-            + Base64Url.EncodeToString(clientData)
-            + "\",\"authenticatorData\":\""
-            + Base64Url.EncodeToString(authenticatorData)
-            + "\",\"publicKey\":\""
-            + Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo())
-            + "\",\"algorithm\":-7},\"label\":\"This phone\"}";
-    }
+        => new JsonObject
+        {
+            ["credential"] = SoftwareAuthenticator.Written(SoftwareAuthenticator.Holding().Attested(
+                challenge,
+                "https://identity.example.test",
+                "identity.example.test",
+                flags: 0x1D)),
+            ["label"] = "This phone",
+        }.ToJsonString();
 
     // The code an authenticator app shows now for the secret it was given.
     private string Generated(string secret) =>

@@ -241,8 +241,9 @@ internal sealed class WebAuthnService(
 
         Error? refusal = null;
 
-        WebAuthnRegistration registration = WebAuthnCeremonies
-            .Created(answered, challenge, party.Origins, party.Id)
+        WebAuthnRegistration registration = (await WebAuthnCeremonies
+                .CreatedAsync(answered, challenge, party, UnheldAsync, cancellationToken)
+                .ConfigureAwait(false))
             .Match(read => read, error => Withheld<WebAuthnRegistration>(error, ref refusal));
 
         if (refusal is not null)
@@ -278,8 +279,9 @@ internal sealed class WebAuthnService(
 
         Error? refusal = null;
 
-        WebAuthnRegistration registration = WebAuthnCeremonies
-            .Created(answered, challenge, party.Origins, party.Id)
+        WebAuthnRegistration registration = (await WebAuthnCeremonies
+                .CreatedAsync(answered, challenge, party, UnheldAsync, cancellationToken)
+                .ConfigureAwait(false))
             .Match(read => read, error => Withheld<WebAuthnRegistration>(error, ref refusal));
 
         refusal ??= Admits(party, kind, registration);
@@ -309,7 +311,7 @@ internal sealed class WebAuthnService(
     {
         ArgumentNullException.ThrowIfNull(answered);
 
-        byte[]? credentialId = Read(answered.CredentialId);
+        byte[]? credentialId = Read(answered.RawId);
 
         if (credentialId is null)
         {
@@ -330,8 +332,9 @@ internal sealed class WebAuthnService(
 
         Error? refusal = null;
 
-        WebAuthnAssertion assertion = WebAuthnCeremonies
-            .Asserted(answered, challenge, party.Origins, held.WebAuthn)
+        WebAuthnAssertion assertion = (await WebAuthnCeremonies
+                .AssertedAsync(answered, challenge, party, held.WebAuthn, cancellationToken)
+                .ConfigureAwait(false))
             .Match(read => read, error => Withheld<WebAuthnAssertion>(error, ref refusal));
 
         return refusal is not null
@@ -414,6 +417,14 @@ internal sealed class WebAuthnService(
                 Error.From(ErrorCodes.WebAuthnUserVerificationRequired));
         }
 
+        // AUTH-FACT-014, WebAuthn Level 3 section 7.2: whether a credential may be
+        // synced is settled when it is created, so an assertion that says otherwise
+        // than the record is not this credential's.
+        if (assertion.BackupEligible != held.WebAuthn.BackupEligible)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -465,6 +476,7 @@ internal sealed class WebAuthnService(
                 locked.Counted(assertion.Counter);
             }
 
+            locked.BackedUp(assertion.BackupState);
             locked.Used(now);
             await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
         }
@@ -515,6 +527,13 @@ internal sealed class WebAuthnService(
     }
 
     private static bool Kept(uint? counter) => counter is > 0;
+
+    // WebAuthn Level 3 section 7.1: a credential identifier some credential already
+    // holds is not enrolled a second time, for this account or another.
+    private async ValueTask<bool> UnheldAsync(
+        ReadOnlyMemory<byte> credentialId,
+        CancellationToken cancellationToken) =>
+        await authenticators.ByCredentialAsync(credentialId, cancellationToken).ConfigureAwait(false) is null;
 
     // The identifier a handle carries, read as bytes and never made a subject: the max
     // UUID, which no subject is issued, is refused here as any other stranger is (D-174).
@@ -585,5 +604,6 @@ internal sealed class WebAuthnService(
             party.Id,
             registration.Counter is 0 ? null : registration.Counter,
             registration.BackupEligible,
-            registration.BackupState);
+            registration.BackupState,
+            registration.Transports);
 }

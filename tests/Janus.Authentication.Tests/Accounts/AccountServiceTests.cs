@@ -610,7 +610,8 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 "example.test",
                 Counter: 0,
                 BackupEligible: true,
-                BackupState: true),
+                BackupState: true,
+                Transports: []),
             Noon);
 
     private async Task ChosenAsync(string username)
@@ -807,6 +808,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 "example.test",
                 Counter: 0,
                 BackupEligible: false,
-                BackupState: false),
+                BackupState: false,
+                Transports: []),
             at);
 }

@@ -2170,7 +2170,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 "example.test",
                 Counter: 0,
                 BackupEligible: backedUp,
-                BackupState: backedUp),
+                BackupState: backedUp,
+                Transports: []),
             Noon);
 
     /// <summary>

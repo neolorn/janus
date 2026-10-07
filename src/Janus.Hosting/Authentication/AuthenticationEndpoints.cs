@@ -190,6 +190,11 @@ internal static class AuthenticationEndpoints
                 .ConfigureAwait(false);
         }
 
+        if (request.Presented() is not FactorPresentation presented)
+        {
+            return Answers.Malformed("value");
+        }
+
         if (Asking(request))
         {
             return Answers.Of(
@@ -210,7 +215,7 @@ internal static class AuthenticationEndpoints
                 await authentication
                     .PresentAsync(
                         challenge,
-                        Presented(request),
+                        presented,
                         origin,
                         Carried(context.Request, BrowserCookies.Browser),
                         Carried(context.Request, BrowserCookies.Device),
@@ -285,6 +290,11 @@ internal static class AuthenticationEndpoints
             return Answers.Malformed("challengeId");
         }
 
+        if (request.Presented() is not FactorPresentation presented)
+        {
+            return Answers.Malformed("value");
+        }
+
         if (Asking(request))
         {
             return Answers.Of(
@@ -307,7 +317,7 @@ internal static class AuthenticationEndpoints
                         holder,
                         browser.Required.Id,
                         challenge,
-                        Presented(request),
+                        presented,
                         RequestOrigin.Source(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
@@ -479,17 +489,7 @@ internal static class AuthenticationEndpoints
     // AUTH-FACT-002 AC6: a second step the library texts is asked for by naming it with
     // nothing to present, and the ask is answered 202 whatever it finds (D-166).
     private static bool Asking(PresentFactorRequest request) =>
-        request.Value is not { Length: > 0 }
-        && request.Assertion is null
-        && AuthenticationService.Asks(request.Factor);
-
-    private static FactorPresentation Presented(PresentFactorRequest request) =>
-        new(request.Factor)
-        {
-            Value = request.Value,
-            Assertion = request.Assertion,
-            TrustDevice = request.TrustDevice,
-        };
+        !request.Presents() && AuthenticationService.Asks(request.Factor);
 
     private static async Task<IResult> LandedAsync(
         Result<LandedSignIn> outcome,

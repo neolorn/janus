@@ -269,7 +269,8 @@ internal sealed class AuthenticatorStore(
                     record.RelyingParty!,
                     record.Counter is long counter ? (uint)counter : null,
                     record.BackupEligible!.Value,
-                    record.BackupState!.Value),
+                    record.BackupState!.Value,
+                    record.Transports ?? []),
             record.IsPreferred);
 
     // A label this library wrote is a label this library accepts, so a stored value
@@ -304,6 +305,7 @@ internal sealed class AuthenticatorStore(
             Counter = authenticator.WebAuthn?.Counter,
             BackupEligible = authenticator.WebAuthn?.BackupEligible,
             BackupState = authenticator.WebAuthn?.BackupState,
+            Transports = authenticator.WebAuthn is null ? null : [.. authenticator.WebAuthn.Transports],
             TotpConsumedStep = authenticator.Totp?.ConsumedStep,
             IsPreferred = authenticator.IsPreferred,
         };

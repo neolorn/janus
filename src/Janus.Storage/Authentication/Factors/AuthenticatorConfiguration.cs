@@ -72,6 +72,12 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
                     + "(credential_id IS NULL) = (backup_eligible IS NULL) AND "
                     + "(credential_id IS NULL) = (backup_state IS NULL)");
 
+            // AUTH-FACT-014: the transports are a key's, kept as its creation gave them,
+            // and a credential that holds no key holds none.
+            table.HasCheckConstraint(
+                "ck_authenticators_transports",
+                "(transports IS NULL) OR (credential_id IS NOT NULL)");
+
             // IDN-LIFE-012a, PRIV-RIGHT-005c: a linked identity is found by the keyed
             // fingerprint of the provider's subject, and only a linked identity has one,
             // with the version it was computed under and the subject it was computed
@@ -126,6 +132,7 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         builder.Property(credential => credential.Counter).HasColumnName("counter");
         builder.Property(credential => credential.BackupEligible).HasColumnName("backup_eligible");
         builder.Property(credential => credential.BackupState).HasColumnName("backup_state");
+        builder.Property(credential => credential.Transports).HasColumnName("transports");
         builder.Property(credential => credential.IsPreferred).HasColumnName("is_preferred");
         builder.Property(credential => credential.ProviderSubject).HasColumnName("provider_subject");
         builder.Property(credential => credential.FingerprintVersion).HasColumnName("fingerprint_version");

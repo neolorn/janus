@@ -1,5 +1,3 @@
-using Janus.Core;
-
 namespace Janus.Hosting.Credentials;
 
 /// <summary>
@@ -7,5 +5,5 @@ namespace Janus.Hosting.Credentials;
 /// </summary>
 /// <param name="Credential">What the browser sent back.</param>
 /// <param name="Label">What the person calls it.</param>
-/// <remarks>Implements AUTH-FACT-001 and AUTH-FACT-011.</remarks>
-internal sealed record CompleteKeyRequest(AuthenticatorAttestation? Credential, string? Label);
+/// <remarks>Implements AUTH-FACT-001, AUTH-FACT-011 and AUTH-FACT-014.</remarks>
+internal sealed record CompleteKeyRequest(RegistrationResponseJson? Credential, string? Label);

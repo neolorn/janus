@@ -563,6 +563,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("totp_secret");
 
+                b.PrimitiveCollection<string[]>("Transports")
+                    .HasColumnType("text[]")
+                    .HasColumnName("transports");
+
                 b.HasKey("Id")
                     .HasName("pk_authenticators");
 
@@ -596,6 +600,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_authenticators_state", "state IN ('active', 'invalidated', 'suspended')");
 
                         t.HasCheckConstraint("ck_authenticators_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_authenticators_transports", "(transports IS NULL) OR (credential_id IS NOT NULL)");
 
                         t.HasCheckConstraint("ck_authenticators_webauthn", "(credential_id IS NULL) = (public_key IS NULL) AND (credential_id IS NULL) = (algorithm IS NULL) AND (credential_id IS NULL) = (relying_party IS NULL) AND (credential_id IS NULL) = (backup_eligible IS NULL) AND (credential_id IS NULL) = (backup_state IS NULL)");
                     });

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Janus.Authentication.Factors;
 
@@ -6,8 +7,11 @@ namespace Janus.Authentication.Factors;
 /// What a completed creation ceremony produced, verified by the caller and judged
 /// against the relying party here.
 /// </summary>
-/// <param name="CredentialId">The identifier the authenticator returned.</param>
-/// <param name="PublicKey">The key a later signature is verified against.</param>
+/// <param name="CredentialId">The identifier the attested credential data carries.</param>
+/// <param name="PublicKey">
+/// The key a later signature is verified against, as the attested credential data
+/// carries it: a COSE key.
+/// </param>
 /// <param name="Algorithm">The COSE algorithm the key signs with.</param>
 /// <param name="RelyingPartyId">What the ceremony ran under.</param>
 /// <param name="UserVerified">Whether the person proved themselves to the authenticator.</param>
@@ -15,6 +19,9 @@ namespace Janus.Authentication.Factors;
 /// <param name="BackupState">Whether it currently is.</param>
 /// <param name="Counter">
 /// The signature counter the authenticator reported, nought where it keeps none.
+/// </param>
+/// <param name="Transports">
+/// The ways the authenticator can be reached, as the response named them.
 /// </param>
 /// <remarks>Implements AUTH-FACT-013 and AUTH-FACT-014.</remarks>
 internal sealed record WebAuthnRegistration(
@@ -25,4 +32,5 @@ internal sealed record WebAuthnRegistration(
     bool UserVerified,
     bool BackupEligible,
     bool BackupState,
-    uint Counter);
+    uint Counter,
+    IReadOnlyList<string> Transports);

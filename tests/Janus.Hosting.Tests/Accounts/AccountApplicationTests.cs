@@ -1004,7 +1004,8 @@ public sealed class AccountApplicationTests : IAsyncDisposable
                 "identity.example.test",
                 Counter: 0,
                 BackupEligible: true,
-                BackupState: true),
+                BackupState: true,
+                Transports: []),
             _deployment.Clock.GetUtcNow());
 
         _deployment.Authenticators.Hold(held);

@@ -268,34 +268,40 @@ Janus.Core.AuthenticationAddresses.SignIn.get -> string!
 Janus.Core.AuthenticationAddresses.SignIn.init -> void
 Janus.Core.AuthenticatorAssertion
 Janus.Core.AuthenticatorAssertion.<Clone>$() -> Janus.Core.AuthenticatorAssertion!
-Janus.Core.AuthenticatorAssertion.AuthenticatorAssertion(string! CredentialId, string! ClientDataJson, string! AuthenticatorData, string! Signature, string? UserHandle = null) -> void
+Janus.Core.AuthenticatorAssertion.AuthenticatorAssertion(string! Id, string! RawId, string! Type, string! ClientDataJson, string! AuthenticatorData, string! Signature, string? UserHandle = null) -> void
 Janus.Core.AuthenticatorAssertion.AuthenticatorData.get -> string!
 Janus.Core.AuthenticatorAssertion.AuthenticatorData.init -> void
 Janus.Core.AuthenticatorAssertion.ClientDataJson.get -> string!
 Janus.Core.AuthenticatorAssertion.ClientDataJson.init -> void
-Janus.Core.AuthenticatorAssertion.CredentialId.get -> string!
-Janus.Core.AuthenticatorAssertion.CredentialId.init -> void
-Janus.Core.AuthenticatorAssertion.Deconstruct(out string! CredentialId, out string! ClientDataJson, out string! AuthenticatorData, out string! Signature, out string? UserHandle) -> void
+Janus.Core.AuthenticatorAssertion.Deconstruct(out string! Id, out string! RawId, out string! Type, out string! ClientDataJson, out string! AuthenticatorData, out string! Signature, out string? UserHandle) -> void
 Janus.Core.AuthenticatorAssertion.Equals(Janus.Core.AuthenticatorAssertion? other) -> bool
+Janus.Core.AuthenticatorAssertion.Id.get -> string!
+Janus.Core.AuthenticatorAssertion.Id.init -> void
+Janus.Core.AuthenticatorAssertion.RawId.get -> string!
+Janus.Core.AuthenticatorAssertion.RawId.init -> void
 Janus.Core.AuthenticatorAssertion.Signature.get -> string!
 Janus.Core.AuthenticatorAssertion.Signature.init -> void
+Janus.Core.AuthenticatorAssertion.Type.get -> string!
+Janus.Core.AuthenticatorAssertion.Type.init -> void
 Janus.Core.AuthenticatorAssertion.UserHandle.get -> string?
 Janus.Core.AuthenticatorAssertion.UserHandle.init -> void
 Janus.Core.AuthenticatorAttestation
 Janus.Core.AuthenticatorAttestation.<Clone>$() -> Janus.Core.AuthenticatorAttestation!
-Janus.Core.AuthenticatorAttestation.Algorithm.get -> int
-Janus.Core.AuthenticatorAttestation.Algorithm.init -> void
-Janus.Core.AuthenticatorAttestation.AuthenticatorAttestation(string! CredentialId, string! ClientDataJson, string! AuthenticatorData, string! PublicKey, int Algorithm) -> void
-Janus.Core.AuthenticatorAttestation.AuthenticatorData.get -> string!
-Janus.Core.AuthenticatorAttestation.AuthenticatorData.init -> void
+Janus.Core.AuthenticatorAttestation.AttestationObject.get -> string!
+Janus.Core.AuthenticatorAttestation.AttestationObject.init -> void
+Janus.Core.AuthenticatorAttestation.AuthenticatorAttestation(string! Id, string! RawId, string! Type, string! ClientDataJson, string! AttestationObject, System.Collections.Generic.IReadOnlyList<string!>! Transports) -> void
 Janus.Core.AuthenticatorAttestation.ClientDataJson.get -> string!
 Janus.Core.AuthenticatorAttestation.ClientDataJson.init -> void
-Janus.Core.AuthenticatorAttestation.CredentialId.get -> string!
-Janus.Core.AuthenticatorAttestation.CredentialId.init -> void
-Janus.Core.AuthenticatorAttestation.Deconstruct(out string! CredentialId, out string! ClientDataJson, out string! AuthenticatorData, out string! PublicKey, out int Algorithm) -> void
+Janus.Core.AuthenticatorAttestation.Deconstruct(out string! Id, out string! RawId, out string! Type, out string! ClientDataJson, out string! AttestationObject, out System.Collections.Generic.IReadOnlyList<string!>! Transports) -> void
 Janus.Core.AuthenticatorAttestation.Equals(Janus.Core.AuthenticatorAttestation? other) -> bool
-Janus.Core.AuthenticatorAttestation.PublicKey.get -> string!
-Janus.Core.AuthenticatorAttestation.PublicKey.init -> void
+Janus.Core.AuthenticatorAttestation.Id.get -> string!
+Janus.Core.AuthenticatorAttestation.Id.init -> void
+Janus.Core.AuthenticatorAttestation.RawId.get -> string!
+Janus.Core.AuthenticatorAttestation.RawId.init -> void
+Janus.Core.AuthenticatorAttestation.Transports.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.AuthenticatorAttestation.Transports.init -> void
+Janus.Core.AuthenticatorAttestation.Type.get -> string!
+Janus.Core.AuthenticatorAttestation.Type.init -> void
 Janus.Core.AuthenticatorId
 Janus.Core.AuthenticatorId.AuthenticatorId() -> void
 Janus.Core.AuthenticatorId.AuthenticatorId(System.Guid Value) -> void

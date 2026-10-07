@@ -21,6 +21,14 @@ namespace Janus.Authentication.Tests.Factors;
 [Trait("kind", "unit")]
 public sealed class WebAuthnServiceTests : IAsyncDisposable
 {
+    // A challenge as the library draws one: base64url, which is what the verification
+    // decodes it from.
+    private const string Challenge = "YS1jaGFsbGVuZ2U";
+
+    private const string Origin = "https://app.example.com";
+
+    private const string RelyingPartyId = "example.com";
+
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -192,8 +200,8 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         WebAuthnMaterial read = Value(await Service.ReadAsync(
             Factor.Passkey,
-            Attestation("a-challenge", "https://app.xn--bcher-kva.de", "xn--bcher-kva.de"),
-            "a-challenge",
+            Attestation(Challenge, "https://app.xn--bcher-kva.de", "xn--bcher-kva.de"),
+            Challenge,
             TestContext.Current.CancellationToken));
 
         Assert.Equal("xn--bcher-kva.de", read.RelyingPartyId);
@@ -221,8 +229,8 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.FactorRejected,
             Refusal(await Service.ReadAsync(
                 Factor.Passkey,
-                Attestation("a-challenge", origin, "xn--bcher-kva.de"),
-                "a-challenge",
+                Attestation(Challenge, origin, "xn--bcher-kva.de"),
+                Challenge,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -970,6 +978,569 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.Empty(_audit.Records);
     }
 
+    /// <summary>
+    /// AUTH-FACT-014 AC6: a ceremony whose authenticator chooses EdDSA under the
+    /// default allow-list enrols and its assertions verify, as one choosing either
+    /// other algorithm of the list does. The key is kept as the attested credential
+    /// data gives it.
+    /// </summary>
+    /// <param name="algorithm">The COSE algorithm the authenticator chooses.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(SoftwareAuthenticator.EdDsa)]
+    [InlineData(SoftwareAuthenticator.Es256)]
+    [InlineData(SoftwareAuthenticator.Rs256)]
+    public async Task AUTH_FACT_014_AC6_ACeremonyOfAnAlgorithmOfTheDefaultAllowListEnrolsAndItsAssertionsVerifyAsync(
+        int algorithm)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding(algorithm);
+
+        AuthenticatorId id = await CreatedAsync(subject, authenticator);
+        WebAuthnMaterial enrolled = await HeldAsync(id);
+
+        Assert.Equal(algorithm, enrolled.Algorithm);
+        Assert.Equal(authenticator.CredentialId, enrolled.CredentialId.ToArray());
+        Assert.Equal(authenticator.PublicKey, enrolled.PublicKey.ToArray());
+        Assert.Null(await AssertedAsync(subject, authenticator.Asserted(Challenge, Origin, RelyingPartyId)));
+        Assert.Equal(Noon, (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC6: an assertion is verified against the key the credential was
+    /// enrolled with, so one another key of the same algorithm signed is rejected, and
+    /// so is one signed over another challenge.
+    /// </summary>
+    /// <param name="algorithm">The COSE algorithm of the credential.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(SoftwareAuthenticator.EdDsa)]
+    [InlineData(SoftwareAuthenticator.Es256)]
+    [InlineData(SoftwareAuthenticator.Rs256)]
+    public async Task AUTH_FACT_014_AC6_AnAssertionTheCredentialsKeyDidNotSignIsRejectedAsync(int algorithm)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding(algorithm);
+        var forger = SoftwareAuthenticator.Holding(algorithm, authenticator.CredentialId);
+
+        AuthenticatorId id = await CreatedAsync(subject, authenticator);
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            await AssertedAsync(subject, forger.Asserted(Challenge, Origin, RelyingPartyId)));
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            await AssertedAsync(subject, authenticator.Asserted("YW5vdGhlcg", Origin, RelyingPartyId)));
+        Assert.Null((await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC4: a ceremony whose authenticator chose an algorithm the
+    /// deployment's allow-list does not hold is refused at enrolment under the code it
+    /// always had.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC4_ACeremonyOfAnAlgorithmOutsideTheAllowListIsRefusedAsync()
+    {
+        _configuration.Set(Settings.WebAuthnAlgorithms, (IReadOnlyList<int>)[-7]);
+
+        Assert.Equal(
+            ErrorCodes.WebAuthnAlgorithmNotAllowed,
+            Refusal(await Service.EnrolAsync(
+                Subject(),
+                Factor.Passkey,
+                Label(),
+                SoftwareAuthenticator.Holding(SoftwareAuthenticator.EdDsa).Attested(Challenge, Origin, RelyingPartyId),
+                Challenge,
+                upgrading: null,
+                TestContext.Current.CancellationToken)));
+        Assert.Empty(_authenticators.All);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC1: a ceremony whose authenticator data does not carry the user
+    /// verified flag is refused at enrolment and at sign-in under the code it always
+    /// had.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC1_ACeremonyWhoseAuthenticatorVerifiedNobodyIsRefusedAsync()
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+
+        Assert.Equal(
+            ErrorCodes.WebAuthnUserVerificationRequired,
+            Refusal(await Service.EnrolAsync(
+                subject,
+                Factor.Passkey,
+                Label(),
+                authenticator.Attested(Challenge, Origin, RelyingPartyId, SoftwareAuthenticator.UserPresent),
+                Challenge,
+                upgrading: null,
+                TestContext.Current.CancellationToken)));
+        Assert.Empty(_authenticators.All);
+
+        _ = await CreatedAsync(subject, authenticator);
+
+        Assert.Equal(
+            ErrorCodes.WebAuthnUserVerificationRequired,
+            await AssertedAsync(
+                subject,
+                authenticator.Asserted(Challenge, Origin, RelyingPartyId, SoftwareAuthenticator.UserPresent)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC7: a ceremony whose client data carries an origin of
+    /// <c>webauthn.relatedorigins</c> is admitted, at enrolment and at sign-in, and one
+    /// from an origin of neither setting is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC7_ACeremonyFromARelatedOriginIsAdmittedAsync()
+    {
+        const string related = "https://app.example.org";
+
+        _configuration.Set(Settings.WebAuthnRelatedOrigins, (IReadOnlyList<string>)[related]);
+
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+
+        AuthenticatorId id = Value(await Service.EnrolAsync(
+            subject,
+            Factor.Passkey,
+            Label(),
+            authenticator.Attested(Challenge, related, RelyingPartyId),
+            Challenge,
+            upgrading: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(RelyingPartyId, (await HeldAsync(id)).RelyingPartyId);
+        Assert.Null(await AssertedAsync(subject, authenticator.Asserted(Challenge, related, RelyingPartyId)));
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            await AssertedAsync(
+                subject,
+                authenticator.Asserted(Challenge, "https://app.example.net", RelyingPartyId, counter: 1)));
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.ReadAsync(
+                Factor.Passkey,
+                SoftwareAuthenticator.Holding().Attested(Challenge, "https://app.example.net", RelyingPartyId),
+                Challenge,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC8: client data whose <c>crossOrigin</c> is true is refused at
+    /// enrolment, nothing enrolled, and client data that says false is admitted as
+    /// client data that says nothing is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC8_ACreationWhoseClientDataIsCrossOriginIsRefusedAsync()
+    {
+        SubjectId subject = Subject();
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.EnrolAsync(
+                subject,
+                Factor.Passkey,
+                Label(),
+                SoftwareAuthenticator.Holding().Attested(Challenge, Origin, RelyingPartyId, crossOrigin: true),
+                Challenge,
+                upgrading: null,
+                TestContext.Current.CancellationToken)));
+        Assert.Empty(_authenticators.All);
+
+        _ = Value(await Service.EnrolAsync(
+            subject,
+            Factor.Passkey,
+            Label(),
+            SoftwareAuthenticator.Holding().Attested(Challenge, Origin, RelyingPartyId, crossOrigin: false),
+            Challenge,
+            upgrading: null,
+            TestContext.Current.CancellationToken));
+
+        _ = Assert.Single(_authenticators.All);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC8: an assertion whose client data's <c>crossOrigin</c> is true is
+    /// refused and nothing of it is stored, and one that says false is accepted.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC8_AnAssertionWhoseClientDataIsCrossOriginIsRefusedAsync()
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        AuthenticatorId id = await CreatedAsync(subject, authenticator);
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            await AssertedAsync(
+                subject,
+                authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 3, crossOrigin: true)));
+        Assert.Null((await HeldAsync(id)).Counter);
+        Assert.Null((await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
+        Assert.Null(await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 3, crossOrigin: false)));
+        Assert.Equal(3u, (await HeldAsync(id)).Counter);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC8: an assertion whose BE flag differs from the stored
+    /// <c>backupEligible</c> is refused, whichever way it differs, and nothing of it is
+    /// stored.
+    /// </summary>
+    /// <param name="enrolled">The flags the credential was created with.</param>
+    /// <param name="presented">The flags the assertion carries.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(0x05, 0x0D)]
+    [InlineData(0x05, 0x1D)]
+    [InlineData(0x0D, 0x05)]
+    [InlineData(0x1D, 0x05)]
+    public async Task AUTH_FACT_014_AC8_AnAssertionWhoseBackupEligibilityDiffersFromTheStoredOneIsRefusedAsync(
+        byte enrolled,
+        byte presented)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        AuthenticatorId id = await CreatedAsync(subject, authenticator, enrolled);
+        WebAuthnMaterial before = await HeldAsync(id);
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            await AssertedAsync(
+                subject,
+                authenticator.Asserted(Challenge, Origin, RelyingPartyId, presented, counter: 4)));
+
+        WebAuthnMaterial after = await HeldAsync(id);
+
+        Assert.Equal(
+            (before.BackupEligible, before.BackupState, before.Counter),
+            (after.BackupEligible, after.BackupState, after.Counter));
+        Assert.Null((await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
+        Assert.Empty(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC8: an assertion whose BS flag changed updates the stored
+    /// <c>backupState</c>, in either direction, the credential's eligibility standing as
+    /// it was.
+    /// </summary>
+    /// <param name="enrolled">The flags the credential was created with.</param>
+    /// <param name="presented">The flags the assertion carries.</param>
+    /// <param name="before">The backup state the record holds from the creation.</param>
+    /// <param name="after">The backup state the record holds afterwards.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(0x0D, 0x1D, false, true)]
+    [InlineData(0x1D, 0x0D, true, false)]
+    [InlineData(0x1D, 0x1D, true, true)]
+    public async Task AUTH_FACT_014_AC8_AnAssertionWhoseBackupStateChangedUpdatesTheStoredOneAsync(
+        byte enrolled,
+        byte presented,
+        bool before,
+        bool after)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        AuthenticatorId id = await CreatedAsync(subject, authenticator, enrolled);
+
+        Assert.Equal((true, before), await FlagsAsync());
+        Assert.Null(await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, presented)));
+        Assert.Equal((true, after), await FlagsAsync());
+
+        async ValueTask<(bool Eligible, bool State)> FlagsAsync()
+        {
+            WebAuthnMaterial held = await HeldAsync(id);
+
+            return (held.BackupEligible, held.BackupState);
+        }
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014, AC3: each assertion stores the counter it carries, and one whose
+    /// counter did not advance past the stored one is refused under the code it always
+    /// had, the stored counter standing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AC3_EachAssertionStoresItsCounterAndOneThatDidNotAdvanceIsRefusedAsync()
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        AuthenticatorId id = await CreatedAsync(subject, authenticator);
+
+        Assert.Null(await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 5)));
+        Assert.Equal(5u, (await HeldAsync(id)).Counter);
+        Assert.Null(await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 9)));
+        Assert.Equal(9u, (await HeldAsync(id)).Counter);
+
+        foreach (uint counter in new uint[] { 9, 4, 0 })
+        {
+            Assert.Equal(
+                ErrorCodes.WebAuthnCounterMismatch,
+                await AssertedAsync(
+                    subject,
+                    authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: counter)));
+        }
+
+        Assert.Equal(9u, (await HeldAsync(id)).Counter);
+        Assert.Equal(3, _audit.Records.Count);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014: an extension output the library did not ask for, in the
+    /// authenticator data of either ceremony, is ignored: the credential enrols and its
+    /// assertion verifies.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_AnExtensionOutputTheLibraryDidNotAskForIsIgnoredAsync()
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+
+        AuthenticatorId id = Value(await Service.EnrolAsync(
+            subject,
+            Factor.Passkey,
+            Label(),
+            authenticator.Attested(Challenge, Origin, RelyingPartyId, extensions: true),
+            Challenge,
+            upgrading: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(authenticator.PublicKey, (await HeldAsync(id)).PublicKey.ToArray());
+        Assert.Null(await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 2, extensions: true)));
+        Assert.Equal(2u, (await HeldAsync(id)).Counter);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014: the transports are stored as the response gives them, and none
+    /// where it gives none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_TheTransportsAreStoredAsTheResponseGivesThemAsync()
+    {
+        SubjectId subject = Subject();
+
+        AuthenticatorId first = Value(await Service.EnrolAsync(
+            subject,
+            Factor.Passkey,
+            Label(),
+            SoftwareAuthenticator.Holding().Attested(
+                Challenge,
+                Origin,
+                RelyingPartyId,
+                transports: ["internal", "hybrid", "a-transport-of-tomorrow"]),
+            Challenge,
+            upgrading: null,
+            TestContext.Current.CancellationToken));
+        WebAuthnMaterial read = Value(await Service.ReadAsync(
+            Factor.Passkey,
+            SoftwareAuthenticator.Holding().Attested(Challenge, Origin, RelyingPartyId),
+            Challenge,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(["internal", "hybrid", "a-transport-of-tomorrow"], (await HeldAsync(first)).Transports);
+        Assert.Empty(read.Transports);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014: a creation whose credential identifier is one a credential
+    /// already holds is refused, the credential that holds it standing as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_014_ACreationWhoseCredentialIdentifierIsHeldIsRefusedAsync()
+    {
+        var authenticator = SoftwareAuthenticator.Holding();
+        _ = await CreatedAsync(Subject(), authenticator);
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.EnrolAsync(
+                Subject(),
+                Factor.Passkey,
+                Label(),
+                SoftwareAuthenticator.Holding(credentialId: authenticator.CredentialId)
+                    .Attested(Challenge, Origin, RelyingPartyId),
+                Challenge,
+                upgrading: null,
+                TestContext.Current.CancellationToken)));
+        _ = Assert.Single(_authenticators.All);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014: a creation ceremony the verification does not stand behind (one
+    /// bound to another relying party, opened with another challenge, of another
+    /// ceremony's type, of a credential type that is not a public key, or carrying
+    /// bytes that are no client data or no attestation object) is refused as a factor
+    /// is, and nothing is enrolled.
+    /// </summary>
+    /// <param name="fault">What is wrong with the ceremony.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("relyingParty")]
+    [InlineData("challenge")]
+    [InlineData("ceremony")]
+    [InlineData("type")]
+    [InlineData("identifier")]
+    [InlineData("clientData")]
+    [InlineData("attestationObject")]
+    [InlineData("truncated")]
+    [InlineData("encoding")]
+    public async Task AUTH_FACT_014_ACreationTheVerificationDoesNotStandBehindIsRejectedAsync(string fault)
+    {
+        var authenticator = SoftwareAuthenticator.Holding();
+        AuthenticatorAttestation sound = authenticator.Attested(Challenge, Origin, RelyingPartyId);
+        AuthenticatorAssertion asserted = authenticator.Asserted(Challenge, Origin, RelyingPartyId);
+
+        AuthenticatorAttestation answered = fault switch
+        {
+            "relyingParty" => authenticator.Attested(Challenge, Origin, "example.org"),
+            "challenge" => authenticator.Attested("YW5vdGhlcg", Origin, RelyingPartyId),
+            "ceremony" => sound with { ClientDataJson = asserted.ClientDataJson },
+            "type" => sound with { Type = "password" },
+            "identifier" => sound with { RawId = Base64Url.EncodeToString(new byte[] { 9, 9, 9 }) },
+            "clientData" => sound with { ClientDataJson = Base64Url.EncodeToString(new byte[] { 1, 2, 3 }) },
+            "attestationObject" => sound with { AttestationObject = Base64Url.EncodeToString(new byte[] { 1, 2, 3 }) },
+            "truncated" => sound with { AttestationObject = sound.AttestationObject[..80] },
+            _ => sound with { AttestationObject = "not base64url!" },
+        };
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.EnrolAsync(
+                Subject(),
+                Factor.Passkey,
+                Label(),
+                answered,
+                Challenge,
+                upgrading: null,
+                TestContext.Current.CancellationToken)));
+        Assert.Empty(_authenticators.All);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014: an assertion the verification does not stand behind (one bound to
+    /// another relying party's hash, of another ceremony's type, of a credential type
+    /// that is not a public key, naming another credential than its identifier does, or
+    /// carrying bytes that are no client data, no authenticator data or no signature)
+    /// is refused as a factor is, and nothing of it is stored.
+    /// </summary>
+    /// <param name="fault">What is wrong with the assertion.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("relyingParty")]
+    [InlineData("ceremony")]
+    [InlineData("type")]
+    [InlineData("identifier")]
+    [InlineData("clientData")]
+    [InlineData("authenticatorData")]
+    [InlineData("signature")]
+    [InlineData("userHandle")]
+    [InlineData("encoding")]
+    public async Task AUTH_FACT_014_AnAssertionTheVerificationDoesNotStandBehindIsRejectedAsync(string fault)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding(SoftwareAuthenticator.EdDsa);
+        AuthenticatorId id = await CreatedAsync(subject, authenticator);
+        AuthenticatorAssertion sound = authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 6);
+        AuthenticatorAttestation attested = authenticator.Attested(Challenge, Origin, RelyingPartyId);
+
+        AuthenticatorAssertion answered = fault switch
+        {
+            "relyingParty" => authenticator.Asserted(Challenge, Origin, "example.org", counter: 6),
+            "ceremony" => sound with { ClientDataJson = attested.ClientDataJson },
+            "type" => sound with { Type = "password" },
+            "identifier" => sound with { Id = Base64Url.EncodeToString(new byte[] { 9, 9, 9 }) },
+            "clientData" => sound with { ClientDataJson = Base64Url.EncodeToString(new byte[] { 1, 2, 3 }) },
+            "authenticatorData" => sound with { AuthenticatorData = Base64Url.EncodeToString(new byte[] { 1, 2, 3 }) },
+            "signature" => sound with { Signature = Base64Url.EncodeToString(new byte[] { 1, 2, 3 }) },
+            "userHandle" => sound with { UserHandle = "not base64url!" },
+            _ => sound with { Signature = "not base64url!" },
+        };
+
+        Assert.Equal(ErrorCodes.FactorRejected, await AssertedAsync(subject, answered));
+        Assert.Null((await HeldAsync(id)).Counter);
+        Assert.Null((await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014: a credential whose stored key is not one of the algorithm it was
+    /// enrolled with, or is no key the verification reads, is refused at sign-in and
+    /// nothing of the assertion is stored.
+    /// </summary>
+    /// <param name="unreadable">Whether the stored key is bytes that are no key.</param>
+    /// <param name="refusal">The refusal.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(false, "auth.webauthn.algorithmnotallowed")]
+    [InlineData(true, "auth.factor.rejected")]
+    public async Task AUTH_FACT_014_ACredentialWhoseStoredKeyIsNotOfItsAlgorithmIsRefusedAsync(
+        bool unreadable,
+        string refusal)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+
+        AuthenticatorId id = await EnrolledAsync(
+            subject,
+            Registration() with
+            {
+                CredentialId = authenticator.CredentialId,
+                PublicKey = unreadable ? new byte[] { 4, 5, 6 } : authenticator.PublicKey,
+                Algorithm = unreadable ? SoftwareAuthenticator.Es256 : SoftwareAuthenticator.EdDsa,
+            });
+
+        Assert.Equal(
+            refusal,
+            (await AssertedAsync(subject, authenticator.Asserted(Challenge, Origin, RelyingPartyId)))?.ToString());
+        Assert.Null((await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
+    }
+
+    // A credential the authenticator created at the deployment's origin, enrolled as a
+    // passkey of the account.
+    private async ValueTask<AuthenticatorId> CreatedAsync(
+        SubjectId subject,
+        SoftwareAuthenticator authenticator,
+        byte flags = SoftwareAuthenticator.UserPresent | SoftwareAuthenticator.UserVerified) =>
+        Value(await Service.EnrolAsync(
+            subject,
+            Factor.Passkey,
+            Label(),
+            authenticator.Attested(Challenge, Origin, RelyingPartyId, flags),
+            Challenge,
+            upgrading: null,
+            TestContext.Current.CancellationToken));
+
+    private async ValueTask<WebAuthnMaterial> HeldAsync(AuthenticatorId id) =>
+        (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.WebAuthn!;
+
+    private async ValueTask<ErrorCode?> AssertedAsync(SubjectId subject, AuthenticatorAssertion answered) =>
+        Refusal(await Service.AssertAsync(
+            answered,
+            Challenge,
+            subject,
+            TestContext.Current.CancellationToken));
+
     private static WebAuthnRegistration Registration() =>
         new(
             new byte[] { 1, 2, 3 },
@@ -979,34 +1550,13 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             UserVerified: true,
             BackupEligible: false,
             BackupState: false,
-            Counter: 0);
+            Counter: 0,
+            Transports: []);
 
     // What a browser sends back from a creation ceremony run at an origin: the client
     // data carrying that origin, and authenticator data bound to the relying party.
-    private static AuthenticatorAttestation Attestation(string challenge, string origin, string relyingParty)
-    {
-        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-
-        byte[] clientData = JsonSerializer.SerializeToUtf8Bytes(
-            new Dictionary<string, string>(capacity: 3, StringComparer.Ordinal)
-            {
-                ["type"] = "webauthn.create",
-                ["challenge"] = challenge,
-                ["origin"] = origin,
-            });
-
-        byte[] authenticatorData = new byte[37];
-
-        SHA256.HashData(Encoding.UTF8.GetBytes(relyingParty)).CopyTo(authenticatorData, 0);
-        authenticatorData[32] = 0x05;
-
-        return new AuthenticatorAttestation(
-            Base64Url.EncodeToString(new byte[] { 1, 2, 3 }),
-            Base64Url.EncodeToString(clientData),
-            Base64Url.EncodeToString(authenticatorData),
-            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
-            Algorithm: -7);
-    }
+    private static AuthenticatorAttestation Attestation(string challenge, string origin, string relyingParty) =>
+        SoftwareAuthenticator.Holding(credentialId: [1, 2, 3]).Attested(challenge, origin, relyingParty);
 
     // REG-PM-001: the handle is the subject identifier; the two shown values are the
     // account's own primary email and display name.
@@ -1018,7 +1568,9 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             new byte[] { 1, 2, 3 },
             RelyingPartyId: "example.com",
             UserVerified: true,
-            Counter: 0);
+            Counter: 0,
+            BackupEligible: false,
+            BackupState: false);
 
     private static CredentialLabel Label() =>
         CredentialLabel.TryParse("this phone", out CredentialLabel label)

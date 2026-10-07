@@ -4331,7 +4331,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             confirmed: true,
             factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
             factor is Factor.SecurityKey
-                ? new WebAuthnMaterial(new byte[] { 1 }, new byte[] { 2 }, -7, "example.test", 0, false, false)
+                ? new WebAuthnMaterial(new byte[] { 1 }, new byte[] { 2 }, -7, "example.test", 0, false, false, [])
                 : null,
             isPreferred);
 
@@ -4538,12 +4538,13 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             null,
             new WebAuthnMaterial(
                 CredentialId,
-                key.ExportSubjectPublicKeyInfo(),
+                SoftwareAuthenticator.Holding(key, CredentialId).PublicKey,
                 algorithm,
                 relyingParty,
                 counter,
                 false,
-                false),
+                false,
+                []),
             isPreferred: false));
 
         return id;
@@ -4558,31 +4559,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         uint counter,
         string relyingParty = "example.test",
         byte flags = 0x05)
-    {
-        byte[] clientData = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>
-        {
-            ["type"] = "webauthn.get",
-            ["challenge"] = challenge,
-            ["origin"] = "https://example.test",
-        });
-
-        byte[] authenticatorData = new byte[37];
-
-        SHA256.HashData(Encoding.UTF8.GetBytes(relyingParty)).CopyTo(authenticatorData, 0);
-        authenticatorData[32] = flags;
-        BinaryPrimitives.WriteUInt32BigEndian(authenticatorData.AsSpan(33), counter);
-
-        byte[] signature = key.SignData(
-            [.. authenticatorData, .. SHA256.HashData(clientData)],
-            HashAlgorithmName.SHA256,
-            DSASignatureFormat.Rfc3279DerSequence);
-
-        return new AuthenticatorAssertion(
-            Base64Url.EncodeToString(CredentialId),
-            Base64Url.EncodeToString(clientData),
-            Base64Url.EncodeToString(authenticatorData),
-            Base64Url.EncodeToString(signature));
-    }
+        => SoftwareAuthenticator.Holding(key, CredentialId)
+            .Asserted(challenge, "https://example.test", relyingParty, flags, counter);
 
     // The account's outstanding email sign-in code, as the ask left it.
     private async ValueTask<PendingSignIn> CodeSentAsync(SubjectId subject)
