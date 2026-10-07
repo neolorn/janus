@@ -979,14 +979,14 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005 AC1, PRIV-RIGHT-005a, AUTH-ABUSE-004: a message admitted for the
+    /// PRIV-RIGHT-005a AC15, PRIV-RIGHT-005, AUTH-ABUSE-004: a message admitted for the
     /// subject and not yet carried is unreadable once the erasure commits. Its row's key
     /// is the erased value, 32 zero bytes with no marker, the row reads as erased and
     /// names only the hash of its reference, and reading its message is refused before
     /// the unwrap is tried. A message for another subject is untouched.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync()
+    public async Task PRIV_RIGHT_005a_AC15_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync()
     {
         SubjectId subject = await DeletingAccountAsync();
         SubjectId other = await _deployment.AccountAsync(Noon);
