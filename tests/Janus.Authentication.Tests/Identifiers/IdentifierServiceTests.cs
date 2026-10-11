@@ -298,6 +298,49 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20: a held value's code or link releases what its send counted
+    /// once only where its presentation succeeds. A right code, and a press from the
+    /// browser that staged the value, refused because another account has come to hold
+    /// the value since, release nothing, their unit of work rolled back.
+    /// </summary>
+    /// <param name="press">Whether the link is pressed; otherwise the code is presented.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_ABUSE_004_AC20_AHeldValuesRightCodeOrPressThatIsRefusedReleasesNothingAsync(bool press)
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        SessionId session = Stepped();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Email,
+            Fourth,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId added = Assert.Single(_pending.All).Identifier;
+        string right = Code(added);
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+
+        Assert.Single(_restrictions.Carried);
+
+        _ = _directory.Verified(SubjectId.New(_randomness), IdentifierKind.Email, Fourth);
+        _work.Reset();
+
+        ErrorCode? refused = press
+            ? Refused(await Service.LandAsync(session, link, press: true, Source, TestContext.Current.CancellationToken))
+            : Refused(await Service.VerifyAsync(Acting, session, added, right, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeExpired, refused);
+        Assert.Empty(_restrictions.Answered);
+        Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC20: the message that asks a displaced address to confirm is
     /// named by its link, and the press that confirms releases what it counted once.
     /// </summary>

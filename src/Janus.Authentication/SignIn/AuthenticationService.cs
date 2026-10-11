@@ -659,11 +659,14 @@ internal sealed class AuthenticationService(
                 ?? refusal);
         }
 
-        // A refusal the factor's judgement answers comes back counted and recorded.
+        // A refusal the factor's judgement answers comes back counted and recorded,
+        // save that of a second-factor security key's assertion presented as a passkey
+        // before a first factor, which is neither (AUTH-FACT-002b AC9).
         bool changeRequired = (await AcceptsAsync(
                     open,
                     subject,
                     presented,
+                    beforeFirstFactor: !FirstAccepted(open),
                     token => CountedAsync(attempt, presented.Factor, subject, trusted, token),
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -900,6 +903,7 @@ internal sealed class AuthenticationService(
                     open,
                     asking,
                     presented,
+                    beforeFirstFactor: false,
                     token => StepUpRefusedAsync(attempt, live, presented.Factor, token),
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -1345,11 +1349,15 @@ internal sealed class AuthenticationService(
     // in: a factor whose refusal keeps a write of its own (a code's wrong try, a
     // counter that did not advance) commits that write with the count, in one unit of
     // work (CONV-DESIGN-003). A fault of the library's own comes back as it is, neither
-    // counted nor recorded (AUTH-ABUSE-001).
+    // counted nor recorded (AUTH-ABUSE-001). Whether the presentation comes at a sign-in
+    // before any first factor has been accepted is what a ceremony is told, since a
+    // second-factor security key that answers one there is refused as a second step is
+    // (AUTH-FACT-002b AC9).
     private async ValueTask<Result<bool>> AcceptsAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
+        bool beforeFirstFactor,
         Func<CancellationToken, ValueTask<Error?>> counted,
         CancellationToken cancellationToken)
     {
@@ -1358,7 +1366,7 @@ internal sealed class AuthenticationService(
         {
             if (properties.IsWebAuthn)
             {
-                return await CeremonyAsync(open, subject, presented, counted, cancellationToken)
+                return await CeremonyAsync(open, subject, presented, beforeFirstFactor, counted, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -1504,10 +1512,16 @@ internal sealed class AuthenticationService(
     // counter that did not advance commits with the failed authentication's record and
     // the failure's counts, and nothing else. Any other refusal wrote nothing to keep
     // and is rolled back before it is counted.
+    // AUTH-FACT-002b AC9 (D-198): before a first factor, a second-factor security key's
+    // assertion presented as a passkey is refused once it verifies, as a second step
+    // presented under its own name is refused: rolled back whole, counted nowhere and
+    // recorded nowhere, nothing accepted on the challenge, and neither the policy's
+    // factors nor a domain lock judged after it.
     private async ValueTask<Result<bool>> CeremonyAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
+        bool beforeFirstFactor,
         Func<CancellationToken, ValueTask<Error?>> counted,
         CancellationToken cancellationToken)
     {
@@ -1526,7 +1540,7 @@ internal sealed class AuthenticationService(
         Error? refusal = null;
 
         Authenticator answered = (await webAuthn
-                .AssertAsync(presented.Assertion, open.WebAuthn, subject, cancellationToken)
+                .AssertAsync(presented.Assertion, open.WebAuthn, subject, beforeFirstFactor, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<Authenticator>(error, ref refusal));
 
@@ -1535,6 +1549,13 @@ internal sealed class AuthenticationService(
         if (refusal is null && answered.Subject != subject)
         {
             refusal = Error.From(ErrorCodes.FactorRejected);
+        }
+
+        if (beforeFirstFactor && refusal?.Code == ErrorCodes.FactorNotPermitted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(refusal);
         }
 
         if (refusal is not null)
@@ -1562,8 +1583,9 @@ internal sealed class AuthenticationService(
     // AUTH-FACT-004: the try is decided in this unit of work, so a wrong try's count and
     // the invalidation at the cap commit with the refusal's record and the failure's
     // counts; a code gone or out of life changes nothing on its record and commits
-    // those alone; and a right code's spend commits in it whether the sign-in then
-    // goes on or a domain lock refuses it (CONV-DESIGN-003).
+    // those alone; and a right code's spend commits in it, with the release of what
+    // its send counted once, whether the sign-in then goes on or a refusal follows it
+    // (AUTH-ABUSE-004, CONV-DESIGN-003).
     private async ValueTask<Result<bool>> CodeAsync(
         Challenge open,
         SubjectId subject,
@@ -1599,10 +1621,14 @@ internal sealed class AuthenticationService(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
+        // AUTH-ABUSE-004 AC20: a right code releases what its send counted once as a
+        // write of its spend, kept by whatever refusal follows.
+        await links.AnsweredAsync(held, cancellationToken).ConfigureAwait(false);
+
         // AUTH-FACT-004 AC7, AUTH-RECOV-007: a code is judged against the credential its
         // record names only once it is right, so only the right one learns that the
         // credential is gone or suspended: it is spent, and the refusal is a failed
-        // attempt whose record and counts commit with the spend.
+        // attempt whose record and counts commit with the spend and its release.
         if (await UnansweredAsync(held, cancellationToken).ConfigureAwait(false) is Error unanswered)
         {
             return Result.Failure<bool>(
@@ -1615,8 +1641,6 @@ internal sealed class AuthenticationService(
         {
             return Result.Failure<bool>(await SpentAsync(locked, counted, cancellationToken).ConfigureAwait(false));
         }
-
-        await links.AnsweredAsync(held, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -1659,10 +1683,10 @@ internal sealed class AuthenticationService(
 
     // AUTH-FACT-004, CONV-DESIGN-003: ends the unit of work a right code was spent in
     // where the sign-in it would complete is then refused. A domain lock's refusal
-    // commits the spend alone, the factor having succeeded, so no failure is counted
-    // and no failed authentication recorded; an address given up since is a refused
-    // factor, whose record and counts commit with the spend (REG-IDENT-006); and a
-    // lock that could not be judged is rolled back.
+    // commits the spend and the release of its send's count alone, the factor having
+    // succeeded, so no failure is counted and no failed authentication recorded; an
+    // address given up since is a refused factor, whose record and counts commit with
+    // them (REG-IDENT-006); and a lock that could not be judged is rolled back.
     private async ValueTask<Error> SpentAsync(
         Error locked,
         Func<CancellationToken, ValueTask<Error?>> counted,

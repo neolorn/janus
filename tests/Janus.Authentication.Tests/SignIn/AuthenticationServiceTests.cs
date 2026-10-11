@@ -3465,6 +3465,213 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002b AC9: at a sign-in before a first factor, an assertion presented
+    /// as <c>passkey</c> whose credential is a second-factor security key is refused
+    /// <c>auth.factor.notpermitted</c> once it verifies: for an active key, for a
+    /// suspended one, under a policy whose <c>loginFactors</c> omits <c>passkey</c> and
+    /// under a domain lock on the sign-in's address alike. Nothing is accepted on the
+    /// challenge, nothing is counted, no failed authentication is recorded, nothing is
+    /// committed, and the stored counter, <c>backupState</c> and last use stand as they
+    /// were.
+    /// </summary>
+    /// <param name="standing">What stands against the key or the sign-in.</param>
+    [Theory]
+    [InlineData("active")]
+    [InlineData("suspended")]
+    [InlineData("policy")]
+    [InlineData("lock")]
+    public async Task AUTH_FACT_002b_AC9_ASecurityKeysAssertionPresentedAsPasskeyBeforeAFirstFactorIsRefusedOnceItVerifiesAsync(
+        string standing)
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+        Authenticator held = Counting(subject, Factor.SecurityKey, key, counter: 9);
+
+        Remembered(subject);
+
+        switch (standing)
+        {
+            case "suspended":
+                held.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+                break;
+            case "policy":
+                _configuration.Set(
+                    Settings.PolicyDefault,
+                    Janus.Core.Policies.SystemDefault with
+                    {
+                        LoginFactors = new HashSet<Factor>(
+                            Janus.Core.Policies.SystemDefault.LoginFactors.Where(factor => factor != Factor.Passkey)),
+                    });
+                break;
+            case "lock":
+                LockedElsewhere(subject);
+                break;
+            default:
+                break;
+        }
+
+        SignInChallenge began = await BeganAsync(Address);
+        int published = _events.Published.Count;
+
+        _work.Reset();
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Synced(key, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Challenge? open = await _challenges.FindAsync(
+            OpaqueToken.Of(began.Challenge).Fingerprint(),
+            TestContext.Current.CancellationToken);
+        Authenticator? after = await _authenticators.FindAsync(held.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            Shape(Error.From(ErrorCodes.FactorNotPermitted)),
+            Shape(refused.Match(_ => (Error?)null, error => error)));
+        Assert.Empty(Assert.IsType<Challenge>(open).Presented);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.Empty(_throttle.Failures);
+        Assert.Empty(_credentials.Records);
+        Assert.Equal(published, _events.Published.Count);
+        Assert.Equal(
+            (9u, false, null),
+            (after?.WebAuthn?.Counter, after?.WebAuthn?.BackupState, after?.LastUsedAt));
+        Assert.Equal(0, _work.Committed);
+        Assert.False(_work.Open);
+        Assert.Empty(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC9: the refusal of a security key's assertion presented as
+    /// <c>passkey</c> before a first factor leaves the challenge as it was, so the
+    /// password and then the key under its own name complete the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC9_TheRefusalAcceptsNothingAndTheKeyCompletesTheSignInOnceAFirstFactorIsAcceptedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+
+        _ = Counting(subject, Factor.SecurityKey, key, counter: 9);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        ErrorCode? before = Refused(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Synced(key, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+        SignInProgress first = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        SignInProgress second = Reached(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.SecurityKey)
+            {
+                Assertion = Synced(key, began.WebAuthn.Challenge, counter: 10),
+            },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, before);
+        Assert.Equal((SignInStatus.FactorRequired, AssuranceLevel.Aal1), (first.Status, first.AssuranceLevel));
+        Assert.Equal([Factor.SecurityKey], first.Required);
+        Assert.Equal((SignInStatus.Complete, AssuranceLevel.Aal2), (second.Status, second.AssuranceLevel));
+        Assert.Empty(_audit.Failed);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC9: an assertion presented as <c>passkey</c> before a first
+    /// factor that does not verify is refused as a wrong passkey assertion is, the same
+    /// answer whether its identifier names a second-factor security key, a passkey or
+    /// nothing: <c>auth.factor.rejected</c>, a failed authentication recorded under
+    /// <c>passkey</c> and counted, and nothing of the credential written.
+    /// </summary>
+    /// <param name="names">What the assertion's credential identifier names.</param>
+    [Theory]
+    [InlineData("securityKey")]
+    [InlineData("passkey")]
+    [InlineData("nothing")]
+    public async Task AUTH_FACT_002b_AC9_AnAssertionThatDoesNotVerifyIsRefusedAsAWrongPasskeyAssertionIsWhateverItsIdentifierNamesAsync(
+        string names)
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+        var forger = SoftwareAuthenticator.Holding(credentialId: key.CredentialId);
+        Authenticator? held = names switch
+        {
+            "securityKey" => Counting(subject, Factor.SecurityKey, key, counter: 9),
+            "passkey" => Counting(subject, Factor.Passkey, key, counter: 9),
+            _ => null,
+        };
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Synced(forger, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            Shape(Error.From(ErrorCodes.FactorRejected)),
+            Shape(refused.Match(_ => (Error?)null, error => error)));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal((held is null ? (uint?)null : 9u, null), (held?.WebAuthn?.Counter, held?.LastUsedAt));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC9, AUTH-FACT-014 AC3: the counter is among the checks an
+    /// assertion verifies by, so a security key's assertion presented as
+    /// <c>passkey</c> before a first factor whose counter did not advance is refused
+    /// <c>auth.webauthn.countermismatch</c> as a passkey's is, its record, the failed
+    /// authentication's and the failure's count committed together.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC9_ASecurityKeysAssertionWhoseCounterDidNotAdvanceIsRefusedAsAPasskeysIsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var key = SoftwareAuthenticator.Holding();
+        Authenticator held = Counting(subject, Factor.SecurityKey, key, counter: 9);
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _work.Reset();
+
+        ErrorCode? refused = Refused(await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Synced(key, began.WebAuthn.Challenge, counter: 9) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        (AuditAction action, SubjectId audited, AuthenticatorId named) = Assert.Single(_credentials.Records);
+
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(("auth.credential.countermismatch", subject, held.Id), (action.ToString(), audited, named));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Equal((9u, false, null), (held.WebAuthn?.Counter, held.WebAuthn?.BackupState, held.LastUsedAt));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC8: at a sign-in, once a password is accepted, the answer that
     /// offers the security key carries the request options for the challenge: user
     /// verification required, the value the sign-in was opened with, and the account's
@@ -4540,6 +4747,185 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(named, Assert.Single(_restrictions.Answered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, AUTH-FACT-004: a second step's text code presented right
+    /// releases what its send counted once though a refusal follows it, at a sign-in
+    /// and at a step-up: where the credential its record names was removed, invalidated
+    /// or suspended since, or its number left the account, the release is committed
+    /// with the code's spend and the refusal, in one unit of work.
+    /// </summary>
+    /// <param name="since">What became of the code's credential since it was sent.</param>
+    /// <param name="stepUp">Whether the code is presented at a step-up.</param>
+    [Theory]
+    [InlineData("removed", false)]
+    [InlineData("invalidated", false)]
+    [InlineData("suspended", false)]
+    [InlineData("unbound", false)]
+    [InlineData("removed", true)]
+    [InlineData("invalidated", true)]
+    [InlineData("suspended", true)]
+    [InlineData("unbound", true)]
+    public async Task AUTH_ABUSE_004_AC20_ARightTextCodeARefusalFollowsReleasesItsSendWithItsSpendAsync(
+        string since,
+        bool stepUp)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SessionId? session = stepUp ? Opened(subject) : null;
+        SignInChallenge began = await BeganAsync(Address);
+
+        if (!stepUp)
+        {
+            _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        }
+
+        _ = await AskedAsync(began.Challenge, stepUp ? subject : null, session);
+
+        string right = Assert.Single(_notifications.Texts).Values["code"];
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        switch (since)
+        {
+            case "suspended":
+                Suspends(subject, Factor.PhoneCode);
+                break;
+            case "unbound":
+                await UnboundAsync(subject);
+                break;
+            default:
+                await GoneAsync(subject, Factor.PhoneCode, removed: since == "removed");
+                break;
+        }
+
+        _work.Reset();
+
+        ErrorCode? refused = Refused(session is SessionId raising
+            ? await Service.StepUpAsync(
+                AccessContext.Of(subject),
+                raising,
+                began.Challenge,
+                new FactorPresentation(Factor.PhoneCode) { Value = right },
+                Source,
+                TestContext.Current.CancellationToken)
+            : await PresentAsync(began.Challenge, Factor.PhoneCode, right));
+
+        Assert.Equal(since == "suspended" ? ErrorCodes.CredentialSuspended : ErrorCodes.FactorRejected, refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, AUTH-FACT-004: a sign-in code presented right releases what
+    /// its send counted once though a refusal follows it, at a sign-in and at a
+    /// step-up: where a domain lock refuses the address it was sent to, or the account
+    /// has given that address up since, the release is committed with the code's spend
+    /// and the refusal, in one unit of work.
+    /// </summary>
+    /// <param name="since">What refuses the address the code was sent to.</param>
+    /// <param name="stepUp">Whether the code is presented at a step-up.</param>
+    [Theory]
+    [InlineData("locked", false)]
+    [InlineData("given up", false)]
+    [InlineData("locked", true)]
+    [InlineData("given up", true)]
+    public async Task AUTH_ABUSE_004_AC20_ARightSignInCodeARefusalFollowsReleasesItsSendWithItsSpendAsync(
+        string since,
+        bool stepUp)
+    {
+        SubjectId subject = await AccountAsync();
+        IdentifierId second = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SessionId? session = stepUp ? Opened(subject) : null;
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Second, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        if (since == "locked")
+        {
+            LockedElsewhere(subject);
+        }
+        else
+        {
+            await RemovedAsync(subject, second);
+        }
+
+        _work.Reset();
+
+        ErrorCode? refused = Refused(session is SessionId raising
+            ? await Service.StepUpAsync(
+                AccessContext.Of(subject),
+                raising,
+                began.Challenge,
+                new FactorPresentation(Factor.EmailCode) { Value = right },
+                Source,
+                TestContext.Current.CancellationToken)
+            : await PresentAsync(began.Challenge, Factor.EmailCode, right));
+
+        Assert.Equal(
+            since == "locked" ? ErrorCodes.IdentifierDomainNotAllowed : ErrorCodes.FactorRejected,
+            refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: a sign-in link releases what its send counted once only
+    /// where its press signs in. A press a domain lock refuses, and one that lands on
+    /// no sign-in of its account, release nothing.
+    /// </summary>
+    /// <param name="locked">
+    /// Whether a domain lock refuses the press; otherwise it lands on a sign-in opened
+    /// for another identifier.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_ABUSE_004_AC20_ASignInLinkWhosePressIsRefusedReleasesNothingAsync(bool locked)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        (string challenge, string token, string browser) = await AskedAsync(subject);
+        SignInChallenge other = await BeganAsync(Elsewhere);
+
+        if (locked)
+        {
+            LockedElsewhere(subject);
+        }
+
+        ErrorCode? refused = Code(await Service.LandAsync(
+            locked ? challenge : other.Challenge,
+            browser,
+            token,
+            Factor.EmailLink,
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(locked ? ErrorCodes.IdentifierDomainNotAllowed : ErrorCodes.FactorRejected, refused);
+        Assert.Single(_restrictions.Carried);
+        Assert.Empty(_restrictions.Answered);
+        Assert.NotNull(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
     }
 
     /// <summary>
@@ -5768,6 +6154,50 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         return held;
     }
+
+    // A WebAuthn credential of the account that keeps a counter and may be synced, not
+    // yet backed up, as its enrolment left it.
+    private Authenticator Counting(SubjectId subject, Factor factor, SoftwareAuthenticator authenticator, uint counter)
+    {
+        var held = Authenticator.Existing(
+            AuthenticatorId.New(_clock),
+            subject,
+            factor,
+            Label(factor),
+            AuthenticatorState.Active,
+            _clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            new WebAuthnMaterial(
+                authenticator.CredentialId,
+                authenticator.PublicKey,
+                SoftwareAuthenticator.Es256,
+                "example.test",
+                counter,
+                true,
+                false,
+                []),
+            isPreferred: false);
+
+        _authenticators.Hold(held);
+
+        return held;
+    }
+
+    // What the authenticator answers the sign-in's ceremony with, user present and
+    // verified, reporting the given counter and that its credential is now backed up.
+    private static AuthenticatorAssertion Synced(SoftwareAuthenticator authenticator, string challenge, uint counter) =>
+        authenticator.Asserted(
+            challenge,
+            "https://example.test",
+            "example.test",
+            SoftwareAuthenticator.UserPresent
+                | SoftwareAuthenticator.UserVerified
+                | SoftwareAuthenticator.BackupEligible
+                | SoftwareAuthenticator.BackedUp,
+            counter);
 
     // The credentials a request names, each as its identifier and its transports.
     private static (string Id, string Transports)[] Described(WebAuthnRequestOptions options) =>

@@ -275,6 +275,97 @@ public sealed class SecurityKeyFlowTests
         Assert.False(second.Json().TryGetProperty("webauthn", out _));
     }
 
+    /// <summary>
+    /// AUTH-FACT-002b AC9, `09` <c>POST /auth/factor</c>: before a first factor, a
+    /// security key's assertion presented as <c>passkey</c> is answered 422
+    /// <c>auth.factor.notpermitted</c> once it verifies, for an active key, a suspended
+    /// one, under a policy whose <c>loginFactors</c> omits <c>passkey</c> and under a
+    /// domain lock on the sign-in's address alike, with no failed authentication
+    /// recorded, no session set and nothing of the credential written; an assertion
+    /// naming the same key that another key signed is answered 422
+    /// <c>auth.factor.rejected</c>, a failed authentication recorded.
+    /// </summary>
+    /// <param name="standing">What stands against the key or the sign-in.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("active")]
+    [InlineData("suspended")]
+    [InlineData("policy")]
+    [InlineData("lock")]
+    public async Task AUTH_FACT_002b_AC9_ASecurityKeysAssertionPresentedAsPasskeyBeforeAFirstFactorIsAnswered422Async(
+        string standing)
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+        deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        _ = await Flow.SignedInAsync(deployment);
+
+        SubjectId subject = deployment.Directory.Created[^1].Subject;
+        var key = SoftwareAuthenticator.Holding();
+        var forger = SoftwareAuthenticator.Holding(credentialId: key.CredentialId);
+        Authenticator held = Held(deployment, subject, Factor.SecurityKey, key, "Key", "usb");
+
+        deployment.Authenticators.Hold(held);
+
+        switch (standing)
+        {
+            case "suspended":
+                _ = Suspended(held, deployment);
+                break;
+            case "policy":
+                deployment.Configuration.Set(
+                    Settings.PolicyDefault,
+                    Policies.SystemDefault with
+                    {
+                        LoginFactors = new HashSet<Factor>(
+                            Policies.SystemDefault.LoginFactors.Where(factor => factor != Factor.Passkey)),
+                    });
+                break;
+            case "lock":
+                var locked = new OrganizationId(Guid.NewGuid());
+
+                deployment.Memberships.Place(subject, locked);
+                deployment.Configuration.Set(
+                    Settings.OrganizationPolicy,
+                    locked.ToString(),
+                    PolicyOverride.None with { EmailDomains = ["elsewhere.test"] });
+                break;
+            default:
+                break;
+        }
+
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        string challenge = began.Text("challengeId");
+        string signed = began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!;
+        int failed = deployment.SessionAudit.Failed.Count;
+
+        Answer verified = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            Presented(challenge, "passkey", key.Asserted(signed, Origin, RelyingPartyId, counter: 4)));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, verified.Status);
+        Assert.Equal("auth.factor.notpermitted", verified.Text("code"));
+        Assert.Equal(failed, deployment.SessionAudit.Failed.Count);
+        Assert.False(browser.Cookies.ContainsKey(Session));
+        Assert.Equal((null, null), (held.WebAuthn?.Counter, held.LastUsedAt));
+
+        Answer forged = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            Presented(challenge, "passkey", forger.Asserted(signed, Origin, RelyingPartyId, counter: 4)));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Status);
+        Assert.Equal("auth.factor.rejected", forged.Text("code"));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], [.. deployment.SessionAudit.Failed.Skip(failed)]);
+    }
+
     private static string Presented(string challenge, string factor, AuthenticatorAssertion asserted) =>
         new JsonObject
         {

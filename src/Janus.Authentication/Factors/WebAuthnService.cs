@@ -355,13 +355,23 @@ internal sealed class WebAuthnService(
     /// <param name="account">
     /// The account the ceremony was opened for, or nothing where it named none.
     /// </param>
+    /// <param name="beforeFirstFactor">
+    /// Whether the assertion is presented at a sign-in on whose challenge no first
+    /// factor has been accepted.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The credential that answered, or the refusal.</returns>
+    /// <returns>
+    /// The credential that answered, or the refusal. Before a first factor, an
+    /// assertion that verifies and whose credential is a second-factor security key of
+    /// the account is refused <c>auth.factor.notpermitted</c>, nothing written of it
+    /// (AUTH-FACT-002b AC9).
+    /// </returns>
     /// <exception cref="ArgumentNullException">The answer is absent.</exception>
     public async ValueTask<Result<Authenticator>> AssertAsync(
         AuthenticatorAssertion answered,
         string challenge,
         SubjectId? account,
+        bool beforeFirstFactor,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(answered);
@@ -394,7 +404,12 @@ internal sealed class WebAuthnService(
 
         return refusal is not null
             ? Result.Failure<Authenticator>(refusal)
-            : await JudgedAsync(assertion, identified: account is not null, account, cancellationToken)
+            : await JudgedAsync(
+                    assertion,
+                    identified: account is not null,
+                    account,
+                    beforeFirstFactor,
+                    cancellationToken)
                 .ConfigureAwait(false);
     }
 
@@ -418,7 +433,7 @@ internal sealed class WebAuthnService(
     {
         ArgumentNullException.ThrowIfNull(assertion);
 
-        return JudgedAsync(assertion, identified, account: null, cancellationToken);
+        return JudgedAsync(assertion, identified, account: null, beforeFirstFactor: false, cancellationToken);
     }
 
     // The account is the one the ceremony was opened for, where its caller knows it: a
@@ -427,6 +442,7 @@ internal sealed class WebAuthnService(
         WebAuthnAssertion assertion,
         bool identified,
         SubjectId? account,
+        bool beforeFirstFactor,
         CancellationToken cancellationToken)
     {
         Authenticator? held = await authenticators
@@ -510,6 +526,21 @@ internal sealed class WebAuthnService(
         {
             await audit.RecordedAsync(CounterMoved, held.Subject, held.Id, now, cancellationToken)
                 .ConfigureAwait(false);
+        }
+        else if (beforeFirstFactor
+            && IsSecondFactorKey(locked)
+            && account is SubjectId opened
+            && locked.Subject == opened)
+        {
+            // AUTH-FACT-002b AC9 (D-198): what a caller names an assertion does not say
+            // what answered it, and that it was a second-factor security key is known
+            // only here, the assertion verified and its counter advanced. Before a first
+            // factor it is a second step, refused before the key's state is judged, and
+            // nothing is written of it: the counter, the backup state and the use stand
+            // as they were.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorNotPermitted));
         }
         else if (!locked.IsUsable)
         {

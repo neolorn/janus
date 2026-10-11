@@ -77,7 +77,11 @@ against the public contract of LIB-API-001.
   the code the send carries is presented right or the link it carries is pressed: a
   registration's or a held value's code or link, the link that asks a displaced
   address to confirm, a sign-in code or link, a second step's text code, the code of
-  the new-device check, and a recovery or enrolment link once used. A wrong code, a
+  the new-device check, and a recovery or enrolment link once used. A sign-in code or
+  a second step's text code presented right, at a sign-in or a step-up, releases it
+  also where a refusal follows (its credential gone or suspended, its number or
+  address given up, a domain lock), committed with the code's spend; a verification
+  code or a link releases it only where its presentation succeeds. A wrong code, a
   link merely opened or pressed in another browser, and a code or link no counted send
   carries release nothing, and nothing but that one count is released.
 - A restriction marked `resend` judges and counts a send once, whatever the number of
@@ -175,6 +179,14 @@ against the public contract of LIB-API-001.
   counted and no failed authentication is recorded. A text code asked for at a
   sign-in while no first factor has been accepted on its challenge is answered 202,
   no phone signal is asked and nothing is sent, whatever the account holds.
+- At a sign-in before a first factor, an assertion presented as `passkey` whose
+  credential is a security key under two-step is a second step too, known only once
+  it verifies: `POST /auth/factor` then answers 422 `auth.factor.notpermitted`, an
+  active key and a suspended one alike, whatever the policy's `loginFactors` and
+  whatever domain lock stands on the sign-in's address. Nothing is accepted on the
+  challenge, nothing is counted, no failed authentication is recorded, and the key's
+  stored counter, `backupState` and last use stay as they were. An assertion that does
+  not verify, its counter included, is refused as any wrong passkey assertion is.
 - A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
   Information, by the code the browser is returned with and the one the refusal
   carried inside. A refused authorization response no longer writes event 10 as

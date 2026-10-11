@@ -305,6 +305,98 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20, `10` section 5.16a: under the restrictions as shipped, a
+    /// second text code asked for inside three minutes is refused
+    /// <c>auth.restriction.exceeded</c>, and the first's code presented right admits the
+    /// next at once though a refusal follows it: with the code's credential suspended
+    /// since the text went out, the right code is answered 422
+    /// <c>auth.credential.suspended</c>, and once the credential is active again the
+    /// next ask sends its text at once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ARightTextCodeARefusalFollowsAdmitsTheNextTextAtOnceAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        await RegisteredAsync();
+
+        var held = Authenticator.Existing(
+            AuthenticatorId.New(_deployment.Clock),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.PhoneCode,
+            CredentialLabel.TryParse("Phone", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _deployment.Clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            null,
+            isPreferred: false,
+            number: Flow.Number);
+
+        _deployment.Authenticators.Hold(held);
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer first = await AskedAsync();
+        Answer paced = await AskedAsync();
+        string code = _deployment.Sms.Taken[^1].Text;
+
+        held.Suspend(_deployment.Clock.GetUtcNow() + TimeSpan.FromDays(7));
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"),
+            ("value", code));
+
+        held.Restore();
+
+        Answer next = await AskedAsync();
+
+        Assert.Equal(StatusCodes.Status202Accepted, first.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, paced.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), paced.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.CredentialSuspended.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, next.Status);
+        Assert.Equal(sent + 2, _deployment.Sms.Taken.Count);
+
+        Task<Answer> AskedAsync() =>
+            browser.SendAsync(
+                "POST",
+                "/auth/factor",
+                ("challengeId", challenge),
+                ("factor", "phoneCode"));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC7 and AUTH-FACT-002b AC6: a text code asked for after the first
     /// factor, where the number's signal answers <c>risk</c> by then, sends nothing and
     /// is answered with what the challenge still offers: 200 <c>factorRequired</c>
