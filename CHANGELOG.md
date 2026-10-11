@@ -2374,8 +2374,12 @@ against the public contract of LIB-API-001.
 - A deployment whose restriction names a key supplier nothing supplies, or whose
   `integration.mail.endpoint`, `integration.sms.endpoint` or
   `password.blocklist.selfhosted.address` is not an HTTPS address, fails to start,
-  rather than at the moment someone is waiting for a code. A corpus address written
-  over plain HTTP after startup is never asked; the offline list answers instead.
+  rather than at the moment someone is waiting for a code. A change of
+  `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}` to a value
+  that is not an absolute `https` address is refused 422 `integration.endpoint.insecure`,
+  `details.key` naming the key, and changes nothing. A stored corpus address that is not
+  one is never asked: the offline list answers the screening and `degradation` is raised
+  under `password.blocklist.fallback`.
 - The message catalogue, the mail and text transports, the recipients a deployment's
   data reaches and the keys a sending restriction counts under are the host's to
   declare, and each is optional: a deployment that declares none of them starts.

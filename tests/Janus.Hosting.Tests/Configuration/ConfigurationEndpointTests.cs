@@ -20,6 +20,8 @@ namespace Janus.Hosting.Tests.Configuration;
 [Trait("kind", "unit")]
 public sealed class ConfigurationEndpointTests : IAsyncDisposable
 {
+    private const string Corpus = "https://corpus.example.test/range";
+
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -405,6 +407,113 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, number.Status);
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), number.Text("code"));
         Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// INT-GEN-001 AC3 and chapter 09 section 8 (D-198): the self-hosted corpus's
+    /// address put to a value that is not an absolute <c>https</c> address is refused 422
+    /// with the endpoint code, naming the key, and changes nothing: the value in force
+    /// stands, no change is written down, and no event, alert or message is raised.
+    /// </summary>
+    /// <param name="address">The value that is not an absolute <c>https</c> address.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("http://corpus.example.test/range")]
+    [InlineData("ftp://corpus.example.test/range")]
+    [InlineData("//corpus.example.test/range")]
+    [InlineData("corpus.example.test/range")]
+    [InlineData("/range")]
+    public async Task INT_GEN_001_AC3_ACorpusAddressThatIsNotAbsoluteHttpsIsRefusedAndChangesNothingAsync(
+        string address)
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+        _deployment.Configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+        int published = _deployment.Events.Published.Count;
+        int mail = _deployment.Mail.Taken.Count;
+        int texts = _deployment.Sms.Taken.Count;
+
+        Answer changed = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/password.blocklist.selfhosted.address",
+            ("value", address),
+            ("reason", "the corpus moved"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
+        Assert.Equal(ErrorCodes.EndpointInsecure.ToString(), changed.Text("code"));
+        Assert.Equal(
+            "password.blocklist.selfhosted.address",
+            changed.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(Corpus, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Equal(published, _deployment.Events.Published.Count);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(mail, _deployment.Mail.Taken.Count);
+        Assert.Equal(texts, _deployment.Sms.Taken.Count);
+    }
+
+    /// <summary>
+    /// INT-GEN-001 AC3 and LIB-API-005 AC2: the same change asked in process is refused
+    /// alike, with the endpoint code naming the key, and changes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_GEN_001_AC3_TheChangeAskedInProcessIsRefusedAlikeAsync()
+    {
+        _ = await AuthorisedAsync(Permissions.ConfigurationManage, Permissions.SystemAdminister);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SessionId session = _deployment.Sessions.All.Last(held => held.Subject == subject).Id;
+        _deployment.Configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+        int published = _deployment.Events.Published.Count;
+        int committed = _deployment.Work.Committed;
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+
+        Error refusal = (await scope.ServiceProvider
+                .GetRequiredService<IConfigurationAdministration>()
+                .ChangeAsync(
+                    AccessContext.Of(subject),
+                    session,
+                    Settings.PasswordBlocklistSelfHostedAddress.Key,
+                    JsonSerializer.SerializeToElement("http://corpus.example.test/range"),
+                    "the corpus moved",
+                    TestContext.Current.CancellationToken))
+            .Match(() => throw new Xunit.Sdk.XunitException("The change was not refused."), error => error);
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+        Assert.Equal("password.blocklist.selfhosted.address", refusal.Details["key"].GetString());
+        Assert.Equal(Corpus, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Equal(published, _deployment.Events.Published.Count);
+        Assert.Equal(committed, _deployment.Work.Committed);
+        Assert.False(_deployment.Work.Open);
+    }
+
+    /// <summary>
+    /// INT-GEN-001: an absolute <c>https</c> address is what the key takes, so the route
+    /// puts it in force and writes the change down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task Change_ACorpusAddressThatIsAbsoluteHttps_IsPutInForceAsync()
+    {
+        const string moved = "https://corpus.example.test/v2/range";
+
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+        _deployment.Configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+
+        Answer changed = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/password.blocklist.selfhosted.address",
+            ("value", moved),
+            ("reason", "the corpus moved"));
+
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Equal(moved, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Equal(moved, Assert.Single(_deployment.Changes.Written).After);
     }
 
     /// <summary>

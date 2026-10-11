@@ -54,6 +54,16 @@ internal sealed class SendingValidation(
 
     private const string Landing = "landingOrigins.authentication";
 
+    // INT-GEN-001: the addresses the library itself calls out to, in the order the
+    // start names the first that is not over TLS.
+    private static readonly IReadOnlyList<TextSetting> Endpoints =
+    [
+        Settings.IntegrationMailEndpoint,
+        Settings.IntegrationSmsEndpoint,
+        Settings.IntegrationMailServerEndpoint,
+        Settings.PasswordBlocklistSelfHostedAddress,
+    ];
+
     /// <summary>
     /// Runs every check, answering with the first that fails.
     /// </summary>
@@ -141,13 +151,7 @@ internal sealed class SendingValidation(
         IConfigurationStore configuration,
         CancellationToken cancellationToken)
     {
-        foreach (TextSetting key in new[]
-        {
-            Settings.IntegrationMailEndpoint,
-            Settings.IntegrationSmsEndpoint,
-            Settings.IntegrationMailServerEndpoint,
-            Settings.PasswordBlocklistSelfHostedAddress,
-        })
+        foreach (TextSetting key in Endpoints)
         {
             // The self-hosted corpus's address is a key the deployment names only where
             // it hosts the corpus, so one never named is no endpoint to call.
@@ -159,12 +163,41 @@ internal sealed class SendingValidation(
                         ? string.Empty
                         : throw new InvalidOperationException(error.Code.ToString()));
 
-            if (endpoint.Length is not 0 && !Secure(endpoint))
+            if (Insecure(key.Key, endpoint) is Error insecure)
             {
-                return Error.From(
-                    ErrorCodes.EndpointInsecure,
-                    "key",
-                    JsonSerializer.SerializeToElement(key.Key.ToString()));
+                return insecure;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The endpoint rule over one value: what a key naming an address the library calls
+    /// out to holds, or is about to hold, is an absolute https address, or empty.
+    /// </summary>
+    /// <param name="key">The key the value is read from or written to.</param>
+    /// <param name="endpoint">The value.</param>
+    /// <returns>
+    /// Nothing where the key names no such address or the value keeps the rule, or
+    /// <c>integration.endpoint.insecure</c> naming the key.
+    /// </returns>
+    /// <remarks>
+    /// Implements INT-GEN-001 and INF-TLS-004 for a change of a runtime setting as for
+    /// the start (D-198), so one rule judges an address at both.
+    /// </remarks>
+    internal static Error? Insecure(ConfigurationKey key, string endpoint)
+    {
+        foreach (TextSetting named in Endpoints)
+        {
+            if (named.Key == key)
+            {
+                return endpoint.Length is 0 || Secure(endpoint)
+                    ? null
+                    : Error.From(
+                        ErrorCodes.EndpointInsecure,
+                        "key",
+                        JsonSerializer.SerializeToElement(key.ToString()));
             }
         }
 

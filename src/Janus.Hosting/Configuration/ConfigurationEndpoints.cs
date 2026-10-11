@@ -49,7 +49,7 @@ internal static class ConfigurationEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationChangeSuperseded,
                     ErrorCodes.ConfigurationValueBelowFloor, ErrorCodes.ConfigurationValueAboveCeiling,
                     ErrorCodes.ConfigurationValueNotAllowed, ErrorCodes.ConfigurationKeyProtected,
-                    ErrorCodes.ConfigurationLastDestination,
+                    ErrorCodes.ConfigurationLastDestination, ErrorCodes.EndpointInsecure,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<ConfigurationKey>("key"))
             .Produces(StatusCodes.Status204NoContent);

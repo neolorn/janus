@@ -23,6 +23,8 @@ namespace Janus.Authentication.Tests.Configuration;
 [Trait("kind", "unit")]
 public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 {
+    private const string Corpus = "https://corpus.example.test/range";
+
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
@@ -690,6 +692,59 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
         Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// INT-GEN-001 AC3 and INF-TLS-004 (D-198): the self-hosted corpus's address changed
+    /// to a value that is not an absolute <c>https</c> address is refused with the
+    /// endpoint code naming the key, and changes nothing: no unit of work is begun, no
+    /// row is held or written, no record of a change is made, and no event or alert is
+    /// raised.
+    /// </summary>
+    /// <param name="address">The value that is not an absolute <c>https</c> address.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("http://corpus.example.test/range")]
+    [InlineData("ftp://corpus.example.test/range")]
+    [InlineData("//corpus.example.test/range")]
+    [InlineData("corpus.example.test/range")]
+    [InlineData("/range")]
+    public async Task INT_GEN_001_AC3_ACorpusAddressThatIsNotAbsoluteHttpsIsRefusedAndChangesNothingAsync(
+        string address)
+    {
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+
+        Error refusal = await RefusedAsync(
+            Settings.PasswordBlocklistSelfHostedAddress,
+            address,
+            "the corpus moved",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+        Assert.Equal("password.blocklist.selfhosted.address", refusal.Details["key"].GetString());
+        Assert.Equal(Corpus, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Equal(0, _work.Opened);
+        Assert.Empty(_configuration.Held);
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// INT-GEN-001: an absolute <c>https</c> address is what the key takes, so the
+    /// change is made and written down as any other.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task ChangeAsync_ACorpusAddressThatIsAbsoluteHttps_IsPutInForceAsync()
+    {
+        const string moved = "https://corpus.example.test/v2/range";
+
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+
+        await ChangedAsync(Settings.PasswordBlocklistSelfHostedAddress, moved, "the corpus moved", Satisfied);
+
+        Assert.Equal(moved, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Equal(moved, Assert.Single(_changes.Written).After);
     }
 
     // The one change OPS-CFG-005 AC1 and OPS-CFG-008 AC2 read the record of: the

@@ -225,6 +225,48 @@ public sealed class ScreeningTests : IDisposable
     }
 
     /// <summary>
+    /// INT-PWD-003 AC3 (D-198): a stored address of the self-hosted corpus that is not an
+    /// absolute <c>https</c> address reads and is never called; the list the package
+    /// carries answers the screening, refusing what it holds and accepting what it does
+    /// not, and the degradation is recorded and raised.
+    /// </summary>
+    /// <param name="address">The stored value that is not an absolute <c>https</c> address.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("http://corpus.example/range")]
+    [InlineData("ftp://corpus.example/range")]
+    [InlineData("//corpus.example/range")]
+    [InlineData("corpus.example/range")]
+    [InlineData("/range")]
+    public async Task INT_PWD_003_AC3_AStoredAddressThatIsNotAbsoluteHttpsIsNeverCalledAsync(string address)
+    {
+        _service.Holds(Prefix(Password), Suffix(Password) + ":3");
+        _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, address);
+
+        Result listed = await ScreenedAsync(Listed);
+        Result unlisted = await ScreenedAsync(Password);
+
+        Assert.Equal(
+            ErrorCodes.PasswordBlocklisted,
+            listed.Match(() => throw new Xunit.Sdk.XunitException("The password was accepted."), error => error.Code));
+        Assert.True(unlisted.Match(() => true, _ => false));
+        Assert.Empty(_service.Asked);
+        Assert.Equal(
+            [
+                (BlocklistSource.SelfHosted, BlocklistSource.Offline),
+                (BlocklistSource.SelfHosted, BlocklistSource.Offline),
+            ],
+            [.. _log.Entries]);
+        Assert.All(
+            _events.Of<AlertRaised>(),
+            raised => Assert.Equal(
+                Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback", named: null),
+                Alerts.Deduplication(raised.IdempotencyKey)));
+        Assert.Equal(2, _events.Of<AlertRaised>().Count);
+    }
+
+    /// <summary>
     /// A corpus older than the deployment admits cannot be screened on, so it answers
     /// nothing and the password is refused rather than judged against stale data.
     /// </summary>
