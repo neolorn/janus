@@ -659,11 +659,14 @@ internal sealed class AuthenticationService(
                 ?? refusal);
         }
 
-        // A refusal the factor's judgement answers comes back counted and recorded.
+        // A refusal the factor's judgement answers comes back counted and recorded,
+        // save that of a second-factor security key's assertion presented as a passkey
+        // before a first factor, which is neither (AUTH-FACT-002b AC9).
         bool changeRequired = (await AcceptsAsync(
                     open,
                     subject,
                     presented,
+                    beforeFirstFactor: !FirstAccepted(open),
                     token => CountedAsync(attempt, presented.Factor, subject, trusted, token),
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -900,6 +903,7 @@ internal sealed class AuthenticationService(
                     open,
                     asking,
                     presented,
+                    beforeFirstFactor: false,
                     token => StepUpRefusedAsync(attempt, live, presented.Factor, token),
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -1345,11 +1349,15 @@ internal sealed class AuthenticationService(
     // in: a factor whose refusal keeps a write of its own (a code's wrong try, a
     // counter that did not advance) commits that write with the count, in one unit of
     // work (CONV-DESIGN-003). A fault of the library's own comes back as it is, neither
-    // counted nor recorded (AUTH-ABUSE-001).
+    // counted nor recorded (AUTH-ABUSE-001). Whether the presentation comes at a sign-in
+    // before any first factor has been accepted is what a ceremony is told, since a
+    // second-factor security key that answers one there is refused as a second step is
+    // (AUTH-FACT-002b AC9).
     private async ValueTask<Result<bool>> AcceptsAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
+        bool beforeFirstFactor,
         Func<CancellationToken, ValueTask<Error?>> counted,
         CancellationToken cancellationToken)
     {
@@ -1358,7 +1366,7 @@ internal sealed class AuthenticationService(
         {
             if (properties.IsWebAuthn)
             {
-                return await CeremonyAsync(open, subject, presented, counted, cancellationToken)
+                return await CeremonyAsync(open, subject, presented, beforeFirstFactor, counted, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -1504,10 +1512,16 @@ internal sealed class AuthenticationService(
     // counter that did not advance commits with the failed authentication's record and
     // the failure's counts, and nothing else. Any other refusal wrote nothing to keep
     // and is rolled back before it is counted.
+    // AUTH-FACT-002b AC9 (D-198): before a first factor, a second-factor security key's
+    // assertion presented as a passkey is refused once it verifies, as a second step
+    // presented under its own name is refused: rolled back whole, counted nowhere and
+    // recorded nowhere, nothing accepted on the challenge, and neither the policy's
+    // factors nor a domain lock judged after it.
     private async ValueTask<Result<bool>> CeremonyAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
+        bool beforeFirstFactor,
         Func<CancellationToken, ValueTask<Error?>> counted,
         CancellationToken cancellationToken)
     {
@@ -1526,7 +1540,7 @@ internal sealed class AuthenticationService(
         Error? refusal = null;
 
         Authenticator answered = (await webAuthn
-                .AssertAsync(presented.Assertion, open.WebAuthn, subject, cancellationToken)
+                .AssertAsync(presented.Assertion, open.WebAuthn, subject, beforeFirstFactor, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<Authenticator>(error, ref refusal));
 
@@ -1535,6 +1549,13 @@ internal sealed class AuthenticationService(
         if (refusal is null && answered.Subject != subject)
         {
             refusal = Error.From(ErrorCodes.FactorRejected);
+        }
+
+        if (beforeFirstFactor && refusal?.Code == ErrorCodes.FactorNotPermitted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(refusal);
         }
 
         if (refusal is not null)

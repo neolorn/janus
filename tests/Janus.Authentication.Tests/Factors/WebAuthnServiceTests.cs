@@ -979,6 +979,99 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002b AC9: before a first factor, a second-factor security key whose
+    /// assertion verifies is refused <c>auth.factor.notpermitted</c> before its state
+    /// is judged, an active key and a suspended one alike, and the refusal ends the
+    /// unit of work it was decided in with nothing committed: neither the counter nor
+    /// the use is written and nothing is audited.
+    /// </summary>
+    /// <param name="suspended">Whether the key is suspended.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_FACT_002b_AC9_ASecurityKeyThatVerifiesBeforeAFirstFactorIsRefusedBeforeItsStateAndWritesNothingAsync(
+        bool suspended)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        Authenticator key = await KeyedAsync(subject, Factor.SecurityKey, authenticator);
+
+        if (suspended)
+        {
+            key.Suspend(_clock.GetUtcNow() + TimeSpan.FromDays(7));
+        }
+
+        _work.Reset();
+
+        ErrorCode? refused = await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 10),
+            beforeFirstFactor: true);
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, refused);
+        Assert.Equal((9u, null), (key.WebAuthn!.Counter, key.LastUsedAt));
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+        Assert.False(_work.Open);
+        Assert.Empty(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC9, AUTH-FACT-014 AC3: the counter is among the checks an
+    /// assertion verifies by, so before a first factor a security key whose counter did
+    /// not advance is refused <c>auth.webauthn.countermismatch</c> and audited, as any
+    /// key's is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC9_ASecurityKeyWhoseCounterDidNotAdvanceBeforeAFirstFactorIsRefusedACounterMismatchAsync()
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        Authenticator key = await KeyedAsync(subject, Factor.SecurityKey, authenticator);
+
+        ErrorCode? refused = await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 9),
+            beforeFirstFactor: true);
+
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, refused);
+        Assert.Equal(
+            ("auth.credential.countermismatch", subject, key.Id),
+            Assert.Single(_audit.Records.Select(record => (record.Item1.ToString(), record.Item2, record.Item3))));
+        Assert.Equal((9u, null), (key.WebAuthn!.Counter, key.LastUsedAt));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC9: the refusal is of a second-factor security key before a
+    /// first factor and of nothing else. A passkey's assertion before a first factor,
+    /// and a security key's once a first factor has been accepted, are accepted and
+    /// store their counter.
+    /// </summary>
+    /// <param name="factor">The kind of the credential.</param>
+    /// <param name="beforeFirstFactor">Whether no first factor has been accepted.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(Factor.Passkey, true)]
+    [InlineData(Factor.SecurityKey, false)]
+    public async Task AUTH_FACT_002b_AC9_APasskeyBeforeAFirstFactorAndASecurityKeyAfterOneAreJudgedAsTheyWereAsync(
+        Factor factor,
+        bool beforeFirstFactor)
+    {
+        SubjectId subject = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        Authenticator key = await KeyedAsync(subject, factor, authenticator);
+
+        ErrorCode? refused = await AssertedAsync(
+            subject,
+            authenticator.Asserted(Challenge, Origin, RelyingPartyId, counter: 10),
+            beforeFirstFactor);
+
+        Assert.Null(refused);
+        Assert.Equal((10u, _clock.GetUtcNow()), (key.WebAuthn!.Counter, key.LastUsedAt));
+    }
+
+    /// <summary>
     /// AUTH-FACT-014 AC6: a ceremony whose authenticator chooses EdDSA under the
     /// default allow-list enrols and its assertions verify, as one choosing either
     /// other algorithm of the list does. The key is kept as the attested credential
@@ -1534,12 +1627,38 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     private async ValueTask<WebAuthnMaterial> HeldAsync(AuthenticatorId id) =>
         (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.WebAuthn!;
 
-    private async ValueTask<ErrorCode?> AssertedAsync(SubjectId subject, AuthenticatorAssertion answered) =>
+    private async ValueTask<ErrorCode?> AssertedAsync(
+        SubjectId subject,
+        AuthenticatorAssertion answered,
+        bool beforeFirstFactor = false) =>
         Refusal(await Service.AssertAsync(
             answered,
             Challenge,
             subject,
+            beforeFirstFactor,
             TestContext.Current.CancellationToken));
+
+    // A credential of the kind named whose key the authenticator holds, enrolled for
+    // the account with a stored counter of nine.
+    private async ValueTask<Authenticator> KeyedAsync(
+        SubjectId subject,
+        Factor factor,
+        SoftwareAuthenticator authenticator)
+    {
+        AuthenticatorId id = Value(await Service.CompleteAsync(
+            subject,
+            factor,
+            Label(),
+            Registration() with
+            {
+                CredentialId = authenticator.CredentialId,
+                PublicKey = authenticator.PublicKey,
+                Counter = 9,
+            },
+            TestContext.Current.CancellationToken));
+
+        return (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!;
+    }
 
     private static WebAuthnRegistration Registration() =>
         new(

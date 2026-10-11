@@ -175,6 +175,14 @@ against the public contract of LIB-API-001.
   counted and no failed authentication is recorded. A text code asked for at a
   sign-in while no first factor has been accepted on its challenge is answered 202,
   no phone signal is asked and nothing is sent, whatever the account holds.
+- At a sign-in before a first factor, an assertion presented as `passkey` whose
+  credential is a security key under two-step is a second step too, known only once
+  it verifies: `POST /auth/factor` then answers 422 `auth.factor.notpermitted`, an
+  active key and a suspended one alike, whatever the policy's `loginFactors` and
+  whatever domain lock stands on the sign-in's address. Nothing is accepted on the
+  challenge, nothing is counted, no failed authentication is recorded, and the key's
+  stored counter, `backupState` and last use stay as they were. An assertion that does
+  not verify, its counter included, is refused as any wrong passkey assertion is.
 - A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
   Information, by the code the browser is returned with and the one the refusal
   carried inside. A refused authorization response no longer writes event 10 as
