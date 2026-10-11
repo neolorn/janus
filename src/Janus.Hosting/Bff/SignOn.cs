@@ -137,14 +137,18 @@ internal sealed class SignOn(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // API-REDIR-001: the destination is judged once, where it arrives, so what the
+        // attempt carries to the return is a path of this application already.
+        string destination = ReturnDestination.Followed(returnTo);
+
         // BFF-SESS-006 AC1: a browser that already holds one here has nothing to
         // establish, so the flow is not started and it goes where it was going.
         if (browser.Live is not null)
         {
-            return Results.Redirect(Local(returnTo));
+            return Results.Redirect(destination);
         }
 
-        return await ForwardAsync(context, Local(returnTo), silent: true, cancellationToken)
+        return await ForwardAsync(context, destination, silent: true, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -242,16 +246,6 @@ internal sealed class SignOn(
 
     private static string Challenge([NeverLogged] string verifier) =>
         Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-
-    // BFF-SESS-006: the browser is sent back onto this application and nowhere else, so
-    // anything that is not one absolute path of this origin becomes the root.
-    private static string Local(string? returnTo) =>
-        returnTo is { Length: > 1 }
-            && returnTo[0] is '/'
-            && returnTo[1] is not ('/' or '\\')
-            && !returnTo.Contains('\\', StringComparison.Ordinal)
-                ? returnTo
-                : "/";
 
     private static string Address(string provider, string route) =>
         provider.TrimEnd('/') + route;

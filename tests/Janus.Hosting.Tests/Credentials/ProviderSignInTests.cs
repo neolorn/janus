@@ -37,6 +37,11 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 {
     private const string Language = "en";
     private const string Page = "/account/profile";
+
+    // FE-API-006: a route as the address serializes it, its own characters
+    // percent-encoded.
+    private const string Route = "/orders/caf%C3%A9%20menu?tab=open%2Fpaid#notes";
+
     private const string GoogleSubject = "110169484474386276334";
     private const string AppleSubject = "001234.5a6b7c8d9e0f.1234";
     private const string Gmail = "person@gmail.com";
@@ -621,25 +626,90 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-012: the browser comes back onto this application and nowhere else, so
-    /// a return address naming another site becomes the root.
+    /// API-REDIR-001 AC1: a destination that is not one path of this application is
+    /// replaced with the root, and the round trip goes as it goes for any other, sent
+    /// to the provider and brought back signed in, with no error in a body or in an
+    /// address.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_012_AReturnAddressOffThisApplicationIsNotFollowedAsync()
+    public async Task API_REDIR_001_AC1_ADestinationOffThisApplicationIsReplacedWithTheRootAndNoErrorAsync()
     {
         SubjectId subject = await RegisteredAsync();
 
         await LinkedAsync(subject, Factor.Google, GoogleSubject);
 
         var browser = new Browser(_deployment);
-        string authorization = Where(await browser.SendAsync(
-            "GET",
-            "/auth/providers/google?intent=signin&returnTo=" + Uri.EscapeDataString("//attacker.test/collect")));
+        Answer started = await browser.SendAsync("GET", StartAt("google", "signin", "/%09/attacker.example"));
+        Answer landed = await ReturnedAsync(browser, "google", Where(started), new ProviderPerson(GoogleSubject));
 
+        Assert.Equal(StatusCodes.Status303SeeOther, started.Status);
+        Assert.NotNull(Parameter(Where(started), "state"));
+        Assert.Empty(started.Body);
+        Assert.Equal(StatusCodes.Status303SeeOther, landed.Status);
+        Assert.Equal("/", landed.Location);
+        Assert.Empty(landed.Body);
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/auth/session")).Status);
+    }
+
+    /// <summary>
+    /// API-REDIR-001 AC2: an absolute or scheme-relative address, and a destination
+    /// carrying a backslash, a tab, a line break, any other control character, a space
+    /// or a character outside ASCII, is not followed, whether the browser comes back
+    /// signed in or is sent back refused.
+    /// </summary>
+    /// <param name="sent">The destination, as the query sends it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/%09/attacker.example")]
+    [InlineData("/%0A/attacker.example")]
+    [InlineData("/%0D/attacker.example")]
+    [InlineData("/%20/attacker.example")]
+    [InlineData("/account%20profile")]
+    [InlineData("/%1B/attacker.example")]
+    [InlineData("/%7F/attacker.example")]
+    [InlineData("/caf%C3%A9")]
+    [InlineData("//attacker.example")]
+    [InlineData("/%5Cattacker.example")]
+    [InlineData("/account%5Cprofile")]
+    [InlineData("https%3A%2F%2Fattacker.example%2Fcollect")]
+    [InlineData("attacker.example")]
+    public async Task API_REDIR_001_AC2_ADestinationThatIsNotOnePathOfThisApplicationIsNotFollowedAsync(string sent)
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        var browser = new Browser(_deployment);
+        Answer refused = await browser.SendAsync(
+            "GET",
+            "/auth/providers/google?intent=unknown&returnTo=" + sent);
+        string authorization = Where(await browser.SendAsync("GET", StartAt("google", "signin", sent)));
         Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
 
+        Assert.Equal("/?error=" + ErrorCodes.RequestMalformed, refused.Location);
         Assert.Equal("/", landed.Location);
+    }
+
+    /// <summary>
+    /// API-REDIR-001, FE-API-006: a path of this application whose own characters are
+    /// percent-encoded, sent percent-encoded as the query's value, is read once and
+    /// followed as it is, its escapes, query and fragment included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_REDIR_001_APercentEncodedPathOfThisApplicationIsFollowedAsItIsAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        var browser = new Browser(_deployment);
+        string authorization = Where(
+            await browser.SendAsync("GET", StartAt("google", "signin", Uri.EscapeDataString(Route))));
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(Route, landed.Location);
     }
 
     /// <summary>
@@ -1526,7 +1596,10 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         };
 
     private static string Start(string provider, string intent) =>
-        "/auth/providers/" + provider + "?intent=" + intent + "&returnTo=" + Uri.EscapeDataString(Page);
+        StartAt(provider, intent, Uri.EscapeDataString(Page));
+
+    private static string StartAt(string provider, string intent, string sent) =>
+        "/auth/providers/" + provider + "?intent=" + intent + "&returnTo=" + sent;
 
     private static string Where(Answer answered) =>
         answered.Location ?? throw new InvalidOperationException("The answer forwarded nowhere.");

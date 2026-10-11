@@ -115,7 +115,9 @@ internal sealed class ProviderSignIn(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        string destination = Local(returnTo);
+        // API-REDIR-001: the destination is judged once, where it arrives, so what the
+        // attempt carries to the return is a path of this application already.
+        string destination = ReturnDestination.Followed(returnTo);
 
         if (intent is null || !Intents.TryGetValue(intent, out ProviderIntent intended))
         {
@@ -300,16 +302,6 @@ internal sealed class ProviderSignIn(
                 .ConfigureAwait(false),
         };
     }
-
-    // BFF-SESS-006: the browser is sent back onto this application and nowhere else, so
-    // anything that is not one absolute path of this origin becomes the root.
-    private static string Local(string? returnTo) =>
-        returnTo is { Length: > 1 }
-            && returnTo[0] is '/'
-            && returnTo[1] is not ('/' or '\\')
-            && !returnTo.Contains('\\', StringComparison.Ordinal)
-                ? returnTo
-                : "/";
 
     // Chapter 09: the round trip answers 303 wherever it sends the browser, to the
     // provider, on to where it was going or back to where it started, so what follows
