@@ -118,8 +118,8 @@ check of INF-OBS-003, which shares no component with the renewer or with the lib
 
 ---
 
-**INF-TLS-004** — Outbound integrations SHALL use TLS, with plaintext endpoints
-rejected at startup.
+**INF-TLS-004** — Outbound integrations SHALL use TLS, with plaintext endpoints rejected
+at startup and at a change (INT-GEN-001, D-198).
 
 **One named exception, recorded rather than discovered:** the SMS gateway's delivery
 report arrives over plain HTTP with parameters in the query string. Confirm whether the
@@ -135,7 +135,7 @@ The report carries a delivery status against an opaque reference and no personal
 
 *Source: D-092, D-197*
 
-*Source: INT-GEN-001, D-162, D-166*
+*Source: INT-GEN-001, D-162, D-166, D-198*
 
 Already required; restated here because it is an environment property. A provider's
 published sample configuration can specify a plaintext base URL, which would send

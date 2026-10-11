@@ -298,25 +298,35 @@ chooses in the passkey dialog. A **security key under two-step** is a non-discov
 second factor created with `residentKey: discouraged`. **Two-step SHALL be unavailable
 until a usable password exists**; a passkey-only account has no second step. At a
 sign-in a second step is accepted only once a first factor has been accepted on the
-challenge; one presented before is refused 422 `auth.factor.notpermitted` before it is
-verified and before anything of the account is read, the same answer for every
-identifier, counting and recording nothing (D-197). A `phoneCode` ask before a first
-factor is answered 202 (AUTH-FACT-002 criterion 8). An answer that offers `securityKey`
-(a `factorRequired` answer at a sign-in once a first factor is accepted, or at a step-up
-once a factor has been presented on its challenge) carries the `webauthn` request
-options with `userVerification` `required` and `allowCredentials` naming each active
-second-factor security key of the account by credential identifier and transports and,
-at a step-up that also offers `passkey`, each active passkey of the account (`09`
-`POST /auth/factor`, D-197); at a step-up a security key is presented after another
-factor of its combination, and no answer before a first factor names a credential. A
-second-factor security key MAY be **upgraded to a passkey** by re-registration
-(`POST /account/credentials/{id}/upgrade`); on success the second-factor entry SHALL be
-retired. Each account SHALL carry a **preferred second-step method** (IDN-ATTR-008).
-`phoneLink` and `phoneCode` SHALL be treated as **restricted factors**: their catalogue
-entries carry `Restricted` (AUTH-FACT-001), which criterion 6 reads; the limitation
-SHALL be shown at enrolment, `phoneCode` SHALL be flagged less secure wherever it is
-listed, and SIM-change and porting risk signals, where available, SHALL be considered
-before an SMS factor is used and before a recovery link is sent by text.
+challenge; one presented under its own name before is refused 422
+`auth.factor.notpermitted` before it is verified and before anything of the account is
+read, the same answer for every identifier, counting and recording nothing (D-197). An
+assertion presented under the name `passkey` is known to be a security key's only once
+it verifies (its signature with every check of AUTH-FACT-014, its counter included):
+where it verifies at a sign-in before a first factor and its credential is a
+second-factor security key, it is refused 422 `auth.factor.notpermitted`, nothing
+accepted on the challenge, counting no failure, recording no failed authentication and
+keeping none of the writes its verification made; one that does not verify is refused as
+any wrong passkey assertion is (D-198). This refusal is judged as soon as the assertion
+verifies, before the credential's state (AUTH-RECOV-007), the factors the policy permits
+(AUTH-STEP-002) and any domain lock (REG-DOM-001), none of which is then judged. A
+`phoneCode` ask before a first factor is answered 202 (AUTH-FACT-002 criterion 8). An
+answer that offers `securityKey` (a `factorRequired` answer at a sign-in once a first
+factor is accepted, or at a step-up once a factor has been presented on its challenge)
+carries the `webauthn` request options with `userVerification` `required` and
+`allowCredentials` naming each active second-factor security key of the account by
+credential identifier and transports and, at a step-up that also offers `passkey`, each
+active passkey of the account (`09` `POST /auth/factor`, D-197); at a step-up a security
+key is presented after another factor of its combination, and no answer before a first
+factor names a credential. A second-factor security key MAY be **upgraded to a passkey**
+by re-registration (`POST /account/credentials/{id}/upgrade`); on success the
+second-factor entry SHALL be retired. Each account SHALL carry a **preferred second-step
+method** (IDN-ATTR-008). `phoneLink` and `phoneCode` SHALL be treated as **restricted
+factors**: their catalogue entries carry `Restricted` (AUTH-FACT-001), which criterion 6
+reads; the limitation SHALL be shown at enrolment, `phoneCode` SHALL be flagged less
+secure wherever it is listed, and SIM-change and porting risk signals, where available,
+SHALL be considered before an SMS factor is used and before a recovery link is sent by
+text.
 
 **Values (D-153).** The SIM-change or porting signal reaches the library through an
 optional host callback declared on the model builder (LIB-HOST-001), returning `none`
@@ -333,7 +343,7 @@ asked for the number beforehand is a fault (CONV-ERR-001), never a send: the oth
 course would let a restricted factor go unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188, D-190, D-197*
+D-183, D-186, D-188, D-190, D-197, D-198*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -367,9 +377,9 @@ person who bought one for two-step should not have to buy another to go password
    a recovery link is not sent to the number, and `/recovery/begin` answers 202 as it
    always does. The signal is asked of the number, so every answer is the same whether
    or not an account holds it (AUTH-ABUSE-003 AC1).
-7. At a sign-in, a second step presented before a first factor has been accepted on the
-   challenge is refused `auth.factor.notpermitted` before it is verified, with the same
-   answer for every identifier, and counts and records nothing.
+7. At a sign-in, a second step presented under its own name before a first factor has
+   been accepted on the challenge is refused `auth.factor.notpermitted` before it is
+   verified, with the same answer for every identifier, and counts and records nothing.
 8. An answer that offers `securityKey` (a `factorRequired` answer at a sign-in once a
    first factor is accepted, or at a step-up once a factor has been presented on its
    challenge) carries the `webauthn` request options with `userVerification` `required`
@@ -378,6 +388,13 @@ person who bought one for two-step should not have to buy another to go password
    `passkey`, each of its active passkeys; at a step-up a security key is presented
    after another factor of its combination; no answer before a first factor names a
    credential.
+9. At a sign-in before a first factor, an assertion presented as `passkey` whose
+   credential is a second-factor security key is refused 422 `auth.factor.notpermitted`
+   once it verifies, a suspended key, a policy whose `loginFactors` omits `passkey` and
+   a domain lock on the sign-in's address included, nothing accepted on the challenge,
+   nothing counted or recorded, and the credential's stored counter and `backupState` as
+   they were; one that does not verify is refused as a wrong passkey assertion is, the
+   same answer whatever its identifier names.
 
 ---
 
@@ -503,28 +520,30 @@ authentication code SHALL be invalidated after `code.signin.attempts` (default *
 ceiling 10) wrong tries, SHALL validate once, and SHALL be decided under a lock as a
 verification code is, its wrong try's count and its invalidation at the cap (the pending
 sign-in or the pending enrolment removed) kept writes as a verification code's are
-(CONV-DESIGN-003, D-186). A code presented right is spent whatever refusal follows, and
-a fault leaves it as it was, since nothing of the operation commits (AUTH-ABUSE-001,
-D-189): where the sign-in or step-up it would complete is then refused (a domain lock,
-REG-DOM-001), its spend is a kept write committed in the one unit of work with the
-refusal, which counts no failure and records no failed authentication since the factor
-succeeded, and the lock is judged after the code, never before it, so that a wrong code
-learns nothing of the lock (D-188). A right sign-in or second-step code sent to an
-address given up since is refused `auth.factor.rejected`, a refused factor counted and
-recorded with its spend in the same unit of work, and so is a right `phoneCode`
-second-step code whose credential, the one its record names from its issue, has been
-removed or invalidated since it was sent, or is one whose number left the account
-(D-192, D-197); one whose credential is otherwise suspended is answered as
+(CONV-DESIGN-003, D-186). A code presented right is spent whatever refusal follows, its
+send's count on a restriction marked `resend` released with the spend (AUTH-ABUSE-004,
+D-198), and a fault leaves both as they were, since nothing of the operation commits
+(AUTH-ABUSE-001, D-189): where the sign-in or step-up it would complete is then refused
+(a domain lock, REG-DOM-001), its spend is a kept write committed in the one unit of
+work with the refusal, which counts no failure and records no failed authentication
+since the factor succeeded, and the lock is judged after the code, never before it, so
+that a wrong code learns nothing of the lock (D-188). A right sign-in or second-step
+code sent to an address given up since is refused `auth.factor.rejected`, a refused
+factor counted and recorded with its spend in the same unit of work, and so is a right
+`phoneCode` second-step code whose credential, the one its record names from its issue,
+has been removed or invalidated since it was sent, or is one whose number left the
+account (D-192, D-197); one whose credential is otherwise suspended is answered as
 AUTH-RECOV-007 states (D-191). For every factor, the lock on the address the sign-in was
-opened with is judged after the factor's verification and counts no failure, and what
-the verification wrote (a code's spend, a credential's counter) is kept with that
+opened with is judged after the factor's verification (and not at all where
+AUTH-FACT-002b refuses a second step before a first factor) and counts no failure, and
+what the verification wrote (a code's spend, a credential's counter) is kept with that
 refusal (CONV-DESIGN-003, D-189); at a step-up, the lock on the address an email code
 was sent to is judged after the code (REG-DOM-001, D-190). The `emailCode` code SHALL be
 sent as the message kind `sign-in-code` and the `phoneCode` code as `secondstep-code`,
 never as a verification code.
 
 *Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189, D-190, D-191, D-192,
-D-197*
+D-197, D-198*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -1255,7 +1274,7 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196*
+*Source: D-104, D-007, D-033.3, D-147, D-166, D-171, D-192, D-196, D-198*
 
 **The flow.** A BFF holding no session pushes an authorization request with
 `prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
@@ -1276,9 +1295,9 @@ record its code was issued from, so a token that holds up and carries no session
 identifier in `sid` is a fault at the sign-on, never a refusal (BFF-SESS-006, D-196).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
-API-REDIR-002), exact-match `redirect_uri` (API-REDIR-001), single-use short-lived
-codes bound to client and verifier, and client authentication at the token endpoint.
-Every one is a standard requirement restated, not a mechanism designed here.
+API-REDIR-002), exact-match `redirect_uri` (AUTH-OIDC-006, D-198), single-use
+short-lived codes bound to client and verifier, and client authentication at the token
+endpoint. Every one is a standard requirement restated, not a mechanism designed here.
 
 **Acceptance criteria**
 1. Every browser application is a registered confidential client with an exact
@@ -1692,7 +1711,7 @@ split across two apps or folded into another.
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
 *Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191,
-D-192, D-197*
+D-192, D-197, D-198*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If a level at or above the gate's, and
@@ -1744,9 +1763,11 @@ D-192, D-197*
 A factor the policy in force does not permit in `loginFactors` is never offered, and
 presenting it at step-up is refused with `auth.factor.notpermitted` before the factor is
 verified, and counted as a refused step-up factor (AUTH-ABUSE-001). At sign-in the same
-refusal is made only after the factor has succeeded (a second step presented before a
-first factor apart, AUTH-FACT-002b, D-197), so that a caller not yet authenticated
-learns nothing of the account's memberships (IDN-LIFE-009b, AUTH-ABUSE-003).
+refusal is made only after the factor has succeeded, and the policy is not judged at all
+where AUTH-FACT-002b refuses a second step before a first factor (one under its own name
+before it is verified, D-197; a security key's assertion presented as `passkey` as soon
+as it verifies, D-198), so that a caller not yet authenticated learns nothing of the
+account's memberships (IDN-LIFE-009b, AUTH-ABUSE-003).
 
 A gate bound to a host's action (AUTHZ-GATE-005) is judged against the library's session
 the request carries, where that session is the acting person's own; a host-named gate
@@ -2263,16 +2284,19 @@ social provider's vouching on its return, D-191) is it refused 422
 `auth.credential.suspended`, on a provider's return as
 `error=auth.credential.suspended`, a failed attempt (AUTH-ABUSE-001), and one whose
 proof does not verify is refused as any wrong presentation is, so a caller who does not
-hold it learns nothing of its state. A right `phoneCode` code whose credential's number
-left the account is refused as one sent to an address given up since (AUTH-FACT-004,
-D-197). A `phoneCode` ask that names a suspended number, made after a first factor or
-under a session, sends nothing and is answered 422 `auth.credential.suspended`, counting
-nothing, since an ask presents no factor; one made before a first factor is answered 202
-and sends nothing, whatever the account holds (AUTH-FACT-002); and where the policy in
-force does not permit `phoneCode`, the policy is judged first: the ask sends nothing and
-is answered 202, whatever the number's state (IDN-LIFE-009b, D-191).
+hold it learns nothing of its state; a second step presented at a sign-in before a first
+factor is refused `auth.factor.notpermitted` before its state is judged, a security
+key's assertion presented as `passkey` included (AUTH-FACT-002b, D-197, D-198). A right
+`phoneCode` code whose credential's number left the account is refused as one sent to an
+address given up since (AUTH-FACT-004, D-197). A `phoneCode` ask that names a suspended
+number, made after a first factor or under a session, sends nothing and is answered 422
+`auth.credential.suspended`, counting nothing, since an ask presents no factor; one made
+before a first factor is answered 202 and sends nothing, whatever the account holds
+(AUTH-FACT-002); and where the policy in force does not permit `phoneCode`, the policy
+is judged first: the ask sends nothing and is answered 202, whatever the number's state
+(IDN-LIFE-009b, D-191).
 
-*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197*
+*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -2297,7 +2321,10 @@ have nothing left to stand in for.
 2. A suspended authenticator is rejected at sign-in and at every gate: with
    `auth.credential.suspended` once what it presented verifies, and as any wrong
    presentation is where it does not; a right `phoneCode` code whose credential's number
-   left the account is refused `auth.factor.rejected` (AUTH-FACT-004).
+   left the account is refused `auth.factor.rejected` (AUTH-FACT-004); a second step
+   presented at a sign-in before a first factor is refused `auth.factor.notpermitted`
+   before its state is judged, a security key's assertion presented as `passkey`
+   included (AUTH-FACT-002b).
 3. Invalidation does not complete before the window elapses; cancellation during the
    window returns the authenticator to `active`, a `phoneCode` credential whose number
    left the account apart (AUTH-FACT-002); with no notification taken by its immediate
@@ -2376,8 +2403,9 @@ The identifier component SHALL be keyed by the keyed hash, under the fingerprint
 its kind's form, anything else trimmed), computed for every identifier whether or not an
 account holds it. A sign-in carries it with its key version from begin, and every
 refused factor of that sign-in counts under it, save a second step refused before a
-first factor, which counts nothing (AUTH-FACT-002b, D-197); every ask of a link, an
-email code or a recovery is delayed under it.
+first factor, a security key's assertion presented as `passkey` included, which counts
+nothing (AUTH-FACT-002b, D-197, D-198); every ask of a link, an email code or a recovery
+is delayed under it.
 
 **Values (D-166).** A **source** is the address the connection arrived on, after the
 proxies the host names to the framework as trusted: an IPv4 address; an IPv4-mapped
@@ -2405,12 +2433,13 @@ cap, naming nothing held or opening nothing among them, and the
 `auth-failures-sustained` raise such failures bring for their account (OPS-ALERT-002); a
 consumed refresh token's session family revoked at its reuse, with its audit record
 (AUTH-OIDC-003); a wrong try of a code, its invalidation at the cap, the spend of a
-right authentication code whatever refusal follows, and what a factor's verification
-wrote where a domain lock then refuses the sign-in or the step-up (AUTH-FACT-004); a
-trusted device's failure and its trust revoked at the limit (AUTH-FACT-015); the record
-of a refused step-up factor and of a failed authentication (AUTH-STEP-002,
-CONV-LOG-005); the audit record of a signature counter that did not advance
-(AUTH-FACT-014); and the record of a bot-defence signal and of a phone signal's
+right authentication code whatever refusal follows, with the release of its send's count
+on a restriction marked `resend` (AUTH-ABUSE-004, D-198), and what a factor's
+verification wrote where a domain lock then refuses the sign-in or the step-up
+(AUTH-FACT-004); a trusted device's failure and its trust revoked at the limit
+(AUTH-FACT-015); the record of a refused step-up factor and of a failed authentication
+(AUTH-STEP-002, CONV-LOG-005); the audit record of a signature counter that did not
+advance (AUTH-FACT-014); and the record of a bot-defence signal and of a phone signal's
 consideration (AUTH-ABUSE-008, AUTH-FACT-002b). A refusal the gate records is written
 outside the operation instead (AUTHZ-CONCEAL-004). A fault of the library's own inside a
 sign-in, a step-up, a sign-in code's or a device check's path is no failed attempt:
@@ -2425,10 +2454,10 @@ attempt of a presented factor is one refused with `auth.factor.rejected`,
 `auth.webauthn.userverificationrequired`, and a break-glass code refused for any cause
 (`auth.breakglass.invalid`, `auth.breakglass.consumed`) is one too (OPS-BOOT-004); a new
 refusal of a factor joins this list with its `10` row (D-189). A second step refused at
-a sign-in before a first factor is accepted is no failed attempt (AUTH-FACT-002b,
-D-197).
+a sign-in before a first factor is accepted is no failed attempt, a security key's
+assertion presented as `passkey` included (AUTH-FACT-002b, D-197, D-198).
 
-*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193, D-197*
+*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193, D-197, D-198*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2583,31 +2612,34 @@ A **failed delivery SHALL NOT count**. A restriction MAY be marked `resend`; it 
 judges and counts a send once, whatever its languages, and its one count is released
 when every text of the send fails for good (below), for a `secondfactor` send also when
 any text of it is reported delivered, and for any send when its code is presented right
-or its link pressed. A failure report of one text releases that text's count from every
-restriction not marked `resend`; a delivered report releases nothing else, since an ask
-that sends nothing counts too (below) and an early release would tell its asker that a
-message went out (AUTH-ABUSE-003, D-197). Restrictions SHALL be **runtime
-configuration** edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up
-action `restriction:edit`, audited, `SendingRestrictionChanged`); every edit SHALL carry
-a reason (OPS-CFG-008, API-CONV-002), a loosening SHALL also require `system:administer`
-in the administrative organization (OPS-CFG-002) and SHALL raise a Normal alert, and a
-name the set does not hold is answered 404 `auth.restriction.notfound`. Support MAY
-**grant** credit to a key (`POST /admin/restrictions/{name}/grant`, step-up action
-`restriction:grant`, support role, audited with a reason (API-CONV-002),
-`SendingRestrictionGranted`); a grant is credit, never a bypass. **Security notices to
-an existing holder** SHALL be governed only by restrictions whose purpose is
-`notification` (the shipped one is `notification.destination`); no restriction whose
-purpose is `any` counts or refuses one, whatever its key. No link or code a person or an
-administrator asked for carries the purpose `notification`: a recovery link and an
-invitation link carry `signin`, as a sign-in link does (REG-IDENT-002, `10` section
-5.15), and the link asking the address a replace displaces to confirm it carries
-`verification`, as the new address's code does (REG-IDENT-007). `notification` and
-`notification.destination` therefore count security notices and other notices only. The
-per-destination record SHALL hold the HMAC, the fingerprint key version it was computed
-under (OPS-SEC-003) and the send timestamps only, kept apart from the records of the
-other key kinds. Before a send's counters are read, and on every run of the expiry
-sweep, every destination record whose newest timestamp is older than the longest
-interval the current destination restrictions declare SHALL be deleted.
+or its link pressed; where the code is an authentication code, the release stands
+whatever refusal follows, kept with the code's spend, and a verification code or a link
+releases it only on its success, a refusal of one releasing nothing (CONV-DESIGN-003,
+D-198). A failure report of one text releases that text's count from every restriction
+not marked `resend`; a delivered report releases nothing else, since an ask that sends
+nothing counts too (below) and an early release would tell its asker that a message went
+out (AUTH-ABUSE-003, D-197). Restrictions SHALL be **runtime configuration** edited
+through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up action `restriction:edit`,
+audited, `SendingRestrictionChanged`); every edit SHALL carry a reason (OPS-CFG-008,
+API-CONV-002), a loosening SHALL also require `system:administer` in the administrative
+organization (OPS-CFG-002) and SHALL raise a Normal alert, and a name the set does not
+hold is answered 404 `auth.restriction.notfound`. Support MAY **grant** credit to a key
+(`POST /admin/restrictions/{name}/grant`, step-up action `restriction:grant`, support
+role, audited with a reason (API-CONV-002), `SendingRestrictionGranted`); a grant is
+credit, never a bypass. **Security notices to an existing holder** SHALL be governed
+only by restrictions whose purpose is `notification` (the shipped one is
+`notification.destination`); no restriction whose purpose is `any` counts or refuses
+one, whatever its key. No link or code a person or an administrator asked for carries
+the purpose `notification`: a recovery link and an invitation link carry `signin`, as a
+sign-in link does (REG-IDENT-002, `10` section 5.15), and the link asking the address a
+replace displaces to confirm it carries `verification`, as the new address's code does
+(REG-IDENT-007). `notification` and `notification.destination` therefore count security
+notices and other notices only. The per-destination record SHALL hold the HMAC, the
+fingerprint key version it was computed under (OPS-SEC-003) and the send timestamps
+only, kept apart from the records of the other key kinds. Before a send's counters are
+read, and on every run of the expiry sweep, every destination record whose newest
+timestamp is older than the longest interval the current destination restrictions
+declare SHALL be deleted.
 
 **Sending order.** Every area undertakes a send through the governed send
 (`IGovernedSend`, CONV-LAYOUT-002), never through `INotificationHandler` or a transport
@@ -2680,7 +2712,7 @@ and refused by it alike (AUTH-ABUSE-006, D-186). For an address no account holds
 
 *Source: D-146; replaces the fixed window of D-013, INT-SMS-002 and IDN-LIFE-011;
 OPS-CFG-002; D-142 for the editing model; D-166, D-183, D-186, D-187, D-188, D-189,
-D-197*
+D-197, D-198*
 
 Shipped defaults:
 
@@ -2776,8 +2808,10 @@ or the alert that tells someone something is wrong.
     `retryAt` 3 minutes after the first send's admission; a failure report of the first
     admits it at once; a delivery report of the first admits it at once where the first
     was a `secondfactor` send and changes nothing otherwise; the first's code presented
-    right, or its link pressed, admits it at once; a send in two declared languages
-    counts once against `sms.resend`.
+    right, or its link pressed, admits it at once, an authentication code also where a
+    refusal follows it, and a verification code or a link whose presentation is refused,
+    a right code included, admits nothing; a send in two declared languages counts once
+    against `sms.resend`.
 
 ---
 

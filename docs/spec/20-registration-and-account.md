@@ -925,11 +925,11 @@ registered return address** of the application named by the client identifier ca
 at step 1, never to an address supplied in any request (API-REDIR-001, API-REDIR-002).
 The client captured at step 1 SHALL be kept on the session the terms step establishes,
 and the done step SHALL read its origin from `GET /auth/session` (`landing`); where no
-client was stored (API-REDIR-002), `landing` is absent and the frontend chooses its own
-(API-REDIR-001). The landing address SHALL receive a signed-in session and nothing else;
+client was stored, `landing` is absent and the frontend chooses its own (API-REDIR-002,
+D-198). The landing address SHALL receive a signed-in session and nothing else;
 restoring what the person was doing is the application's responsibility.
 
-*Source: D-146, D-162, D-166; D-057*
+*Source: D-146, D-162, D-166; D-057, D-198*
 
 **Acceptance criteria**
 1. No registration step accepts or forwards a destination parameter.

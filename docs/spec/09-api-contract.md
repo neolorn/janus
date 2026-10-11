@@ -567,10 +567,16 @@ active second-factor security key of the account by credential identifier and tr
 and, at a step-up that also offers `passkey`, each active passkey of the account
 (AUTH-FACT-002b, D-197).
 
-At a sign-in, a second step presented before a first factor has been accepted on the
-challenge is refused **422** `auth.factor.notpermitted` before it is verified and before
-anything of the account is read, the same answer for every identifier, counting and
-recording nothing (AUTH-FACT-002b, D-197).
+At a sign-in, a second step presented under its own name before a first factor has been
+accepted on the challenge is refused **422** `auth.factor.notpermitted` before it is
+verified and before anything of the account is read, the same answer for every
+identifier, counting and recording nothing (AUTH-FACT-002b, D-197). Before a first
+factor, an assertion presented as `passkey` whose credential is a second-factor security
+key is a second step too: known only once it verifies, it is then refused **422**
+`auth.factor.notpermitted`, before its credential's state, the policy's factors or a
+domain lock is judged, nothing accepted on the challenge, counting and recording nothing
+and keeping none of its verification's writes; one that does not verify is refused as
+any wrong passkey assertion is (D-198).
 
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
@@ -588,8 +594,9 @@ challenge whose email the account no longer holds is `auth.factor.rejected`),
 `auth.code.replayed` (a TOTP code already used, AUTH-FACT-005),
 `auth.credential.suspended` (a suspended authenticator whose proof verified, save a
 right `phoneCode` code whose credential's number left the account, which is
-`auth.factor.rejected`, AUTH-FACT-004; or a `phoneCode` ask after a first factor naming
-a suspended number where the policy permits `phoneCode`, AUTH-RECOV-007), and
+`auth.factor.rejected`, AUTH-FACT-004, and a second step before a first factor, which is
+`auth.factor.notpermitted`, AUTH-FACT-002b; or a `phoneCode` ask after a first factor
+naming a suspended number where the policy permits `phoneCode`, AUTH-RECOV-007), and
 `auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
 `auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` (an assertion
 refused, AUTH-FACT-011, AUTH-FACT-014); each that refuses a presented factor is a failed
@@ -656,7 +663,8 @@ carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
 requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
-AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197*
+AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197,
+D-198*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -845,54 +853,55 @@ The browser profile's sign-on (BFF-SESS-006): both halves are the library's.
 `GET /auth/signon?returnTo=` pushes the authorization request to `POST /oidc/par` and
 answers **302** to the provider's `/oidc/authorize` carrying `client_id` and
 `request_uri` only; a browser already holding a per-app session is sent to `returnTo`,
-which is followed only as a path of this application. `GET /auth/signon/return` answers
-**302** to the stored return address with the session cookies set. A start from a
-browser with no pre-authentication session issues one (BFF-CSRF-005a). The sign-on is a
-navigation route (BFF-ERR-001): a refusal other than its `state`'s returns the browser
-with **302**, to `returnTo` at the start and to the stored return address at the return,
-carrying `error` `auth.session.expired` placed before any fragment, which both routes
-declare (BFF-SESS-006, CONV-DESIGN-006, D-192, D-193). An `error` `login_required` at
-the return is no failure: the return pushes again without `prompt=none` and answers
-**302** to `/oidc/authorize` (BFF-SESS-006). A fault stays a fault, answered **500**
-`system.fault` (BFF-ERR-002), the pipeline's answer, which no route declares: where no
-pre-authentication session can be issued, or where the push or the exchange cannot reach
-the authentication application, is answered a 5xx, or reads no answer in its protocol's
-shape (D-193). At the push every error the authentication application answers is a
-fault, since it refuses the deployment's own client or request; at the exchange a 400
-whose `error` is `invalid_grant` (RFC 6749 section 5.2) is a refusal and every other
-error a fault, a 4xx whose body names no `error` among them; an authorization response's
-`error` is a refusal, save `login_required`, which pushes again, and `server_error` and
-`temporarily_unavailable` (RFC 6749 section 4.1.2.1), which are faults; a derivation the
-library refuses with a code of its own is a refusal, save a code whose row names a
-fault, or that no row names (`10` section 6), which is a fault (D-195). The deployment's
-own state is a fault too: the application's client in no registry, its secret that
-cannot be read, an identity token from the authentication application that does not hold
-up (its signature under that application's published keys, its issuer, its audience or
-its expiry) or carries no session identifier in `sid` (D-196), and that application's
-published keys that cannot be read; a return carrying neither `code` nor `error` is a
-refusal, its inside code `api.request.malformed`, and so is an identity token whose
-`sid` names a session that has ended since or is not found, its inside code
-`auth.session.expired` (D-195, D-196). An authorization response's `error` reaches the
-return through the browser, so the return judges it as text (CONV-DESIGN-006): one that
-is not one or more characters of %x20 to %x21, %x23 to %x5B and %x5D to %x7E (RFC 6749
-Appendix A.7), or is longer than 64 characters, does not read, and the return is a
-refusal, its inside code `api.request.malformed`, the value in no entry the library
-writes (D-196). The `error`, or the library's own code, that a refusal carried inside is
-logged once, at Information, beside the one returned (BFF-LOG-001, D-194, D-195); a
-fault that the push, the exchange or the authorization response answered adds, beside
-the fault's own entry, one entry at Error carrying the status the push or the exchange
-read and the `error` any of them read, and nothing else they carried (D-195). A fault of
-the sign-on is logged at Error and at no other level, and its log names what failed: a
-secret or keys that cannot be read make a fault carrying the code and details their read
-answered, an identity token that does not hold up a fault carrying the validation's own
-fault as its inner fault, and a client in no registry and a token carrying no session
-identifier in `sid` each add one entry at Error naming it (BFF-LOG-001, BFF-ERR-002,
-D-196).
+which is followed only as a path of this application (API-REDIR-001, D-198).
+`GET /auth/signon/return` answers **302** to the stored return address with the session
+cookies set. A start from a browser with no pre-authentication session issues one
+(BFF-CSRF-005a). The sign-on is a navigation route (BFF-ERR-001): a refusal other than
+its `state`'s returns the browser with **302**, to `returnTo` at the start and to the
+stored return address at the return, carrying `error` `auth.session.expired` placed
+before any fragment, which both routes declare (BFF-SESS-006, CONV-DESIGN-006, D-192,
+D-193). An `error` `login_required` at the return is no failure: the return pushes again
+without `prompt=none` and answers **302** to `/oidc/authorize` (BFF-SESS-006). A fault
+stays a fault, answered **500** `system.fault` (BFF-ERR-002), the pipeline's answer,
+which no route declares: where no pre-authentication session can be issued, or where the
+push or the exchange cannot reach the authentication application, is answered a 5xx, or
+reads no answer in its protocol's shape (D-193). At the push every error the
+authentication application answers is a fault, since it refuses the deployment's own
+client or request; at the exchange a 400 whose `error` is `invalid_grant` (RFC 6749
+section 5.2) is a refusal and every other error a fault, a 4xx whose body names no
+`error` among them; an authorization response's `error` is a refusal, save
+`login_required`, which pushes again, and `server_error` and `temporarily_unavailable`
+(RFC 6749 section 4.1.2.1), which are faults; a derivation the library refuses with a
+code of its own is a refusal, save a code whose row names a fault, or that no row names
+(`10` section 6), which is a fault (D-195). The deployment's own state is a fault too:
+the application's client in no registry, its secret that cannot be read, an identity
+token from the authentication application that does not hold up (its signature under
+that application's published keys, its issuer, its audience or its expiry) or carries no
+session identifier in `sid` (D-196), and that application's published keys that cannot
+be read; a return carrying neither `code` nor `error` is a refusal, its inside code
+`api.request.malformed`, and so is an identity token whose `sid` names a session that
+has ended since or is not found, its inside code `auth.session.expired` (D-195, D-196).
+An authorization response's `error` reaches the return through the browser, so the
+return judges it as text (CONV-DESIGN-006): one that is not one or more characters of
+%x20 to %x21, %x23 to %x5B and %x5D to %x7E (RFC 6749 Appendix A.7), or is longer than
+64 characters, does not read, and the return is a refusal, its inside code
+`api.request.malformed`, the value in no entry the library writes (D-196). The `error`,
+or the library's own code, that a refusal carried inside is logged once, at Information,
+beside the one returned (BFF-LOG-001, D-194, D-195); a fault that the push, the exchange
+or the authorization response answered adds, beside the fault's own entry, one entry at
+Error carrying the status the push or the exchange read and the `error` any of them
+read, and nothing else they carried (D-195). A fault of the sign-on is logged at Error
+and at no other level, and its log names what failed: a secret or keys that cannot be
+read make a fault carrying the code and details their read answered, an identity token
+that does not hold up a fault carrying the validation's own fault as its inner fault,
+and a client in no registry and a token carrying no session identifier in `sid` each add
+one entry at Error naming it (BFF-LOG-001, BFF-ERR-002, D-196).
 
 **403**: `auth.session.csrfinvalid`, for an absent, unbound or mismatched `state`; the
 browser is sent nowhere
 
-*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195, D-196*
+*Source: BFF-SESS-006, AUTH-OIDC-006, D-162, D-166, D-192, D-193, D-194, D-195, D-196,
+D-198*
 
 ---
 
@@ -1448,22 +1457,23 @@ is returned with it in `error`).
 
 The social provider round trip (IDN-LIFE-012, REG-IDENT-008).
 `GET /auth/providers/{provider}?intent=signin|register|link&returnTo=...` starts it on
-the browser profile: `returnTo` is sanitised to a local path (anything else is `/`), the
-attempt is bound to the browser's session for `link` and to its pre-authentication
-session otherwise, and the browser is sent to the provider. The provider returns the
-browser to `/callbacks/providers/{provider}/return` on the machine profile, by query or
-form post; that route ignores any cookie and answers only **303** to
-`/auth/providers/{provider}/return` carrying `code`, `state` and `error` in the query.
-The continuation finishes the round trip on the browser profile. A start to sign in from
-a browser with no pre-authentication session issues one and binds the attempt to it
-(BFF-CSRF-005a, D-192); where none can be issued, that is a fault, answered **500**
-`system.fault` as every fault is (BFF-ERR-002, D-193), the pipeline's answer, which no
-route declares. A start to link asks the gate `POST /account/link/{provider}` answers
-before the browser leaves, and the return asks it again before it links (D-193). A
-refusal of the person's attempt returns the browser to where it started with the code in
-the query member `error`, placed before any fragment, and nothing else of the refusal's
-`details`; a throttled refusal, and a send a restriction refuses, carry `retryAt` beside
-it (`error=auth.throttled&retryAt=<instant>`, ISO 8601 in UTC), and a provider's return
+the browser profile: `returnTo` is followed only as a path of this application, anything
+else being `/` (API-REDIR-001, D-198), the attempt is bound to the browser's session for
+`link` and to its pre-authentication session otherwise, and the browser is sent to the
+provider. The provider returns the browser to `/callbacks/providers/{provider}/return`
+on the machine profile, by query or form post; that route ignores any cookie and answers
+only **303** to `/auth/providers/{provider}/return` carrying `code`, `state` and `error`
+in the query. The continuation finishes the round trip on the browser profile. A start
+to sign in from a browser with no pre-authentication session issues one and binds the
+attempt to it (BFF-CSRF-005a, D-192); where none can be issued, that is a fault,
+answered **500** `system.fault` as every fault is (BFF-ERR-002, D-193), the pipeline's
+answer, which no route declares. A start to link asks the gate
+`POST /account/link/{provider}` answers before the browser leaves, and the return asks
+it again before it links (D-193). A refusal of the person's attempt returns the browser
+to where it started with the code in the query member `error`, placed before any
+fragment, and nothing else of the refusal's `details`; a throttled refusal, and a send a
+restriction refuses, carry `retryAt` beside it
+(`error=auth.throttled&retryAt=<instant>`, ISO 8601 in UTC), and a provider's return
 asks the source's delay before the code is traded (AUTH-ABUSE-001, D-192). A sign-in by
 a linked credential that is suspended, on a window or held after its provider's security
 event, is refused `auth.credential.suspended` once the provider vouches, the browser
@@ -1506,7 +1516,7 @@ them a link's return whose session has ended, D-194), it names another provider,
 `state` does not match; the browser is sent nowhere
 
 *Source: IDN-LIFE-012, REG-IDENT-008, BFF-MACH-001, BFF-CSRF-005a, BFF-ABUSE-001, D-166,
-D-191, D-192, D-193, D-194*
+D-191, D-192, D-193, D-194, D-198*
 
 ---
 
@@ -2398,10 +2408,13 @@ whose value in force changed after its previous destinations were notified
 (OPS-ALERT-004a)
 **422**: `config.value.belowfloor`, `config.value.aboveceiling`,
 `config.value.notallowed`, `config.key.protected`, `config.value.lastdestination`;
-`config.change.reasonrequired`, `details.key` naming the key, where a change arrives
-without a reason or with a blank one
+`integration.endpoint.insecure`, `details.key` naming the key, for a value of
+`password.blocklist.selfhosted.address` that is not an absolute `https` address
+(INT-GEN-001, D-198); `config.change.reasonrequired`, `details.key` naming the key,
+where a change arrives without a reason or with a blank one
 
-*Source: OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-ALERT-004a, D-147, D-166, D-183*
+*Source: OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-ALERT-004a, D-147, D-166, D-183,
+D-198*
 
 Every change carries a reason and produces an audit entry. Tightening requires no
 step-up; loosening requires step-up and `system:administer`. Protected keys (OPS-CFG-004)
@@ -2724,13 +2737,16 @@ D-187, D-188, D-197*
 ## 11. Return destinations
 
 **API-REDIR-001** — Any return destination arriving as a request parameter SHALL be
-validated by **exact match against the origins of the registered clients' return
-addresses** (the client registry, D-057, D-162). An unrecognised destination SHALL fall
-back to a configured default: the browser application named by
-`redirect.defaultclient`; where the deployment names none, no destination is carried
-and the frontend chooses its own.
+followed only as **one path of the application that received it**: it begins with `/`,
+its second character is neither `/` nor `\`, and every character is printable ASCII
+(%x21 to %x7E) other than `\`. Any other destination SHALL be replaced with `/`, that
+application's root; no route of version 1 takes a destination on another origin
+(D-198). The client registry's return addresses are where the authentication
+application forwards a browser after an authorization request, each exactly the
+client's registered one (AUTH-OIDC-006), and `redirect.defaultclient` names where a
+registration returns when its originating client is unknown (API-REDIR-002).
 
-*Source: D-057, D-162, D-166*
+*Source: D-057, D-162, D-166, D-198*
 
 Applies to **every endpoint that forwards a browser**: sign-in link landings,
 post-sign-in redirects, and any other flow carrying a destination. RFC 9700 prohibits
@@ -2742,17 +2758,23 @@ unless it is exactly the client's registered one (AUTH-OIDC-006, RFC 9126);
 
 **Registration is exempt because it carries no destination.** See API-REDIR-002.
 
-**Pattern or prefix matching SHALL NOT be used.** A check of the form "starts with the
-expected domain" is defeated by `example.com.attacker.net`.
+**A check of the first characters alone SHALL NOT be used.** A browser removes every tab
+and line break from an address before it reads it (the URL Standard's basic URL parser),
+so `/`, a tab and `/attacker.example` passes a check that the second character is not
+`/` and is read as `//attacker.example`, another origin; and a check of the form "starts
+with the expected domain" is defeated by `example.com.attacker.net`.
 
 Without this, a link to the genuine registration page carrying an attacker-controlled
 destination presents a real domain, real branding, and a real flow — then delivers the
 person to the attacker at the final step, already trusting it.
 
 **Acceptance criteria**
-1. A destination not in the configured list is replaced with the default, not
-   rejected with an error revealing the check.
-2. A destination that merely contains a known origin as a substring is not accepted.
+1. A destination that is not one path of the application that received it is replaced
+   with `/`, not rejected with an error revealing the check.
+2. A destination that is an absolute or scheme-relative address, or that carries a
+   backslash, a tab, a line break, any other control character, a space or a character
+   outside ASCII (`/` followed by a tab and `/attacker.example`, for example), is not
+   followed, whatever origin it names.
 3. The registry is read at startup: a registered return address that is not an absolute
    `https` address with a host (or `http` on a loopback IP literal), or a
    `redirect.defaultclient` naming no registered browser application, fails with

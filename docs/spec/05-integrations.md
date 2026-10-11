@@ -26,10 +26,12 @@ The endpoints the library itself calls are `10` keys: `integration.mail.endpoint
 `password.blocklist.selfhosted.address` (the self-hosted corpus, INT-PWD-003). Each is
 an absolute `https` address; startup refuses any other value with
 `integration.endpoint.insecure`, and a change of a protected one from the server is
-refused alike (OPS-CFG-004). A host's own integrations are the host's, and the library
+refused alike (OPS-CFG-004), as is a change of `password.blocklist.selfhosted.address`,
+the one of them changed at runtime, through `PUT /admin/config/{key}`, answered 422 and
+changing nothing (D-198). A host's own integrations are the host's, and the library
 holds no register of them (D-162).
 
-*Source: P-003, D-162, D-166*
+*Source: P-003, D-162, D-166, D-198*
 
 This is not theoretical. Providers publish sample configuration that specifies a plain
 `http://` base URL, which would send names, addresses and phone numbers unencrypted.
@@ -40,6 +42,9 @@ configuration unexamined.
 1. A base URL with scheme `http` fails startup with a named error.
 2. The error is `integration.endpoint.insecure`, and `details.key` names the setting,
    whose name names the integration.
+3. A change of `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}`
+   to a value that is not an absolute `https` address is refused 422
+   `integration.endpoint.insecure`, `details.key` naming the key, and changes nothing.
 
 ---
 
@@ -915,12 +920,13 @@ list, never a silent skip.
 **Values (D-162, D-166).** The self-hosted corpus answers the range protocol of INT-PWD-001
 at `password.blocklist.selfhosted.address`, an absolute `https` address (INT-GEN-001).
 With `password.blocklist.source` `selfHosted` and that key unset, startup fails with
-`model.startup.declarationmissing` naming it; a value written at runtime that is not an
-absolute `https` address is never called, and the screening that reads it is refused
-with `auth.screening.unavailable`. Where the corpus cannot answer, the package's list
-answers and the degradation is raised (INT-PWD-002).
+`model.startup.declarationmissing` naming it; a change at runtime to a value that is not
+an absolute `https` address is refused (INT-GEN-001), and a screening that meets such a
+value anyway never calls it and treats the corpus as one that cannot answer. Where the
+corpus cannot answer, the package's list answers and the degradation is raised
+(INT-PWD-002, D-198).
 
-*Source: D-011, D-023, D-162, D-166*
+*Source: D-011, D-023, D-162, D-166, D-198*
 
 Retained so the integration can be brought in-house if required.
 
@@ -929,6 +935,9 @@ Retained so the integration can be brought in-house if required.
 2. With `password.blocklist.source` `selfHosted`, the prefix goes to
    `password.blocklist.selfhosted.address` and nowhere else; with that key unset,
    startup fails naming it.
+3. A stored value of `password.blocklist.selfhosted.address` that is not an absolute
+   `https` address is never called: the screening that reads it is answered by the
+   package's list and raises the degradation.
 
 ---
 

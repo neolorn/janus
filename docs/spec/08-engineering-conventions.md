@@ -394,8 +394,9 @@ write. A level an operation joined (a nested `BeginAsync`) that succeeds ends wi
 `CommitAsync` whatever it wrote. The **kept writes** are the counts and records a
 chapter requires to stand whatever the outcome, and no others: a wrong try's count on a
 code's record, the code's invalidation at its attempt cap, the spend of an
-authentication code presented right whatever refusal follows, and what a factor's
-verification wrote where a domain lock then refuses the sign-in or the step-up
+authentication code presented right whatever refusal follows, with the release of its
+send's count on a restriction marked `resend` (AUTH-ABUSE-004, D-198), and what a
+factor's verification wrote where a domain lock then refuses the sign-in or the step-up
 (AUTH-FACT-004, D-189, D-190); a failure AUTH-ABUSE-001 counts, every code or press
 refused at either verify route as wrong, past its lifetime or its attempt cap, naming
 nothing held or opening nothing among them, and the `auth-failures-sustained` raise such
@@ -500,7 +501,7 @@ serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
 generation to `artifacts/model.json`.
 
 *Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166,
-D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190*
+D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190, D-198*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -1469,7 +1470,8 @@ level governs: failed authentication (`auth.authentication.failed`), denied auth
 refused), configuration change (`ops.configuration.changed`), break-glass use
 (`auth.breakglass.used`).
 
-*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193, D-197*
+*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193, D-197,
+D-198*
 
 **Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
 press (a link token unknown or expired included, when pressed) or on a social provider's
@@ -1482,10 +1484,12 @@ step-up, which writes no `auth.stepup.failed`; a refused factor is one refused w
 code AUTH-ABUSE-001 lists (D-188, D-189). A `phoneCode` ask presents nothing: refused
 `auth.factor.rejected` where no factor is left, or `auth.credential.suspended` for a
 suspended number, it is no failed authentication and writes no `auth.stepup.failed`
-(AUTH-FACT-002, AUTH-RECOV-007, D-190). A second step presented at a sign-in before a
-first factor has been accepted on its challenge, refused `auth.factor.notpermitted`
-before it is verified, is no failed authentication and records nothing (AUTH-FACT-002b,
-AUTH-ABUSE-001, D-197).
+(AUTH-FACT-002, AUTH-RECOV-007, D-190). A second step presented under its own name at a
+sign-in before a first factor has been accepted on its challenge, refused
+`auth.factor.notpermitted` before it is verified, and an assertion presented there as
+`passkey` whose credential is a second-factor security key, refused
+`auth.factor.notpermitted` once it verifies, are no failed authentication and record
+nothing (AUTH-FACT-002b, AUTH-ABUSE-001, D-197, D-198).
 
 **Acceptance criteria**
 1. Raising the minimum log level does not suppress these.

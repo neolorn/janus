@@ -2745,6 +2745,8 @@ answerable for the notice as well as for consents.
 
 > **Amended.** A pushed `redirect_uri` that is not the client's registered one is refused, not replaced (D-166).
 
+> **Amended.** A return destination is followed only as one path of the application that received it: it begins with `/`, its second character is neither `/` nor `\`, and every character is printable ASCII (%x21 to %x7E) other than `\`; anything else becomes `/`, and no route of version 1 takes another origin (D-198).
+
 **Date:** 2026-08-25 · **Status:** accepted
 
 **TL;DR.** Registration completion sends the person back to the application they
@@ -8528,6 +8530,8 @@ the working guide sections 3 and 6.
 
 > **Amended.** 58 and 59: no job updates the credential source; the first read of the signing keys five minutes before the cadence makes the next key, the first read once the cadence has passed and that key has been published for five minutes makes it current, and the first read after an overlap ends retires the replaced key (D-181).
 
+> **Amended.** 60: API-REDIR-001 keeps no list of origins: a return destination is followed only as one path of the application that received it, anything else becoming `/`, and `redirect.defaultclient` is the registration's fallback alone (API-REDIR-002) (D-198).
+
 **Date:** 2026-09-22 · **Status:** accepted · **Amends:** D-149, D-153, D-155, D-160, D-161 and the items named below · **Extends:** D-161
 
 **TL;DR.** The ledger of decisions taken in the owner's absence (phases 2 to 7, entries 1
@@ -9029,6 +9033,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 > **Amended.** 328: the host's assurance report gives the instant each level and phishing resistance was last reached (`Aal1At`, `Aal2At`, `Aal3At`, `PhishingResistantAt`) beside `Reachable`, in place of `Level`, `PhishingResistant` and `AttainedAt`, and the gate is judged from it as a session is (D-191).
 
 > **Amended.** Item 114: the list is drawn by the script under `tools/leaked-passwords/`, run at each release by a manually dispatched workflow that Milestone 2 step 1 builds; item 235: a restriction marked `resend` judges and counts a send once, whatever the number of its languages (D-197).
+
+> **Amended.** 319: the endpoint rule `configure` runs (fix 1) also holds a runtime change of `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}`, refused `integration.endpoint.insecure`; a screening that meets such a value anyway falls back to the package's list and raises the degradation (D-198).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -13382,6 +13388,8 @@ head does not clear it.
 
 > **Amended.** Question 112: the after-commit work catches and logs its own fault; question 114: a new send row is due `outbox.retry.initial` after its admission and its immediate attempt claims it whatever its due instant, and a send row tracks one delivery, a multi-language text message being one row per language and a mail one composed row (D-188).
 
+> **Amended.** The kept writes gain, with the spend of an authentication code presented right, the release of its send's count on a restriction marked `resend` (D-198).
+
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-183 (question 58, the writes a refusal keeps, now a closed list, and a commit made only where a write is kept; questions 27, 38 and 63, a refused retry and a fault after the commit; question 61, a row that tracks several deliveries; question 62, the sites whose first effect is outside the database), D-166 (119 (5), callers that act on a send's delivery; D.8 break-glass part (2), where the limit's raise is committed)
 
 **TL;DR.** The X9 sweep of D-183 question 58 met refusals whose counts or records a
@@ -15434,6 +15442,8 @@ reached it is now a 202, so no sign-in test is owed, and the step-up tests hold 
 
 ## D-197 — The Milestone 1 review: the owner's decisions and the last corrections run
 
+> **Amended.** A second step before a first factor: a security key's assertion presented as `passkey` is refused `auth.factor.notpermitted` once it verifies; the `resend` release: a right authentication code's release stands whatever refusal follows, with its spend; the last corrections run's Tier 3 answers are built in one short run before the exit gate (D-198).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-146 (item 18, the `phoneCode` second step: its enrolment; item 17, the shipped restrictions gain `sms.resend`), D-193 (question 218, the enrolment gap closed and the number bound), D-196 (question 247, the framework's request log), D-195 (questions 236 and 238, a second step accepted before a first factor no longer arises), D-194 (question 229, a second step presented before a first factor at a sign-in), D-188 (question 145, what a step-up's ask offers), D-187 (question 94, what a step-up offers), D-184 (the analyser-authoring packages), D-183 (question 36, where `auth.factor.notpermitted` is judged), D-182 (the last corrections run's questions), D-166 (item 114, where the leaked-password draw runs; item 235, a `resend` restriction counts a send once), D-149 (item 9, the permitted packages), D-141 (item 5, a suspension no cancel returns), D-092 (L3, a cache outage), D-079 and D-043 (the permission cache), D-033 (33.1, staff lifetimes), D-013 (the resend window), D-007 (the session record held in PostgreSQL alone)
 
 **TL;DR.** The run that built D-196 raised no question, so the Milestone 1 review ran: the
@@ -15726,6 +15736,124 @@ REG-IDENT-004 (body, new criterion 8), REG-IDENT-006, REG-IDENT-007, REG-SESS-00
 
 ---
 
+## D-198 — The Tier 3 questions of the last corrections run: 248 to 251
+
+**Date:** 2026-10-07 · **Status:** accepted · **Amends:** D-197 (a second step before a first factor; the release of a `resend` count; the last corrections run, whose Tier 3 answers are built before the exit gate), D-186 (the kept writes), D-057 (return destinations), D-162 (item 60, API-REDIR-001's list and default), D-166 (item 319, the endpoint rule at a change)
+
+**TL;DR.** The run that built D-197 raised four Tier 3 questions and listed 48 known
+issues. The known issues are Tier 2 and stay where D-197 put them, carried into Milestone
+2. The four questions are answered here, narrowly, and one short run builds the answers
+before the exit gate. A security key's assertion presented under the name `passkey` before
+any first factor is refused `auth.factor.notpermitted` once it verifies, since only then
+is its kind known (248). A right authentication code releases its send's `resend` count
+whatever refusal follows, as it is spent whatever refusal follows (249). A return
+destination is followed only as one path of the application that received it, the rule as
+built, stated precisely: a browser removes a tab or a line break from an address before
+reading it, so `/`, a tab and `/attacker.example` would land on `//attacker.example`,
+another site; every character must be printable ASCII and no backslash (250). A runtime
+change of the self-hosted corpus's address that is not an absolute `https` address is
+refused `integration.endpoint.insecure`, as startup refuses it; a screening that meets
+such a value anyway falls back to the package's list and raises the degradation, as for a
+corpus that cannot answer (251).
+
+**The questions.** Questions 248 to 251 of the corrections-4 report
+(`docs/reports/corrections-4.md` section 4), each Tier 3. Each answer below names its
+question; the chapters carry the full rule.
+
+- **248. A security key's assertion presented as `passkey` before any first factor.** The
+  name a caller gives does not decide what a factor is; the credential that answers does,
+  and that is known only once the assertion is verified, which reads the credential as
+  every passkey sign-in reads it. Where an assertion presented as `passkey` at a sign-in
+  before a first factor verifies (its signature with every check of AUTH-FACT-014, its
+  counter included) and its credential is a second-factor security key, it is a second
+  step presented before a first factor: refused 422 `auth.factor.notpermitted`, nothing
+  accepted on the challenge, counting no failure, recording no failed authentication, and
+  keeping none of the writes its verification made. The refusal is judged as soon as the
+  assertion verifies, before the credential's state, the factors the policy permits or a
+  domain lock, none of which is then judged, as a second step under its own name is
+  refused before any of them. An assertion that does not verify is refused as any wrong
+  passkey assertion is, so a caller who does not hold the key learns nothing of what its
+  identifier names. A second step presented under its own name stays refused before it is
+  verified (D-197). *Rejected:* looking the credential up and refusing before verification
+  (it would tell a caller who holds no key that an identifier names a security key); as
+  built (a sign-in that can never complete, against AUTH-FACT-002b criterion 7).
+- **249. A right code that then meets a refusal which keeps writes.** A restriction marked
+  `resend` paces texts so that one can arrive before the next is sent. A code presented
+  right proves its text arrived and tells the presenter nothing they do not hold. An
+  authentication code presented right is already spent whatever refusal follows, a kept
+  write (AUTH-FACT-004, D-189); the release of its send's one count goes with that spend,
+  so it stands whatever refusal follows and joins CONV-DESIGN-003's kept writes beside it.
+  A verification code or a link whose refusal keeps nothing writes nothing, as its item
+  states, and releases nothing; it releases on its success, as built. *Rejected:*
+  releasing on success alone for an authentication code (a person whose right code met a
+  domain lock or a credential gone would wait out a pacing that had served its purpose); a
+  release by every refused code or press, committed alone where the refusal keeps nothing
+  (it would put a write into refusals that the chapters state write nothing, for no gain
+  once the person can ask again).
+- **250. A return destination matched against no registered client.** API-REDIR-001 was
+  written when a destination could name another application's origin. No route of version
+  1 takes one: the two that take a destination from the browser, `GET /auth/signon` and
+  `GET /auth/providers/{provider}` by `returnTo`, are served by the application the
+  browser comes back to and follow the destination only as a path of that application,
+  which admits less than a list of origins does, and the provider forwards a browser to a
+  client only at the address its push named, refused unless it is the client's registered
+  one (AUTH-OIDC-006). The item now states that rule, and closes what the built check
+  leaves open: the URL Standard's basic URL parser removes every ASCII tab and newline
+  from an address before it reads it, so a destination of `/`, a tab and
+  `/attacker.example` passes a check of its first two characters and is read as
+  `//attacker.example`, another origin. A destination is followed only where it begins
+  with `/`, its second character is neither `/` nor `\`, and every character is printable
+  ASCII (%x21-7E) other than `\`; any other is replaced with `/`, the application's root,
+  with no error that reveals the check, and is logged. `redirect.defaultclient` keeps its
+  one use, at registration (API-REDIR-002). *Rejected:* matching origins of the registry
+  (no route takes another origin, and an origin admits every path on it); as built (the
+  tab and the line break).
+- **251. A runtime value of the self-hosted corpus's address that is not an absolute
+  `https` address.** INT-GEN-001 refuses a plaintext endpoint at startup and at a change
+  of a protected key from the server. `password.blocklist.selfhosted.address` is the one
+  endpoint key a person changes at runtime (`PUT /admin/config/{key}`), and that change
+  was not held to the rule, which is what let such a value be written. It is now refused
+  422 `integration.endpoint.insecure`, `details.key` naming the key, and changes nothing.
+  A screening that meets such a value anyway never calls it and treats the corpus as one
+  that cannot answer: the package's list answers and the degradation is raised
+  (INT-PWD-002), as built. *Rejected:* refusing the screening with
+  `auth.screening.unavailable` (no password could be set over a configuration slip that
+  the degradation already reports, while the package's list still screens); leaving the
+  runtime change unchecked.
+
+**The known issues.** The 48 known issues of the report's section 6 are Tier 2. As D-197
+decided, none is answered before the exit gate: `implementation-plan.md` section 4 carries
+them into Milestone 2, each answered by a decision before release 1.0.0 (step 12).
+
+**The run.** D-197 made its run the last corrections run of Milestone 1, a Tier 3 question
+still being answered at once. These four answers are built in one short run that builds
+nothing else; a Tier 2 question it raises joins the known issues, and a Tier 3 one is
+answered as these are. Then come the owner's review of its report and the exit gate.
+
+**What the run reported besides.** The repository stays public until Janus is finished and
+in use by its first host, the owner's choice; it is then made private. The commits made
+again on side branches with identical trees, in place of two out-of-form commits, stand.
+The owner's uncommitted one-line edit of `Argon2idHasher.cs` stays out of every commit.
+The process departures the report discloses are recorded there.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `02` AUTH-FACT-002b (body, criterion 7, new criterion 9), AUTH-FACT-004
+(body), AUTH-SESS-012 (body), AUTH-STEP-002 (the refusal at a sign-in), AUTH-RECOV-007
+(values, criterion 2), AUTH-ABUSE-001 (what a refused second step counts, the kept
+writes), AUTH-ABUSE-004 (body, criterion 20); `05` INT-GEN-001 (body, new criterion 3),
+INT-PWD-003 (values, new criterion 3); `08` CONV-DESIGN-003 (the kept writes),
+CONV-LOG-005 (values); `09` `POST /auth/factor` (a second step before a first factor, the
+422s), `GET /auth/signon` · `GET /auth/signon/return`, the provider round trip
+(`returnTo`), `GET|PUT /admin/config/{key}`, API-REDIR-001 (body, criteria 1 and 2); `10`
+`auth.factor.notpermitted`, `auth.credential.suspended`, `integration.endpoint.insecure`,
+`password.blocklist.selfhosted.address`, section 5.16a, section 5.24
+(`auth.authentication.failed`); `17` BFF-SESS-006 (body); `18` FE-API-006 (body); `19`
+INF-TLS-004 (body); `20` REG-SESS-008 (body); `implementation-plan.md` (section 3, section
+4's known issues); `janus-explained.md` (section 8.2).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -15933,6 +16061,7 @@ REG-IDENT-004 (body, new criterion 8), REG-IDENT-006, REG-IDENT-007, REG-SESS-00
 | Corrections-4 questions 236 to 242: the answers after D-194 was built | D-195 |
 | Corrections-4 questions 243 to 247: the answers after D-195 was built | D-196 |
 | The Milestone 1 review: the owner's decisions and the last corrections run | D-197 |
+| The Tier 3 questions of the last corrections run: 248 to 251 | D-198 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

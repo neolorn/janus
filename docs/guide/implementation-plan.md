@@ -90,20 +90,23 @@ running the criteria of the items listed, not by inspection.
 **Corrections before the exit gate.** After phase 10, one corrections run applies D-166
 (the review of every decision taken alone through phase 10) against the reconciled
 chapters, and ends with the full gate and a report. Later corrections runs applied the
-answers each raised; the run D-197 opens is Milestone 1's last, after which come the
-owner's review of its report and the exit gate. A Tier 2 question that run raises parks
-its item and is carried into Milestone 2 as a known issue (section 4), unanswered before
-the exit gate; a Tier 3 question is answered at once (D-197).
+answers each raised; the run D-197 opens is Milestone 1's last corrections run. A Tier 2
+question that run raises parks its item and is carried into Milestone 2 as a known issue
+(section 4), unanswered before the exit gate; a Tier 3 question is answered at once, and
+the answers are built in one short run that builds nothing else, a Tier 2 question it
+raises joining the known issues and a Tier 3 one answered and built as these are; then
+come the owner's review of the last such run's report and the exit gate (D-197, D-198).
 
 **Milestone 1 exit gate.** All ten phases and every corrections run reported, the last
-the one D-197 opens, and the owner's review of its report done; every acceptance
-criterion of every item in chapters 01 to 10, 17 and 20, and the code-side items of 06,
-12 and 19, has a passing test carrying its identifier, or is named in the report as one
-a test cannot decide with how it was verified, or is Milestone 2's by this section, or
-belongs to a known issue section 4 carries (CONV-TEST-007, D-197); the full gate is
-green; `PublicAPI.Unshipped.txt` holds the complete surface; no spec defect is open save
-the known issues section 4 carries into Milestone 2 (D-197). The implementer stops here
-and does not begin Milestone 2 on its own.
+the one D-197 opens, then the runs that build the Tier 3 answers (D-198), and the
+owner's review of the last run's report done; every acceptance criterion of every item
+in chapters 01 to 10, 17 and 20, and the code-side items of 06, 12 and 19, has a passing
+test carrying its identifier, or is named in the report as one a test cannot decide with
+how it was verified, or is Milestone 2's by this section, or belongs to a known issue
+section 4 carries (CONV-TEST-007, D-197); the full gate is green;
+`PublicAPI.Unshipped.txt` holds the complete surface; no spec defect is open save the
+known issues section 4 carries into Milestone 2 (D-197). The implementer stops here and
+does not begin Milestone 2 on its own.
 
 What Milestone 1 does **not** touch: a real mail server, SMS gateway, secrets manager,
 DNS, certificates, host machine, package feed or frontend. Each is met at its
@@ -141,8 +144,8 @@ Milestone 1 phases 5 and 8 deliver the server side they need.
   `report-loss`; the way out, a new sign-in with the provider, is stated in no chapter
   (D-197).
 
-Section 4 also carries every further known issue the report of the last corrections run
-of Milestone 1 lists (D-197).
+Section 4 also carries every further known issue the reports of the last corrections run
+of Milestone 1 and of each run that builds Tier 3 answers list (D-197, D-198).
 
 ## 5. Phase report
 

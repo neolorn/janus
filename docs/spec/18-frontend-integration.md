@@ -209,13 +209,15 @@ exceptions to the content rule).
 
 **FE-API-006** — A frontend that finds no per-app session SHALL navigate the browser to
 `GET /auth/signon?returnTo=<route>`, `<route>` being the path of its own route the
-person was on. It finds none where `GET /auth/session` answers that no session is held,
-or where any request other than a registration request (FE-REG-005) or one an enrolment
+person was on, as the URL serializes it (percent-encoded), itself percent-encoded as the
+query's value, so that the destination read is that path and is followed (API-REDIR-001,
+D-198). It finds none where `GET /auth/session` answers that no session is held, or
+where any request other than a registration request (FE-REG-005) or one an enrolment
 session makes on its routes (FE-API-004, D-188, D-189) is refused 401 with no `details`
 (BFF-ORDER-001 stage 8). A route the browser was returned to with `error` (FE-API-003)
 SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
 
-*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189*
+*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189, D-198*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
