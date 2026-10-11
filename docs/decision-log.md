@@ -15738,6 +15738,8 @@ REG-IDENT-004 (body, new criterion 8), REG-IDENT-006, REG-IDENT-007, REG-SESS-00
 
 ## D-198 — The Tier 3 questions of the last corrections run: 248 to 251
 
+> **Amended.** Answer 250: a replaced destination writes one entry at Information naming the request identifier and nothing of the value, and a request naming none writes none; answer 248: the refusal is for a security key of the account the sign-in is for, a credential that account does not hold, and any at a sign-in whose identifier names no account, being `auth.factor.rejected`, counted and recorded (D-199).
+
 **Date:** 2026-10-07 · **Status:** accepted · **Amends:** D-197 (a second step before a first factor; the release of a `resend` count; the last corrections run, whose Tier 3 answers are built before the exit gate), D-186 (the kept writes), D-057 (return destinations), D-162 (item 60, API-REDIR-001's list and default), D-166 (item 319, the endpoint rule at a change)
 
 **TL;DR.** The run that built D-197 raised four Tier 3 questions and listed 48 known
@@ -15851,6 +15853,90 @@ CONV-LOG-005 (values); `09` `POST /auth/factor` (a second step before a first fa
 (`auth.authentication.failed`); `17` BFF-SESS-006 (body); `18` FE-API-006 (body); `19`
 INF-TLS-004 (body); `20` REG-SESS-008 (body); `implementation-plan.md` (section 3, section
 4's known issues); `janus-explained.md` (section 8.2).
+
+---
+
+## D-199 — The Tier 3 questions of the run that built D-198: 252 and 253
+
+**Date:** 2026-10-12 · **Status:** accepted · **Amends:** D-198 (answer 250, the log entry of a replaced destination; answer 248, the account whose security key it refuses)
+
+**TL;DR.** The run that built D-198 raised two Tier 3 questions and one known issue. The
+known issue is Tier 2 and joins the others carried into Milestone 2. The two questions are
+answered here, narrowly, and one short run builds the answers before the exit gate. A link
+carrying `returnTo=//attacker.example` sends the browser to `/` and writes one log entry,
+at Information, naming the request and nothing of what the browser sent; a request naming
+no destination writes none (252). The refusal of D-198 answer 248 is for a security key of
+the account the sign-in is for; a key that account does not hold, another account's
+included, is refused as every wrong credential is, `auth.factor.rejected` and counted, as
+built (253).
+
+**The questions.** Questions 252 and 253 of the corrections-4 report
+(`docs/reports/corrections-4.md` section 4), each Tier 3. Each answer below names its
+question; the chapters carry the full rule.
+
+- **252. The log entry of a replaced return destination.** API-REDIR-001 criterion 4 asks
+  that rejected destinations be logged and says no more. A replaced destination is neither
+  a refusal nor a fault: the browser is answered as for any destination, so BFF-LOG-001
+  criterion 2 gives it no level. It is the browser's input judged and set aside, which the
+  library logs at Information, as it logs every refusal of a caller's input; nothing in it
+  is the library's own failure. The route the destination arrives at judges it once and,
+  where it replaces it, writes one entry at Information naming the request identifier
+  (CONV-LOG-002) and nothing of the value: neither the value, a part of it, its length nor
+  which condition it failed. The value is the browser's, of any length, and by the rule
+  itself may hold a control character, another site's address, a token or a personal
+  identifier (CONV-LOG-003, CONV-LOG-004), as a navigation's query string is kept out of
+  the log (BFF-LOG-002) and an `error` that does not read is kept out of every entry
+  (D-196). The return of a round trip follows what its start kept and writes no entry. A
+  request whose destination is absent or empty names none: it is sent to `/` and writes no
+  entry, nothing having been set aside. The entry is no audit record (CONV-LOG-005).
+  *Rejected:* Warning (the condition is the browser's, met whenever anyone sends such a
+  link, and the library logs every refusal of a caller's input at Information); carrying
+  the value or a part of it, cut or escaped (what remains can still hold what CONV-LOG-003
+  forbids); naming which condition failed (every replaced destination is answered alike,
+  and the request identifier finds the request); an entry for an absent or empty
+  destination (every ordinary sign-on without one would write it).
+- **253. A security key of another account, presented as `passkey` before a first
+  factor.** D-198's answer 248 refuses a second step presented under another name and
+  counts nothing, because a person holding a security key of their own account who
+  presented it as `passkey` made a mistake of the name, not a guess. That holds only of a
+  key the account the sign-in is for holds: the account its identifier names or, for a
+  sign-in opened without one, the account the assertion's user handle names. A relying
+  party verifies that the identified account holds the credential before it uses the
+  credential at all (WebAuthn Level 3 section 7.2, step 6), so a credential that account
+  does not hold is a wrong credential for the sign-in whatever its kind, and a sign-in
+  whose identifier names no account holds none. Each is refused `auth.factor.rejected`,
+  counted and recorded as every wrong credential is, whether or not the assertion would
+  verify, as built. *Rejected:* `auth.factor.notpermitted` for every second-factor
+  security key that verifies, whoever holds it (it reads the credential across accounts
+  against step 6, counts nothing for a credential that can never complete the sign-in, and
+  would tell a caller holding any registered key whether an identifier names an account,
+  unless a sign-in for an identifier naming none made the same lookup).
+
+**The known issue.** Known issue 49 (a blank value of
+`password.blocklist.selfhosted.address` at a change, refused `config.value.notallowed`) is
+Tier 2. As D-197 decided, it is not answered before the exit gate:
+`implementation-plan.md` section 4 carries it into Milestone 2 with the others.
+
+**What the run reported besides.** Answer 251's refusal is judged with the value's own
+refusals, after the `config:manage` gate and before the cost of the direction, so a caller
+holding `config:manage` alone is answered 422 for such an address, as for a value below
+its floor; that order stands, as built. The process departures the report discloses are
+recorded there.
+
+**The run.** One short run builds the entry of 252 and the tests of 253, and nothing else
+(`implementation-plan.md` section 3); a Tier 2 question it raises joins the known issues,
+and a Tier 3 one is answered as these are. Then come the owner's review of its report and
+the exit gate.
+
+**Ledger.** No entry takes a line from these answers.
+
+**Propagated to:** `02` AUTH-FACT-002b (body, criterion 9, new criterion 10),
+AUTH-RECOV-007 (values, criterion 2), AUTH-ABUSE-001 (what a refused second step counts);
+`08` CONV-LOG-002 (values), CONV-LOG-005 (values); `09` `POST /auth/factor` (a second step
+before a first factor, the 422s), API-REDIR-001 (body, criterion 4); `10`
+`auth.factor.notpermitted`, `auth.credential.suspended`, section 5.24
+(`auth.authentication.failed`); `17` BFF-SESS-006 (body); `20` REG-PM-001 (body, criterion
+4).
 
 ---
 
@@ -16062,6 +16148,7 @@ INF-TLS-004 (body); `20` REG-SESS-008 (body); `implementation-plan.md` (section 
 | Corrections-4 questions 243 to 247: the answers after D-195 was built | D-196 |
 | The Milestone 1 review: the owner's decisions and the last corrections run | D-197 |
 | The Tier 3 questions of the last corrections run: 248 to 251 | D-198 |
+| The Tier 3 questions of the run that built D-198: 252 and 253 | D-199 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

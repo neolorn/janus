@@ -145,7 +145,7 @@ AUTH-OIDC-006), acting as a **confidential client** of the library's provider, a
 retain no token afterwards.
 
 *Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172, D-192, D-193, D-194,
-D-195, D-196, D-198*
+D-195, D-196, D-198, D-199*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -160,30 +160,31 @@ return, `GET /auth/signon/return` forgets the attempt, validates `state`, exchan
 code back-channel with its client secret and PKCE verifier, reads `sid` from the ID
 token, creates the per-app session bound to that session record, rotates the cookie
 (BFF-SESS-004), discards the token and sends the browser to the stored return address,
-which is followed only as a path of this application (`09` section 3, API-REDIR-001,
-D-198). The per-app session takes the record's instants and last downgrade, never the
-instant of derivation (AUTH-SESS-012, D-192), and carries its break-glass reason where
-it has one (OPS-BOOT-002, D-171). On `login_required` it pushes again without
-`prompt=none`, so the person signs in at the authentication application and the flow
-repeats. The sign-on is a navigation route (BFF-ERR-001): a `state` that is absent,
-unbound or not the one the browser was sent out with is refused with
-`auth.session.csrfinvalid` and sent nowhere; any other refusal returns the browser with
-302, to `returnTo` at the start and to the stored return address at the return, with
-`error` `auth.session.expired`, the `error` or the library's own code it carried inside
-logged beside it (BFF-LOG-001, D-194), while a fault stays a fault: where no
-pre-authentication session can be issued, or where a push or an exchange cannot reach
-the authentication application, is answered a 5xx, or reads no answer in its protocol's
-shape (BFF-ERR-002, D-193); every error the push reads, every error of the exchange but
-a 400 `invalid_grant`, and an authorization response's `server_error` or
-`temporarily_unavailable` are faults too (D-194), and so are the application's client in
-no registry, its secret that cannot be read, an identity token from the authentication
-application that does not hold up (its signature under that application's published
-keys, its issuer, its audience or its expiry) or carries no session identifier in `sid`
-(D-196), that application's published keys that cannot be read, and a derivation code
-whose row names a fault or that no row names; a return carrying neither `code` nor
-`error`, and a token whose `sid` names a session that has ended or is not found, are
-refusals (D-195, D-196), and so is a return whose `error` does not read as RFC 6749
-Appendix A.7 defines one or is longer than 64 characters, its inside code
+the `returnTo` its start judged and kept, followed only as a path of this application
+(`09` section 3, API-REDIR-001, D-198); a `returnTo` the start replaces with `/` is
+logged by the start alone (API-REDIR-001, D-199). The per-app session takes the record's
+instants and last downgrade, never the instant of derivation (AUTH-SESS-012, D-192), and
+carries its break-glass reason where it has one (OPS-BOOT-002, D-171). On
+`login_required` it pushes again without `prompt=none`, so the person signs in at the
+authentication application and the flow repeats. The sign-on is a navigation route
+(BFF-ERR-001): a `state` that is absent, unbound or not the one the browser was sent out
+with is refused with `auth.session.csrfinvalid` and sent nowhere; any other refusal
+returns the browser with 302, to `returnTo` at the start and to the stored return
+address at the return, with `error` `auth.session.expired`, the `error` or the library's
+own code it carried inside logged beside it (BFF-LOG-001, D-194), while a fault stays a
+fault: where no pre-authentication session can be issued, or where a push or an exchange
+cannot reach the authentication application, is answered a 5xx, or reads no answer in
+its protocol's shape (BFF-ERR-002, D-193); every error the push reads, every error of
+the exchange but a 400 `invalid_grant`, and an authorization response's `server_error`
+or `temporarily_unavailable` are faults too (D-194), and so are the application's client
+in no registry, its secret that cannot be read, an identity token from the
+authentication application that does not hold up (its signature under that application's
+published keys, its issuer, its audience or its expiry) or carries no session identifier
+in `sid` (D-196), that application's published keys that cannot be read, and a
+derivation code whose row names a fault or that no row names; a return carrying neither
+`code` nor `error`, and a token whose `sid` names a session that has ended or is not
+found, are refusals (D-195, D-196), and so is a return whose `error` does not read as
+RFC 6749 Appendix A.7 defines one or is longer than 64 characters, its inside code
 `api.request.malformed` and the value in no entry the library writes (D-196); a refusal
 is logged once, and a fault the push, the exchange or the authorization response
 answered logs, at Error, the status and `error` read (D-195); a fault of the sign-on is

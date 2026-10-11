@@ -304,12 +304,19 @@ read, the same answer for every identifier, counting and recording nothing (D-19
 assertion presented under the name `passkey` is known to be a security key's only once
 it verifies (its signature with every check of AUTH-FACT-014, its counter included):
 where it verifies at a sign-in before a first factor and its credential is a
-second-factor security key, it is refused 422 `auth.factor.notpermitted`, nothing
-accepted on the challenge, counting no failure, recording no failed authentication and
-keeping none of the writes its verification made; one that does not verify is refused as
-any wrong passkey assertion is (D-198). This refusal is judged as soon as the assertion
-verifies, before the credential's state (AUTH-RECOV-007), the factors the policy permits
-(AUTH-STEP-002) and any domain lock (REG-DOM-001), none of which is then judged. A
+second-factor security key of the account the sign-in is for (the account its identifier
+names or, for a sign-in opened without one, the account the assertion's user handle
+names), it is refused 422 `auth.factor.notpermitted`, nothing accepted on the challenge,
+counting no failure, recording no failed authentication and keeping none of the writes
+its verification made; one that does not verify is refused as any wrong passkey
+assertion is (D-198). This refusal is judged as soon as the assertion verifies, before
+the credential's state (AUTH-RECOV-007), the factors the policy permits (AUTH-STEP-002)
+and any domain lock (REG-DOM-001), none of which is then judged. An assertion presented
+as `passkey` whose credential the account the sign-in is for does not hold, a security
+key of another account included, is a wrong credential for the sign-in whatever its
+kind, as is any such assertion at a sign-in whose identifier names no account: each is
+refused `auth.factor.rejected`, counted and recorded as every wrong credential is,
+whether or not it would verify (WebAuthn Level 3 section 7.2 step 6, D-199). A
 `phoneCode` ask before a first factor is answered 202 (AUTH-FACT-002 criterion 8). An
 answer that offers `securityKey` (a `factorRequired` answer at a sign-in once a first
 factor is accepted, or at a step-up once a factor has been presented on its challenge)
@@ -343,7 +350,7 @@ asked for the number beforehand is a fault (CONV-ERR-001), never a send: the oth
 course would let a restricted factor go unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188, D-190, D-197, D-198*
+D-183, D-186, D-188, D-190, D-197, D-198, D-199*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -389,12 +396,18 @@ person who bought one for two-step should not have to buy another to go password
    after another factor of its combination; no answer before a first factor names a
    credential.
 9. At a sign-in before a first factor, an assertion presented as `passkey` whose
-   credential is a second-factor security key is refused 422 `auth.factor.notpermitted`
-   once it verifies, a suspended key, a policy whose `loginFactors` omits `passkey` and
-   a domain lock on the sign-in's address included, nothing accepted on the challenge,
-   nothing counted or recorded, and the credential's stored counter and `backupState` as
-   they were; one that does not verify is refused as a wrong passkey assertion is, the
-   same answer whatever its identifier names.
+   credential is a second-factor security key of the account the sign-in is for is
+   refused 422 `auth.factor.notpermitted` once it verifies, a suspended key, a policy
+   whose `loginFactors` omits `passkey` and a domain lock on the sign-in's address
+   included, nothing accepted on the challenge, nothing counted or recorded, and the
+   credential's stored counter and `backupState` as they were; one that does not verify
+   is refused as a wrong passkey assertion is, the same answer whatever its identifier
+   names.
+10. At a sign-in before a first factor, an assertion presented as `passkey` whose
+    credential the account the sign-in is for does not hold, a second-factor security
+    key of another account included, or any such assertion at a sign-in whose identifier
+    names no account, is refused `auth.factor.rejected`, counted and recorded as a wrong
+    credential is, whether or not it would verify.
 
 ---
 
@@ -2285,18 +2298,20 @@ social provider's vouching on its return, D-191) is it refused 422
 `error=auth.credential.suspended`, a failed attempt (AUTH-ABUSE-001), and one whose
 proof does not verify is refused as any wrong presentation is, so a caller who does not
 hold it learns nothing of its state; a second step presented at a sign-in before a first
-factor is refused `auth.factor.notpermitted` before its state is judged, a security
-key's assertion presented as `passkey` included (AUTH-FACT-002b, D-197, D-198). A right
-`phoneCode` code whose credential's number left the account is refused as one sent to an
-address given up since (AUTH-FACT-004, D-197). A `phoneCode` ask that names a suspended
-number, made after a first factor or under a session, sends nothing and is answered 422
-`auth.credential.suspended`, counting nothing, since an ask presents no factor; one made
-before a first factor is answered 202 and sends nothing, whatever the account holds
-(AUTH-FACT-002); and where the policy in force does not permit `phoneCode`, the policy
-is judged first: the ask sends nothing and is answered 202, whatever the number's state
-(IDN-LIFE-009b, D-191).
+factor is refused `auth.factor.notpermitted` before its state is judged, including an
+assertion presented as `passkey` whose credential is a security key of the account the
+sign-in is for; one presented as `passkey` whose credential that account does not hold
+is refused `auth.factor.rejected` whatever its state (AUTH-FACT-002b, D-197, D-198,
+D-199). A right `phoneCode` code whose credential's number left the account is refused
+as one sent to an address given up since (AUTH-FACT-004, D-197). A `phoneCode` ask that
+names a suspended number, made after a first factor or under a session, sends nothing
+and is answered 422 `auth.credential.suspended`, counting nothing, since an ask presents
+no factor; one made before a first factor is answered 202 and sends nothing, whatever
+the account holds (AUTH-FACT-002); and where the policy in force does not permit
+`phoneCode`, the policy is judged first: the ask sends nothing and is answered 202,
+whatever the number's state (IDN-LIFE-009b, D-191).
 
-*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198*
+*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198, D-199*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -2323,8 +2338,10 @@ have nothing left to stand in for.
    presentation is where it does not; a right `phoneCode` code whose credential's number
    left the account is refused `auth.factor.rejected` (AUTH-FACT-004); a second step
    presented at a sign-in before a first factor is refused `auth.factor.notpermitted`
-   before its state is judged, a security key's assertion presented as `passkey`
-   included (AUTH-FACT-002b).
+   before its state is judged, including an assertion presented as `passkey` whose
+   credential is a security key of the account the sign-in is for; one presented as
+   `passkey` whose credential that account does not hold is refused
+   `auth.factor.rejected` (AUTH-FACT-002b).
 3. Invalidation does not complete before the window elapses; cancellation during the
    window returns the authenticator to `active`, a `phoneCode` credential whose number
    left the account apart (AUTH-FACT-002); with no notification taken by its immediate
@@ -2403,9 +2420,12 @@ The identifier component SHALL be keyed by the keyed hash, under the fingerprint
 its kind's form, anything else trimmed), computed for every identifier whether or not an
 account holds it. A sign-in carries it with its key version from begin, and every
 refused factor of that sign-in counts under it, save a second step refused before a
-first factor, a security key's assertion presented as `passkey` included, which counts
-nothing (AUTH-FACT-002b, D-197, D-198); every ask of a link, an email code or a recovery
-is delayed under it.
+first factor (an assertion presented as `passkey` whose credential is a security key of
+the account the sign-in is for included), which counts nothing (AUTH-FACT-002b, D-197,
+D-198); an assertion presented as `passkey` whose credential that account does not hold,
+or one at a sign-in whose identifier names no account, counts under it as every wrong
+credential does (D-199); every ask of a link, an email code or a recovery is delayed
+under it.
 
 **Values (D-166).** A **source** is the address the connection arrived on, after the
 proxies the host names to the framework as trusted: an IPv4 address; an IPv4-mapped
@@ -2454,10 +2474,13 @@ attempt of a presented factor is one refused with `auth.factor.rejected`,
 `auth.webauthn.userverificationrequired`, and a break-glass code refused for any cause
 (`auth.breakglass.invalid`, `auth.breakglass.consumed`) is one too (OPS-BOOT-004); a new
 refusal of a factor joins this list with its `10` row (D-189). A second step refused at
-a sign-in before a first factor is accepted is no failed attempt, a security key's
-assertion presented as `passkey` included (AUTH-FACT-002b, D-197, D-198).
+a sign-in before a first factor is accepted is no failed attempt, including an assertion
+presented as `passkey` whose credential is a security key of the account the sign-in is
+for; an assertion presented as `passkey` whose credential that account does not hold, or
+one at a sign-in whose identifier names no account, is refused `auth.factor.rejected`, a
+failed attempt (AUTH-FACT-002b, D-197, D-198, D-199).
 
-*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193, D-197, D-198*
+*Source: D-013, D-166, D-183, D-186, D-188, D-189, D-190, D-193, D-197, D-198, D-199*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.

@@ -572,11 +572,17 @@ accepted on the challenge is refused **422** `auth.factor.notpermitted` before i
 verified and before anything of the account is read, the same answer for every
 identifier, counting and recording nothing (AUTH-FACT-002b, D-197). Before a first
 factor, an assertion presented as `passkey` whose credential is a second-factor security
-key is a second step too: known only once it verifies, it is then refused **422**
+key of the account the sign-in is for (the account its identifier names or, for a
+sign-in opened without one, the account the assertion's user handle names) is a second
+step too: known only once it verifies, it is then refused **422**
 `auth.factor.notpermitted`, before its credential's state, the policy's factors or a
 domain lock is judged, nothing accepted on the challenge, counting and recording nothing
 and keeping none of its verification's writes; one that does not verify is refused as
-any wrong passkey assertion is (D-198).
+any wrong passkey assertion is (D-198). An assertion presented as `passkey` whose
+credential that account does not hold, a security key of another account included, and
+any such assertion at a sign-in whose identifier names no account, are refused **422**
+`auth.factor.rejected`, counted and recorded as every wrong credential is, whether or
+not they would verify (AUTH-FACT-002b, D-199).
 
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
@@ -594,8 +600,10 @@ challenge whose email the account no longer holds is `auth.factor.rejected`),
 `auth.code.replayed` (a TOTP code already used, AUTH-FACT-005),
 `auth.credential.suspended` (a suspended authenticator whose proof verified, save a
 right `phoneCode` code whose credential's number left the account, which is
-`auth.factor.rejected`, AUTH-FACT-004, and a second step before a first factor, which is
-`auth.factor.notpermitted`, AUTH-FACT-002b; or a `phoneCode` ask after a first factor
+`auth.factor.rejected`, AUTH-FACT-004, a second step before a first factor, which is
+`auth.factor.notpermitted`, AUTH-FACT-002b, and an assertion presented as `passkey`
+whose credential the account the sign-in is for does not hold, which is
+`auth.factor.rejected`, AUTH-FACT-002b, D-199; or a `phoneCode` ask after a first factor
 naming a suspended number where the policy permits `phoneCode`, AUTH-RECOV-007), and
 `auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
 `auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` (an assertion
@@ -664,7 +672,7 @@ requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
 AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197,
-D-198*
+D-198, D-199*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -2746,7 +2754,7 @@ application forwards a browser after an authorization request, each exactly the
 client's registered one (AUTH-OIDC-006), and `redirect.defaultclient` names where a
 registration returns when its originating client is unknown (API-REDIR-002).
 
-*Source: D-057, D-162, D-166, D-198*
+*Source: D-057, D-162, D-166, D-198, D-199*
 
 Applies to **every endpoint that forwards a browser**: sign-in link landings,
 post-sign-in redirects, and any other flow carrying a destination. RFC 9700 prohibits
@@ -2768,6 +2776,17 @@ Without this, a link to the genuine registration page carrying an attacker-contr
 destination presents a real domain, real branding, and a real flow — then delivers the
 person to the attacker at the final step, already trusting it.
 
+**A replaced destination is logged once, carrying nothing of itself** (D-199). The route
+a destination arrives at judges it once and, where it replaces it, writes one entry at
+Information naming the request identifier (CONV-LOG-002) and nothing of the value:
+neither the value, a part of it, its length nor which condition it failed. The value is
+the browser's, of any length, and by this item may hold a control character, another
+site's address, a token or a personal identifier (CONV-LOG-003, CONV-LOG-004). The
+return of a round trip follows what its start kept and writes no entry. A request whose
+destination is absent or empty names none: it is sent to `/` and writes no entry. The
+replacement is no refusal, the browser being answered as for any destination, and no
+audit record (CONV-LOG-005).
+
 **Acceptance criteria**
 1. A destination that is not one path of the application that received it is replaced
    with `/`, not rejected with an error revealing the check.
@@ -2779,7 +2798,10 @@ person to the attacker at the final step, already trusting it.
    `https` address with a host (or `http` on a loopback IP literal), or a
    `redirect.defaultclient` naming no registered browser application, fails with
    `model.startup.redirectclient`.
-4. Rejected destinations are logged.
+4. A destination replaced with `/` is logged once, at Information, by the route it
+   arrived at, the entry naming the request identifier and nothing of the value; the
+   return of a round trip writes none, and nor does a request whose destination is
+   absent or empty.
 
 ---
 

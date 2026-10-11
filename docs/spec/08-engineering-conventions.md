@@ -1402,12 +1402,12 @@ query or an alert kept on either never comes to match another event of that clas
 **CONV-LOG-002** — Every log entry SHALL carry a correlation identifier, the same one
 returned in concealment responses.
 
-*Source: AUTHZ-CONCEAL-004, D-166*
+*Source: AUTHZ-CONCEAL-004, D-166, D-199*
 
 **Values.** The identifier is the server's request identifier (`TraceIdentifier`),
-carried as `RequestId` by the scope the server opens per request while its hosting logger
-is enabled; every refusal and fault the library logs, and every rejected destination
-(API-REDIR-001 AC4), also names it as `CorrelationId` in its message.
+carried as `RequestId` by the scope the server opens per request while its hosting
+logger is enabled; every refusal and fault the library logs, and every destination
+replaced with `/` (API-REDIR-001 AC4), also names it as `CorrelationId` in its message.
 
 A customer's "I can't see my record" resolves to the exact decision that denied them.
 
@@ -1471,7 +1471,7 @@ refused), configuration change (`ops.configuration.changed`), break-glass use
 (`auth.breakglass.used`).
 
 *Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188, D-189, D-190, D-192, D-193, D-197,
-D-198*
+D-198, D-199*
 
 **Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
 press (a link token unknown or expired included, when pressed) or on a social provider's
@@ -1487,9 +1487,12 @@ suspended number, it is no failed authentication and writes no `auth.stepup.fail
 (AUTH-FACT-002, AUTH-RECOV-007, D-190). A second step presented under its own name at a
 sign-in before a first factor has been accepted on its challenge, refused
 `auth.factor.notpermitted` before it is verified, and an assertion presented there as
-`passkey` whose credential is a second-factor security key, refused
-`auth.factor.notpermitted` once it verifies, are no failed authentication and record
-nothing (AUTH-FACT-002b, AUTH-ABUSE-001, D-197, D-198).
+`passkey` whose credential is a second-factor security key of the account the sign-in is
+for, refused `auth.factor.notpermitted` once it verifies, are no failed authentication
+and record nothing; one presented as `passkey` whose credential that account does not
+hold, or at a sign-in whose identifier names no account, is refused
+`auth.factor.rejected` and is failed authentication (AUTH-FACT-002b, AUTH-ABUSE-001,
+D-197, D-198, D-199).
 
 **Acceptance criteria**
 1. Raising the minimum log level does not suppress these.
