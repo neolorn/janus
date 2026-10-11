@@ -664,7 +664,7 @@ PUT /admin/config/{key}
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   409 config.change.superseded
-  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.lastdestination config.value.notallowed
+  422 config.change.reasonrequired config.key.protected config.value.aboveceiling config.value.belowfloor config.value.lastdestination config.value.notallowed integration.endpoint.insecure
 POST /admin/documents/{document}/versions
   request application/json
     text: string

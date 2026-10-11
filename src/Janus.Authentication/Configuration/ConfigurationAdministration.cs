@@ -25,8 +25,8 @@ namespace Janus.Authentication.Configuration;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements OPS-CFG-002, OPS-CFG-005, OPS-CFG-008, INT-MAIL-011 AC2, OPS-ALERT-001 and the
-/// <c>system:administer</c> row of chapter 10 section 2.1. Nothing else holds
+/// Implements OPS-CFG-002, OPS-CFG-005, OPS-CFG-008, INT-MAIL-011 AC2, OPS-ALERT-001,
+/// INT-GEN-001 AC3 and the <c>system:administer</c> row of chapter 10 section 2.1. Nothing else holds
 /// <see cref="IConfigurationWrites"/>: a change that went round this would be a change
 /// nobody was told of and nobody had to answer for.
 /// </remarks>
@@ -73,6 +73,15 @@ internal sealed class ConfigurationAdministration(
         if (context.Acting is not SubjectId actor)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // INT-GEN-001 AC3 (D-198): an address the library calls out to is held to the
+        // rule the start holds it to, before the unit of work begins, so a value that is
+        // not an absolute https address is refused having held, written and raised
+        // nothing.
+        if (value is string endpoint && SendingValidation.Insecure(setting.Key, endpoint) is Error insecure)
+        {
+            return Result.Failure(insecure);
         }
 
         Error? failure = null;
