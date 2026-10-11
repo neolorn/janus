@@ -280,6 +280,13 @@ against the public contract of LIB-API-001.
   fragment, where it answered 401 `auth.session.expired` in a body. Both routes declare
   the code under their redirect. A return whose state is absent, unbound or mismatched
   is still refused 403 `auth.session.csrfinvalid` and sent nowhere.
+- A `returnTo` at `GET /auth/signon` and at `GET /auth/providers/{provider}` is followed
+  only as one path of the application that received it: it begins with `/`, its second
+  character is neither `/` nor `\`, and every character is printable ASCII (`!` to `~`)
+  other than `\`. Any other destination, one holding a tab, a line break, a space or a
+  character outside ASCII among them, sends the browser to `/` with no error. A frontend
+  sends its route as the address serializes it, percent-encoded, and percent-encodes
+  that as the query's value; the route is then followed as it is.
 - The start and the continuation of a social provider's round trip answer 303 wherever
   they send the browser, where they answered 302.
 - A social provider's round trip whose provider cannot be reached or read, at its

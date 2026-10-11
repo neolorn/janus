@@ -39,6 +39,10 @@ public sealed class SignOnTests
 
     private const string Page = "/account/profile";
 
+    // FE-API-006: a route as the address serializes it, its own characters
+    // percent-encoded.
+    private const string Route = "/orders/caf%C3%A9%20menu?tab=open%2Fpaid#notes";
+
     private const string Described = "a-description-never-logged";
 
     private const string Forged = "forged";
@@ -1533,12 +1537,13 @@ public sealed class SignOnTests
     }
 
     /// <summary>
-    /// BFF-SESS-006: the browser is sent back onto this application, so a return
-    /// address naming another site is not one it is sent to.
+    /// API-REDIR-001 AC1: a destination that is not one path of this application is
+    /// replaced with the root, and the sign-on goes as it goes for any other, forwarded,
+    /// established and returned, with no error in a body or in an address.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_SESS_006_AReturnAddressOffThisApplicationIsNotFollowedAsync()
+    public async Task API_REDIR_001_AC1_ADestinationOffThisApplicationIsReplacedWithTheRootAndNoErrorAsync()
     {
         await using var deployment = new Deployment();
 
@@ -1546,16 +1551,87 @@ public sealed class SignOnTests
 
         Browser holder = await HolderAsync(deployment);
         var arriving = new Browser(deployment);
-        Answer forwarded = await arriving.SendAsync(
-            "GET",
-            "/auth/signon?returnTo=" + Uri.EscapeDataString("https://attacker.test/collect"));
+        Answer forwarded = await arriving.SendAsync("GET", StartAt("/%09/attacker.example"));
         Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
         Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
 
+        Assert.Equal(StatusCodes.Status302Found, forwarded.Status);
+        Assert.Equal(Client, Parameter(Where(forwarded), "client_id"));
+        Assert.Empty(forwarded.Body);
+        Assert.Equal(StatusCodes.Status302Found, established.Status);
         Assert.Equal("/", Where(established));
+        Assert.Empty(established.Body);
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await arriving.SendAsync("GET", "/auth/session")).Status);
     }
 
-    private static string Start => "/auth/signon?returnTo=" + Uri.EscapeDataString(Page);
+    /// <summary>
+    /// API-REDIR-001 AC2: an absolute or scheme-relative address, and a destination
+    /// carrying a backslash, a tab, a line break, any other control character, a space
+    /// or a character outside ASCII, is not followed, whether the browser is sent on
+    /// once its session exists or holds one already.
+    /// </summary>
+    /// <param name="sent">The destination, as the query sends it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/%09/attacker.example")]
+    [InlineData("/%0A/attacker.example")]
+    [InlineData("/%0D/attacker.example")]
+    [InlineData("/%20/attacker.example")]
+    [InlineData("/account%20profile")]
+    [InlineData("/%1B/attacker.example")]
+    [InlineData("/%7F/attacker.example")]
+    [InlineData("/caf%C3%A9")]
+    [InlineData("//attacker.example")]
+    [InlineData("/%5Cattacker.example")]
+    [InlineData("/account%5Cprofile")]
+    [InlineData("https%3A%2F%2Fattacker.example%2Fcollect")]
+    [InlineData("attacker.example")]
+    public async Task API_REDIR_001_AC2_ADestinationThatIsNotOnePathOfThisApplicationIsNotFollowedAsync(string sent)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", StartAt(sent));
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+        Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
+        Answer holding = await arriving.SendAsync("GET", StartAt(sent));
+
+        Assert.Equal("/", Where(established));
+        Assert.Equal("/", Where(holding));
+    }
+
+    /// <summary>
+    /// API-REDIR-001, FE-API-006: a path of this application whose own characters are
+    /// percent-encoded, sent percent-encoded as the query's value, is read once and
+    /// followed as it is, its escapes, query and fragment included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_REDIR_001_APercentEncodedPathOfThisApplicationIsFollowedAsItIsAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", StartAt(Uri.EscapeDataString(Route)));
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+        Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
+        Answer holding = await arriving.SendAsync("GET", StartAt(Uri.EscapeDataString(Route)));
+
+        Assert.Equal(Route, Where(established));
+        Assert.Equal(Route, Where(holding));
+    }
+
+    private static string Start => StartAt(Uri.EscapeDataString(Page));
+
+    private static string StartAt(string sent) => "/auth/signon?returnTo=" + sent;
 
     // BFF-LOG-001: the entry that records what a refusal carried inside.
     private static (LogLevel Level, int EventId) Inside => (LogLevel.Information, 26);
