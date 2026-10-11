@@ -15,6 +15,8 @@ time, but for the items the open questions park and 209 (2) (section 2). Questio
 D-197, the review of Milestone 1, is applied in the last corrections run but for the audit
 actions of known issue 1 and what questions 248 to 251 park (section 1, "D-197"); its
 Tier 2 questions are under Known issues (section 6) and the coverage accounting is section 7.
+D-198 answers questions 248 to 251, and its four answers are built but for what questions
+252 and 253 park (section 1, "D-198"); both are Tier 3 and open.
 
 ## 1. Items implemented
 
@@ -2096,6 +2098,69 @@ Renames a part left to the working branch, the files being another part's at the
 - Tests that pin a list and fail when a later change adds to it, as their neighbours do: `BFF_OWN_001_AC3` (the five files naming `ApplicationKind`), `BFF_CSRF_007_AC2`, `BFF_CAP_002_AC1`, `PersonalFieldCipherTests.PRIV_RIGHT_005a_AC16_OnlyTheStoresOfTheSubjectKeyTableWrapUnderTheKeyEncryptionKey` (the five files that borrow the key-encryption key).
 - `corrections-4` is some 850 commits and eleven days ahead of `main`; CONV-VCS-001 criterion 1 says days, not weeks. Recorded in its row.
 
+### D-198: the answers to questions 248 to 251
+
+D-198 and the twelve files it changed are committed as `694fc3dd`, each of the twenty-five files given checked against its hash. The four answers are built in three parts, each merged into the working branch with a merge commit and the fast checks run on the merged tree. Questions 252 and 253 are Tier 3 and open (section 4); the one Tier 2 question of this round is known issue 49 (section 6).
+
+| D-198 answer | Where built |
+|---|---|
+| 248. A security key's assertion presented as `passkey` before a first factor | `part/signin`, but for what question 253 parks |
+| 249. The release of a right authentication code's send where a refusal follows | `part/signin` |
+| 250. A return destination followed only as one path of the application | `part/returns`, but for the log entry question 252 parks |
+| 251. A corpus address that is not an absolute `https` address, at a change | `part/screening` |
+
+**Disclosures of this round.** No commit is rewritten.
+- In `b9c3108e` (`part/signin`) the dash check of the part's own script did not run; the diff and the message were checked by hand after the commit, and by the trace check at the merge.
+- `IdentifierServiceTests.AUTH_ABUSE_004_AC20_AHeldValuesRightCodeOrPressThatIsRefusedReleasesNothingAsync` (`6c1ab07d`) was written after the source change; it touches no changed code and passed before and after.
+- On `part/screening` the fast checks for `50c68cb3` ran on its exact tree with the test of `60b1456a` taken out of the working tree by its patch.
+- `part/returns` read `08` in the sections that govern its work and not in full.
+- No integration class was run on `part/signin` or `part/returns`: neither changed a store, and every test touched is of the unit kind.
+
+### `part/returns` (D-198), merged as `5c423f2f`: answer 250
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| A `returnTo` is followed only where it begins with `/`, its second character is neither `/` nor `\`, and every character is printable ASCII other than `\`; anything else, and a request naming none, becomes `/` with no error | `27d92e45` | API-REDIR-001 | `ReturnDestinationTests.API_REDIR_001_OnePathOfThisApplicationIsFollowedAsItIs`, `ReturnDestinationTests.API_REDIR_001_AC1_ADestinationThatIsNotOnePathIsReplacedWithTheRoot`, `ReturnDestinationTests.API_REDIR_001_AC2_ADestinationOffThisApplicationOrNotPrintableIsNotFollowed`; in `SignOnTests` and in `ProviderSignInTests` each: `API_REDIR_001_AC1_ADestinationOffThisApplicationIsReplacedWithTheRootAndNoErrorAsync`, `API_REDIR_001_AC2_ADestinationThatIsNotOnePathOfThisApplicationIsNotFollowedAsync`, `API_REDIR_001_APercentEncodedPathOfThisApplicationIsFollowedAsItIsAsync` |
+
+- The rule is `ReturnDestination.Followed` (`src/Janus.Hosting/Bff`), the one place both routes use; `SignOn.Local` and `ProviderSignIn.Local` are removed.
+- It is applied once, where the value arrives, decoded once by the framework. What is admitted is held on the attempt on the server and the return follows the held value; nothing of it goes round through the browser.
+- The route tests send the query percent-encoded, thirteen rows at each route: a tab, a line feed, a carriage return and a space between the two slashes, an escape and a delete character, a space in a path, a character outside ASCII, `//attacker.example`, `/\attacker.example`, a backslash inside a path, an absolute address and a bare host, each answered with `/`. Eight of the thirteen failed first at each route, followed as sent; the five the earlier check already refused passed before and after.
+- The rule's own tests failed first by not compiling. The percent-encoded path (`/orders/caf%C3%A9%20menu?tab=open%2Fpaid#notes`) is followed as it is, its escapes, query and fragment untouched; that test passed before and after.
+- Removed, each case now a row of the criterion 2 theory: `SignOnTests.BFF_SESS_006_AReturnAddressOffThisApplicationIsNotFollowedAsync`, `ProviderSignInTests.IDN_LIFE_012_AReturnAddressOffThisApplicationIsNotFollowedAsync`.
+- Not built: the log entry of a replaced destination (criterion 4; question 252).
+- No public member, no declared code, no truth-table row, no migration.
+
+### `part/signin` (D-198), merged as `ce8584ee`: answers 248 and 249
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| 248. At a sign-in before a first factor, an assertion presented as `passkey` whose credential is a security key of the account is refused 422 `auth.factor.notpermitted` once it verifies, before its state, the policy or a domain lock is judged, with nothing accepted, counted, recorded or kept | `b9c3108e` | AUTH-FACT-002b, AUTH-STEP-002, AUTH-RECOV-007, AUTH-ABUSE-001, CONV-LOG-005 | `AuthenticationServiceTests.AUTH_FACT_002b_AC9_ASecurityKeysAssertionPresentedAsPasskeyBeforeAFirstFactorIsRefusedOnceItVerifiesAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC9_TheRefusalAcceptsNothingAndTheKeyCompletesTheSignInOnceAFirstFactorIsAcceptedAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC9_AnAssertionThatDoesNotVerifyIsRefusedAsAWrongPasskeyAssertionIsWhateverItsIdentifierNamesAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC9_ASecurityKeysAssertionWhoseCounterDidNotAdvanceIsRefusedAsAPasskeysIsAsync`, `WebAuthnServiceTests.AUTH_FACT_002b_AC9_ASecurityKeyThatVerifiesBeforeAFirstFactorIsRefusedBeforeItsStateAndWritesNothingAsync`, `WebAuthnServiceTests.AUTH_FACT_002b_AC9_ASecurityKeyWhoseCounterDidNotAdvanceBeforeAFirstFactorIsRefusedACounterMismatchAsync`, `WebAuthnServiceTests.AUTH_FACT_002b_AC9_APasskeyBeforeAFirstFactorAndASecurityKeyAfterOneAreJudgedAsTheyWereAsync`, `SecurityKeyFlowTests.AUTH_FACT_002b_AC9_ASecurityKeysAssertionPresentedAsPasskeyBeforeAFirstFactorIsAnswered422Async` |
+| 249. A right sign-in code or second step's text code, at a sign-in or a step-up, releases its send's count on a restriction marked `resend` with its spend, where a refusal follows too | `6c1ab07d` | AUTH-ABUSE-004, AUTH-FACT-004, AUTH-ABUSE-001, CONV-DESIGN-003 | `AuthenticationServiceTests.AUTH_ABUSE_004_AC20_ARightTextCodeARefusalFollowsReleasesItsSendWithItsSpendAsync`, `AuthenticationServiceTests.AUTH_ABUSE_004_AC20_ARightSignInCodeARefusalFollowsReleasesItsSendWithItsSpendAsync`, `SignInFlowTests.AUTH_ABUSE_004_AC20_ARightTextCodeARefusalFollowsAdmitsTheNextTextAtOnceAsync`, `AuthenticationServiceTests.AUTH_ABUSE_004_AC20_ASignInLinkWhosePressIsRefusedReleasesNothingAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC20_AHeldValuesRightCodeOrPressThatIsRefusedReleasesNothingAsync` |
+
+- 248: the service and the route tests each hold an active key, a suspended key, a policy whose `loginFactors` omits `passkey` and a domain lock on the sign-in's address, each answered `auth.factor.notpermitted`. All failed first: the active key and the policy case were accepted, the suspended key answered `auth.credential.suspended`, the lock `identity.identifier.domainnotallowed`.
+- 248: the refusal sits in `WebAuthnService.AssertAsync` after the counter check and before the credential's state, and rolls the verification's writes back; the stored counter and `backupState` are asserted unchanged. The key then completes the same sign-in as a second step once a first factor is accepted. A step-up is judged as it was.
+- 248: the `WebAuthnServiceTests` tests could not be seen failing, since they need the new parameter to compile. The two tests of an assertion that does not verify, and of a counter that did not advance, state what is as built and passed before and after.
+- 248, not built: a key that verifies and is another account's than the one the sign-in was opened for, or where the identifier names no account (question 253). It is refused and counted as a wrong credential is, as built.
+- 249: the release is made in `AuthenticationService.CodeAsync` directly after the right code's spend, in the same unit of work, before the credential and the lock are judged. Twelve cases failed first with no release recorded (a text code whose credential is removed, invalidated or suspended or whose number left; a sign-in code under a domain lock or whose address was given up; each at a sign-in and at a step-up), and the route test failed first with 429 where the next text is now admitted. Each asserts one commit and no rollback.
+- 249: a lock that cannot be judged still rolls everything back (`AuthenticationServiceTests.AUTH_ABUSE_001_AFaultJudgingTheLockAfterARightSignInCodeIsRolledBackAsync`, unchanged).
+- 249: the two tests of a refused link and a refused verification code state what is as built and passed before and after. The new-device check's code is left as built: D-198 names a sign-in code and a second step's text code.
+- No public member, no declared code (`POST /auth/factor` already declares both), no truth-table row, no migration.
+
+### `part/screening` (D-198), merged as `8ca18d33`: answer 251
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| `PUT /admin/config/password.blocklist.selfhosted.address` with a value that is not an absolute `https` address is refused 422 `integration.endpoint.insecure`, `details.key` naming the key, and changes nothing | `50c68cb3` | INT-GEN-001, INF-TLS-004 | `ConfigurationAdministrationTests.INT_GEN_001_AC3_ACorpusAddressThatIsNotAbsoluteHttpsIsRefusedAndChangesNothingAsync`, `ConfigurationEndpointTests.INT_GEN_001_AC3_ACorpusAddressThatIsNotAbsoluteHttpsIsRefusedAndChangesNothingAsync`, `ConfigurationEndpointTests.INT_GEN_001_AC3_TheChangeAskedInProcessIsRefusedAlikeAsync`, `ConfigurationAdministrationTests.ChangeAsync_ACorpusAddressThatIsAbsoluteHttps_IsPutInForceAsync`, `ConfigurationEndpointTests.Change_ACorpusAddressThatIsAbsoluteHttps_IsPutInForceAsync` |
+| A stored value that is not one is never called; the package's list answers and the degradation is raised | `60b1456a` (test only) | INT-PWD-003 | `ScreeningTests.INT_PWD_003_AC3_AStoredAddressThatIsNotAbsoluteHttpsIsNeverCalledAsync` |
+
+- The rule is the one the start and the change of a protected key already use (`SendingValidation`); the judgement of one value is `SendingValidation.Insecure`, which the start now calls for each key. No second judgement of an address is written.
+- The three criterion 3 tests failed first, the change made (204 over the route). Five values each: `http`, `ftp`, a scheme-relative address, a bare host and a path. Each asserts the code, `details.key`, the value in force unchanged, no row, no audit record, no event and no alert; at the service, that no unit of work was opened.
+- The refusal is made after the check that a person acts and before the unit of work begins. Over the route it follows the body's and the reason's refusals, the `config:manage` gate, `config.key.protected` and the value's own refusals, and comes before the direction's cost (`system:administer`, the step-up): a caller holding `config:manage` alone is answered 422 for such an address, as for a value below its floor.
+- The stored value's test passed before any change, as built: the corpus is never asked, a listed password is refused `auth.password.blocklisted` and an unlisted one accepted, the fallback is logged and `degradation` raised under `password.blocklist.fallback`.
+- `ConfigurationLockTests` (integration) was run on the part, 1 of 1.
+- `endpoints.txt`: `integration.endpoint.insecure` on the 422 of `PUT /admin/config/{key}`, declared on the route. `GET /admin/config/{key}` is unchanged. The changelog line that spoke of an address written over plain HTTP after startup is corrected.
+- A blank value is known issue 49. No public member, no truth-table row, no migration.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -2128,10 +2193,13 @@ Renames a part left to the working branch, the files being another part's at the
 | The reverse direction of the REF-001 tests | Question 25's "each direction" | Nothing: built (`part/endpoint-codes`) |
 | 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Nothing: built (`part/idna`) |
 | D-197 item 10: the audit actions `authz.grant.created` and `authz.grant.revoked` (AUTHZ-GRANT-003 criterion 6) | The subject of the two records | Known issue 1 |
-| D-197 item 5 for an assertion presented as `passkey` whose credential is a security key | Whether it is a second step cannot be known before the account is read | Question 248 |
-| D-197 item 2: the release of a `resend` count where a right code meets a refusal that keeps writes; the release for an invitation's link and for the links notices carry | CONV-DESIGN-003 against `10` section 5.16a; where such a link is pressed | Question 249; known issues 14 and 15 |
-| API-REDIR-001 criterion 1 | No route validates a return destination against the registered clients | Question 250 |
-| INT-PWD-003: the refusal of a screening whose self-hosted address is not `https` | Two sentences of the item | Question 251 |
+| D-197 item 5 for an assertion presented as `passkey` whose credential is a security key | Whether it is a second step cannot be known before the account is read | Nothing: question 248, settled by D-198 and built (`part/signin`), but for the row of question 253 below |
+| D-197 item 2: the release of a `resend` count where a right code meets a refusal that keeps writes; the release for an invitation's link and for the links notices carry | CONV-DESIGN-003 against `10` section 5.16a; where such a link is pressed | The release where a refusal follows: nothing, question 249, settled by D-198 and built (`part/signin`). The two links: known issues 14 and 15 |
+| API-REDIR-001 criterion 1 | No route validates a return destination against the registered clients | Nothing: question 250, settled by D-198 and built (`part/returns`), but for the row of question 252 below |
+| INT-PWD-003: the refusal of a screening whose self-hosted address is not `https` | Two sentences of the item | Nothing: question 251, settled by D-198 and built (`part/screening`) |
+| API-REDIR-001 criterion 4 at `GET /auth/signon` and `GET /auth/providers/{provider}`: the log entry of a `returnTo` that is replaced | Its level, what it may carry of the value, and whether a request naming none is logged | Question 252 |
+| AUTH-FACT-002b criterion 9 for a security key that verifies and is not the opened account's | Which of two answers governs | Question 253 |
+| INT-GEN-001 criterion 3 for a blank value | Which of two codes refuses it | Known issue 49 |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
 - `30b1c4bc` carries only the changelog line of 323; its code and tests are in `5db004f4`. The two are one change split in two commits.
@@ -5329,7 +5397,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The refusal of a second step before a first factor is made on the factor's name. An assertion presented as `passkey` is verified before the account's credentials are read, and where the credential that answers is a security key it is accepted on the challenge: 200 `factorRequired`, `required` naming the second steps. That sign-in can never complete.
 - **What the specification says.** Criterion 7 refuses "a second step presented before a first factor has been accepted" with 422 `auth.factor.notpermitted`, before anything of the account is read. Whether an assertion is a passkey's or a security key's cannot be known before the account is read.
 - **Parked.** Any change to that path. Nothing changed.
-- **Answer:** none yet.
+- **Answer:** D-198.
 
 **249. Tier 3. AUTH-ABUSE-004, `10` section 5.16a and CONV-DESIGN-003: a right code that then meets a refusal which keeps writes.**
 
@@ -5337,7 +5405,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** In `AuthenticationService.CodeAsync` (a sign-in code and a second step's text code, shared by the step-up), once the code is right and spent, a refusal may still follow (the credential gone or suspended, the number left, the domain lock), and that refusal commits the writes it keeps. The `resend` count is released on the success path only.
 - **What the specification says.** Section 5.16a releases the count "when its code is presented right". CONV-DESIGN-003's list of the writes a refusal keeps is closed, and the release of a count is not in it.
 - **Parked.** The release on the refused path. The refusal D-197 item 1 adds (a right text code whose credential's number left) is one more such path and was left as the others are.
-- **Answer:** none yet.
+- **Answer:** D-198.
 
 **250. Tier 3. API-REDIR-001 criterion 1: no route validates a return destination against the registered clients.**
 
@@ -5345,7 +5413,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The routes that take a destination from the browser (`GET /auth/signon` and `GET /auth/providers/{provider}`, each by `returnTo`) hold it to a local path and answer `/` for anything else. `redirect.defaultclient` is read at the start and by registration only.
 - **What the specification says.** API-REDIR-001: a return destination arriving as a request parameter is validated by exact match against the origins of the registered clients' return addresses, and an unrecognised one falls back to the application `redirect.defaultclient` names; it applies to every endpoint that forwards a browser. `09`'s text of the sign-on states the local path.
 - **Parked.** Any change to how a return destination is handled. The criterion has no test of its name.
-- **Answer:** none yet.
+- **Answer:** D-198.
 
 **251. Tier 3. INT-PWD-003 and the `10` row of `password.blocklist.selfhosted.address`: a value written at runtime that is not an absolute `https` address.**
 
@@ -5353,6 +5421,22 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The address is never called; the screening falls back to the package's list and the degradation is logged. `ScreeningTests.INF_TLS_004_AC1_APlaintextCorpusAddressIsNeverAskedAsync` and `ScreeningTests.ScreenAsync_TheSelfHostedCorpusWithNoAddress_FallsBackAsync` assert the fall back.
 - **What the specification says.** INT-PWD-003: such a value "is never called, and the screening that reads it is refused with `auth.screening.unavailable`". Its next sentence: "Where the corpus cannot answer, the package's list answers and the degradation is raised".
 - **Parked.** Any change to that path.
+- **Answer:** D-198.
+
+**252. Tier 3. API-REDIR-001 criterion 4: the log entry of a `returnTo` that is replaced.**
+
+- **Item.** D-198, answer 250.
+- **What the code does.** Neither `GET /auth/signon` nor `GET /auth/providers/{provider}` writes an entry when it replaces a `returnTo` with `/`; neither did before D-198. The one entry of the kind is that of a refused `redirect_uri` at the authorization request, at Warning, carrying the client identifier and the destination as sent.
+- **What the specification says.** Criterion 4: "Rejected destinations are logged". CONV-LOG-002: the entry names the request identifier. It does not give the level (BFF-LOG-001 criterion 2 gives Information to a refusal by its code and Error to a fault, and a replaced destination carries no code and is neither), nor what the entry may carry of a value that is the browser's, unbounded and by the rule itself may hold control characters, another site's address, a token or a personal identifier (BFF-LOG-002 keeps a navigation's query string out of the log; D-196 keeps an `error` that does not read out of every entry), nor whether a request naming no `returnTo`, or an empty one, is a rejected destination.
+- **Parked.** The entry at both routes and its test. Nothing of it is built.
+- **Answer:** none yet.
+
+**253. Tier 3. AUTH-FACT-002b criterion 9: a security key that verifies and is not the opened account's, presented as `passkey` before a first factor.**
+
+- **Item.** D-198, answer 248.
+- **What the code does.** An assertion whose credential is another account's than the one the sign-in was opened for is refused `auth.factor.rejected`, counted and recorded, as any wrong credential is; a sign-in whose identifier names no account is refused and counted before any verification. Both are as they were before D-198. The refusal D-198 adds applies where the key is the opened account's.
+- **What the specification says.** Criterion 9 refuses a security key's assertion `auth.factor.notpermitted` once it verifies, nothing counted or recorded, and says "the same answer whatever its identifier names" of an assertion that does not verify only. For a key that verifies and is not the opened account's, `auth.factor.notpermitted` tells the caller that the credential exists and is a security key, and `auth.factor.rejected` counts and records a failure the criterion says is not counted.
+- **Parked.** That case alone, left as built. No test holds it either way.
 - **Answer:** none yet.
 
 ## 5. Gate result
@@ -5838,6 +5922,7 @@ Tier 2 questions of the last corrections run (D-197). Each parks its item where 
 46. **AUTH-OIDC-001 criterion 3, its test.** `OidcFlowTests.AUTH_OIDC_001_AC3_NoDynamicRegistrationEndpointExistsAsync` asks `GET /oidc/register` and reads 404; under API-CONV-003 a mapped path asked under another method is 404 too, and a `POST` with no credential is answered 403 before routing. The absence rests on the discovery document and on `endpoints.txt`. Readings: (a) enough; (b) the test reads the mapped routes. We would take (b). Not built; the comment that said 405 was removed.
 47. **PRIV-BREACH-001 criterion 1: "Notification templates exist for both audiences".** `11` section 8.3 carries the procedure only, `10` declares no message kind for it, and the plan names no step. Readings: (a) operator documents written in Milestone 2, the plan naming the step; (b) the owner adds the two templates to `11`; (c) a message kind of the library for the subject's notice. We would take (b): the library decides no wording.
 48. **AUTH-STEP-002 step 3 and AUTH-STEP-006, after the fix for criterion 9.** A factor the policy's `loginFactors` does not permit is no longer offered at a gate. Reachable assurance is still read from the credentials alone, as AUTH-STEP-006 states it, so an account whose only way to a gate is such a factor is answered `report-loss` at step 3: the level "meets the gate" and nothing can be presented. The same answer was given before the fix once the factor was refused. Readings: (a) as built; (b) `enrol`, reachable assurance counting only what the policy permits. We would take (b); it is a change to AUTH-STEP-006 and not to criterion 9. Not built.
+49. **INT-GEN-001 criterion 3: a blank value** (D-198, answer 251). A `value` that is empty or white space for `password.blocklist.selfhosted.address` is refused 422 `config.value.notallowed`, as for every text key, before the endpoint rule is reached; nothing is written. The criterion and the `09` row refuse "a value that is not an absolute `https` address" with `integration.endpoint.insecure`, and `10` gives `config.value.notallowed` to a value outside the key's set. Readings: (a) a blank is no value for a text key and keeps `config.value.notallowed`; (b) a blank is not an absolute `https` address and takes `integration.endpoint.insecure`, the rule then judged before the value's own refusals and refusing an empty address at a change though it passes one at the start. We would take (a). Left as built; no test asserts either code.
 
 ## 7. The coverage accounting (D-197, step 2)
 
