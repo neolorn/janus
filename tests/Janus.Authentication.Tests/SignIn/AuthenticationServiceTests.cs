@@ -4750,6 +4750,185 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC20, AUTH-FACT-004: a second step's text code presented right
+    /// releases what its send counted once though a refusal follows it, at a sign-in
+    /// and at a step-up: where the credential its record names was removed, invalidated
+    /// or suspended since, or its number left the account, the release is committed
+    /// with the code's spend and the refusal, in one unit of work.
+    /// </summary>
+    /// <param name="since">What became of the code's credential since it was sent.</param>
+    /// <param name="stepUp">Whether the code is presented at a step-up.</param>
+    [Theory]
+    [InlineData("removed", false)]
+    [InlineData("invalidated", false)]
+    [InlineData("suspended", false)]
+    [InlineData("unbound", false)]
+    [InlineData("removed", true)]
+    [InlineData("invalidated", true)]
+    [InlineData("suspended", true)]
+    [InlineData("unbound", true)]
+    public async Task AUTH_ABUSE_004_AC20_ARightTextCodeARefusalFollowsReleasesItsSendWithItsSpendAsync(
+        string since,
+        bool stepUp)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SessionId? session = stepUp ? Opened(subject) : null;
+        SignInChallenge began = await BeganAsync(Address);
+
+        if (!stepUp)
+        {
+            _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+        }
+
+        _ = await AskedAsync(began.Challenge, stepUp ? subject : null, session);
+
+        string right = Assert.Single(_notifications.Texts).Values["code"];
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        switch (since)
+        {
+            case "suspended":
+                Suspends(subject, Factor.PhoneCode);
+                break;
+            case "unbound":
+                await UnboundAsync(subject);
+                break;
+            default:
+                await GoneAsync(subject, Factor.PhoneCode, removed: since == "removed");
+                break;
+        }
+
+        _work.Reset();
+
+        ErrorCode? refused = Refused(session is SessionId raising
+            ? await Service.StepUpAsync(
+                AccessContext.Of(subject),
+                raising,
+                began.Challenge,
+                new FactorPresentation(Factor.PhoneCode) { Value = right },
+                Source,
+                TestContext.Current.CancellationToken)
+            : await PresentAsync(began.Challenge, Factor.PhoneCode, right));
+
+        Assert.Equal(since == "suspended" ? ErrorCodes.CredentialSuspended : ErrorCodes.FactorRejected, refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, AUTH-FACT-004: a sign-in code presented right releases what
+    /// its send counted once though a refusal follows it, at a sign-in and at a
+    /// step-up: where a domain lock refuses the address it was sent to, or the account
+    /// has given that address up since, the release is committed with the code's spend
+    /// and the refusal, in one unit of work.
+    /// </summary>
+    /// <param name="since">What refuses the address the code was sent to.</param>
+    /// <param name="stepUp">Whether the code is presented at a step-up.</param>
+    [Theory]
+    [InlineData("locked", false)]
+    [InlineData("given up", false)]
+    [InlineData("locked", true)]
+    [InlineData("given up", true)]
+    public async Task AUTH_ABUSE_004_AC20_ARightSignInCodeARefusalFollowsReleasesItsSendWithItsSpendAsync(
+        string since,
+        bool stepUp)
+    {
+        SubjectId subject = await AccountAsync();
+        IdentifierId second = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SessionId? session = stepUp ? Opened(subject) : null;
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Second, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+        byte[] named = Assert.Single(_restrictions.Carried).Answer;
+
+        if (since == "locked")
+        {
+            LockedElsewhere(subject);
+        }
+        else
+        {
+            await RemovedAsync(subject, second);
+        }
+
+        _work.Reset();
+
+        ErrorCode? refused = Refused(session is SessionId raising
+            ? await Service.StepUpAsync(
+                AccessContext.Of(subject),
+                raising,
+                began.Challenge,
+                new FactorPresentation(Factor.EmailCode) { Value = right },
+                Source,
+                TestContext.Current.CancellationToken)
+            : await PresentAsync(began.Challenge, Factor.EmailCode, right));
+
+        Assert.Equal(
+            since == "locked" ? ErrorCodes.IdentifierDomainNotAllowed : ErrorCodes.FactorRejected,
+            refused);
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Equal(named, Assert.Single(_restrictions.Answered));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20: a sign-in link releases what its send counted once only
+    /// where its press signs in. A press a domain lock refuses, and one that lands on
+    /// no sign-in of its account, release nothing.
+    /// </summary>
+    /// <param name="locked">
+    /// Whether a domain lock refuses the press; otherwise it lands on a sign-in opened
+    /// for another identifier.
+    /// </param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_ABUSE_004_AC20_ASignInLinkWhosePressIsRefusedReleasesNothingAsync(bool locked)
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        (string challenge, string token, string browser) = await AskedAsync(subject);
+        SignInChallenge other = await BeganAsync(Elsewhere);
+
+        if (locked)
+        {
+            LockedElsewhere(subject);
+        }
+
+        ErrorCode? refused = Code(await Service.LandAsync(
+            locked ? challenge : other.Challenge,
+            browser,
+            token,
+            Factor.EmailLink,
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(locked ? ErrorCodes.IdentifierDomainNotAllowed : ErrorCodes.FactorRejected, refused);
+        Assert.Single(_restrictions.Carried);
+        Assert.Empty(_restrictions.Answered);
+        Assert.NotNull(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC4: a text code accepted as a second step is one issued for that
     /// sign-in; the code issued for another is refused as no code of this one.
     /// </summary>

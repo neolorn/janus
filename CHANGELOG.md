@@ -77,7 +77,11 @@ against the public contract of LIB-API-001.
   the code the send carries is presented right or the link it carries is pressed: a
   registration's or a held value's code or link, the link that asks a displaced
   address to confirm, a sign-in code or link, a second step's text code, the code of
-  the new-device check, and a recovery or enrolment link once used. A wrong code, a
+  the new-device check, and a recovery or enrolment link once used. A sign-in code or
+  a second step's text code presented right, at a sign-in or a step-up, releases it
+  also where a refusal follows (its credential gone or suspended, its number or
+  address given up, a domain lock), committed with the code's spend; a verification
+  code or a link releases it only where its presentation succeeds. A wrong code, a
   link merely opened or pressed in another browser, and a code or link no counted send
   carries release nothing, and nothing but that one count is released.
 - A restriction marked `resend` judges and counts a send once, whatever the number of

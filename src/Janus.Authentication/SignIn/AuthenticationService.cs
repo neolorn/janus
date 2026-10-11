@@ -1583,8 +1583,9 @@ internal sealed class AuthenticationService(
     // AUTH-FACT-004: the try is decided in this unit of work, so a wrong try's count and
     // the invalidation at the cap commit with the refusal's record and the failure's
     // counts; a code gone or out of life changes nothing on its record and commits
-    // those alone; and a right code's spend commits in it whether the sign-in then
-    // goes on or a domain lock refuses it (CONV-DESIGN-003).
+    // those alone; and a right code's spend commits in it, with the release of what
+    // its send counted once, whether the sign-in then goes on or a refusal follows it
+    // (AUTH-ABUSE-004, CONV-DESIGN-003).
     private async ValueTask<Result<bool>> CodeAsync(
         Challenge open,
         SubjectId subject,
@@ -1620,10 +1621,14 @@ internal sealed class AuthenticationService(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
+        // AUTH-ABUSE-004 AC20: a right code releases what its send counted once as a
+        // write of its spend, kept by whatever refusal follows.
+        await links.AnsweredAsync(held, cancellationToken).ConfigureAwait(false);
+
         // AUTH-FACT-004 AC7, AUTH-RECOV-007: a code is judged against the credential its
         // record names only once it is right, so only the right one learns that the
         // credential is gone or suspended: it is spent, and the refusal is a failed
-        // attempt whose record and counts commit with the spend.
+        // attempt whose record and counts commit with the spend and its release.
         if (await UnansweredAsync(held, cancellationToken).ConfigureAwait(false) is Error unanswered)
         {
             return Result.Failure<bool>(
@@ -1636,8 +1641,6 @@ internal sealed class AuthenticationService(
         {
             return Result.Failure<bool>(await SpentAsync(locked, counted, cancellationToken).ConfigureAwait(false));
         }
-
-        await links.AnsweredAsync(held, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -1680,10 +1683,10 @@ internal sealed class AuthenticationService(
 
     // AUTH-FACT-004, CONV-DESIGN-003: ends the unit of work a right code was spent in
     // where the sign-in it would complete is then refused. A domain lock's refusal
-    // commits the spend alone, the factor having succeeded, so no failure is counted
-    // and no failed authentication recorded; an address given up since is a refused
-    // factor, whose record and counts commit with the spend (REG-IDENT-006); and a
-    // lock that could not be judged is rolled back.
+    // commits the spend and the release of its send's count alone, the factor having
+    // succeeded, so no failure is counted and no failed authentication recorded; an
+    // address given up since is a refused factor, whose record and counts commit with
+    // them (REG-IDENT-006); and a lock that could not be judged is rolled back.
     private async ValueTask<Error> SpentAsync(
         Error locked,
         Func<CancellationToken, ValueTask<Error?>> counted,

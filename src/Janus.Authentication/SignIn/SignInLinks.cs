@@ -457,15 +457,16 @@ internal sealed class SignInLinks(
 
     /// <summary>
     /// Releases what the send that carried a code counted once, inside the transaction
-    /// in which the code was presented right, as its last write.
+    /// in which the code was presented right, as a write of its spend.
     /// </summary>
     /// <param name="held">The pending sign-in the code was held on.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Nothing.</returns>
     /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-ABUSE-004. A wrong code releases nothing, and nor does a right
-    /// one that a refusal follows, whose kept writes are the ones CONV-DESIGN-003 lists.
+    /// Implements AUTH-ABUSE-004. A wrong code releases nothing. A right one releases
+    /// also where a refusal follows it: the release is a kept write, committed with the
+    /// spend (CONV-DESIGN-003).
     /// </remarks>
     public ValueTask AnsweredAsync(PendingSignIn held, CancellationToken cancellationToken)
     {
