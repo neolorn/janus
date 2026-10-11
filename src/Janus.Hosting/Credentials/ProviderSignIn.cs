@@ -119,6 +119,13 @@ internal sealed class ProviderSignIn(
         // attempt carries to the return is a path of this application already.
         string destination = ReturnDestination.Followed(returnTo);
 
+        // API-REDIR-001 AC4: a destination set aside is logged here, once, and the
+        // return, which follows what the attempt kept, logs none.
+        if (ReturnDestination.Replaced(returnTo))
+        {
+            BrowserProfileLog.DestinationReplaced(log, context.TraceIdentifier);
+        }
+
         if (intent is null || !Intents.TryGetValue(intent, out ProviderIntent intended))
         {
             return Back(context, destination, Error.From(ErrorCodes.RequestMalformed));

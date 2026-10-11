@@ -350,4 +350,18 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Error,
         Message = "A sign-on's identity token held up and carried no session identifier in sid ({CorrelationId}).")]
     public static partial void SignOnSessionUnnamed(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A return destination a request named that the route it arrived at replaced with
+    /// the root. The entry names the request and nothing of the value, which is the
+    /// browser's: not the value, a part of it, its length nor which condition it
+    /// failed (API-REDIR-001 AC4, CONV-LOG-003).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 29,
+        Level = LogLevel.Information,
+        Message = "A return destination was replaced with the root ({CorrelationId}).")]
+    public static partial void DestinationReplaced(ILogger log, string correlationId);
 }

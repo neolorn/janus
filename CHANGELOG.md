@@ -298,7 +298,10 @@ against the public contract of LIB-API-001.
   other than `\`. Any other destination, one holding a tab, a line break, a space or a
   character outside ASCII among them, sends the browser to `/` with no error. A frontend
   sends its route as the address serializes it, percent-encoded, and percent-encodes
-  that as the query's value; the route is then followed as it is.
+  that as the query's value; the route is then followed as it is. A destination that is
+  replaced is logged once, at Information, by the route it arrived at, the entry naming
+  the request identifier and nothing of the value; a request naming none, or an empty
+  one, writes no entry, and nor does the return of the round trip.
 - The start and the continuation of a social provider's round trip answer 303 wherever
   they send the browser, where they answered 302.
 - A social provider's round trip whose provider cannot be reached or read, at its

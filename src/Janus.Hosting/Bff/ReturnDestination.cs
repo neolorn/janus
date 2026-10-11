@@ -31,11 +31,25 @@ internal static class ReturnDestination
     /// <param name="returnTo">What the request named, or nothing where it named none.</param>
     /// <returns>What was named where it is one path of this application; the root otherwise.</returns>
     public static string Followed(string? returnTo) =>
+        returnTo is not null && IsPath(returnTo) ? returnTo : Root;
+
+    /// <summary>
+    /// Whether the destination a request named is set aside for the root, which is
+    /// what its route logs (API-REDIR-001 AC4).
+    /// </summary>
+    /// <param name="returnTo">What the request named, or nothing where it named none.</param>
+    /// <returns>
+    /// Whether a destination was named and is not followed. A request naming none, or
+    /// an empty one, has nothing set aside.
+    /// </returns>
+    public static bool Replaced(string? returnTo) =>
+        returnTo is { Length: > 0 } && !IsPath(returnTo);
+
+    // API-REDIR-001: the one judgement of a destination, made on the whole value.
+    private static bool IsPath(string returnTo) =>
         returnTo is { Length: > 0 }
         && returnTo[0] is '/'
         && (returnTo.Length is 1 || returnTo[1] is not '/')
         && !returnTo.AsSpan().ContainsAnyExceptInRange('!', '~')
-        && !returnTo.Contains('\\', StringComparison.Ordinal)
-            ? returnTo
-            : Root;
+        && !returnTo.Contains('\\', StringComparison.Ordinal);
 }

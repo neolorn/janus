@@ -141,6 +141,13 @@ internal sealed class SignOn(
         // attempt carries to the return is a path of this application already.
         string destination = ReturnDestination.Followed(returnTo);
 
+        // API-REDIR-001 AC4: a destination set aside is logged here, once, and the
+        // return, which follows what the attempt kept, logs none.
+        if (ReturnDestination.Replaced(returnTo))
+        {
+            BrowserProfileLog.DestinationReplaced(log, context.TraceIdentifier);
+        }
+
         // BFF-SESS-006 AC1: a browser that already holds one here has nothing to
         // establish, so the flow is not started and it goes where it was going.
         if (browser.Live is not null)

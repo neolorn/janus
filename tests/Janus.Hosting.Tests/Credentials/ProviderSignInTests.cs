@@ -713,6 +713,67 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-REDIR-001 AC4: a destination replaced with the root is logged once, at
+    /// Information, by the start it arrived at, the entry naming the request identifier
+    /// and nothing of the value, and the return of the round trip writes none.
+    /// </summary>
+    /// <param name="sent">The destination, as the query sends it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/%09/attacker.example")]
+    [InlineData("//attacker.example")]
+    [InlineData("https%3A%2F%2Fattacker.example%2Fcollect")]
+    public async Task API_REDIR_001_AC4_AReplacedDestinationIsLoggedOnceNamingTheRequestAloneAsync(string sent)
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        var browser = new Browser(_deployment);
+        Answer started = await browser.SendAsync("GET", StartAt("google", "signin", sent));
+
+        Assert.Equal([Replaced], _deployment.ProviderLog.Entries);
+
+        Answer landed = await ReturnedAsync(browser, "google", Where(started), new ProviderPerson(GoogleSubject));
+
+        IReadOnlyDictionary<string, string?> carried = Assert.Single(_deployment.ProviderLog.Carried);
+
+        Assert.Equal("/", landed.Location);
+        Assert.Equal([Replaced], _deployment.ProviderLog.Entries);
+        Assert.Equal(["CorrelationId", "{OriginalFormat}"], carried.Keys.Order(StringComparer.Ordinal));
+        Assert.False(string.IsNullOrEmpty(carried["CorrelationId"]));
+        Assert.DoesNotContain(
+            carried.Values,
+            value => value is not null && value.Contains("attacker", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// API-REDIR-001 AC4: a request whose destination is absent or empty names none,
+    /// and one whose destination is followed has nothing replaced, so neither the start
+    /// nor the return writes the entry.
+    /// </summary>
+    /// <param name="query">What the start's query carries after its intent.</param>
+    /// <param name="followed">Where the browser lands.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("", "/")]
+    [InlineData("&returnTo=", "/")]
+    [InlineData("&returnTo=%2Faccount%2Fprofile", "/account/profile")]
+    public async Task API_REDIR_001_AC4_ADestinationAbsentEmptyOrFollowedIsNotLoggedAsync(string query, string followed)
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        var browser = new Browser(_deployment);
+        Answer started = await browser.SendAsync("GET", "/auth/providers/google?intent=signin" + query);
+        Answer landed = await ReturnedAsync(browser, "google", Where(started), new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(followed, landed.Location);
+        Assert.Empty(_deployment.ProviderLog.Entries);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012 AC6 and OPS-OBS-002: a provider whose discovery document or
     /// published keys cannot be reached or read, or whose discovery document names no
     /// endpoint to sign in at, is not started. The browser is sent
@@ -1597,6 +1658,9 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
     private static string Start(string provider, string intent) =>
         StartAt(provider, intent, Uri.EscapeDataString(Page));
+
+    // API-REDIR-001 AC4: the entry that records a destination replaced with the root.
+    private static (LogLevel Level, int EventId) Replaced => (LogLevel.Information, 29);
 
     private static string StartAt(string provider, string intent, string sent) =>
         "/auth/providers/" + provider + "?intent=" + intent + "&returnTo=" + sent;

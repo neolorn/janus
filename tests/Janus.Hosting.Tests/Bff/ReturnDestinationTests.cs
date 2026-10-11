@@ -71,4 +71,23 @@ public sealed class ReturnDestinationTests
     [InlineData("/\uFF0Fattacker.example")]
     public void API_REDIR_001_AC2_ADestinationOffThisApplicationOrNotPrintableIsNotFollowed(string destination) =>
         Assert.Equal("/", ReturnDestination.Followed(destination));
+
+    /// <summary>
+    /// API-REDIR-001 AC4: a destination is set aside, which is what its route logs,
+    /// where one was named and is not followed; a request naming none, an empty one
+    /// and one that is followed have nothing set aside.
+    /// </summary>
+    /// <param name="destination">The destination, as the route reads it.</param>
+    /// <param name="replaced">Whether it is set aside.</param>
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("/", false)]
+    [InlineData("/account/profile", false)]
+    [InlineData("/\t/attacker.example", true)]
+    [InlineData("//attacker.example", true)]
+    [InlineData("https://attacker.example/collect", true)]
+    [InlineData(" ", true)]
+    public void API_REDIR_001_AC4_ADestinationNamedAndNotFollowedIsSetAside(string? destination, bool replaced) =>
+        Assert.Equal(replaced, ReturnDestination.Replaced(destination));
 }

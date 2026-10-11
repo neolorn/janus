@@ -1629,9 +1629,77 @@ public sealed class SignOnTests
         Assert.Equal(Route, Where(holding));
     }
 
+    /// <summary>
+    /// API-REDIR-001 AC4: a destination replaced with the root is logged once, at
+    /// Information, by the start it arrived at, the entry naming the request identifier
+    /// and nothing of the value, and the return of the round trip writes none.
+    /// </summary>
+    /// <param name="sent">The destination, as the query sends it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/%09/attacker.example")]
+    [InlineData("//attacker.example")]
+    [InlineData("https%3A%2F%2Fattacker.example%2Fcollect")]
+    public async Task API_REDIR_001_AC4_AReplacedDestinationIsLoggedOnceNamingTheRequestAloneAsync(string sent)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", StartAt(sent));
+
+        Assert.Equal([Replaced], deployment.SignOnLog.Entries);
+
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+        Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        IReadOnlyDictionary<string, string?> carried = Assert.Single(deployment.SignOnLog.Carried);
+
+        Assert.Equal("/", Where(established));
+        Assert.Equal([Replaced], deployment.SignOnLog.Entries);
+        Assert.Equal(["CorrelationId", "{OriginalFormat}"], carried.Keys.Order(StringComparer.Ordinal));
+        Assert.False(string.IsNullOrEmpty(carried["CorrelationId"]));
+        Assert.DoesNotContain(
+            carried.Values,
+            value => value is not null && value.Contains("attacker", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// API-REDIR-001 AC4: a request whose destination is absent or empty names none,
+    /// and one whose destination is followed has nothing replaced, so neither the start
+    /// nor the return writes the entry.
+    /// </summary>
+    /// <param name="query">The start's query.</param>
+    /// <param name="followed">Where the browser is sent once its session exists.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("", "/")]
+    [InlineData("?returnTo=", "/")]
+    [InlineData("?returnTo=%2Faccount%2Fprofile", Page)]
+    public async Task API_REDIR_001_AC4_ADestinationAbsentEmptyOrFollowedIsNotLoggedAsync(string query, string followed)
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Browser holder = await HolderAsync(deployment);
+        var arriving = new Browser(deployment);
+        Answer forwarded = await arriving.SendAsync("GET", "/auth/signon" + query);
+        Answer issued = await holder.SendAsync("GET", Local(Where(forwarded)));
+        Answer established = await arriving.SendAsync("GET", Local(Where(issued)));
+
+        Assert.Equal(followed, Where(established));
+        Assert.Empty(deployment.SignOnLog.Entries);
+    }
+
     private static string Start => StartAt(Uri.EscapeDataString(Page));
 
     private static string StartAt(string sent) => "/auth/signon?returnTo=" + sent;
+
+    // API-REDIR-001 AC4: the entry that records a destination replaced with the root.
+    private static (LogLevel Level, int EventId) Replaced => (LogLevel.Information, 29);
 
     // BFF-LOG-001: the entry that records what a refusal carried inside.
     private static (LogLevel Level, int EventId) Inside => (LogLevel.Information, 26);
