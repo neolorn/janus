@@ -187,6 +187,18 @@ against the public contract of LIB-API-001.
   challenge, nothing is counted, no failed authentication is recorded, and the key's
   stored counter, `backupState` and last use stay as they were. An assertion that does
   not verify, its counter included, is refused as any wrong passkey assertion is.
+- Whether the account a WebAuthn ceremony is for holds the credential is judged first,
+  before the assertion is verified, as WebAuthn Level 3 section 7.2 step 6 orders. At a
+  sign-in for an account, and at a step-up, an assertion whose credential that account
+  does not hold is answered 422 `auth.factor.rejected` whatever else it would fail (its
+  user verification, relying party, algorithm, backup flag, counter or signature),
+  counted and recorded as every wrong credential is; nothing of the credential is
+  written and no `auth.credential.countermismatch` is recorded. Where the ceremony was
+  opened without an identifier, the account is the one the user handle names, and a
+  handle that is absent, names no account or names another than the credential's holder
+  is refused the same way at the same point. The `auth.webauthn.*` codes answer only an
+  assertion of a credential the account holds, so the answer no longer differs between
+  an identifier that names an account and one that names none.
 - A refusal of the sign-on is logged once: event 26 of the browser profile's log, at
   Information, by the code the browser is returned with and the one the refusal
   carried inside. A refused authorization response no longer writes event 10 as

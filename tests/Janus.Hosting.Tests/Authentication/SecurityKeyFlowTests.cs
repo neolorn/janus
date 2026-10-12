@@ -423,6 +423,91 @@ public sealed class SecurityKeyFlowTests
         Assert.False(browser.Cookies.ContainsKey(Session));
     }
 
+    /// <summary>
+    /// AUTH-FACT-014 AC9: over <c>POST /auth/factor</c>, at a sign-in for an account,
+    /// an assertion presented as <c>passkey</c> whose credential another account holds
+    /// is answered 422 <c>auth.factor.rejected</c> before it is verified, where its
+    /// user verification flag is clear and where its counter did not advance alike: a
+    /// failed authentication recorded, no <c>auth.credential.countermismatch</c>
+    /// recorded, nothing of the credential written, and the same answer a sign-in whose
+    /// identifier names no account is given.
+    /// </summary>
+    /// <param name="factor">The kind of the credential the other account holds.</param>
+    /// <param name="failing">What the assertion would fail at its verification.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("passkey", "userVerification")]
+    [InlineData("passkey", "counter")]
+    [InlineData("securityKey", "userVerification")]
+    [InlineData("securityKey", "counter")]
+    public async Task AUTH_FACT_014_AC9_ACredentialTheSignInsAccountDoesNotHoldIsAnswered422RejectedAsync(
+        string factor,
+        string failing)
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+        deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        _ = await Flow.SignedInAsync(deployment);
+
+        SubjectId subject = deployment.Directory.Created[^1].Subject;
+        var key = SoftwareAuthenticator.Holding();
+        Authenticator held = Held(
+            deployment,
+            new SubjectId(Guid.NewGuid()),
+            factor is "securityKey" ? Factor.SecurityKey : Factor.Passkey,
+            key,
+            "Key",
+            "usb");
+
+        held.Counted(9);
+        deployment.Authenticators.Hold(held);
+
+        int failed = deployment.SessionAudit.Failed.Count;
+        int recorded = deployment.CredentialAudit.Records.Count;
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer refused = await AnsweredAsync(Flow.Address);
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal("auth.factor.rejected", refused.Text("code"));
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(subject, Factor.Passkey)],
+            [.. deployment.SessionAudit.Failed.Skip(failed)]);
+        Assert.Equal(recorded, deployment.CredentialAudit.Records.Count);
+        Assert.False(browser.Cookies.ContainsKey(Session));
+        Assert.Equal((9u, null), (held.WebAuthn?.Counter, held.LastUsedAt));
+
+        Answer unnamed = await AnsweredAsync("nobody@example.test");
+
+        Assert.Equal(refused.Status, unnamed.Status);
+        Assert.Equal(refused.Text("code"), unnamed.Text("code"));
+        Assert.Equal(refused.Json().GetProperty("details").GetRawText(), unnamed.Json().GetProperty("details").GetRawText());
+
+        async ValueTask<Answer> AnsweredAsync(string identifier)
+        {
+            Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", identifier));
+
+            return await browser.SendAsync(
+                "POST",
+                "/auth/factor",
+                Presented(
+                    began.Text("challengeId"),
+                    "passkey",
+                    key.Asserted(
+                        began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!,
+                        Origin,
+                        RelyingPartyId,
+                        (byte)(failing is "userVerification"
+                            ? SoftwareAuthenticator.UserPresent
+                            : SoftwareAuthenticator.UserPresent | SoftwareAuthenticator.UserVerified),
+                        counter: failing is "counter" ? 9u : 10u)));
+        }
+    }
+
     private static string Presented(string challenge, string factor, AuthenticatorAssertion asserted) =>
         new JsonObject
         {

@@ -361,10 +361,13 @@ internal sealed class WebAuthnService(
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The credential that answered, or the refusal. Before a first factor, an
-    /// assertion that verifies and whose credential is a second-factor security key of
-    /// the account is refused <c>auth.factor.notpermitted</c>, nothing written of it
-    /// (AUTH-FACT-002b AC9).
+    /// The credential that answered, or the refusal. An assertion whose credential the
+    /// account the ceremony is for does not hold (the account named, or the one the
+    /// user handle names where none was) is refused <c>auth.factor.rejected</c> before
+    /// it is verified, nothing read or written of it (AUTH-FACT-014 AC9). Before a
+    /// first factor, an assertion that verifies and whose credential is a second-factor
+    /// security key of the account is refused <c>auth.factor.notpermitted</c>, nothing
+    /// written of it (AUTH-FACT-002b AC9).
     /// </returns>
     /// <exception cref="ArgumentNullException">The answer is absent.</exception>
     public async ValueTask<Result<Authenticator>> AssertAsync(
@@ -388,6 +391,23 @@ internal sealed class WebAuthnService(
             .ConfigureAwait(false);
 
         if (held?.WebAuthn is null)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        // AUTH-FACT-014 AC9 (D-200), WebAuthn Level 3 section 7.2 step 6: whether the
+        // account the ceremony is for holds the credential is judged first, before the
+        // assertion is verified and before anything else of it is judged, so one it
+        // does not hold is refused as any wrong credential is whatever else it would
+        // fail, and nothing is read or written of another account's credential. Where
+        // the ceremony named no account, the account is the one the user handle names,
+        // and a handle that is absent, names nobody or names another than the holder
+        // is refused here alike (REG-PM-001 AC4).
+        Guid? holder = account is SubjectId opened
+            ? opened.Value
+            : answered.UserHandle is { Length: > 0 } handle ? Named(handle) : null;
+
+        if (holder != held.Subject.Value)
         {
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }

@@ -3747,6 +3747,163 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-014 AC9, AUTH-FACT-002b AC10: at a sign-in opened for an account, an
+    /// assertion presented as <c>passkey</c> whose credential another account holds,
+    /// a passkey or a second-factor security key, is refused
+    /// <c>auth.factor.rejected</c> before it is verified, whatever else it would fail:
+    /// its user verification flag clear, another relying party, an algorithm outside
+    /// the allow-list, a backup flag differing from the stored one, a counter that did
+    /// not advance, a signature that does not verify, or none of these. The refusal is
+    /// counted under the identifier and the source and recorded as a failed
+    /// authentication, nothing of the credential is written, no
+    /// <c>auth.credential.countermismatch</c> is recorded, and the answer is the one a
+    /// sign-in whose identifier names no account gives.
+    /// </summary>
+    /// <param name="factor">The kind of the credential the other account holds.</param>
+    /// <param name="failing">What the assertion would fail at its verification.</param>
+    [Theory]
+    [InlineData("passkey", "userVerification")]
+    [InlineData("passkey", "relyingParty")]
+    [InlineData("passkey", "algorithm")]
+    [InlineData("passkey", "backupFlag")]
+    [InlineData("passkey", "counter")]
+    [InlineData("passkey", "signature")]
+    [InlineData("passkey", "nothing")]
+    [InlineData("securityKey", "userVerification")]
+    [InlineData("securityKey", "relyingParty")]
+    [InlineData("securityKey", "algorithm")]
+    [InlineData("securityKey", "backupFlag")]
+    [InlineData("securityKey", "counter")]
+    [InlineData("securityKey", "signature")]
+    [InlineData("securityKey", "nothing")]
+    public async Task AUTH_FACT_014_AC9_ACredentialTheSignInsAccountDoesNotHoldIsRefusedBeforeItIsVerifiedAsync(
+        string factor,
+        string failing)
+    {
+        SubjectId subject = await AccountAsync();
+        var another = new SubjectId(Guid.NewGuid());
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var forger = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        string relyingParty = failing is "relyingParty" ? "elsewhere.test" : "example.test";
+        AuthenticatorId held = Keyed(
+            another,
+            key,
+            counter: 9,
+            relyingParty,
+            algorithm: failing is "algorithm" ? SoftwareAuthenticator.EdDsa : SoftwareAuthenticator.Es256,
+            factor is "securityKey" ? Factor.SecurityKey : Factor.Passkey);
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _work.Reset();
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Failing(began) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Challenge? open = await _challenges.FindAsync(
+            OpaqueToken.Of(began.Challenge).Fingerprint(),
+            TestContext.Current.CancellationToken);
+        Authenticator? after = await _authenticators.FindAsync(held, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            Shape(Error.From(ErrorCodes.FactorRejected)),
+            Shape(refused.Match(_ => (Error?)null, error => error)));
+        Assert.Empty(Assert.IsType<Challenge>(open).Presented);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Identifier);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Empty(_credentials.Records);
+        Assert.Equal(
+            (9u, false, null),
+            (after?.WebAuthn?.Counter, after?.WebAuthn?.BackupState, after?.LastUsedAt));
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.False(_work.Open);
+
+        SignInChallenge nobodys = await BeganAsync(Elsewhere);
+
+        Result<SignInProgress> unnamed = await Service.PresentAsync(
+            nobodys.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Failing(nobodys) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            Shape(unnamed.Match(_ => (Error?)null, error => error)),
+            Shape(refused.Match(_ => (Error?)null, error => error)));
+
+        AuthenticatorAssertion Failing(SignInChallenge opened) =>
+            Asserted(
+                failing is "signature" ? forger : key,
+                opened.WebAuthn.Challenge,
+                counter: failing is "counter" ? 9u : 10u,
+                relyingParty,
+                flags: failing switch
+                {
+                    "userVerification" => SoftwareAuthenticator.UserPresent,
+                    "backupFlag" => SoftwareAuthenticator.UserPresent
+                        | SoftwareAuthenticator.UserVerified
+                        | SoftwareAuthenticator.BackupEligible,
+                    _ => SoftwareAuthenticator.UserPresent | SoftwareAuthenticator.UserVerified,
+                });
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC9: at a step-up, an assertion whose credential another account
+    /// holds, its user verification flag clear, is refused <c>auth.factor.rejected</c>
+    /// before it is verified, recorded as a refused step-up factor and counted, and
+    /// nothing of the credential is written.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_014_AC9_AtAStepUpACredentialTheAccountDoesNotHoldIsRefusedBeforeItIsVerifiedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        var another = new SubjectId(Guid.NewGuid());
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        AuthenticatorId held = Keyed(another, key, counter: 9);
+        SessionId session = Opened(subject);
+        SignInChallenge began = await BeganAsync(Address);
+
+        ErrorCode? refused = Refused(await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            session,
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = Asserted(
+                    key,
+                    began.WebAuthn.Challenge,
+                    counter: 10,
+                    flags: SoftwareAuthenticator.UserPresent),
+            },
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Authenticator? after = await _authenticators.FindAsync(held, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, refused);
+        Assert.Equal(
+            [(session, subject, Factor.Passkey)],
+            _audit.StepUpsFailed.Select(failed => (failed.Session, failed.Subject, failed.Presented)));
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Empty(_credentials.Records);
+        Assert.Equal(
+            (9u, false, null),
+            (after?.WebAuthn?.Counter, after?.WebAuthn?.BackupState, after?.LastUsedAt));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC8: at a sign-in, once a password is accepted, the answer that
     /// offers the security key carries the request options for the challenge: user
     /// verification required, the value the sign-in was opened with, and the account's
@@ -6278,22 +6435,24 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private static (string Id, string Transports)[] Described(WebAuthnRequestOptions options) =>
         [.. options.AllowCredentials.Select(named => (named.Id, string.Join(',', named.Transports)))];
 
-    // A passkey of the account whose public key is the given one, as its enrolment
-    // left it, under the relying party and the algorithm it was enrolled with.
+    // A WebAuthn credential of the account, a passkey unless another kind is named,
+    // whose public key is the given one, as its enrolment left it, under the relying
+    // party and the algorithm it was enrolled with.
     private AuthenticatorId Keyed(
         SubjectId subject,
         ECDsa key,
         uint counter,
         string relyingParty = "example.test",
-        int algorithm = -7)
+        int algorithm = -7,
+        Factor? factor = null)
     {
         var id = AuthenticatorId.New(_clock);
 
         _authenticators.Hold(Authenticator.Existing(
             id,
             subject,
-            Factor.Passkey,
-            Label(Factor.Passkey),
+            factor ?? Factor.Passkey,
+            Label(factor ?? Factor.Passkey),
             AuthenticatorState.Active,
             _clock.GetUtcNow(),
             null,

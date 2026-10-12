@@ -1609,6 +1609,143 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.Null((await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.LastUsedAt);
     }
 
+
+    /// <summary>
+    /// AUTH-FACT-014 AC9: an assertion whose credential the account the ceremony is for
+    /// does not hold, a passkey or a second-factor security key, is refused
+    /// <c>auth.factor.rejected</c> before it is verified, whatever else it would fail,
+    /// with no unit of work begun, nothing of the credential written and no
+    /// <c>auth.credential.countermismatch</c> recorded.
+    /// </summary>
+    /// <param name="securityKey">Whether the credential is a second-factor security key.</param>
+    /// <param name="failing">What the assertion would fail at its verification.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(false, "userVerification")]
+    [InlineData(false, "relyingParty")]
+    [InlineData(false, "algorithm")]
+    [InlineData(false, "backupFlag")]
+    [InlineData(false, "counter")]
+    [InlineData(false, "signature")]
+    [InlineData(false, "nothing")]
+    [InlineData(true, "userVerification")]
+    [InlineData(true, "relyingParty")]
+    [InlineData(true, "algorithm")]
+    [InlineData(true, "backupFlag")]
+    [InlineData(true, "counter")]
+    [InlineData(true, "signature")]
+    [InlineData(true, "nothing")]
+    public async Task AUTH_FACT_014_AC9_ACredentialTheCeremonysAccountDoesNotHoldIsRefusedBeforeItIsVerifiedAsync(
+        bool securityKey,
+        string failing)
+    {
+        SubjectId owner = Subject();
+        SubjectId opened = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        Authenticator held = await KeyedAsync(
+            owner,
+            securityKey ? Factor.SecurityKey : Factor.Passkey,
+            authenticator,
+            failing is "algorithm" ? SoftwareAuthenticator.EdDsa : SoftwareAuthenticator.Es256);
+
+        int recorded = _audit.Records.Count;
+
+        _work.Reset();
+
+        ErrorCode? refused = await AssertedAsync(opened, Failing(authenticator, failing));
+
+        Assert.Equal(ErrorCodes.FactorRejected, refused);
+        Assert.Equal(0, _work.Opened);
+        Assert.Equal(recorded, _audit.Records.Count);
+        Assert.Equal(
+            (9u, false, null),
+            (held.WebAuthn?.Counter, held.WebAuthn?.BackupState, held.LastUsedAt));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC9, REG-PM-001 AC4: where the ceremony was opened without an
+    /// identifier, the account is the one the user handle names, so an assertion whose
+    /// handle is absent, names no account or names an account that does not hold the
+    /// credential is refused <c>auth.factor.rejected</c> before it is verified, its
+    /// user verification flag clear included, and nothing of the credential is
+    /// written; the owner's handle is judged on, and answers what the assertion fails.
+    /// </summary>
+    /// <param name="handle">What the user handle names.</param>
+    /// <param name="refusal">The refusal.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("absent", "auth.factor.rejected")]
+    [InlineData("nobody", "auth.factor.rejected")]
+    [InlineData("another", "auth.factor.rejected")]
+    [InlineData("owner", "auth.webauthn.userverificationrequired")]
+    public async Task AUTH_FACT_014_AC9_WithoutAnIdentifierAHandleNotTheHoldersIsRefusedBeforeTheAssertionIsVerifiedAsync(
+        string handle,
+        string refusal)
+    {
+        SubjectId owner = Subject();
+        SubjectId another = Subject();
+        var authenticator = SoftwareAuthenticator.Holding();
+        Authenticator held = await KeyedAsync(owner, Factor.Passkey, authenticator);
+
+        _ = await KeyedAsync(another, Factor.Passkey, SoftwareAuthenticator.Holding());
+        int recorded = _audit.Records.Count;
+
+        _work.Reset();
+
+        ErrorCode? refused = Refusal(await Service.AssertAsync(
+            authenticator.Asserted(
+                Challenge,
+                Origin,
+                RelyingPartyId,
+                SoftwareAuthenticator.UserPresent,
+                counter: 10,
+                userHandle: handle switch
+                {
+                    "absent" => null,
+                    "nobody" => WebAuthnService.Handle(Without()),
+                    "another" => WebAuthnService.Handle(another),
+                    _ => WebAuthnService.Handle(owner),
+                }),
+            Challenge,
+            account: null,
+            beforeFirstFactor: true,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(refusal, refused?.ToString());
+        Assert.Equal(recorded, _audit.Records.Count);
+        Assert.Equal(
+            (9u, false, null),
+            (held.WebAuthn?.Counter, held.WebAuthn?.BackupState, held.LastUsedAt));
+
+        if (handle is not "owner")
+        {
+            Assert.Equal(0, _work.Opened);
+        }
+    }
+
+    // What the authenticator answers the ceremony with, failing its verification at the
+    // step named: a clear user verification flag, another relying party, a backup flag
+    // the record does not carry, a counter that did not advance, or another key's
+    // signature. An algorithm outside the allow-list is the record's, and nothing is
+    // one that passes every check.
+    private static AuthenticatorAssertion Failing(SoftwareAuthenticator authenticator, string failing) =>
+        (failing is "signature"
+            ? SoftwareAuthenticator.Holding(credentialId: authenticator.CredentialId)
+            : authenticator)
+        .Asserted(
+            Challenge,
+            Origin,
+            failing is "relyingParty" ? "example.org" : RelyingPartyId,
+            failing switch
+            {
+                "userVerification" => SoftwareAuthenticator.UserPresent,
+                "backupFlag" => SoftwareAuthenticator.UserPresent
+                    | SoftwareAuthenticator.UserVerified
+                    | SoftwareAuthenticator.BackupEligible,
+                _ => SoftwareAuthenticator.UserPresent | SoftwareAuthenticator.UserVerified,
+            },
+            counter: failing is "counter" ? 9u : 10u);
+
     // A credential the authenticator created at the deployment's origin, enrolled as a
     // passkey of the account.
     private async ValueTask<AuthenticatorId> CreatedAsync(
@@ -1639,11 +1776,13 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
     // A credential of the kind named whose key the authenticator holds, enrolled for
-    // the account with a stored counter of nine.
+    // the account with a stored counter of nine, under the algorithm of its key unless
+    // another is named.
     private async ValueTask<Authenticator> KeyedAsync(
         SubjectId subject,
         Factor factor,
-        SoftwareAuthenticator authenticator)
+        SoftwareAuthenticator authenticator,
+        int algorithm = SoftwareAuthenticator.Es256)
     {
         AuthenticatorId id = Value(await Service.CompleteAsync(
             subject,
@@ -1653,6 +1792,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             {
                 CredentialId = authenticator.CredentialId,
                 PublicKey = authenticator.PublicKey,
+                Algorithm = algorithm,
                 Counter = 9,
             },
             TestContext.Current.CancellationToken));
