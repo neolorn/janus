@@ -15444,6 +15444,8 @@ reached it is now a 202, so no sign-in test is owed, and the step-up tests hold 
 
 > **Amended.** A second step before a first factor: a security key's assertion presented as `passkey` is refused `auth.factor.notpermitted` once it verifies; the `resend` release: a right authentication code's release stands whatever refusal follows, with its spend; the last corrections run's Tier 3 answers are built in one short run before the exit gate (D-198).
 
+> **Amended.** WebAuthn on the package: step 6 of section 7.2, whether the account holds the credential, is the library's and is judged before every other step (D-200).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-146 (item 18, the `phoneCode` second step: its enrolment; item 17, the shipped restrictions gain `sms.resend`), D-193 (question 218, the enrolment gap closed and the number bound), D-196 (question 247, the framework's request log), D-195 (questions 236 and 238, a second step accepted before a first factor no longer arises), D-194 (question 229, a second step presented before a first factor at a sign-in), D-188 (question 145, what a step-up's ask offers), D-187 (question 94, what a step-up offers), D-184 (the analyser-authoring packages), D-183 (question 36, where `auth.factor.notpermitted` is judged), D-182 (the last corrections run's questions), D-166 (item 114, where the leaked-password draw runs; item 235, a `resend` restriction counts a send once), D-149 (item 9, the permitted packages), D-141 (item 5, a suspension no cancel returns), D-092 (L3, a cache outage), D-079 and D-043 (the permission cache), D-033 (33.1, staff lifetimes), D-013 (the resend window), D-007 (the session record held in PostgreSQL alone)
 
 **TL;DR.** The run that built D-196 raised no question, so the Milestone 1 review ran: the
@@ -15858,6 +15860,8 @@ INF-TLS-004 (body); `20` REG-SESS-008 (body); `implementation-plan.md` (section 
 
 ## D-199 — The Tier 3 questions of the run that built D-198: 252 and 253
 
+> **Amended.** Answer 253: the build did not meet it for an assertion that fails a check other than its signature; whether the account holds the credential is judged first, before the assertion is verified, and one it does not hold is `auth.factor.rejected` whatever else it would fail, nothing of it written (D-200).
+
 **Date:** 2026-10-12 · **Status:** accepted · **Amends:** D-198 (answer 250, the log entry of a replaced destination; answer 248, the account whose security key it refuses)
 
 **TL;DR.** The run that built D-198 raised two Tier 3 questions and one known issue. The
@@ -15937,6 +15941,99 @@ before a first factor, the 422s), API-REDIR-001 (body, criterion 4); `10`
 `auth.factor.notpermitted`, `auth.credential.suspended`, section 5.24
 (`auth.authentication.failed`); `17` BFF-SESS-006 (body); `20` REG-PM-001 (body, criterion
 4).
+
+---
+
+## D-200 — The exit gate review: a credential the account does not hold is judged first
+
+**Date:** 2026-10-12 · **Status:** accepted · **Amends:** D-199 (answer 253, which took the build as meeting it), D-197 (the steps of section 7.2 the package leaves to its caller)
+
+**TL;DR.** The run that built D-199 raised no question. Its report and code were reviewed,
+and with them the Milestone 1 exit gate: every acceptance criterion it covers has a test
+carrying its identifier or a report row saying how it was verified or where it goes, the
+full gate is green, and the 49 known issues are carried into Milestone 2. One defect was
+found, in the behaviour D-199 took as built. A caller who holds any credential the library
+knows, their own included, opens a sign-in for an address and presents that credential's
+assertion as `passkey`, with its user verification flag clear. Where the address names an
+account, the library verifies and judges the assertion against the credential before
+asking whether that account holds it, and answers
+`auth.webauthn.userverificationrequired`; where it names none, it answers
+`auth.factor.rejected`. The difference tells the caller whether the address has an
+account, which AUTH-ABUSE-003 forbids. WebAuthn's own order settles it: whether the
+account holds the credential is judged first (section 7.2, step 6), and a credential it
+does not hold is refused `auth.factor.rejected` before anything else of the assertion is
+judged, nothing written of it. One short run builds this; the review of its report is then
+all that is left of the exit gate.
+
+**The finding.**
+
+- **What is built.** `WebAuthnService.AssertAsync` finds the credential an assertion
+  names, whoever holds it, has the package verify the assertion against it, and judges its
+  relying party, its user verification, its backup flag and its counter; only after that
+  does the sign-in compare the credential's holder with its account. A refusal at any of
+  those steps is answered with its own code (`auth.webauthn.userverificationrequired`,
+  `auth.webauthn.rpidchanged`, `auth.webauthn.algorithmnotallowed`,
+  `auth.webauthn.countermismatch`), and a counter that did not advance records
+  `auth.credential.countermismatch` against the other account's credential and keeps it. A
+  sign-in whose identifier names no account answers `auth.factor.rejected` before any of
+  that. The tests of AUTH-FACT-002b criterion 10 held an assertion whose signature
+  verifies and one whose signature does not, and so reached none of the other steps.
+- **What it breaks.** AUTH-FACT-002b criterion 10 refuses such an assertion
+  `auth.factor.rejected` whether or not it would verify, and it is not met for these.
+  AUTH-ABUSE-003 forbids any endpoint to confirm that an account exists, and these answers
+  confirm it to anyone who holds a credential the library knows, their own included. A
+  sign-in for one account writes a record about another's credential.
+- **The rule.** WebAuthn Level 3 section 7.2 step 6 identifies the account and verifies
+  that it holds the credential before any later step of the ceremony. The package leaves
+  that step to its caller (its owner callback, which the library answers true), so it is
+  the library's, beside the steps AUTH-FACT-014 already names. Where the ceremony is for
+  an account (a sign-in whose identifier names one, or a step-up), an assertion whose
+  credential that account does not hold is refused `auth.factor.rejected` as soon as that
+  is known: before the package verifies it and before its relying party, user
+  verification, algorithm, backup flag or counter is judged, whatever any of them would
+  answer. Nothing of the credential is written, no `auth.credential.countermismatch` is
+  recorded, and the refusal is counted and recorded as every wrong credential's is. Where
+  the ceremony was opened without an identifier, the account is the one the user handle
+  names, and a handle that is absent, names no account, or names an account that does not
+  hold the credential, is refused the same way at the same point. The refusals that
+  concern a credential the account holds keep their place after it verifies: a
+  second-factor security key presented as `passkey` before a first factor
+  (`auth.factor.notpermitted`, D-198) and a suspended credential
+  (`auth.credential.suspended`, AUTH-RECOV-007). *Rejected:* answering each later refusal
+  `auth.factor.rejected` where the credential turns out to be another's (the other
+  account's credential would still be verified and judged, and written in a unit of work
+  that must then be undone, in the order the standard puts last); carrying it into
+  Milestone 2 as a known issue (it is a defect against a criterion and an
+  account-existence leak, not a question with two readings).
+
+**The exit gate.** Reviewed at `ba717a35`. Every acceptance criterion of chapters 01 to
+10, 17 and 20 and of the items of 06, 12 and 19, 1665 in all, has a passing test carrying
+its identifier (1463), or a row of the coverage accounting of the corrections-4 report
+(200: 94 that no test can decide, each saying how it was verified; 78 Milestone 2's by the
+plan's step; 18 belonging to a known issue; 10 whose tests carry the name of the item
+whose criteria they are: six under the retired heading IDN-ACCT-007a, which are
+IDN-ACCT-007's, and four of IDN-LIFE-009b, which cover IDN-LIFE-009a too), or a phase
+report's row saying how it was verified (AUTHZ-CONCEAL-002 criterion 2, CONV-TEST-002
+criterion 3). The full gate is green at `4a4386a6`, its public-surface job included. Known
+issues 1 to 49 are carried by `implementation-plan.md` section 4. The rows of the coverage
+accounting written before D-198 and D-199 that a test now decides (API-REDIR-001 criterion
+1 among them) stand superseded by those tests. What remains is the defect above.
+
+**The run.** One short run builds the rule above and nothing else, as
+`implementation-plan.md` section 3 now provides for a defect the owner's review finds; a
+Tier 2 question it raises joins the known issues, and a Tier 3 one is answered as before.
+The owner's review of its report closes the exit gate.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `02` AUTH-FACT-014 (verification, a new paragraph on the account
+holding the credential, criterion 3, new criterion 9), AUTH-FACT-002b (body, criterion
+10), AUTH-RECOV-007 (criterion 9); `09` `POST /auth/factor` (a second step before a first
+factor, the 422s, passkey assertions); `10` `auth.credential.suspended`,
+`auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
+`auth.webauthn.rpidchanged`, `auth.webauthn.userverificationrequired`, section 5.24
+(`auth.credential.countermismatch`); `20` REG-PM-001 (body, criterion 4);
+`implementation-plan.md` (section 3, section 4).
 
 ---
 
@@ -16149,6 +16246,7 @@ before a first factor, the 422s), API-REDIR-001 (body, criterion 4); `10`
 | The Milestone 1 review: the owner's decisions and the last corrections run | D-197 |
 | The Tier 3 questions of the last corrections run: 248 to 251 | D-198 |
 | The Tier 3 questions of the run that built D-198: 252 and 253 | D-199 |
+| The exit gate review: a credential the account does not hold is judged first | D-200 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

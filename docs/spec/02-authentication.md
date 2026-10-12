@@ -316,24 +316,24 @@ as `passkey` whose credential the account the sign-in is for does not hold, a se
 key of another account included, is a wrong credential for the sign-in whatever its
 kind, as is any such assertion at a sign-in whose identifier names no account: each is
 refused `auth.factor.rejected`, counted and recorded as every wrong credential is,
-whether or not it would verify (WebAuthn Level 3 section 7.2 step 6, D-199). A
-`phoneCode` ask before a first factor is answered 202 (AUTH-FACT-002 criterion 8). An
-answer that offers `securityKey` (a `factorRequired` answer at a sign-in once a first
-factor is accepted, or at a step-up once a factor has been presented on its challenge)
-carries the `webauthn` request options with `userVerification` `required` and
-`allowCredentials` naming each active second-factor security key of the account by
-credential identifier and transports and, at a step-up that also offers `passkey`, each
-active passkey of the account (`09` `POST /auth/factor`, D-197); at a step-up a security
-key is presented after another factor of its combination, and no answer before a first
-factor names a credential. A second-factor security key MAY be **upgraded to a passkey**
-by re-registration (`POST /account/credentials/{id}/upgrade`); on success the
-second-factor entry SHALL be retired. Each account SHALL carry a **preferred second-step
-method** (IDN-ATTR-008). `phoneLink` and `phoneCode` SHALL be treated as **restricted
-factors**: their catalogue entries carry `Restricted` (AUTH-FACT-001), which criterion 6
-reads; the limitation SHALL be shown at enrolment, `phoneCode` SHALL be flagged less
-secure wherever it is listed, and SIM-change and porting risk signals, where available,
-SHALL be considered before an SMS factor is used and before a recovery link is sent by
-text.
+whether or not it would verify, and before anything else of it is judged (WebAuthn Level
+3 section 7.2 step 6, AUTH-FACT-014, D-199, D-200). A `phoneCode` ask before a first
+factor is answered 202 (AUTH-FACT-002 criterion 8). An answer that offers `securityKey`
+(a `factorRequired` answer at a sign-in once a first factor is accepted, or at a step-up
+once a factor has been presented on its challenge) carries the `webauthn` request
+options with `userVerification` `required` and `allowCredentials` naming each active
+second-factor security key of the account by credential identifier and transports and,
+at a step-up that also offers `passkey`, each active passkey of the account (`09`
+`POST /auth/factor`, D-197); at a step-up a security key is presented after another
+factor of its combination, and no answer before a first factor names a credential. A
+second-factor security key MAY be **upgraded to a passkey** by re-registration
+(`POST /account/credentials/{id}/upgrade`); on success the second-factor entry SHALL be
+retired. Each account SHALL carry a **preferred second-step method** (IDN-ATTR-008).
+`phoneLink` and `phoneCode` SHALL be treated as **restricted factors**: their catalogue
+entries carry `Restricted` (AUTH-FACT-001), which criterion 6 reads; the limitation
+SHALL be shown at enrolment, `phoneCode` SHALL be flagged less secure wherever it is
+listed, and SIM-change and porting risk signals, where available, SHALL be considered
+before an SMS factor is used and before a recovery link is sent by text.
 
 **Values (D-153).** The SIM-change or porting signal reaches the library through an
 optional host callback declared on the model builder (LIB-HOST-001), returning `none`
@@ -350,7 +350,7 @@ asked for the number beforehand is a fault (CONV-ERR-001), never a send: the oth
 course would let a restricted factor go unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188, D-190, D-197, D-198, D-199*
+D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -407,7 +407,8 @@ person who bought one for two-step should not have to buy another to go password
     credential the account the sign-in is for does not hold, a second-factor security
     key of another account included, or any such assertion at a sign-in whose identifier
     names no account, is refused `auth.factor.rejected`, counted and recorded as a wrong
-    credential is, whether or not it would verify.
+    credential is, before it is verified and whatever else it would fail
+    (AUTH-FACT-014), nothing of the credential written.
 
 ---
 
@@ -810,15 +811,32 @@ the `AuthenticationResponseJSON` it gives, as a JSON object. The package verifie
 ceremonies and the attestation statement of a format it knows, none being required to
 chain to a trust anchor, and a ceremony's origin is matched against the origins of
 `webauthn.origins` and `webauthn.relatedorigins` (AUTH-FACT-010). The steps of sections
-7.1 and 7.2 the package leaves to its caller are the library's: client data whose
-`crossOrigin` is true is refused, an assertion whose BE flag differs from the stored
-`backupEligible` is refused, extension outputs the library did not ask for are ignored,
-and each assertion stores the counter and `backupState` the package returns. The
-credential's public key and transports are stored as the attested credential data and
-the response give them. A refusal at a step the verification adds is
-`auth.factor.rejected`.
+7.1 and 7.2 the package leaves to its caller are the library's: step 6 of section 7.2 is
+judged first (below), client data whose `crossOrigin` is true is refused, an assertion
+whose BE flag differs from the stored `backupEligible` is refused, extension outputs the
+library did not ask for are ignored, and each assertion stores the counter and
+`backupState` the package returns. The credential's public key and transports are stored
+as the attested credential data and the response give them. A refusal at a step the
+verification adds is `auth.factor.rejected`.
 
-*Source: D-034, D-120, D-186, D-191, D-197*
+**The account holding the credential is judged first (D-200).** Step 6 of section 7.2,
+which identifies the account and verifies that it holds the credential, is one the
+package leaves to its caller, and it comes before every later step. Where the ceremony
+is for an account (a sign-in whose identifier names one, or a step-up), an assertion
+whose credential that account does not hold is refused `auth.factor.rejected` before the
+package verifies it and before its relying party, user verification, algorithm, backup
+flag or counter is judged, whatever any of them would answer; nothing of the credential
+is written, no `auth.credential.countermismatch` is recorded, and the refusal is counted
+and recorded as a wrong credential's is (AUTH-ABUSE-001, CONV-LOG-005). Where the
+ceremony was opened without an identifier, the account is the one the assertion's user
+handle names, and a handle that is absent, names no account, or names an account that
+does not hold the credential, is refused the same way at the same point; and at a
+sign-in whose identifier names no account, every assertion is refused before anything of
+it is read (AUTH-FACT-002b). Otherwise a caller holding any credential the library
+knows, their own included, could tell from the answer which identifiers name an account
+(AUTH-ABUSE-003).
+
+*Source: D-034, D-120, D-186, D-191, D-197, D-200*
 
 **The allow-list is configuration** (`webauthn.algorithms`, `10` §4.3): default
 **EdDSA (−8), ES256 (−7), RS256 (−257)**, offered in that preference order — the
@@ -834,10 +852,11 @@ zero, so the check applies only where either value is non-zero (D-191).
 **Acceptance criteria**
 1. An authentication without user verification is rejected.
 2. A credential from an unattested authenticator enrols successfully.
-3. A counter not above the stored value, where either is non-zero, is rejected; the
-   refusal records `auth.credential.countermismatch`, records the failed authentication
-   (CONV-LOG-005) and counts the failure (AUTH-ABUSE-001), the three committed together
-   and nothing else (CONV-DESIGN-003).
+3. A counter of a credential the account the ceremony is for holds, not above the stored
+   value where either is non-zero, is rejected; the refusal records
+   `auth.credential.countermismatch`, records the failed authentication (CONV-LOG-005)
+   and counts the failure (AUTH-ABUSE-001), the three committed together and nothing
+   else (CONV-DESIGN-003).
 4. A credential using an algorithm outside the allow-list is rejected at enrolment.
 5. The default allow-list is exactly −8, −7, −257; a configuration omitting −7 is
    refused at startup.
@@ -848,6 +867,15 @@ zero, so the check applies only where either value is non-zero (D-191).
 8. Client data whose `crossOrigin` is true is refused, an assertion whose BE flag
    differs from the stored `backupEligible` is refused, and an assertion whose BS flag
    changed updates the stored `backupState`.
+9. An assertion whose credential the account the ceremony is for does not hold (the
+   account a sign-in's identifier names, a step-up's, or, for a sign-in opened without
+   an identifier, the one its user handle names), or one at a sign-in opened without an
+   identifier whose user handle is absent or names no account, is refused
+   `auth.factor.rejected` before it is verified, whether its user verification flag is
+   clear, its relying party is another, its algorithm is outside the allow-list, its
+   backup flag differs from the stored one, its counter did not advance, its signature
+   does not verify, or none of these; nothing of the credential is written and no
+   `auth.credential.countermismatch` is recorded.
 
 ---
 
@@ -2311,7 +2339,7 @@ the account holds (AUTH-FACT-002); and where the policy in force does not permit
 `phoneCode`, the policy is judged first: the ask sends nothing and is answered 202,
 whatever the number's state (IDN-LIFE-009b, D-191).
 
-*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198, D-199*
+*Source: D-009, D-022, D-141, D-166, D-186, D-190, D-191, D-197, D-198, D-199, D-200*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -2359,8 +2387,8 @@ have nothing left to stand in for.
    permit it, it is answered 202.
 9. A social credential that is suspended, on a window or held after its provider's
    security event, returns the browser with `error=auth.credential.suspended` once its
-   provider vouches; a suspended key whose signature counter did not advance is refused
-   `auth.webauthn.countermismatch`.
+   provider vouches; a suspended key of the account the ceremony is for whose signature
+   counter did not advance is refused `auth.webauthn.countermismatch`.
 
 ---
 

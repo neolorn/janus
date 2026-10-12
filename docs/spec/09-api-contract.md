@@ -581,8 +581,9 @@ and keeping none of its verification's writes; one that does not verify is refus
 any wrong passkey assertion is (D-198). An assertion presented as `passkey` whose
 credential that account does not hold, a security key of another account included, and
 any such assertion at a sign-in whose identifier names no account, are refused **422**
-`auth.factor.rejected`, counted and recorded as every wrong credential is, whether or
-not they would verify (AUTH-FACT-002b, D-199).
+`auth.factor.rejected`, counted and recorded as every wrong credential is, before they
+are verified and whatever else they would fail (AUTH-FACT-002b, AUTH-FACT-014, D-199,
+D-200).
 
 The request MAY carry `"trustDevice": true` on the call that completes a two-factor
 sign-in; where `trustDeviceOffered` is true the response sets the device-trust cookie
@@ -601,17 +602,19 @@ challenge whose email the account no longer holds is `auth.factor.rejected`),
 `auth.credential.suspended` (a suspended authenticator whose proof verified, save a
 right `phoneCode` code whose credential's number left the account, which is
 `auth.factor.rejected`, AUTH-FACT-004, a second step before a first factor, which is
-`auth.factor.notpermitted`, AUTH-FACT-002b, and an assertion presented as `passkey`
-whose credential the account the sign-in is for does not hold, which is
-`auth.factor.rejected`, AUTH-FACT-002b, D-199; or a `phoneCode` ask after a first factor
-naming a suspended number where the policy permits `phoneCode`, AUTH-RECOV-007), and
-`auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
-`auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` (an assertion
-refused, AUTH-FACT-011, AUTH-FACT-014); each that refuses a presented factor is a failed
-attempt, save `identity.identifier.domainnotallowed`, which counts no failure
-(AUTH-FACT-004), and the refusal of a second step before a first factor, which counts
-nothing (AUTH-FACT-002b, D-197); a `phoneCode` ask refused where no factor is left, or
-naming a suspended number, counts nothing (AUTH-FACT-002, AUTH-ABUSE-001, D-189, D-190).
+`auth.factor.notpermitted`, AUTH-FACT-002b, and an assertion whose credential the
+account the ceremony is for does not hold, which is `auth.factor.rejected` before it is
+verified, AUTH-FACT-002b, AUTH-FACT-014, D-199, D-200; or a `phoneCode` ask after a
+first factor naming a suspended number where the policy permits `phoneCode`,
+AUTH-RECOV-007), and `auth.webauthn.algorithmnotallowed`,
+`auth.webauthn.countermismatch`, `auth.webauthn.rpidchanged` and
+`auth.webauthn.userverificationrequired` (an assertion of a credential the account the
+ceremony is for holds, refused at its verification, AUTH-FACT-011, AUTH-FACT-014,
+D-200); each that refuses a presented factor is a failed attempt, save
+`identity.identifier.domainnotallowed`, which counts no failure (AUTH-FACT-004), and the
+refusal of a second step before a first factor, which counts nothing (AUTH-FACT-002b,
+D-197); a `phoneCode` ask refused where no factor is left, or naming a suspended number,
+counts nothing (AUTH-FACT-002, AUTH-ABUSE-001, D-189, D-190).
 Never 401: that code is session death only (API-CONV-003, D-125).
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
@@ -650,9 +653,16 @@ credential is now suspended and otherwise answered as at `risk` (AUTH-FACT-002, 
 returned. A handle naming an account other than the credential's owner, or none the
 library issued, is refused `auth.factor.rejected`; a passkey sign-in opened without an
 identifier refuses an assertion with no handle the same way (WebAuthn Level 3 section
-7.2, REG-PM-001, D-166). The `value` of a `passkey` or `securityKey` factor is the
-`AuthenticationResponseJSON` object that `PublicKeyCredential.toJSON()` gives (WebAuthn
-Level 3 section 5.1), as a JSON object, not a string (D-197).
+7.2, REG-PM-001, D-166). Whether the account the ceremony is for holds the credential is
+judged first (for a sign-in opened without an identifier, the account the handle names,
+an absent handle refused at the same point), before the assertion is verified and before
+its relying party, user verification, algorithm, backup flag or counter is judged: one
+it does not hold is `auth.factor.rejected` whatever those would answer, counted and
+recorded as every wrong credential is, nothing of the credential written and no
+`auth.credential.countermismatch` recorded (AUTH-FACT-014, D-200). The `value` of a
+`passkey` or `securityKey` factor is the `AuthenticationResponseJSON` object that
+`PublicKeyCredential.toJSON()` gives (WebAuthn Level 3 section 5.1), as a JSON object,
+not a string (D-197).
 
 **New-device check** (AUTH-FACT-016). Where the factors presented would complete a
 sign-in at reachable assurance AAL1 from a browser the account has not seen, the call
@@ -672,7 +682,7 @@ requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
 AUTH-ABUSE-001, D-146, D-166, D-183, D-189, D-190, D-191, D-193, D-194, D-195, D-197,
-D-198, D-199*
+D-198, D-199, D-200*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).

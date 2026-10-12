@@ -96,17 +96,20 @@ question that run raises parks its item and is carried into Milestone 2 as a kno
 the answers are built in one short run that builds nothing else, a Tier 2 question it
 raises joining the known issues and a Tier 3 one answered and built as these are; then
 come the owner's review of the last such run's report and the exit gate (D-197, D-198).
+A defect the owner's review finds is built the same way, in one short run that builds
+nothing else, and the review of that run's report closes the exit gate (D-200).
 
 **Milestone 1 exit gate.** All ten phases and every corrections run reported, the last
-the one D-197 opens, then the runs that build the Tier 3 answers (D-198), and the
-owner's review of the last run's report done; every acceptance criterion of every item
-in chapters 01 to 10, 17 and 20, and the code-side items of 06, 12 and 19, has a passing
-test carrying its identifier, or is named in the report as one a test cannot decide with
-how it was verified, or is Milestone 2's by this section, or belongs to a known issue
-section 4 carries (CONV-TEST-007, D-197); the full gate is green;
-`PublicAPI.Unshipped.txt` holds the complete surface; no spec defect is open save the
-known issues section 4 carries into Milestone 2 (D-197). The implementer stops here and
-does not begin Milestone 2 on its own.
+the one D-197 opens, then the runs that build the Tier 3 answers (D-198) and any run
+that builds a defect the owner's review found (D-200), and the owner's review of the
+last run's report done; every acceptance criterion of every item in chapters 01 to 10,
+17 and 20, and the code-side items of 06, 12 and 19, has a passing test carrying its
+identifier, or is named in the report as one a test cannot decide with how it was
+verified, or is Milestone 2's by this section, or belongs to a known issue section 4
+carries (CONV-TEST-007, D-197); the full gate is green; `PublicAPI.Unshipped.txt` holds
+the complete surface; no spec defect is open save the known issues section 4 carries
+into Milestone 2 (D-197). The implementer stops here and does not begin Milestone 2 on
+its own.
 
 What Milestone 1 does **not** touch: a real mail server, SMS gateway, secrets manager,
 DNS, certificates, host machine, package feed or frontend. Each is met at its
@@ -145,7 +148,8 @@ Milestone 1 phases 5 and 8 deliver the server side they need.
   (D-197).
 
 Section 4 also carries every further known issue the reports of the last corrections run
-of Milestone 1 and of each run that builds Tier 3 answers list (D-197, D-198).
+of Milestone 1 and of each run that builds Tier 3 answers or a defect the owner's review
+found list (D-197, D-198, D-200).
 
 ## 5. Phase report
 

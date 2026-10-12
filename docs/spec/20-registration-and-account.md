@@ -1335,15 +1335,18 @@ be the primary email and `displayName` the display name or empty. An assertion's
 handle SHALL name the credential's owner, and SHALL be present where the sign-in was
 opened without an identifier (WebAuthn Level 3 section 7.2); any other is refused with
 `auth.factor.rejected`, as is an assertion presented as `passkey` whose credential the
-account the sign-in is for does not hold (AUTH-FACT-002b, D-199). The library SHALL
-serve `/.well-known/change-password` as a redirect to the password page and
-`/.well-known/passkey-endpoints` as JSON naming the enrol and manage addresses. The
+account the sign-in is for does not hold (AUTH-FACT-002b, D-199); where the sign-in was
+opened without an identifier, a handle that is absent, or names an account that does not
+hold the credential, is refused before the assertion is verified and before anything
+else of it is judged (WebAuthn Level 3 section 7.2 step 6, AUTH-FACT-014, D-200). The
+library SHALL serve `/.well-known/change-password` as a redirect to the password page
+and `/.well-known/passkey-endpoints` as JSON naming the enrol and manage addresses. The
 three addresses (`changePassword`, `enrol`, `manage`) are a host declaration with no
 default (LIB-HOST-001); without it, or with a field of it empty or blank, startup fails
 with `model.startup.declarationmissing`, `details.key` naming `passkeyAddresses` or the
 field.
 
-*Source: D-146, D-162, D-166; AUTH-FACT-014, D-199*
+*Source: D-146, D-162, D-166; AUTH-FACT-014, D-199, D-200*
 
 **Acceptance criteria**
 1. No user handle contains personal data.
@@ -1354,7 +1357,9 @@ field.
 3. A deployment that declares no passkey pages, or leaves one of the three empty or
    blank, does not start, and the refusal names what is missing.
 4. An assertion whose user handle names another account, or has none where the sign-in
-   was opened without an identifier, is refused with `auth.factor.rejected`.
+   was opened without an identifier, is refused with `auth.factor.rejected`; at a
+   sign-in opened without an identifier it is refused before it is verified, whatever
+   else it would fail, and nothing of the credential is written.
 
 ---
 
