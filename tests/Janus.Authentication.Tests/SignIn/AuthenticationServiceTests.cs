@@ -3672,6 +3672,81 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002b AC10: at a sign-in before a first factor, an assertion presented
+    /// as <c>passkey</c> whose credential is a second-factor security key the account
+    /// the sign-in is for does not hold (another account's, or any account's where the
+    /// sign-in's identifier names none) is refused <c>auth.factor.rejected</c>, counted
+    /// under the identifier and the source and recorded as a failed authentication
+    /// under <c>passkey</c>, whether or not it would verify, and nothing of the
+    /// credential is written.
+    /// </summary>
+    /// <param name="named">Whether the sign-in's identifier names an account.</param>
+    /// <param name="verifies">Whether the assertion is the key's own.</param>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task AUTH_FACT_002b_AC10_ASecurityKeyTheSignInsAccountDoesNotHoldIsRefusedAsAWrongCredentialIsAsync(
+        bool named,
+        bool verifies)
+    {
+        SubjectId subject = await AccountAsync();
+        var another = new SubjectId(Guid.NewGuid());
+        var key = SoftwareAuthenticator.Holding();
+        SoftwareAuthenticator presenting = verifies
+            ? key
+            : SoftwareAuthenticator.Holding(credentialId: key.CredentialId);
+        Authenticator held = Counting(named ? another : subject, Factor.SecurityKey, key, counter: 9);
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(named ? Address : Elsewhere);
+
+        _work.Reset();
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = Synced(presenting, began.WebAuthn.Challenge, counter: 10),
+            },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Challenge? open = await _challenges.FindAsync(
+            OpaqueToken.Of(began.Challenge).Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            Shape(Error.From(ErrorCodes.FactorRejected)),
+            Shape(refused.Match(_ => (Error?)null, error => error)));
+        Assert.Empty(Assert.IsType<Challenge>(open).Presented);
+        Assert.Equal<(SubjectId?, Factor)>([(named ? subject : null, Factor.Passkey)], _audit.Failed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Identifier);
+        Assert.Equal(
+            1,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.Empty(_credentials.Records);
+
+        // Where the sign-in names an account, the ceremony is judged in the sign-in's
+        // unit of work, which is rolled back whole before the failure's record and
+        // counts commit, so nothing the judgement wrote of another account's key is
+        // kept. Where it names none, no credential is read at all.
+        Assert.Equal((1, named ? 1 : 0), (_work.OutermostCommitted, _work.RolledBack));
+
+        if (!(named && verifies))
+        {
+            Assert.Equal(
+                (9u, false, null),
+                (held.WebAuthn?.Counter, held.WebAuthn?.BackupState, held.LastUsedAt));
+        }
+
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC8: at a sign-in, once a password is accepted, the answer that
     /// offers the security key carries the request options for the challenge: user
     /// verification required, the value the sign-in was opened with, and the account's

@@ -366,6 +366,63 @@ public sealed class SecurityKeyFlowTests
         Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], [.. deployment.SessionAudit.Failed.Skip(failed)]);
     }
 
+    /// <summary>
+    /// AUTH-FACT-002b AC10: over <c>POST /auth/factor</c> before a first factor, a
+    /// security key's assertion presented as <c>passkey</c> that verifies is answered
+    /// 422 <c>auth.factor.rejected</c> where the key is another account's than the one
+    /// the sign-in is for, and where the sign-in's identifier names no account, a
+    /// failed authentication recorded and no session set.
+    /// </summary>
+    /// <param name="named">Whether the sign-in's identifier names an account.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AUTH_FACT_002b_AC10_ASecurityKeyTheSignInsAccountDoesNotHoldIsAnswered422RejectedAsync(bool named)
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+        deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        _ = await Flow.SignedInAsync(deployment);
+
+        SubjectId subject = deployment.Directory.Created[^1].Subject;
+        var key = SoftwareAuthenticator.Holding();
+
+        deployment.Authenticators.Hold(Held(
+            deployment,
+            named ? new SubjectId(Guid.NewGuid()) : subject,
+            Factor.SecurityKey,
+            key,
+            "Key",
+            "usb"));
+
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer began = await browser.SendAsync(
+            "POST",
+            "/auth/begin",
+            ("identifier", named ? Flow.Address : "nobody@example.test"));
+        string challenge = began.Text("challengeId");
+        string signed = began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!;
+        int failed = deployment.SessionAudit.Failed.Count;
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            Presented(challenge, "passkey", key.Asserted(signed, Origin, RelyingPartyId, counter: 4)));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal("auth.factor.rejected", refused.Text("code"));
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(named ? subject : null, Factor.Passkey)],
+            [.. deployment.SessionAudit.Failed.Skip(failed)]);
+        Assert.False(browser.Cookies.ContainsKey(Session));
+    }
+
     private static string Presented(string challenge, string factor, AuthenticatorAssertion asserted) =>
         new JsonObject
         {
