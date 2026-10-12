@@ -15,8 +15,8 @@ time, but for the items the open questions park and 209 (2) (section 2). Questio
 D-197, the review of Milestone 1, is applied in the last corrections run but for the audit
 actions of known issue 1 and what questions 248 to 251 park (section 1, "D-197"); its
 Tier 2 questions are under Known issues (section 6) and the coverage accounting is section 7.
-D-198 answers questions 248 to 251, and its four answers are built but for what questions
-252 and 253 park (section 1, "D-198"); both are Tier 3 and open.
+D-198 answers questions 248 to 251 and D-199 questions 252 and 253; their answers are
+built (section 1, "D-198" and "D-199"). No question is open; known issues 1 to 49 stand.
 
 ## 1. Items implemented
 
@@ -2161,6 +2161,23 @@ D-198 and the twelve files it changed are committed as `694fc3dd`, each of the t
 - `endpoints.txt`: `integration.endpoint.insecure` on the 422 of `PUT /admin/config/{key}`, declared on the route. `GET /admin/config/{key}` is unchanged. The changelog line that spoke of an address written over plain HTTP after startup is corrected.
 - A blank value is known issue 49. No public member, no truth-table row, no migration.
 
+### D-199: the answers to questions 252 and 253
+
+D-199 and the seven files it changed are committed as `bb37ab68`, each of the twenty-five files given checked against its hash. The two answers are built on the working branch, with no part. No question was raised in this round.
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| 252. Where `GET /auth/signon` or `GET /auth/providers/{provider}` replaces a `returnTo` with `/`, the route writes one entry at Information naming the request identifier and nothing of the value; a request naming none, an empty one, one that is followed and the return of the round trip write none | `39bb3eb8` | API-REDIR-001 | `ReturnDestinationTests.API_REDIR_001_AC4_ADestinationNamedAndNotFollowedIsSetAside`; in `SignOnTests` and in `ProviderSignInTests` each: `API_REDIR_001_AC4_AReplacedDestinationIsLoggedOnceNamingTheRequestAloneAsync`, `API_REDIR_001_AC4_ADestinationAbsentEmptyOrFollowedIsNotLoggedAsync` |
+| 253. A security key the sign-in's account does not hold, presented as `passkey` before a first factor, is refused `auth.factor.rejected`, counted and recorded, whether or not it would verify | `d9be1403` (tests only) | AUTH-FACT-002b | `AuthenticationServiceTests.AUTH_FACT_002b_AC10_ASecurityKeyTheSignInsAccountDoesNotHoldIsRefusedAsAWrongCredentialIsAsync`, `SecurityKeyFlowTests.AUTH_FACT_002b_AC10_ASecurityKeyTheSignInsAccountDoesNotHoldIsAnswered422RejectedAsync` |
+
+- 252: the entry is `BrowserProfileLog.DestinationReplaced`, event 29, a source-generated method whose one value is `CorrelationId`. Whether a destination is set aside is judged by `ReturnDestination.Replaced`, on the same judgement `ReturnDestination.Followed` makes; each start calls it once, and neither return does.
+- 252: the route tests hold a tab between the two slashes, `//attacker.example` and an absolute address, sent percent-encoded. Each asserts the one entry after the start and the same one entry after the whole round trip, its members `CorrelationId` and the message's template alone, and no value holding the destination's host. All six rows failed first, no entry written. The six rows of an absent, an empty and a followed destination assert no entry after the whole round trip; they passed before and after. The rule's own test failed first by not compiling.
+- 252: no public member, no declared code, no truth-table row, no migration. One changelog line is extended.
+- 253: the behaviour is as built and no source changed. The service test holds four rows (the key another account's or the identifier naming no account, each with an assertion that verifies and one another key signed): `auth.factor.rejected`, nothing accepted on the challenge, one failed authentication under `passkey` (against the account where the identifier names one, against none otherwise), a count under the identifier and one failure under the source, no credential record. The route test holds the two verifying rows: 422 `auth.factor.rejected`, the failed authentication recorded, no session.
+- 253: as first written, the tests also asserted the other account's key unchanged in memory, and that failed for the key that verifies: the judgement advances the counter and the use on the credential it read, inside the sign-in's unit of work, and the refusal then rolls that unit of work back whole before the failure's record and counts commit. The in-memory authenticators of the tests do not undo a write at a rollback. The assertion was replaced by what decides it: one rollback and then one commit where the identifier names an account, one commit and no rollback where it names none. That the store's rollback discards what the unit of work tracked (`UnitOfWork.RollbackAsync`) was established by reading; no store test of this path was added.
+- REG-PM-001 criterion 4: `WebAuthnServiceTests.REG_PM_001_AC4_AnAssertionWithNoHandleIsRefusedWhereNoAccountWasNamedAsync` asserts the case as the criterion now reads: a ceremony opened for no account (`identified` false), an assertion with no user handle refused `auth.factor.rejected` and the same assertion carrying the handle accepted. Its name keeps the earlier wording; nothing changed.
+- The fast checks ran on the exact tree of each of the two commits, the tests of the second set aside for the first.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -2197,8 +2214,8 @@ D-198 and the twelve files it changed are committed as `694fc3dd`, each of the t
 | D-197 item 2: the release of a `resend` count where a right code meets a refusal that keeps writes; the release for an invitation's link and for the links notices carry | CONV-DESIGN-003 against `10` section 5.16a; where such a link is pressed | The release where a refusal follows: nothing, question 249, settled by D-198 and built (`part/signin`). The two links: known issues 14 and 15 |
 | API-REDIR-001 criterion 1 | No route validates a return destination against the registered clients | Nothing: question 250, settled by D-198 and built (`part/returns`), but for the row of question 252 below |
 | INT-PWD-003: the refusal of a screening whose self-hosted address is not `https` | Two sentences of the item | Nothing: question 251, settled by D-198 and built (`part/screening`) |
-| API-REDIR-001 criterion 4 at `GET /auth/signon` and `GET /auth/providers/{provider}`: the log entry of a `returnTo` that is replaced | Its level, what it may carry of the value, and whether a request naming none is logged | Question 252 |
-| AUTH-FACT-002b criterion 9 for a security key that verifies and is not the opened account's | Which of two answers governs | Question 253 |
+| API-REDIR-001 criterion 4 at `GET /auth/signon` and `GET /auth/providers/{provider}`: the log entry of a `returnTo` that is replaced | Its level, what it may carry of the value, and whether a request naming none is logged | Nothing: question 252, settled by D-199 and built (`39bb3eb8`) |
+| AUTH-FACT-002b criterion 9 for a security key that verifies and is not the opened account's | Which of two answers governs | Nothing: question 253, settled by D-199 as built, its tests written (`d9be1403`) |
 | INT-GEN-001 criterion 3 for a blank value | Which of two codes refuses it | Known issue 49 |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
@@ -5429,7 +5446,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** Neither `GET /auth/signon` nor `GET /auth/providers/{provider}` writes an entry when it replaces a `returnTo` with `/`; neither did before D-198. The one entry of the kind is that of a refused `redirect_uri` at the authorization request, at Warning, carrying the client identifier and the destination as sent.
 - **What the specification says.** Criterion 4: "Rejected destinations are logged". CONV-LOG-002: the entry names the request identifier. It does not give the level (BFF-LOG-001 criterion 2 gives Information to a refusal by its code and Error to a fault, and a replaced destination carries no code and is neither), nor what the entry may carry of a value that is the browser's, unbounded and by the rule itself may hold control characters, another site's address, a token or a personal identifier (BFF-LOG-002 keeps a navigation's query string out of the log; D-196 keeps an `error` that does not read out of every entry), nor whether a request naming no `returnTo`, or an empty one, is a rejected destination.
 - **Parked.** The entry at both routes and its test. Nothing of it is built.
-- **Answer:** none yet.
+- **Answer:** D-199.
 
 **253. Tier 3. AUTH-FACT-002b criterion 9: a security key that verifies and is not the opened account's, presented as `passkey` before a first factor.**
 
@@ -5437,7 +5454,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** An assertion whose credential is another account's than the one the sign-in was opened for is refused `auth.factor.rejected`, counted and recorded, as any wrong credential is; a sign-in whose identifier names no account is refused and counted before any verification. Both are as they were before D-198. The refusal D-198 adds applies where the key is the opened account's.
 - **What the specification says.** Criterion 9 refuses a security key's assertion `auth.factor.notpermitted` once it verifies, nothing counted or recorded, and says "the same answer whatever its identifier names" of an assertion that does not verify only. For a key that verifies and is not the opened account's, `auth.factor.notpermitted` tells the caller that the credential exists and is a security key, and `auth.factor.rejected` counts and records a failure the criterion says is not counted.
 - **Parked.** That case alone, left as built. No test holds it either way.
-- **Answer:** none yet.
+- **Answer:** D-199.
 
 ## 5. Gate result
 
