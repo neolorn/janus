@@ -111,11 +111,11 @@ internal sealed class OidcApplicationStore(StoreContext context)
     {
         ArgumentNullException.ThrowIfNull(application);
 
-        // What the row holds is what the secret hashes to and never the secret, so what
-        // leaves here authenticates nothing on its own.
+        // What the row holds is the secret wrapped under the deployment's data key, so
+        // what leaves here authenticates nothing on its own.
         return ValueTask.FromResult<string?>(
-            application.Secret is { Length: > 0 } fingerprint
-                ? Convert.ToBase64String(fingerprint)
+            application.Secret is { Length: > 0 } wrapped
+                ? Convert.ToBase64String(wrapped)
                 : null);
     }
 

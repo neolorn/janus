@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
@@ -9,6 +10,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -16,7 +18,8 @@ namespace Janus.Hosting.Tests.Bff;
 /// <summary>
 /// What a throttle looks like at the boundary: the interval it carries, and the same
 /// answer whether or not an account stands behind the identifier (BFF-ABUSE-001,
-/// BFF-ABUSE-002).
+/// BFF-ABUSE-002), and what a request refused before the session leaves uncounted
+/// (BFF-ORDER-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ThrottlingTests : IAsyncDisposable
@@ -25,6 +28,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
     private const string Wrong = "notthepasswordatall";
     private const string Unheld = "nobody@example.test";
     private const string Trace = "throttled";
+    private const string Site = "https://identity.example.test";
 
     private static readonly IPAddress Attacker = IPAddress.Parse("203.0.113.5");
     private static readonly IPAddress Elsewhere = IPAddress.Parse("203.0.113.6");
@@ -63,7 +67,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {link}"));
             }
         }
     }
@@ -94,6 +98,29 @@ public sealed class ThrottlingTests : IAsyncDisposable
             ("value", Flow.Password));
 
         AssertThrottled(throttled);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC13: two addresses of one IPv6 /64 are one source, so the delay
+    /// one earns holds the other, whatever identifier it asks for; an address of
+    /// another /64 is not held, and an IPv4-mapped address shares its IPv4 address's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC13_TwoAddressesOfOneIpv6SubnetShareTheSourceDelayAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await FailedAsync(Unheld, IPAddress.Parse("2001:db8:1:1::5"));
+        _ = await FailedAsync("somebody@example.test", Attacker);
+
+        Answer neighbour = await ArrivedAsync(IPAddress.Parse("2001:db8:1:1:ffff::6"), "/auth/link", "other@example.test");
+        Answer another = await ArrivedAsync(IPAddress.Parse("2001:db8:1:2::5"), "/auth/link", "third@example.test");
+        Answer mapped = await ArrivedAsync(Attacker.MapToIPv6(), "/auth/link", "fourth@example.test");
+
+        AssertThrottled(neighbour);
+        Assert.Equal(StatusCodes.Status202Accepted, another.Status);
+        AssertThrottled(mapped);
     }
 
     /// <summary>
@@ -201,6 +228,53 @@ public sealed class ThrottlingTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ORDER-001 AC5: a wrong password refused by the resource isolation, by the
+    /// origin validation or by the source limit reaches no operation, each being
+    /// answered with its stage's refusal and never as a rejected factor, and is counted
+    /// against no account: nine of them leave the account they named without the delay
+    /// three admitted failures earn it, so a first request from another address is
+    /// answered.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC5_ARequestRefusedBeforeTheSessionIsCountedAgainstNoAccountAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+        List<(int Status, string Code)> refused = [];
+
+        _ = await browser.SendAsync("GET", "/auth/session", source: Attacker);
+
+        string challenge = await BegunAsync(browser, Flow.Address, Attacker);
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            refused.Add(await PresentedAsync(browser, challenge, "cross-site", Site));
+            refused.Add(await PresentedAsync(browser, challenge, "same-origin", "https://elsewhere.example"));
+        }
+
+        _deployment.Configuration.Set(Settings.AbuseSourceRateLimit, 0);
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            refused.Add(await PresentedAsync(browser, challenge, "same-origin", Site));
+        }
+
+        _deployment.Configuration.Set(Settings.AbuseSourceRateLimit, Settings.AbuseSourceRateLimit.Default);
+
+        Answer admitted = await ArrivedAsync(Fresh, "/auth/begin", Flow.Address);
+
+        Assert.Equal(
+            6,
+            refused.Count(answer => answer == (StatusCodes.Status403Forbidden, ErrorCodes.SessionCsrfInvalid.ToString())));
+        Assert.Equal(
+            3,
+            refused.Count(answer => answer == (StatusCodes.Status429TooManyRequests, ErrorCodes.Throttled.ToString())));
+        Assert.Equal(StatusCodes.Status200OK, admitted.Status);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC5: the cookie the account's own sign-in left on a browser spares
     /// that browser the delay failures elsewhere earned the account and the address; the
     /// same cookie altered, or none, spares nothing.
@@ -286,6 +360,48 @@ public sealed class ThrottlingTests : IAsyncDisposable
         AssertAlike(held, unheld);
         Assert.Equal(0, sent);
         Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC7, AUTH-ABUSE-004: an ask of a sign-in link, an email code or a
+    /// recovery is answered before any transport is called, whether or not an account
+    /// holds the address: no mail is handed over while either request runs, both are
+    /// answered 202 alike, and the messages go once the publisher's pass carries them.
+    /// With a transport that refuses everything, both asks are still answered alike.
+    /// </summary>
+    /// <param name="path">The ask.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/auth/link")]
+    [InlineData("/auth/email-otp")]
+    [InlineData("/recovery/begin")]
+    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheTransportIsCalledAsync(string path)
+    {
+        await RegisteredAsync();
+
+        int handed = 0;
+
+        _deployment.Mail.Handed = () => handed++;
+        _deployment.WorkerCarries = false;
+
+        (Answer held, Answer unheld, int sent) = await AskedAsync(path);
+
+        Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        AssertAlike(held, unheld);
+        Assert.Equal(0, handed);
+        Assert.Equal(0, sent);
+
+        Assert.Equal(2, await _deployment.CarrySendsAsync());
+        Assert.Equal(2, handed);
+
+        _deployment.Mail.Accepts = false;
+        _deployment.Clock.Advance(TimeSpan.FromHours(2));
+
+        (Answer refusedHeld, Answer refusedUnheld, _) = await AskedAsync(path);
+
+        Assert.Equal(StatusCodes.Status202Accepted, refusedHeld.Status);
+        AssertAlike(refusedHeld, refusedUnheld);
+        Assert.Equal(0, await _deployment.CarrySendsAsync());
     }
 
     /// <summary>
@@ -414,6 +530,50 @@ public sealed class ThrottlingTests : IAsyncDisposable
         }
 
         return await browser.SendAsync(source, Trace, "POST", path, ("identifier", identifier));
+    }
+
+    // A wrong password for the challenge from the attacker's address, carrying
+    // everything the browser holds, sent as a page of the site named would send it
+    // and claiming the origin given. What comes back is the status and the code.
+    private async Task<(int Status, string Code)> PresentedAsync(
+        Browser browser,
+        string challenge,
+        string site,
+        string origin)
+    {
+        byte[] body = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["challengeId"] = challenge,
+            ["factor"] = "password",
+            ["value"] = Wrong,
+        });
+        var context = new DefaultHttpContext();
+        var written = new ResponseBody();
+
+        context.TraceIdentifier = Trace;
+        context.Connection.RemoteIpAddress = Attacker;
+        context.Request.Method = "POST";
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString(new Uri(Site).Host);
+        context.Request.Path = new PathString("/auth/factor");
+        context.Request.Headers["Sec-Fetch-Site"] = site;
+        context.Request.Headers[BrowserCookies.RequestHeader] = "1";
+        context.Request.Headers.Origin = origin;
+        context.Request.Headers.Cookie = string.Join(
+            "; ",
+            browser.Cookies.Select(held => held.Key + "=" + held.Value));
+        context.Request.Headers[SynchronizerToken.Header] = browser.Cookies[BrowserCookies.Csrf];
+        context.Request.ContentType = "application/json";
+        context.Request.Body = new MemoryStream(body);
+        context.Request.ContentLength = body.Length;
+        context.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyPresent());
+        context.Response.Body = written;
+
+        await _deployment.SendAsync(context);
+
+        using var answered = JsonDocument.Parse(written.Taken());
+
+        return (context.Response.StatusCode, answered.RootElement.GetProperty("code").GetString()!);
     }
 
     // The account signs in on a browser of its own, which passes the new-device check

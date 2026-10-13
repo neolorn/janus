@@ -30,6 +30,10 @@ internal sealed class ErasureConfiguration : IEntityTypeConfiguration<ErasureRec
                 "ck_erasures_reason",
                 Vocabulary.Admits<ErasureReason>("reason"));
             table.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
+
+            table.HasCheckConstraint(
+                "ck_erasures_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(erasure => erasure.Subject).HasName("pk_erasures");

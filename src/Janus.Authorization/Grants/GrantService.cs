@@ -51,6 +51,10 @@ internal sealed class GrantService(
     // names the whole organization rather than one record in it.
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
+    // The role bootstrap grants the reserved account, which the break-glass session
+    // holds (OPS-BOOT-002).
+    private static readonly RoleName SystemAdministrator = RoleName.Parse("system-administrator");
+
     /// <inheritdoc/>
     public async ValueTask<Result<GrantId>> GrantAsync(
         AccessContext context,
@@ -92,7 +96,7 @@ internal sealed class GrantService(
 
         if (role is null)
         {
-            return Result.Failure<GrantId>(Malformed("role"));
+            return Result.Failure<GrantId>(Unresolved("role"));
         }
 
         if (await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
@@ -103,7 +107,7 @@ internal sealed class GrantService(
 
         if (!await HolderAsync(request.Subject, organization, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure<GrantId>(Malformed("subjectId"));
+            return Result.Failure<GrantId>(Unresolved("subjectId"));
         }
 
         // OPS-BOOT-002: the break-glass session's account holds what bootstrap gave it
@@ -146,7 +150,7 @@ internal sealed class GrantService(
                 now,
                 request.Reason)
             .Match(
-                grant => WrittenAsync(grant, now, cancellationToken),
+                grant => WrittenAsync(context, grant, now, cancellationToken),
                 refused => ValueTask.FromResult(Result.Failure<GrantId>(refused)))
             .ConfigureAwait(false);
     }
@@ -180,6 +184,15 @@ internal sealed class GrantService(
             return Result.Failure(Error.From(ErrorCodes.GrantNotFound));
         }
 
+        // OPS-BOOT-002, D-166: the break-glass session holds what this grant confers,
+        // so revoking it would leave the session nothing.
+        if (held.Role == SystemAdministrator
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) is SubjectId reserved
+            && held.Subject == GrantSubject.Of(reserved))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
         if (await AdministeringRefusedAsync(
                 context,
                 await roles.FindAsync(held.Role, cancellationToken).ConfigureAwait(false),
@@ -200,16 +213,50 @@ internal sealed class GrantService(
             return Result.Failure(challenged);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        if (held.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error)
-            is Error refused)
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
-            return Result.Failure(refused);
+            return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RevokingRefusedAsync(context, grant, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the role and then the grant are read under their rows' locks, in the
+        // order a grant's writing takes them, so a second revocation finds the first and
+        // OPS-CFG-007 is judged on what the role allows as committed.
+        Role? role = await roles.FindForUpdateAsync(held.Role, cancellationToken).ConfigureAwait(false);
+
+        Grant? standing = await grants.FindForUpdateAsync(grant, cancellationToken).ConfigureAwait(false);
+
+        Error? moved = standing is not { Kind: GrantKind.Stored, RevokedAt: null }
+            ? Error.From(ErrorCodes.GrantNotFound)
+            : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                ?? standing.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error);
+
+        if (moved is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
+        }
+
+        held = standing!;
+
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -268,6 +315,12 @@ internal sealed class GrantService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // AUTHZ-GRANT-001, D-166: a role or a group the body names that the deployment
+    // does not hold where the grant is made is a request read and understood, whose
+    // meaning cannot be carried out.
+    private static Error Unresolved(string member) =>
+        Error.From(ErrorCodes.GrantUnresolved, "member", JsonSerializer.SerializeToElement(member));
 
     // AUTHZ-GRANT-001 AC2: the whole organization is named by its identifier; a record
     // is scoped to the organization it was registered in.
@@ -328,19 +381,69 @@ internal sealed class GrantService(
                 .ConfigureAwait(false);
 
     private async ValueTask<Result<GrantId>> WrittenAsync(
+        AccessContext context,
         Grant grant,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        if (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false))
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
-            return Result.Failure<GrantId>(Error.From(ErrorCodes.GrantDuplicate));
+            return Result.Failure<GrantId>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await ManagingRefusedAsync(context, grant.Organization, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GrantId>(since);
+        }
+
+        // D-166 X3: a group is given a grant with its organization's groups held, which
+        // its removal holds too, so the group still stands and its removal finds the
+        // grant. They are held before the role, as a change of members holds them.
+        bool standing = grant.Subject.Type != SubjectType.Group;
+
+        if (!standing)
+        {
+            await groups.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
+
+            standing = await HolderAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false);
+        }
+
+        // D-166 X3: the role is read under its row's lock, which a definition and a
+        // removal hold too, so OPS-CFG-007 is judged on what the role allows as
+        // committed; and two grants of one role at once are written one after the other,
+        // so the second finds the first.
+        Role? role = await roles.FindForUpdateAsync(grant.Role, cancellationToken).ConfigureAwait(false);
+
+        Error? refused = !standing
+            ? Unresolved("subjectId")
+            : role is null
+                ? Unresolved("role")
+                : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                    ?? (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false)
+                        ? Error.From(ErrorCodes.GrantDuplicate)
+                        : null);
+
+        if (refused is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GrantId>(refused);
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GrantId>(notCommitted);
+        }
 
         return Result.Success(grant.Id);
     }

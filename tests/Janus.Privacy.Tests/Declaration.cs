@@ -75,9 +75,9 @@ internal static class Declaration
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("statement", TimeSpan.FromDays(1826))
-            .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
-            .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
+            .LawfulBasis(new LawfulBasisDeclaration("agreement", "Agreement", true, true, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("interest", "Interest", false, false, true, true))
             .SensitiveCategory("financial")
             .Permission("statement:read")
             .Resource<Statement>("statement", statement => statement

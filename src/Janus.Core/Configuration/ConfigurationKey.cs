@@ -13,7 +13,7 @@ namespace Janus.Core.Configuration;
 /// <see cref="Settings"/>. A default instance was never read, so it has no text to give
 /// and no row can carry it (CONV-DESIGN-004).
 /// </remarks>
-public readonly partial record struct ConfigurationKey
+public readonly partial record struct ConfigurationKey : IParsable<ConfigurationKey>
 {
     private readonly string? _value;
 
@@ -38,6 +38,28 @@ public readonly partial record struct ConfigurationKey
     }
 
     /// <summary>
+    /// Reads a configuration key as a route or a query carries it.
+    /// </summary>
+    /// <param name="s">The text.</param>
+    /// <param name="provider">Unused: a configuration key is written one way.</param>
+    /// <returns>The value the text names.</returns>
+    /// <exception cref="FormatException">The text is not a configuration key.</exception>
+    static ConfigurationKey IParsable<ConfigurationKey>.Parse(string s, IFormatProvider? provider) =>
+        Read(s, out ConfigurationKey result)
+            ? result
+            : throw new FormatException("The text is not a configuration key.");
+
+    /// <summary>
+    /// Reads a configuration key as a route or a query carries it.
+    /// </summary>
+    /// <param name="s">The text.</param>
+    /// <param name="provider">Unused: a configuration key is written one way.</param>
+    /// <param name="result">The value, where the text names one.</param>
+    /// <returns>Whether the text is a configuration key.</returns>
+    static bool IParsable<ConfigurationKey>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out ConfigurationKey result) =>
+        Read(s, out result);
+
+    /// <summary>
     /// The key as the management application and the audit record name it.
     /// </summary>
     /// <returns>The dot-separated key.</returns>
@@ -51,6 +73,20 @@ public readonly partial record struct ConfigurationKey
     // A family key carries the organization identifier or the host's category name as
     // its last segment (D-151), and those are not confined to letters: an identifier is
     // a version 7 value and begins with a digit as often as with a letter.
+    private static bool Read(string? text, out ConfigurationKey result)
+    {
+        if (text is null || !Shape().IsMatch(text))
+        {
+            result = default;
+
+            return false;
+        }
+
+        result = new ConfigurationKey(text);
+
+        return true;
+    }
+
     [GeneratedRegex("^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)*$", RegexOptions.CultureInvariant)]
     private static partial Regex Shape();
 }

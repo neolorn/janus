@@ -69,7 +69,9 @@ public interface IRecovery
     /// <returns>
     /// When the link stops working, or <c>auth.recovery.selfapproval</c>,
     /// <c>auth.recovery.reasonrequired</c>, <c>auth.recovery.channelnotonaccount</c>,
-    /// <c>auth.stepup.required</c>, <c>authz.denied</c> or <c>auth.throttled</c>.
+    /// <c>auth.stepup.required</c>, <c>authz.denied</c>, <c>auth.throttled</c>, or
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is past 1024
+    /// characters after trimming, or <c>channelUsed</c> where it is blank or past them.
     /// </returns>
     ValueTask<Result<ApprovedRecovery>> ApproveAsync(
         AccessContext context,

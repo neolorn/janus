@@ -6,6 +6,7 @@ namespace Janus.Hosting.BreakGlass;
 /// The body of <c>POST /auth/break-glass</c>.
 /// </summary>
 /// <param name="Credential">The sealed code, as it was typed or scanned.</param>
+/// <param name="Reason">Why the owner opens the emergency session, in their own words.</param>
 /// <remarks>Implements OPS-BOOT-002 and FE-BG-001.</remarks>
 [NeverLogged]
-internal sealed record PresentBreakGlassRequest([property: NeverLogged] string? Credential);
+internal sealed record PresentBreakGlassRequest([property: NeverLogged] string? Credential, string? Reason);

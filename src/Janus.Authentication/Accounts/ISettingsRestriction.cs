@@ -20,8 +20,11 @@ internal interface ISettingsRestriction
     /// <summary>
     /// The refusal a change to the account's own settings meets, if any.
     /// </summary>
-    /// <param name="subject">The account whose settings would change.</param>
+    /// <param name="context">
+    /// Who is asking, whose effective identity is the account whose settings would
+    /// change.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns><c>authz.restricted</c> for a restricted account; otherwise nothing.</returns>
-    ValueTask<Error?> RefusedAsync(SubjectId subject, CancellationToken cancellationToken);
+    ValueTask<Error?> RefusedAsync(AccessContext context, CancellationToken cancellationToken);
 }

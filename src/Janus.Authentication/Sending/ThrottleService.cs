@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -58,7 +57,7 @@ internal sealed class ThrottleService(
         DateTimeOffset now = time.GetUtcNow();
         TimeSpan standing = TimeSpan.Zero;
 
-        foreach ((ThrottleScope scope, string key) in Scopes(attempt))
+        foreach ((ThrottleScope scope, string key) in Holding(attempt))
         {
             ThrottleCounter? counted = await ledger
                 .FindAsync(scope, key, cancellationToken)
@@ -105,17 +104,6 @@ internal sealed class ThrottleService(
     }
 
     /// <summary>
-    /// The refusal a standing delay produces, which says when the next attempt is
-    /// looked at and nothing about whether the account exists. Every throttle of the
-    /// library answers in this one shape, which the boundary turns into
-    /// <c>Retry-After</c> (AUTH-ABUSE-002, BFF-ABUSE-001).
-    /// </summary>
-    /// <param name="lifts">When the delay has run.</param>
-    /// <returns>The failure.</returns>
-    public static Error Refusal(DateTimeOffset lifts) =>
-        Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts));
-
-    /// <summary>
     /// Counts one failed attempt against every scope it belongs to.
     /// </summary>
     /// <param name="attempt">Who attempted what, from where.</param>
@@ -145,10 +133,18 @@ internal sealed class ThrottleService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        foreach ((ThrottleScope scope, string key) in Scopes(attempt))
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
+            return Result.Failure(notBegun);
+        }
+
+        foreach ((ThrottleScope scope, string key) in Counting(attempt))
+        {
+            // D-166 X3: counted from what stands with the scope's counter held, so
+            // failures at once are each counted.
+            await ledger.HoldAsync(scope, key, cancellationToken).ConfigureAwait(false);
+
             ThrottleCounter? counted = await ledger
                 .FindAsync(scope, key, cancellationToken)
                 .ConfigureAwait(false);
@@ -169,12 +165,18 @@ internal sealed class ThrottleService(
 
                 if (published.Match(() => (Error?)null, error => error) is Error unpublished)
                 {
+                    await work.RollbackAsync().ConfigureAwait(false);
+
                     return Result.Failure(unpublished);
                 }
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -202,9 +204,12 @@ internal sealed class ThrottleService(
             return;
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        await ledger.HoldAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
         await ledger.ClearAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -214,16 +219,20 @@ internal sealed class ThrottleService(
         return default!;
     }
 
-    private static IEnumerable<(ThrottleScope Scope, string Key)> Scopes(ThrottleAttempt attempt)
+    // The scopes whose delay holds an attempt. A browser the account already knows is
+    // not the attack, so the components an attacker can raise from anywhere do not hold
+    // it; the source always does (AUTH-ABUSE-001).
+    private static IEnumerable<(ThrottleScope Scope, string Key)> Holding(ThrottleAttempt attempt) =>
+        attempt.Recognised
+            ? [(ThrottleScope.Source, attempt.Source)]
+            : Counting(attempt);
+
+    // The scopes a failure is counted against: every one it belongs to, a recognised
+    // browser's included, so its failures still raise the account's alert and hold
+    // other browsers (AUTH-ABUSE-001 AC10).
+    private static IEnumerable<(ThrottleScope Scope, string Key)> Counting(ThrottleAttempt attempt)
     {
         yield return (ThrottleScope.Source, attempt.Source);
-
-        // A browser the account already knows is not the attack, so the components an
-        // attacker can raise from anywhere do not hold it (AUTH-ABUSE-001).
-        if (attempt.Recognised)
-        {
-            yield break;
-        }
 
         if (attempt.Account is SubjectId account)
         {
@@ -234,6 +243,31 @@ internal sealed class ThrottleService(
         {
             yield return (ThrottleScope.Identifier, Convert.ToHexString(identifier));
         }
+    }
+
+    /// <summary>
+    /// The expiry sweep's pass over the counters: each one whose standing has decayed to
+    /// nothing goes, whatever version of the fingerprint key it is under (D-166, 318).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the pass.</param>
+    /// <returns>Success, or the failure to read the decay.</returns>
+    public async ValueTask<Result> SweepAsync(CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan decay = (await configuration
+                .ReadAsync(Settings.AbuseThrottleDecay, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        await ledger.SweepAsync(time.GetUtcNow(), decay, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
     }
 
     private async ValueTask<Result<ThrottleTerms>> TermsAsync(CancellationToken cancellationToken)

@@ -22,6 +22,15 @@ internal interface IRecoveryCodeStore
     ValueTask<RecoveryCodeSet?> FindAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The account's set, its row held until the operation's transaction ends, so a code
+    /// spent on it is spent alone (D-166 X3).
+    /// </summary>
+    /// <param name="subject">Whose set.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The set as it stands once the lock is taken, or nothing.</returns>
+    ValueTask<RecoveryCodeSet?> FindForUpdateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes the account's set, replacing whatever it held.
     /// </summary>
     /// <param name="set">The set.</param>

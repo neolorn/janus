@@ -51,9 +51,9 @@ public sealed class IntegrationBoundaryTests
         "Mailcow",
     ];
 
-    // The caches a deployment might put behind the cache extension point, and the
-    // clients that reach them. Chapter 07 ships one of them by default, and the core
-    // contract still names none.
+    // The caches a deployment might one day put in front of its database, and the
+    // clients that reach them. Version 1 has no cache and no extension point for one
+    // (INF-CACHE-001), and the core contract names none.
     private static readonly string[] Caches =
     [
         "Redis",
@@ -67,8 +67,8 @@ public sealed class IntegrationBoundaryTests
     ];
 
     // The secrets managers a deployment might read its keys and the maintenance
-    // credential from through the secret source. "AWS" is left out because it is in
-    // "draws" and "withdraws", and the vendor's other names stand for it.
+    // credential from through the secret source. "AWS" is read apart, as a whole word
+    // in capitals, because it is in "draws" and "withdraws".
     private static readonly string[] SecretSources =
     [
         "HashiCorp",
@@ -91,6 +91,9 @@ public sealed class IntegrationBoundaryTests
         "Thycotic",
     ];
 
+    // The one vendor name that is also the inside of ordinary words.
+    private static readonly Regex Aws = new(@"\bAWS\b", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     // The one schema the library owns, and the catalogue PostgreSQL answers its own
     // questions from.
     private static readonly string[] OwnSchemas = ["identity", "pg_catalog"];
@@ -105,7 +108,16 @@ public sealed class IntegrationBoundaryTests
     // site and nowhere else.
     private static readonly string[] Payloads = ["new MailMessage(", "new SmsMessage("];
 
-    private static readonly string[] Mapping = ["SendingService.cs"];
+    private static readonly string[] Mapping = ["NotificationHandler.cs"];
+
+    private static readonly string[] CoreProjects =
+    [
+        "Janus.Core",
+        "Janus.Identity",
+        "Janus.Authentication",
+        "Janus.Authorization",
+        "Janus.Privacy",
+    ];
 
     /// <summary>
     /// INT-SMS-006 AC1: no provider name appears anywhere in the library, so the
@@ -122,9 +134,10 @@ public sealed class IntegrationBoundaryTests
     }
 
     /// <summary>
-    /// LIB-EXT-001 AC3: no product of any extension point is named in the core
-    /// contract: no gateway or mail transport, no mail server, no cache and no secrets
-    /// manager. Google and Apple are not searched for, since they are factors of the
+    /// LIB-EXT-001 AC3: no product of any extension point is named in a core
+    /// namespace, <c>Janus.Core</c> or an area project: no gateway or mail transport,
+    /// no mail server and no secrets manager, and no cache, which version 1 does not
+    /// have (INF-CACHE-001). Google and Apple are not searched for, since they are factors of the
     /// catalogue chapter 02 fixes rather than a product behind an extension point, and
     /// neither is PostgreSQL, which LIB-API-004 has the contract name.
     /// </summary>
@@ -132,16 +145,12 @@ public sealed class IntegrationBoundaryTests
     public void LIB_EXT_001_AC3_NoProviderNameAppearsInTheCoreNamespace()
     {
         string[] products = [.. Gateways, .. MailServers, .. Caches, .. SecretSources];
-        string[] core =
-        [
-            .. Sources().Where(file => file.Contains(
-                Path.DirectorySeparatorChar + "Janus.Core" + Path.DirectorySeparatorChar,
-                StringComparison.Ordinal)),
-        ];
+        string[] core = [.. CoreNamespaces()];
 
         IEnumerable<string> naming = core
             .Where(file => products.Any(product =>
-                File.ReadAllText(file).Contains(product, StringComparison.OrdinalIgnoreCase)))
+                    File.ReadAllText(file).Contains(product, StringComparison.OrdinalIgnoreCase))
+                || Aws.IsMatch(File.ReadAllText(file)))
             .Select(Path.GetFileName)
             .Select(name => name!);
 
@@ -165,16 +174,21 @@ public sealed class IntegrationBoundaryTests
     }
 
     /// <summary>
-    /// INT-MAIL-008 AC1: no mail server is named anywhere in the library, so the one
-    /// hosting the staff mailboxes is a deployment's registration.
+    /// INT-MAIL-008 AC1: no mail server is named in a core namespace, <c>Janus.Core</c>
+    /// or an area project, so the one hosting the staff mailboxes is a deployment's
+    /// registration. The shipped adapter in <c>Janus.Hosting</c> speaks the capability
+    /// INT-MAIL-001 names, and is outside them.
     /// </summary>
     [Fact]
-    public void INT_MAIL_008_AC1_NoMailServerIsNamedInTheLibrary()
+    public void INT_MAIL_008_AC1_NoMailServerIsNamedInTheCoreNamespace()
     {
-        IEnumerable<string> naming = Sources()
+        string[] core = [.. CoreNamespaces()];
+
+        IEnumerable<string> naming = core
             .Where(file => MailServers.Any(server =>
                 File.ReadAllText(file).Contains(server, StringComparison.OrdinalIgnoreCase)));
 
+        Assert.NotEmpty(core);
         Assert.Empty(naming);
     }
 
@@ -238,6 +252,12 @@ public sealed class IntegrationBoundaryTests
             .Select(name => name!)
             .Order(StringComparer.Ordinal),
     ];
+
+    // Chapter 07: a core namespace is Janus.Core's or an area project's.
+    private static IEnumerable<string> CoreNamespaces() =>
+        Sources().Where(file => CoreProjects.Any(project => file.Contains(
+            Path.DirectorySeparatorChar + project + Path.DirectorySeparatorChar,
+            StringComparison.Ordinal)));
 
     private static IEnumerable<string> Sources() =>
         Directory

@@ -16,7 +16,9 @@ internal sealed class ReadBaselineConfiguration : IEntityTypeConfiguration<ReadB
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("read_baselines");
+        builder.ToTable("read_baselines", table => table.HasCheckConstraint(
+            "ck_read_baselines_actor_not_max_uuid",
+            MaxUuid.Refused("actor")));
 
         builder.HasKey(baseline => baseline.Actor).HasName("pk_read_baselines");
 

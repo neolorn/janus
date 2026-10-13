@@ -101,13 +101,14 @@ internal sealed class ErasureReplay(
     private static Dictionary<string, JsonElement> Named(ErasureLedgerLine line) =>
         new(capacity: 2, StringComparer.Ordinal)
         {
-            ["reason"] = JsonSerializer.SerializeToElement(line.Reason.ToString()),
+            ["reason"] = JsonSerializer.SerializeToElement(ErasureLedgerLine.Spelling(line.Reason)),
             ["erasedAt"] = JsonSerializer.SerializeToElement(line.ErasedAt),
         };
 
     private async ValueTask ReappliedAsync(ErasureLedgerLine line, CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         _ = await eraser
             .ReapplyAsync(line.Subject, line.Reason, Origin(line.Reason), line.ErasedAt, cancellationToken)
@@ -126,10 +127,12 @@ internal sealed class ErasureReplay(
                 Erased,
                 Replaying,
                 line.Subject,
+                organization: null,
                 time.GetUtcNow(),
                 Named(line),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 }

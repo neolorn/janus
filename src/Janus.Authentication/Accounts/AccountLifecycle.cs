@@ -18,10 +18,12 @@ namespace Janus.Authentication.Accounts;
 /// up, asks for its own erasure and changes its mind inside the window.
 /// </summary>
 /// <param name="directory">Where the standing is read and the transition carried.</param>
+/// <param name="restriction">The gate's answer on a restricted account's deactivation.</param>
 /// <param name="identifiers">Where the addresses a notice reaches are read.</param>
 /// <param name="links">Where the link a notice carries is held.</param>
 /// <param name="sessions">What every transition out of active ends.</param>
 /// <param name="sending">Where a notice goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="audit">Where what the account did to itself is recorded.</param>
 /// <param name="stepUp">What the two gated operations ask of the session.</param>
 /// <param name="events">Where the lifecycle event goes.</param>
@@ -36,10 +38,12 @@ namespace Janus.Authentication.Accounts;
 /// </remarks>
 internal sealed class AccountLifecycle(
     IAccountDirectory directory,
+    ISettingsRestriction restriction,
     IIdentifierDirectory identifiers,
     ILifecycleLinkStore links,
     ISessionStore sessions,
-    INotificationHandler sending,
+    IGovernedSend sending,
+    LandingLinks landing,
     IAccountAudit audit,
     StepUpGuard stepUp,
     IEvents events,
@@ -83,6 +87,26 @@ internal sealed class AccountLifecycle(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.AccountDeactivate) is Error withheld)
+        {
+            return Result.Failure(withheld);
+        }
+
+        // IDN-ACCT-007 AC2, AUTHZ-GATE-006: a restricted account takes no modifying
+        // action, and the gate is where that is refused.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
+        // IDN-ACCT-007, X5: the state is judged before the step-up, which is judged last.
+        if (await UnadmittedAsync(subject, deletion: false, cancellationToken).ConfigureAwait(false)
+            is Error unadmitted)
+        {
+            return Result.Failure(unadmitted);
+        }
+
         if (await stepUp
                 .PassedAsync(subject, session, StepUpAction.AccountDeactivate, cancellationToken)
                 .ConfigureAwait(false)
@@ -91,16 +115,37 @@ internal sealed class AccountLifecycle(
             return Result.Failure(closed);
         }
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState.Active)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
         DateTimeOffset now = time.GetUtcNow();
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: decided again on the account's row under its lock, so a transition
+        // committed since the first decision is the one this one follows.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself before any other, so one committed since the gate step
+        // refuses the deactivation before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        if (await UnadmittedAsync(subject, deletion: false, cancellationToken).ConfigureAwait(false)
+            is Error moved)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
+        }
+
         await directory.DeactivateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         await links
@@ -117,7 +162,7 @@ internal sealed class AccountLifecycle(
                 subject,
                 MessageKind.DeactivationNotice,
                 source,
-                token.Value,
+                landing.Of(LinkKind.Reactivation, token.Value),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -126,19 +171,27 @@ internal sealed class AccountLifecycle(
                 new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Self)
                 {
                     Subject = subject,
-                    Actor = subject,
+                    Actor = context.Acting,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
-        await audit.RecordedAsync(Deactivated, subject, subject, now, cancellationToken)
+        await audit.RecordedAsync(Deactivated, subject, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -163,21 +216,29 @@ internal sealed class AccountLifecycle(
             return Result.Failure(Error.From(ErrorCodes.ReactivationTokenInvalid));
         }
 
-        // IDN-LIFE-013: the two suspensions are reversed differently, and a link
-        // cannot stand up an account an administrator took down.
-        switch (await directory.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+        if (await ReactivationRefusedAsync(link.Subject, cancellationToken).ConfigureAwait(false) is Error refusal)
         {
-            case SuspensionOrigin.Administrator:
-                return Result.Failure(Error.From(ErrorCodes.AccountAdministrativelySuspended));
-            case null:
-                return Result.Failure(Error.From(ErrorCodes.ReactivationTokenInvalid));
-            default:
-                break;
+            return Result.Failure(refusal);
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: as for a deactivation.
+        await directory.HoldAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (await ReactivationRefusedAsync(link.Subject, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
+        }
+
         await directory.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
@@ -186,19 +247,25 @@ internal sealed class AccountLifecycle(
                 new AccountReactivated(now, Key(link.Subject, now))
                 {
                     Subject = link.Subject,
-                    Actor = link.Subject,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
-        await audit.RecordedAsync(Reactivated, link.Subject, link.Subject, now, cancellationToken)
+        await audit.RecordedAsync(Reactivated, link.Subject, breakGlassReason: null, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -226,18 +293,25 @@ internal sealed class AccountLifecycle(
             return Result.Failure<DateTimeOffset>(Error.From(ErrorCodes.Denied));
         }
 
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.AccountDelete) is Error withheld)
+        {
+            return Result.Failure<DateTimeOffset>(withheld);
+        }
+
+        // IDN-ACCT-007, X5: as for a deactivation; a restricted account exercises its
+        // right to erasure.
+        if (await UnadmittedAsync(subject, deletion: true, cancellationToken).ConfigureAwait(false)
+            is Error unadmitted)
+        {
+            return Result.Failure<DateTimeOffset>(unadmitted);
+        }
+
         if (await stepUp
                 .PassedAsync(subject, session, StepUpAction.AccountDelete, cancellationToken)
                 .ConfigureAwait(false)
             is Error closed)
         {
             return Result.Failure<DateTimeOffset>(closed);
-        }
-
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not (AccountState.Active or AccountState.Restricted))
-        {
-            return Result.Failure<DateTimeOffset>(Error.From(ErrorCodes.Denied));
         }
 
         Error? refused = null;
@@ -255,7 +329,23 @@ internal sealed class AccountLifecycle(
         DateTimeOffset erasesAt = now + grace;
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<DateTimeOffset>(notBegun);
+        }
+
+        // D-166 X3: as for a deactivation.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await UnadmittedAsync(subject, deletion: true, cancellationToken).ConfigureAwait(false)
+            is Error moved)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<DateTimeOffset>(moved);
+        }
+
         await directory.BeginDeletionAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         await links
@@ -268,7 +358,7 @@ internal sealed class AccountLifecycle(
         // removed, and the window runs with nothing of theirs still live.
         await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
-        _ = await TellAsync(subject, MessageKind.DeletionNotice, source, token.Value, cancellationToken)
+        _ = await TellAsync(subject, MessageKind.DeletionNotice, source, landing.Of(LinkKind.DeletionCancel, token.Value), cancellationToken)
             .ConfigureAwait(false);
 
         Result published = await events
@@ -276,19 +366,27 @@ internal sealed class AccountLifecycle(
                 new AccountDeletionRequested(now, Key(subject, now), DeletionOrigin.Self, erasesAt)
                 {
                     Subject = subject,
-                    Actor = subject,
+                    Actor = context.Acting,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<DateTimeOffset>(unpublished);
         }
 
-        await audit.RecordedAsync(DeletionRequested, subject, subject, now, cancellationToken)
+        await audit.RecordedAsync(DeletionRequested, subject, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<DateTimeOffset>(notCommitted);
+        }
 
         return Result.Success(erasesAt);
     }
@@ -312,29 +410,29 @@ internal sealed class AccountLifecycle(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        HeldDeletion? deleting = link is null
-            ? null
-            : await directory.DeletingAsync(link.Subject, cancellationToken).ConfigureAwait(false);
-
-        // IDN-LIFE-003: a takedown is not the subject's to cancel, and says so rather
-        // than answering as a window that has run out.
-        if (deleting?.By is DeletionOrigin.Takedown)
+        if (await CancellationRefusedAsync(link, cancellationToken).ConfigureAwait(false) is Error refusal)
         {
-            return Result.Failure(Error.From(ErrorCodes.TakedownActive));
-        }
-
-        if (link is null
-            || deleting is null
-            || await ElapsedAsync(deleting, cancellationToken).ConfigureAwait(false))
-        {
-            // A token that answers to nothing and a window that has run out are the
-            // same answer: neither says whether a deletion was ever asked for.
-            return Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed));
+            return Result.Failure(refusal);
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: as for a deactivation.
+        await directory.HoldAsync(link!.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (await CancellationRefusedAsync(link, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
+        }
+
         await directory.CancelDeletionAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
@@ -343,20 +441,26 @@ internal sealed class AccountLifecycle(
                 new AccountDeletionCancelled(now, Key(link.Subject, now))
                 {
                     Subject = link.Subject,
-                    Actor = link.Subject,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
         await audit
-            .RecordedAsync(DeletionCancelled, link.Subject, link.Subject, now, cancellationToken)
+            .RecordedAsync(DeletionCancelled, link.Subject, breakGlassReason: null, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -383,6 +487,62 @@ internal sealed class AccountLifecycle(
         return default!;
     }
 
+    // IDN-ACCT-007 (D-166): an account takes itself down, or begins its deletion, only
+    // from a state that admits it, and any other state is named. A restriction the gate
+    // did not refuse is the restriction committed since it read the account, refused
+    // as before; an account no row bears is no person's.
+    private async ValueTask<Error?> UnadmittedAsync(
+        SubjectId subject,
+        bool deletion,
+        CancellationToken cancellationToken) =>
+        await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) switch
+        {
+            AccountState.Active => null,
+            AccountState.Restricted => deletion ? null : Error.From(ErrorCodes.Denied),
+            AccountState.Suspended => AccountAdministration.StateConflict(
+                AccountState.Suspended,
+                await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)),
+            AccountState other => AccountAdministration.StateConflict(other, suspendedBy: null),
+            null => Error.From(ErrorCodes.Denied),
+        };
+
+    private async ValueTask<Error?> ReactivationRefusedAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+
+        // IDN-LIFE-013: the two suspensions are reversed differently, and a link
+        // cannot stand up an account an administrator took down.
+        await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false) switch
+        {
+            SuspensionOrigin.Administrator => Error.From(ErrorCodes.AccountAdministrativelySuspended),
+            null => Error.From(ErrorCodes.ReactivationTokenInvalid),
+            _ => null,
+        };
+
+    private async ValueTask<Error?> CancellationRefusedAsync(
+        LifecycleLink? link,
+        CancellationToken cancellationToken)
+    {
+        HeldDeletion? deleting = link is null
+            ? null
+            : await directory.DeletingAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        // IDN-LIFE-003: a takedown is not the subject's to cancel, and says so rather
+        // than answering as a window that has run out.
+        if (deleting?.By is DeletionOrigin.Takedown)
+        {
+            return Error.From(ErrorCodes.TakedownActive);
+        }
+
+        // A token that answers to nothing and a window that has run out are the same
+        // answer: neither says whether a deletion was ever asked for.
+        return link is null
+            || deleting is null
+            || await ElapsedAsync(deleting, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.DeletionWindowElapsed)
+            : null;
+    }
+
     private async ValueTask<LifecycleLink?> PresentedAsync(
         [NeverLogged] string linkToken,
         LifecycleLinkKind kind,
@@ -406,7 +566,7 @@ internal sealed class AccountLifecycle(
     {
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.AccountDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => TimeSpan.Zero);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return time.GetUtcNow() >= deleting.Since + grace;
     }
@@ -415,7 +575,7 @@ internal sealed class AccountLifecycle(
         SubjectId subject,
         MessageKind message,
         string source,
-        [NeverLogged] string token,
+        [NeverLogged] string link,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
@@ -424,7 +584,7 @@ internal sealed class AccountLifecycle(
         string? language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
         var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
         {
-            ["token"] = token,
+            ["link"] = link,
         };
 
         int told = 0;
@@ -437,8 +597,8 @@ internal sealed class AccountLifecycle(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,
@@ -465,7 +625,7 @@ internal sealed class AccountLifecycle(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }

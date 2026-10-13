@@ -49,6 +49,7 @@ internal sealed class ConfigurationAudit(
                     change.At,
                     change.Actor,
                     change.Actor,
+                    change.BreakGlassReason,
                     organization: null,
                     Details(change.Key, change.Before, change.After, change.Loosening, change.Reason)),
                 cancellationToken)
@@ -77,7 +78,7 @@ internal sealed class ConfigurationAudit(
                     Changed,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization: null,
                     Details(key, before, after, loosening, reason)),
                 cancellationToken)
@@ -98,6 +99,13 @@ internal sealed class ConfigurationAudit(
         SubjectId actor,
         CancellationToken cancellationToken) =>
         await ReadAsync(Changes().Where(row => row.ActingSubject == actor), cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<ConfigurationChange>> OfPrincipalAsync(
+        string principal,
+        CancellationToken cancellationToken) =>
+        await ReadAsync(Changes().Where(row => row.Principal == principal), cancellationToken)
             .ConfigureAwait(false);
 
     private static Dictionary<string, JsonElement> Details(
@@ -143,7 +151,9 @@ internal sealed class ConfigurationAudit(
             fields.GetProperty("loosening").GetBoolean(),
             fields.TryGetProperty("reason", out JsonElement reason) ? reason.GetString() : null,
             row.ActingSubject,
-            row.OccurredAt);
+            row.BreakGlassReason,
+            row.OccurredAt,
+            row.Principal);
     }
 
     private static async ValueTask<IReadOnlyList<ConfigurationChange>> ReadAsync(

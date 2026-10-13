@@ -23,6 +23,20 @@ internal sealed class RolesInMemory : IRoleStore
     public ValueTask<Role?> FindAsync(RoleName name, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_roles.TryGetValue(name, out Role? role) ? role : null);
 
+    /// <summary>
+    /// What another transaction committed on a role while this one waited for its lock,
+    /// applied as the lock is taken.
+    /// </summary>
+    public Action<RoleName>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<Role?> FindForUpdateAsync(RoleName name, CancellationToken cancellationToken)
+    {
+        Locking?.Invoke(name);
+
+        return FindAsync(name, cancellationToken);
+    }
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Role>> AllAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<Role>>([.. _roles.Values.OrderBy(role => role.Name.ToString(), StringComparer.Ordinal)]);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Enumeration;
 using System.Linq;
@@ -26,18 +27,26 @@ public sealed class ProductNameTests
     // reader of the package; the scan is of the source.
     private static readonly string[] Documents = ["*.md", "NOTICE"];
 
-    // The first segment of a dotted name (a namespace, or a project, assembly, package
-    // or solution identifier), and the entry point.
-    private static readonly Regex Permitted = new(
-        $@"(?<!\w)(?:{Regex.Escape(Name)}(?=\.)|Add{Regex.Escape(Name)}\b)",
-        RegexOptions.None,
-        TimeSpan.FromSeconds(5));
+    // The second segments a dotted name headed by the product name may carry: the name
+    // of each project folder of the solution, and the solution file's extension.
+    private static readonly string[] Projects =
+    [
+        .. new[] { "src", "tests", "tools" }
+            .SelectMany(root => Directory.EnumerateDirectories(Path.Combine(Repository.Root, root)))
+            .Select(folder => Path.GetFileName(folder).Split('.'))
+            .Where(segments => segments.Length > 1 && string.Equals(segments[0], Name, StringComparison.Ordinal))
+            .Select(segments => segments[1])
+            .Append("slnx")
+            .Distinct(StringComparer.Ordinal),
+    ];
+
+    // The head of a dotted name whose second segment is a project of the solution (a
+    // namespace, or a project, assembly, package or solution identifier), and the entry
+    // point.
+    private static readonly Regex Permitted = Heads(RegexOptions.None);
 
     // NuGet writes a package identifier in lower case in the lock file.
-    private static readonly Regex LockedPackage = new(
-        $@"""{Regex.Escape(Name)}\.",
-        RegexOptions.IgnoreCase,
-        TimeSpan.FromSeconds(5));
+    private static readonly Regex LockedPackage = Heads(RegexOptions.IgnoreCase);
 
     /// <summary>
     /// CONV-NAME-001 AC2: a source scan finds the product name only in namespaces,
@@ -55,6 +64,37 @@ public sealed class ProductNameTests
         Assert.Empty(carrying);
     }
 
+    /// <summary>
+    /// CONV-NAME-001 AC2: a dot after the name is not enough. A dotted header or string
+    /// constant whose second segment names no project of the solution is found, and a
+    /// namespace declaration is not.
+    /// </summary>
+    /// <param name="line">The line the scan reads.</param>
+    /// <param name="found">Whether the scan finds the name in it.</param>
+    [Theory]
+    [InlineData("context.Response.Headers[\"{0}.Correlation\"] = value;", true)]
+    [InlineData("private const string Key = \"{0}.Setting\";", true)]
+    [InlineData("namespace {0}.Hosting.Bff;", false)]
+    [InlineData("services.Add{0}(declaration);", false)]
+    public void CONV_NAME_001_AC2_ADottedNameThatIsNoProjectIsFound(string line, bool found) =>
+        Assert.Equal(found, Carries("Source.cs", string.Format(CultureInfo.InvariantCulture, line, Name)));
+
+    /// <summary>
+    /// CONV-NAME-001 AC2: in the lock file the package identifiers are held to the same
+    /// rule in lower case, and nothing else is let through.
+    /// </summary>
+    /// <param name="line">The line the scan reads.</param>
+    /// <param name="found">Whether the scan finds the name in it.</param>
+    [Theory]
+    [InlineData("\"{0}.core\": {{", false)]
+    [InlineData("\"{0}.setting\": {{", true)]
+    public void CONV_NAME_001_AC2_ALockedPackageIsHeldToTheProjectsInLowerCase(string line, bool found) =>
+        Assert.Equal(
+            found,
+            Carries(
+                "packages.lock.json",
+                string.Format(CultureInfo.InvariantCulture, line, CultureInfo.InvariantCulture.TextInfo.ToLower(Name))));
+
     private static bool Carries(string file, string line)
     {
         string remaining = Permitted.Replace(line, string.Empty);
@@ -66,6 +106,12 @@ public sealed class ProductNameTests
 
         return remaining.Contains(Name, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static Regex Heads(RegexOptions options) =>
+        new(
+            $@"(?<!\w)(?:{Regex.Escape(Name)}(?=\.(?:{string.Join('|', Projects.Select(Regex.Escape))})\b)|Add{Regex.Escape(Name)}\b)",
+            options,
+            TimeSpan.FromSeconds(5));
 
     private static IEnumerable<string> Sources() =>
         Roots

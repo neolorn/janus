@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -15,7 +16,7 @@ namespace Janus.Authentication.Oidc;
 /// from, the end of everything derived from a record whose token came back twice, the
 /// claims a token covers, and the keys it is validated against.
 /// </summary>
-/// <param name="keys">What signs tokens and publishes the set they validate against.</param>
+/// <param name="source">The signing keys the set a token validates against is read from.</param>
 /// <param name="sessions">Where the session record a token stands on is read and ended.</param>
 /// <param name="identifiers">Where the primary address and the language are read.</param>
 /// <param name="accounts">Where the display name is read.</param>
@@ -30,27 +31,18 @@ namespace Janus.Authentication.Oidc;
 /// never outlives it, and ending the record ends both.
 /// </remarks>
 internal sealed class OidcService(
-    SigningKeys keys,
+    SigningCredentialSource source,
     ISessionStore sessions,
     IIdentifierDirectory identifiers,
     IAccountDirectory accounts,
     IOidcAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,
-    TimeProvider time) : IOidc
+    TimeProvider time) : IOidc, ITokenMinting
 {
     private static readonly char[] Separator = [' '];
 
-    /// <summary>
-    /// What a token minted from a session record may carry and how long it may last.
-    /// </summary>
-    /// <param name="session">The record the token stands on.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>
-    /// What to mint from, or <c>auth.session.expired</c> where the record has been
-    /// revoked or has reached either of its expiries: no token is minted from a record
-    /// that no longer answers.
-    /// </returns>
+    /// <inheritdoc/>
     public async ValueTask<Result<MintedSession>> MintAsync(
         SessionId session,
         CancellationToken cancellationToken)
@@ -102,22 +94,34 @@ internal sealed class OidcService(
         // AUTH-OIDC-003 AC1 and AC2: a token presented twice means a copy is in
         // someone's hands and there is no telling whose, so everything derived from the
         // record goes and the whole of it is recorded.
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await sessions.EndSpineAsync(session, now, cancellationToken).ConfigureAwait(false);
         await audit.ReusedAsync(subject, clientId, session, now, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     /// <inheritdoc/>
     public async ValueTask<Result<OidcClaims>> ClaimsAsync(
-        SubjectId subject,
+        AccessContext context,
         string scope,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(scope);
 
+        // LIB-API-005 (D-166, 160): a caller in process reads the claims of the identity
+        // it carries and of no other account.
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure<OidcClaims>(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007: a restricted account signs on and reads its mail, as an active
+        // one does.
         if (await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState.Active)
+            is not (AccountState.Active or AccountState.Restricted))
         {
             return Result.Failure<OidcClaims>(Error.From(ErrorCodes.Denied));
         }
@@ -162,9 +166,28 @@ internal sealed class OidcService(
     }
 
     /// <inheritdoc/>
-    public ValueTask<Result<IReadOnlyList<PublishedSigningKey>>> KeysAsync(
-        CancellationToken cancellationToken) =>
-        keys.PublishedAsync(cancellationToken);
+    public async ValueTask<Result<IReadOnlyList<PublishedSigningKey>>> KeysAsync(
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        // AUTH-KEY-001: a request for the key set is a read of the signing keys, so a
+        // change its times make due is made before the set is answered.
+        SigningKeySet set = (await source.ReadAsync(configuration, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<SigningKeySet>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IReadOnlyList<PublishedSigningKey>>(failure);
+        }
+
+        return Result.Success<IReadOnlyList<PublishedSigningKey>>(
+            [.. set.Published(time.GetUtcNow()).Select(held => new PublishedSigningKey(
+                held.Key.KeyId,
+                held.Key.Algorithm,
+                held.Key.PublicKey,
+                held.Key.OverlapEndsAt))]);
+    }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

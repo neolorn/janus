@@ -7,6 +7,7 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Maintenance;
@@ -33,10 +34,22 @@ internal static class MaintenanceEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/licences", LicencesAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/licences", ReplaceAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/maintenance", LogAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/compliance/maintenance", RecordAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/licences", LicencesAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<LicencesView>();
+        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/licences", ReplaceAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/maintenance", LogAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
+            .Produces<MaintenanceLogView>();
+        _ = SessionRequired.On(endpoints.MapPost("/admin/compliance/maintenance", RecordAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Produces<MaintenanceEntryView>(StatusCodes.Status201Created);
 
         return endpoints;
     }
@@ -51,7 +64,7 @@ internal static class MaintenanceEndpoints
 
         return Answers.Of(
             await records
-                .LicencesAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .LicencesAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             licences => TypedResults.Json(
                 new LicencesView([.. licences.Select(LicenceView.Of)]),
@@ -60,8 +73,9 @@ internal static class MaintenanceEndpoints
                 StatusCodes.Status200OK));
     }
 
+    // 09 section 8a: the body is the list of records itself.
     private static async Task<IResult> ReplaceAsync(
-        LicencesBody body,
+        [FromBody] IReadOnlyList<LicenceBody?> body,
         IMaintenanceRecords records,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -70,7 +84,7 @@ internal static class MaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(browser);
 
-        (IReadOnlyList<Licence>? licences, string member) = body.Read();
+        (IReadOnlyList<Licence>? licences, string member) = LicenceBody.Read(body);
 
         if (licences is null)
         {
@@ -79,7 +93,7 @@ internal static class MaintenanceEndpoints
 
         return Answers.Of(
             await records
-                .ReplaceLicencesAsync(AccessContext.Of(browser.Required.Subject), licences, cancellationToken)
+                .ReplaceLicencesAsync(browser.Asking, licences, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -94,7 +108,7 @@ internal static class MaintenanceEndpoints
 
         return Answers.Of(
             await records
-                .LogAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .LogAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             entries => TypedResults.Json(
                 new MaintenanceLogView([.. entries.Select(MaintenanceEntryView.Of)]),
@@ -123,13 +137,22 @@ internal static class MaintenanceEndpoints
             return Answers.Malformed("performedAt");
         }
 
+        // API-CONV-002, X4: a note is optional, and one given is 1 to 1024 characters
+        // after trimming, refused before the service is called (CONV-CODE-006 AC2).
+        string? note = body.Note?.Trim();
+
+        if (note is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("note");
+        }
+
         return Answers.Of(
             await records
                 .RecordAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     task,
                     performedAt,
-                    body.Note,
+                    note,
                     cancellationToken)
                 .ConfigureAwait(false),
             entry => TypedResults.Json(

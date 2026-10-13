@@ -14,9 +14,9 @@ namespace Janus.Authentication.Factors;
 /// <remarks>
 /// Implements AUTH-STEP-001, AUTH-STEP-002, BFF-STEP-001 and chapter 9
 /// <c>POST /auth/step-up</c>, whose shape this is: <c>required</c> carries
-/// <c>level</c>, <c>phishingResistant</c> and <c>maxAge</c> in whole seconds, beside
-/// <c>outcome</c>, <c>options</c> and <c>pendingUntil</c>, which is null unless the
-/// outcome is <c>pending</c>. A person who cannot reach the gate is offered enrolment
+/// <c>level</c>, <c>phishingResistant</c> and <c>maxAge</c> in whole seconds, null
+/// where the gate asks none, beside <c>outcome</c>, <c>options</c> and
+/// <c>pendingUntil</c>, which is null unless the outcome is <c>pending</c>. A person who cannot reach the gate is offered enrolment
 /// or a loss report, never refused outright, which is why the outcome travels with the
 /// refusal. The gate's name does not: the caller knows what it asked for.
 /// </remarks>
@@ -45,11 +45,18 @@ internal static class StepUpRefusal
     {
         ArgumentNullException.ThrowIfNull(challenge);
 
+        // A gate whose level is delegated asks no maximum age, so its refusal names none:
+        // the age the policy gives the action is a limit that gate does not apply
+        // (AUTH-STEP-007, D-193).
+        long? maximumAge = challenge.Required is AssuranceLevel.Delegated
+            ? null
+            : (long)challenge.MaximumAge.TotalSeconds;
+
         var required = new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
         {
             ["level"] = JsonSerializer.SerializeToElement(WrittenName.Of(challenge.Required)),
             ["phishingResistant"] = JsonSerializer.SerializeToElement(challenge.PhishingResistant),
-            ["maxAge"] = JsonSerializer.SerializeToElement((long)challenge.MaximumAge.TotalSeconds),
+            ["maxAge"] = JsonSerializer.SerializeToElement(maximumAge),
         };
 
         var details = new Dictionary<string, JsonElement>(capacity: 4, StringComparer.Ordinal)

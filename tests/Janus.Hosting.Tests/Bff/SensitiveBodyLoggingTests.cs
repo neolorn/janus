@@ -107,12 +107,12 @@ public sealed class SensitiveBodyLoggingTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-LOG-002 AC1: a request the logging meets before its endpoint is known is
+    /// BFF-LOG-002 AC3: a request the logging meets before its endpoint is known is
     /// treated as marked, so a host that logs ahead of routing logs no body at all.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_LOG_002_AC1_ABodyMetBeforeRoutingIsNotLoggedAsync()
+    public async Task BFF_LOG_002_AC3_ABodyMetBeforeRoutingIsNotLoggedAsync()
     {
         using WebApplication application = Registered(everything: true);
 
@@ -151,14 +151,7 @@ public sealed class SensitiveBodyLoggingTests : IDisposable
             });
         }
 
-        _ = builder.Services.AddJanus(
-            "Host=unused",
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            Encoding.UTF8.GetBytes("the secret this application presents"),
-            Encoding.UTF8.GetBytes("Host=unused"),
-            HostFixture.Declaration(),
-            ApplicationKind.Public);
+        _ = builder.Services.AddJanus("Host=unused", HostFixture.Declaration(), ApplicationKind.Public);
 
         // The transport every host registers, which the delivery report reads the
         // gateway's parameters through.

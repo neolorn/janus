@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
@@ -23,6 +24,7 @@ namespace Janus.Privacy.Records;
 /// <param name="roles">Where the roles holding a permission are read.</param>
 /// <param name="retention">How long each category is kept.</param>
 /// <param name="configuration">Where the hosting keys are read.</param>
+/// <param name="mail">The mail server in use, where the deployment has one.</param>
 /// <param name="work">The one transaction what a person supplies is written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -38,6 +40,7 @@ internal sealed class ProcessingRecordsService(
     IRegisterRoles roles,
     CategoryRetention retention,
     IConfigurationStore configuration,
+    IMailServerInUse mail,
     IUnitOfWork work,
     TimeProvider time) : IProcessingRecords
 {
@@ -96,42 +99,41 @@ internal sealed class ProcessingRecordsService(
         ComplianceRecord supplied = await compliance.ReadAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        string environment = await ReadAsync(
-                Settings.HostingEnvironment, string.Empty, cancellationToken)
+        string environment = await ReadAsync(Settings.HostingEnvironment, cancellationToken)
             .ConfigureAwait(false);
 
-        HostingLocation location = await ReadAsync(
-                Settings.HostingLocation, HostingLocation.Inside, cancellationToken)
+        HostingLocation location = await ReadAsync(Settings.HostingLocation, cancellationToken)
             .ConfigureAwait(false);
 
-        string basis = await ReadAsync(
-                Settings.HostingCrossBorderBasis, string.Empty, cancellationToken)
-            .ConfigureAwait(false);
+        // PRIV-ROPA-003: the basis is a key the deployment names only where it hosts
+        // outside, so one it never named is no basis stated, and the register says so.
+        string? basis = (await configuration
+                .ReadAsync(Settings.HostingCrossBorderBasis, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                Stated,
+                error => error.Code == ErrorCodes.StartupDeclarationMissing
+                    ? null
+                    : throw new InvalidOperationException(error.Code.ToString()));
 
         // PRIV-MINOR-001: where the affirmation is required the service is adults
         // only, so a deployment that declares no children's type is reporting the
         // truth; where it is off and none is declared, the register says so rather
         // than reporting no children's processing at all.
-        bool minors = await ReadAsync(
-                Settings.RegistrationAdultAffirmation,
-                Settings.RegistrationAdultAffirmation.Default,
-                cancellationToken)
+        bool minors = await ReadAsync(Settings.RegistrationAdultAffirmation, cancellationToken)
             .ConfigureAwait(false) is AttributeRequirement.Off;
 
-        // PRIV-ROPA-002: whether the library itself calls a mail server and the
-        // screening service, which is what makes those two rows of the shipped
-        // register true of this deployment.
-        bool mail = (await ReadAsync(
-                Settings.IntegrationMailEndpoint, string.Empty, cancellationToken)
-            .ConfigureAwait(false)).Length is not 0;
+        // PRIV-ROPA-002, D-166 (270): whether the library itself calls a mail server
+        // and the screening service, which is what makes those two rows of the shipped
+        // register true of this deployment. A mail server is integrated where the host
+        // registered one or the adapter's endpoint was set at the start; the library
+        // ships no mail transport of its own, so no default transport is in use.
+        bool hosted = mail.Chosen().Match(_ => true, _ => false);
 
-        bool screening = await ReadAsync(
-                Settings.PasswordBlocklistSource,
-                Settings.PasswordBlocklistSource.Default,
-                cancellationToken)
+        bool screening = await ReadAsync(Settings.PasswordBlocklistSource, cancellationToken)
             .ConfigureAwait(false) is BlocklistSource.RangeApi;
 
-        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis, mail, screening);
+        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis, hosted, screening);
         var flags = new List<RegisterFlag>();
 
         Missing(flags, supplied, recipients);
@@ -153,9 +155,9 @@ internal sealed class ProcessingRecordsService(
             time.GetUtcNow(),
             environment,
             location,
-            Stated(basis),
+            basis,
             supplied.DataOwner,
-            supplied.OrganisationalSecurityMeasures,
+            supplied.OrganizationalSecurityMeasures,
             supplied.AssessmentLinks,
             records,
             recipients,
@@ -179,14 +181,58 @@ internal sealed class ProcessingRecordsService(
             return Result.Failure(denied);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await compliance.RecordAsync(record, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        // 09 section 8a, API-CONV-002 (D-183): the two statements are free text, held to
+        // the bound for a caller in process as at the endpoint; one omitted is cleared.
+        string? dataOwner = record.DataOwner?.Trim();
+
+        if (dataOwner is { Length: 0 or > 1024 })
+        {
+            return Result.Failure(Malformed("dataOwner"));
+        }
+
+        string? measures = record.OrganizationalSecurityMeasures?.Trim();
+
+        if (measures is { Length: 0 or > 1024 })
+        {
+            return Result.Failure(Malformed("organizationalSecurityMeasures"));
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.ComplianceManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        await compliance
+            .RecordAsync(
+                record with { DataOwner = dataOwner, OrganizationalSecurityMeasures = measures },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
 
     private static string? Stated(string basis) => basis.Length is 0 ? null : basis;
+
+    private static Error Malformed(string member) =>
+        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 
     // PRIV-SENS-001: children's data is one of the declared sensitivity categories,
     // and the register's children's column is that category and no other property of
@@ -214,9 +260,9 @@ internal sealed class ProcessingRecordsService(
             flags.Add(new RegisterFlag(RegisterFinding.DataOwnerMissing, string.Empty));
         }
 
-        if (string.IsNullOrWhiteSpace(supplied.OrganisationalSecurityMeasures))
+        if (string.IsNullOrWhiteSpace(supplied.OrganizationalSecurityMeasures))
         {
-            flags.Add(new RegisterFlag(RegisterFinding.OrganisationalMeasuresMissing, string.Empty));
+            flags.Add(new RegisterFlag(RegisterFinding.OrganizationalMeasuresMissing, string.Empty));
         }
 
         if (supplied.AssessmentLinks.Count is 0)
@@ -240,7 +286,7 @@ internal sealed class ProcessingRecordsService(
     // the basis it stands on is the deployment's declared one and never a consent.
     private IReadOnlyList<RecipientRecord> Reached(
         HostingLocation hosting,
-        string basis,
+        string? basis,
         bool mail,
         bool screening) =>
     [
@@ -254,7 +300,7 @@ internal sealed class ProcessingRecordsService(
                 recipient.DataReceived,
                 where,
                 recipient.AgreementReference,
-                where is HostingLocation.Outside ? Stated(basis) : null,
+                where is HostingLocation.Outside ? basis : null,
                 recipient.Callback);
         }),
     ];
@@ -285,16 +331,14 @@ internal sealed class ProcessingRecordsService(
         declaration.Recipients.Any(recipient =>
             string.Equals(recipient.Name, row, StringComparison.OrdinalIgnoreCase));
 
-    // A key the deployment names has no default to fall back on, so the fallback is
-    // the caller's: an unnamed one leaves the cell empty rather than stopping the
-    // register a compliance officer is trying to read.
+    // OPS-CFG-008, D-166: a key the deployment names was named before the server
+    // served, so a read that finds none is a fault, as one that does not read is, and
+    // no value stands in for it in the register.
     private async ValueTask<TValue> ReadAsync<TValue>(
         Setting<TValue> setting,
-        TValue fallback,
-        CancellationToken cancellationToken)
-        where TValue : notnull =>
+        CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => fallback);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
     // PRIV-ROPA-001: every cell of a row is derived. What a purpose is over decides
     // the sensitivity columns, what the deployment retains decides the retention, and
@@ -314,7 +358,7 @@ internal sealed class ProcessingRecordsService(
             purpose.Name,
             purpose.DataCategories,
             purpose.SubjectCategories,
-            purpose.Basis.Key,
+            purpose.Basis.Label,
             Ordinary(purpose),
             purpose.SensitiveCategories.Count > 0,
             purpose.SensitiveCategories.Contains(SensitiveCategories.Children, StringComparer.Ordinal),

@@ -29,7 +29,7 @@ internal sealed class ComplianceStore(StoreContext context, TimeProvider time) :
 
         return row is null
             ? Nothing
-            : new ComplianceRecord(row.DataOwner, row.OrganisationalMeasures, Links(row));
+            : new ComplianceRecord(row.DataOwner, row.OrganizationalMeasures, Links(row));
     }
 
     /// <inheritdoc/>
@@ -48,7 +48,7 @@ internal sealed class ComplianceStore(StoreContext context, TimeProvider time) :
         }
 
         row.DataOwner = record.DataOwner;
-        row.OrganisationalMeasures = record.OrganisationalSecurityMeasures;
+        row.OrganizationalMeasures = record.OrganizationalSecurityMeasures;
         row.AssessmentLinks = JsonSerializer.Serialize(
             record.AssessmentLinks,
             ComplianceDocument.Default.IReadOnlyListString);

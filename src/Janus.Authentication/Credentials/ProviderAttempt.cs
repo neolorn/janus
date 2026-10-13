@@ -17,7 +17,7 @@ namespace Janus.Authentication.Credentials;
 /// </param>
 /// <param name="Verifier">
 /// The proof key the token request presents, where the provider takes one, which never
-/// leaves this server and is at rest under the key-encryption key.
+/// leaves this server and is at rest under the deployment's data key.
 /// </param>
 /// <param name="ReturnTo">
 /// The path on this application the browser is sent back to once the return is judged.

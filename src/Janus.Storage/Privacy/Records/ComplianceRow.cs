@@ -24,8 +24,8 @@ internal sealed class ComplianceRow
     /// <summary>The <c>data_owner</c> column.</summary>
     public string? DataOwner { get; set; }
 
-    /// <summary>The <c>organisational_measures</c> column.</summary>
-    public string? OrganisationalMeasures { get; set; }
+    /// <summary>The <c>organizational_measures</c> column.</summary>
+    public string? OrganizationalMeasures { get; set; }
 
     /// <summary>The <c>assessment_links</c> column, the references as a JSON array.</summary>
     public string AssessmentLinks { get; set; } = "[]";

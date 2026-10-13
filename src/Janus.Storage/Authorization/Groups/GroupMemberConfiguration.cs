@@ -21,9 +21,15 @@ internal sealed class GroupMemberConfiguration : IEntityTypeConfiguration<GroupM
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.ToTable("group_members", table =>
+        {
             table.HasCheckConstraint(
                 "ck_group_members_member_type",
-                Vocabulary.Admits<SubjectType>("member_type")));
+                Vocabulary.Admits<SubjectType>("member_type"));
+
+            table.HasCheckConstraint(
+                "ck_group_members_member_id_not_max_uuid",
+                MaxUuid.Refused("member_id"));
+        });
 
         builder.HasKey(member => new { member.Group, member.MemberType, member.MemberId })
             .HasName("pk_group_members");

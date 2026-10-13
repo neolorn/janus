@@ -55,12 +55,12 @@ public sealed class ResultOfTTests
     [Fact]
     public void Switch_Failure_RunsTheFailureBranchWithTheFailure()
     {
-        var outcome = Result.Failure<string>(Error.From(ErrorCodes.ConfigurationChangeStepUpRequired));
+        var outcome = Result.Failure<string>(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
         string ran = string.Empty;
 
         outcome.Switch(value => ran = value, failure => ran = failure.Code.ToString());
 
-        Assert.Equal("config.change.stepuprequired", ran);
+        Assert.Equal("config.change.reasonrequired", ran);
     }
 
     /// <summary>

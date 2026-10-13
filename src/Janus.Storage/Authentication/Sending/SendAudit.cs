@@ -43,6 +43,7 @@ internal sealed class SendAudit(IAuditStore records, TimeProvider time) : ISendA
         bool loosening,
         string? reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
@@ -59,7 +60,7 @@ internal sealed class SendAudit(IAuditStore records, TimeProvider time) : ISendA
             details["reason"] = JsonSerializer.SerializeToElement(reason);
         }
 
-        await AppendAsync(Edited, actor, at, details, cancellationToken).ConfigureAwait(false);
+        await AppendAsync(Edited, actor, breakGlassReason, at, details, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -68,11 +69,13 @@ internal sealed class SendAudit(IAuditStore records, TimeProvider time) : ISendA
         int credit,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await AppendAsync(
                 Granted,
                 actor,
+                breakGlassReason,
                 at,
                 new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
                 {
@@ -101,6 +104,7 @@ internal sealed class SendAudit(IAuditStore records, TimeProvider time) : ISendA
     private async ValueTask AppendAsync(
         AuditAction action,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         Dictionary<string, JsonElement> details,
         CancellationToken cancellationToken) =>
@@ -113,6 +117,7 @@ internal sealed class SendAudit(IAuditStore records, TimeProvider time) : ISendA
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization: null,
                     details),
                 cancellationToken)

@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- CONV-DESIGN-007: the container's abstractions are the shared framework's, taken
+       by a reference and never as a package (CONV-DESIGN-008). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
@@ -7,9 +13,14 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-002 AC1, D-171: the key ring's clearing is seen by its own tests.
+       CONV-DESIGN-007: the hosting tests stand the ring up through this project's
+       registration method. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Hosting" />
+    <InternalsVisibleTo Include="Janus.Hosting.Tests" />
     <InternalsVisibleTo Include="Janus.Cli" />
+    <InternalsVisibleTo Include="Janus.Core.Tests" />
   </ItemGroup>
 
 </Project>

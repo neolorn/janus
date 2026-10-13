@@ -7,7 +7,8 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements IDN-LIFE-003b and chapter 10 section 5.12a. The erasures table and the
-/// off-host erasure ledger use these spellings and no others.
+/// off-host erasure ledger use these spellings and no others. An organization's erasure
+/// erases no account, so it is no reason here (IDN-ORG-003).
 /// </remarks>
 public enum ErasureReason
 {
@@ -22,10 +23,4 @@ public enum ErasureReason
     /// </summary>
     [JsonStringEnumMemberName("minor-takedown")]
     MinorTakedown = 1,
-
-    /// <summary>
-    /// An organization's deletion grace window elapsed.
-    /// </summary>
-    [JsonStringEnumMemberName("organization-erasure")]
-    OrganizationErasure = 2,
 }

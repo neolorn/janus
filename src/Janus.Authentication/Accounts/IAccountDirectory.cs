@@ -28,6 +28,17 @@ internal interface IAccountDirectory
     ValueTask<AccountState?> StateAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds an account's row under a lock until the operation's transaction ends, so
+    /// what is read of the account after it is the row as committed when the lock was
+    /// taken and a transition decided on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Who suspended an account, where it is suspended: what a self-deactivated
     /// account is reversed by is not what an administratively suspended one is
     /// (IDN-LIFE-013).

@@ -35,8 +35,7 @@ internal sealed class PreAuthenticationConfiguration
                 "expires_at > created_at");
             table.HasCheckConstraint(
                 "ck_preauthentication_sessions_signon",
-                "num_nulls(signon_state, signon_verifier, signon_key_version, signon_return) "
-                    + "IN (0, 4)");
+                "num_nulls(signon_state, signon_verifier, signon_return) IN (0, 3)");
         });
 
         builder.HasKey(contact => contact.Fingerprint).HasName("pk_preauthentication_sessions");
@@ -68,7 +67,6 @@ internal sealed class PreAuthenticationConfiguration
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(contact => contact.SignOnVerifier).HasColumnName("signon_verifier");
-        builder.Property(contact => contact.SignOnKeyVersion).HasColumnName("signon_key_version");
         builder.Property(contact => contact.SignOnReturn).HasColumnName("signon_return");
 
         builder.HasIndex(contact => contact.ExpiresAt)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,4 +32,24 @@ internal sealed class RoleCatalogueInMemory : IRoleCatalogue
     /// <inheritdoc/>
     public ValueTask<DefinedRole?> FindAsync(RoleName name, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_roles.GetValueOrDefault(name));
+
+    /// <summary>
+    /// What another transaction committed on a role while this one waited for its lock,
+    /// applied as the lock is taken.
+    /// </summary>
+    public Action<RoleName>? Locking { get; set; }
+
+    /// <summary>
+    /// Takes a role away, as a removal does.
+    /// </summary>
+    /// <param name="name">Which role.</param>
+    public void Remove(RoleName name) => _roles.Remove(name);
+
+    /// <inheritdoc/>
+    public ValueTask<DefinedRole?> FindForUpdateAsync(RoleName name, CancellationToken cancellationToken)
+    {
+        Locking?.Invoke(name);
+
+        return FindAsync(name, cancellationToken);
+    }
 }

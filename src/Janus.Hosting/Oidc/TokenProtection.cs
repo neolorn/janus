@@ -11,12 +11,12 @@ namespace Janus.Hosting.Oidc;
 /// What the codes and the refresh tokens the server writes are encrypted under.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-KEY-002, AUTH-OIDC-002 and OPS-SEC-001. The key is derived from the
-/// key-encryption key the secrets manager hands the deployment at startup, under a
-/// purpose string of its own, so every instance derives the same key without holding a
-/// second secret and without a key of the server's own that would die with the
-/// process. Every version the deployment still holds is derived, newest first, so a
-/// key rotation does not invalidate a code or a refresh token already issued.
+/// Implements AUTH-KEY-002, AUTH-OIDC-002, OPS-SEC-001 and CONV-CODE-007. The key is
+/// derived from the key-encryption key the key ring lends, under a purpose string of its
+/// own, so every instance derives the same key without holding a second secret and
+/// without a key of the server's own that would die with the process. Every version the
+/// deployment still holds is derived, newest first, so a key rotation does not
+/// invalidate a code or a refresh token already issued.
 /// <para>
 /// The signing key is not this: a token is validated by relying parties against the
 /// published set (AUTH-KEY-001), and nothing here is ever published.
@@ -34,13 +34,21 @@ internal static class TokenProtection
     /// <summary>
     /// The keys the server encrypts with and decrypts with, the current version first.
     /// </summary>
-    /// <param name="keyEncryptionKeys">The versions the deployment holds.</param>
+    /// <param name="ring">The key ring every version the deployment holds is borrowed from.</param>
     /// <returns>The keys.</returns>
-    /// <exception cref="ArgumentNullException">The versions are absent.</exception>
-    public static IReadOnlyList<SymmetricSecurityKey> Keys(KeyEncryptionKeys keyEncryptionKeys)
+    /// <exception cref="ArgumentNullException">The ring is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no key-encryption key.</exception>
+    public static IReadOnlyList<SymmetricSecurityKey> Keys(IKeyRing ring)
     {
-        ArgumentNullException.ThrowIfNull(keyEncryptionKeys);
+        ArgumentNullException.ThrowIfNull(ring);
 
+        return ring
+            .BorrowKeyEncryptionKeys(Keys)
+            .Match(derived => derived, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    private static IReadOnlyList<SymmetricSecurityKey> Keys(KeyEncryptionKeys keyEncryptionKeys)
+    {
         var derived = new List<SymmetricSecurityKey>(keyEncryptionKeys.Versions.Count)
         {
             Derive(keyEncryptionKeys.Current),
@@ -57,17 +65,26 @@ internal static class TokenProtection
         return derived;
     }
 
+    // CONV-CODE-007 AC4: the credential takes a copy of its own, so the bytes it was
+    // made from are cleared as the making returns.
     private static SymmetricSecurityKey Derive([NeverLogged] ReadOnlyMemory<byte> material)
     {
         byte[] key = new byte[Length];
 
-        HKDF.DeriveKey(
-            HashAlgorithmName.SHA256,
-            material.Span,
-            key,
-            salt: [],
-            Encoding.UTF8.GetBytes(Purpose));
+        try
+        {
+            HKDF.DeriveKey(
+                HashAlgorithmName.SHA256,
+                material.Span,
+                key,
+                salt: [],
+                Encoding.UTF8.GetBytes(Purpose));
 
-        return new SymmetricSecurityKey(key);
+            return new SymmetricSecurityKey(key);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
     }
 }

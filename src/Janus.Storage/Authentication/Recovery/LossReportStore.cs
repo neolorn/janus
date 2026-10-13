@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Recovery;
 using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +16,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// The loss reports that are running, over the <c>loss_reports</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-RECOV-007, PRIV-RIGHT-005a and CONV-DESIGN-003. The cancel token
@@ -24,7 +25,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// </remarks>
 internal sealed class LossReportStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : ILossReportStore
 {
     /// <inheritdoc/>
@@ -173,10 +174,10 @@ internal sealed class LossReportStore(
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to hold a token under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,19 +52,11 @@ internal static class OidcRegistration
     /// handlers.
     /// </summary>
     /// <param name="services">The host's services.</param>
-    /// <param name="keyEncryptionKeys">
-    /// The versions the deployment holds, which the codes and the refresh tokens are
-    /// encrypted under.
-    /// </param>
     /// <returns>The collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
-    public static IServiceCollection AddOidc(
-        this IServiceCollection services,
-        KeyEncryptionKeys keyEncryptionKeys)
+    public static IServiceCollection AddOidc(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-
-        services.AddSingleton<SigningCredentialSource>();
 
         _ = services.AddOpenIddict()
             .AddCore(options =>
@@ -121,13 +114,12 @@ internal static class OidcRegistration
                 // against the published key set, which it cannot do if it is encrypted.
                 _ = options.DisableAccessTokenEncryption();
 
-                // AUTH-KEY-002: the codes and the refresh tokens are encrypted under a
-                // key derived from the deployment's own key-encryption key, so every
-                // instance reads what any other wrote and a restart loses nothing.
-                foreach (SymmetricSecurityKey key in TokenProtection.Keys(keyEncryptionKeys))
-                {
-                    _ = options.AddEncryptionKey(key);
-                }
+                // BFF-MACH-001 AC2: a request to one of the provider's machine routes
+                // that carries the session cookie is refused with the protocol's
+                // invalid_request, before the server judges anything it presents.
+                CookieRefused<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(options);
+                CookieRefused<OpenIddictServerEvents.ValidateTokenRequestContext>(options);
+                CookieRefused<OpenIddictServerEvents.ValidateUserInfoRequestContext>(options);
 
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(
                     handler => handler
@@ -145,14 +137,39 @@ internal static class OidcRegistration
                         .UseScopedHandler<AuthorizationErrorAnswer>()
                         .SetOrder(AuthorizationErrorAnswer.Order));
 
+                // LIB-API-003 AC1: every error an endpoint the provider serves answers
+                // carries the protocol's code alone.
+                ErrorAlone<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyPushedAuthorizationResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyTokenResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyUserInfoResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyJsonWebKeySetResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyConfigurationResponseContext>(options);
+
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(
                     handler => handler.UseScopedHandler<TokenIssue>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(
                     handler => handler.UseScopedHandler<ClaimsAnswer>());
-                _ = options.AddEventHandler<OpenIddictServerEvents.HandleJsonWebKeySetRequestContext>(
-                    handler => handler.UseScopedHandler<KeySetAnswer>());
+                // AUTH-KEY-001, CONV-CODE-007, D-181: the server's own steps that take a
+                // signing credential or a signing key from its options are removed, and
+                // steps that read the credential source stand in their places, so the key
+                // the options hold from the start signs, is published and validates only
+                // while the set says so.
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.Protection.AttachSecurityCredentials.Descriptor);
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.Discovery.AttachSigningKeys.Descriptor);
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.Discovery.AttachSigningAlgorithms.Descriptor);
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.AttachTokenDigests.Descriptor);
                 _ = options.AddEventHandler<OpenIddictServerEvents.GenerateTokenContext>(
                     handler => handler.UseScopedHandler<TokenSigning>().SetOrder(TokenSigning.Order));
+                _ = options.AddEventHandler<OpenIddictServerEvents.HandleJsonWebKeySetRequestContext>(
+                    handler => handler.UseScopedHandler<KeySetAnswer>().SetOrder(KeySetAnswer.Order));
+                _ = options.AddEventHandler<OpenIddictServerEvents.HandleConfigurationRequestContext>(
+                    handler => handler.UseScopedHandler<SigningAlgorithms>().SetOrder(SigningAlgorithms.Order));
+                _ = options.AddEventHandler<OpenIddictServerEvents.ProcessSignInContext>(
+                    handler => handler
+                        .AddFilter<OpenIddictServerHandlerFilters.RequireIdentityTokenGenerated>()
+                        .UseScopedHandler<TokenDigests>()
+                        .SetOrder(TokenDigests.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidateTokenContext>(
                     handler => handler
                         .UseScopedHandler<TokenValidationKeys>()
@@ -163,13 +180,47 @@ internal static class OidcRegistration
                 _ = options.UseAspNetCore();
             });
 
-        // AUTH-KEY-001: the server is put together with the key the store held at
-        // startup, and every token afterwards is signed with the key the store holds
-        // when the request arrives, so a rotation needs no restart.
+        // AUTH-KEY-001, CONV-CODE-007, CONV-DESIGN-007: the server requires one
+        // asymmetric signing credential to start, and holds the current key's as the
+        // start read it, the same object the source holds. The options are built once,
+        // by the start, after that read, and are never rebuilt; no step of the server
+        // reads the credential from them.
         _ = services.AddOptions<OpenIddictServerOptions>()
             .Configure<SigningCredentialSource>(
-                (options, source) => options.SigningCredentials.Add(source.Current));
+                (options, source) => options.SigningCredentials.Add(source.Started));
+
+        // AUTH-KEY-002, CONV-CODE-007: the codes and the refresh tokens are encrypted
+        // under a key derived from the deployment's own key-encryption key, so every
+        // instance reads what any other wrote and a restart loses nothing. The server's
+        // options are built by the start, after it has filled the ring, and the
+        // credential is made then, with the key wrapping the content key as the server
+        // does for a symmetric key.
+        _ = services.AddOptions<OpenIddictServerOptions>()
+            .Configure<IKeyRing>((options, ring) =>
+            {
+                foreach (SymmetricSecurityKey key in TokenProtection.Keys(ring))
+                {
+                    options.EncryptionCredentials.Add(new EncryptingCredentials(
+                        key,
+                        SecurityAlgorithms.Aes256KW,
+                        SecurityAlgorithms.Aes256CbcHmacSha512));
+                }
+            });
 
         return services;
     }
+
+    private static void CookieRefused<TContext>(OpenIddictServerBuilder options)
+        where TContext : OpenIddictServerEvents.BaseValidatingContext =>
+        _ = options.AddEventHandler<TContext>(
+            handler => handler
+                .UseScopedHandler<SessionCookieRefused<TContext>>()
+                .SetOrder(SessionCookieRefused<TContext>.Order));
+
+    private static void ErrorAlone<TContext>(OpenIddictServerBuilder options)
+        where TContext : OpenIddictServerEvents.BaseRequestContext =>
+        _ = options.AddEventHandler<TContext>(
+            handler => handler
+                .UseScopedHandler<ProtocolErrorAlone<TContext>>()
+                .SetOrder(ProtocolErrorAlone<TContext>.Order));
 }

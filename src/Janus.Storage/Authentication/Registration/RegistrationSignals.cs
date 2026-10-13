@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Registration;
 using Janus.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace Janus.Storage.Authentication.Registration;
@@ -14,17 +17,25 @@ namespace Janus.Storage.Authentication.Registration;
 /// the instance holds open.
 /// </summary>
 /// <param name="connectionString">The credential the listening connection opens under.</param>
+/// <param name="scopes">Where the scope a lost channel is raised in comes from.</param>
 /// <param name="time">The clock the interval is waited on.</param>
 /// <remarks>
-/// Implements REG-SESS-003 and FE-VER-001. One connection listens for all of them,
-/// because a connection for each would be a waiting screen costing a connection. A wait
-/// ends on the channel or on the interval, whichever comes first, so an instance whose
-/// listening connection has dropped reads the state back on the interval and loses
-/// nothing but the promptness of a press.
+/// Implements REG-SESS-003, FE-VER-001 and OPS-OBS-002. One connection listens for all
+/// of them, because a connection for each would be a waiting screen costing a
+/// connection. A wait ends on the channel or on the interval, whichever comes first, so
+/// an instance whose listening connection has dropped reads the state back on the
+/// interval and loses nothing but the promptness of a press. A wait that begins while
+/// the channel it opened is no longer listened on raises the loss itself, in a scope and
+/// unit of work of its own, and opens the channel again.
 /// </remarks>
-internal sealed class RegistrationSignals(string connectionString, TimeProvider time)
+internal sealed class RegistrationSignals(
+    string connectionString,
+    IServiceScopeFactory scopes,
+    TimeProvider time)
     : IRegistrationSignals, IAsyncDisposable
 {
+    private const string Component = "registration-channel";
+
     private readonly ConcurrentDictionary<RegistrationSessionId, TaskCompletionSource> _waiting =
         new();
 
@@ -32,7 +43,8 @@ internal sealed class RegistrationSignals(string connectionString, TimeProvider 
 
     private readonly SemaphoreSlim _starting = new(1, 1);
 
-    private Task _listening = Task.CompletedTask;
+    // Nothing until the first wait opens the channel: a channel never opened is not lost.
+    private Task? _listening;
 
     /// <inheritdoc/>
     public async ValueTask WaitAsync(
@@ -40,7 +52,10 @@ internal sealed class RegistrationSignals(string connectionString, TimeProvider 
         TimeSpan interval,
         CancellationToken cancellationToken)
     {
-        await ListeningAsync(cancellationToken).ConfigureAwait(false);
+        if (!await ListeningAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await LostAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         TaskCompletionSource waiter = _waiting.GetOrAdd(
             session,
@@ -68,33 +83,68 @@ internal sealed class RegistrationSignals(string connectionString, TimeProvider 
         _starting.Dispose();
     }
 
-    private async ValueTask ListeningAsync(CancellationToken cancellationToken)
+    // Whether the channel was listened on when the wait began. Where it was not, it is
+    // opened, so the next wait finds it listening.
+    private async ValueTask<bool> ListeningAsync(CancellationToken cancellationToken)
     {
-        if (!_listening.IsCompleted)
+        if (_listening is { IsCompleted: false })
         {
-            return;
+            return true;
         }
 
         await _starting.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            if (_listening.IsCompleted)
+            if (_listening is { IsCompleted: false })
             {
-                // The connection the last one held has ended, dropped by the database or
-                // closed under it. Its failure is taken here and nowhere else, because a
-                // wait ends on the interval as well: the stream reads the state back and
-                // the next wait opens the connection again.
-                _ = _listening.Exception;
-
-                _listening = Task.Run(
-                    () => ListenAsync(_stopping.Token),
-                    CancellationToken.None);
+                return true;
             }
+
+            // The connection the last one held has ended, dropped by the database or
+            // closed under it. Its failure is taken here and nowhere else, because a
+            // wait ends on the interval as well: the stream reads the state back and
+            // this wait opens the connection again.
+            bool lost = _listening is not null;
+
+            _ = _listening?.Exception;
+
+            _listening = Task.Run(
+                () => ListenAsync(_stopping.Token),
+                CancellationToken.None);
+
+            return !lost;
         }
         finally
         {
             _ = _starting.Release();
+        }
+    }
+
+    // OPS-OBS-002: the loss is raised in a scope and unit of work of its own, which the
+    // alert channels begin and commit, and the window of OPS-ALERT-002 folds one raised
+    // by every wait of every stream into one alert.
+    private async ValueTask LostAsync(CancellationToken cancellationToken)
+    {
+        AsyncServiceScope scope = scopes.CreateAsyncScope();
+
+        await using (scope.ConfigureAwait(false))
+        {
+            Result raised = await scope.ServiceProvider
+                .GetRequiredService<IAlertChannels>()
+                .RaiseAsync(
+                    Alerts.Of(
+                        AlertCondition.Degradation,
+                        named: null,
+                        time.GetUtcNow(),
+                        new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
+                        {
+                            ["component"] = JsonSerializer.SerializeToElement(Component),
+                        }),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            raised.Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
 

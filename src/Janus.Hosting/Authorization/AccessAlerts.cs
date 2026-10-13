@@ -22,7 +22,7 @@ namespace Janus.Hosting.Authorization;
 internal sealed class AccessAlerts(IAlertChannels alerts, TimeProvider time) : IAccessAlerts
 {
     /// <inheritdoc/>
-    public async ValueTask RaiseAsync(
+    public async ValueTask<Result> RaiseAsync(
         AlertCondition condition,
         string? scope,
         IReadOnlyDictionary<string, JsonElement> details,

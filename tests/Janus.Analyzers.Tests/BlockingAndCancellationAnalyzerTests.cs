@@ -91,6 +91,79 @@ public sealed class BlockingAndCancellationAnalyzerTests
     }
 
     /// <summary>
+    /// CONV-CODE-008 AC1: a member implementing an interface of the framework that
+    /// declares no cancellation token is left alone, and so is the rollback of the unit
+    /// of work.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [Fact]
+    public async Task CONV_CODE_008_AC1_SilentOnAFrameworkInterfacesMemberAndOnTheRollbackAsync()
+    {
+        string[] reported = await Analysis.OfAsync<BlockingAndCancellationAnalyzer>("""
+            using System;
+            using System.Threading.Tasks;
+
+            namespace Janus.Core
+            {
+                public interface IUnitOfWork : IAsyncDisposable
+                {
+                    ValueTask RollbackAsync();
+                }
+            }
+
+            namespace Cases
+            {
+                internal sealed class Work : Janus.Core.IUnitOfWork
+                {
+                    public async ValueTask RollbackAsync()
+                    {
+                        await Task.Yield();
+                    }
+
+                    public async ValueTask DisposeAsync()
+                    {
+                        await Task.Yield();
+                    }
+                }
+            }
+            """);
+
+        Assert.Empty(reported);
+    }
+
+    /// <summary>
+    /// CONV-CODE-008 AC1: a member implementing one of the library's own interfaces
+    /// without a cancellation token is reported, the interface being where the token
+    /// was left out.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [Fact]
+    public async Task CONV_CODE_008_AC1_ReportedOnAnOwnInterfacesMemberWithoutACancellationTokenAsync()
+    {
+        string[] reported = await Analysis.OfAsync<BlockingAndCancellationAnalyzer>("""
+            using System.Threading.Tasks;
+
+            namespace Cases;
+
+            internal interface IWork
+            {
+                Task<int> LaterAsync();
+            }
+
+            internal sealed class Work : IWork
+            {
+                public async Task<int> LaterAsync()
+                {
+                    await Task.Yield();
+                    return 1;
+                }
+            }
+            """);
+
+        Assert.Equal(["JAN0004"], reported);
+    }
+
+    /// <summary>
     /// CONV-CODE-002 AC1: blocking on a task and an asynchronous method without a
     /// cancellation token are each reported as an error, and the repository's
     /// .editorconfig lowers neither in any file the build analyses.

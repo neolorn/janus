@@ -21,7 +21,7 @@ internal sealed class SendAuditInMemory : ISendAudit
     /// <summary>
     /// Every grant recorded, in order.
     /// </summary>
-    public List<(string Restriction, int Credit, string Reason, SubjectId Actor)> Grants { get; } = [];
+    public List<(string Restriction, int Credit, string Reason, SubjectId Actor, string? BreakGlassReason)> Grants { get; } = [];
 
     /// <inheritdoc/>
     public ValueTask EditedAsync(
@@ -31,10 +31,11 @@ internal sealed class SendAuditInMemory : ISendAudit
         bool loosening,
         string? reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Edits.Add(new Edit(restriction, before, after, loosening, reason, actor));
+        Edits.Add(new Edit(restriction, before, after, loosening, reason, actor) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }
@@ -45,10 +46,11 @@ internal sealed class SendAuditInMemory : ISendAudit
         int credit,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Grants.Add((restriction, credit, reason, actor));
+        Grants.Add((restriction, credit, reason, actor, breakGlassReason));
 
         return ValueTask.CompletedTask;
     }
@@ -68,5 +70,12 @@ internal sealed class SendAuditInMemory : ISendAudit
         Restriction? After,
         bool Loosening,
         string? Reason,
-        SubjectId Actor);
+        SubjectId Actor)
+    {
+        /// <summary>
+        /// The reason given at the use of the break-glass credential, where the change
+        /// was made in the session it opened, or nothing.
+        /// </summary>
+        public string? BreakGlassReason { get; init; }
+    }
 }

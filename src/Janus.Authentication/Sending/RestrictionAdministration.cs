@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -19,6 +20,7 @@ namespace Janus.Authentication.Sending;
 /// </summary>
 /// <param name="configuration">Where the restriction set is read.</param>
 /// <param name="administration">The one operation a runtime setting is written through.</param>
+/// <param name="scope">Whether the caller still holds the permission inside the unit of work.</param>
 /// <param name="ledger">Where credit is added.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
@@ -34,6 +36,7 @@ namespace Janus.Authentication.Sending;
 internal sealed class RestrictionAdministration(
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
+    AdministrativeScope scope,
     ISendLedger ledger,
     ISendAudit audit,
     RestrictionKeySuppliers suppliers,
@@ -63,64 +66,95 @@ internal sealed class RestrictionAdministration(
     /// <param name="replacement">
     /// What it becomes, or nothing to delete it. Its name is the one given.
     /// </param>
-    /// <param name="reason">The written reason, which a loosening requires.</param>
+    /// <param name="reason">The written reason, which every edit requires.</param>
     /// <param name="challenge">What the <c>restriction:edit</c> gate answered.</param>
-    /// <param name="actor">Who is making the change.</param>
+    /// <param name="context">Who is making the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
     /// <returns>Whether the change was made, or why it was refused.</returns>
-    /// <exception cref="ArgumentNullException">The name or the challenge is absent.</exception>
+    /// <exception cref="ArgumentNullException">The name, the challenge or the context is absent.</exception>
     public async ValueTask<Result> EditAsync(
         string name,
         Restriction? replacement,
         string? reason,
         StepUpChallenge challenge,
-        SubjectId actor,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId actor)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         if (!StepUpRefusal.Met(challenge))
         {
             return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
-        Error? failure = null;
-
-        IReadOnlyList<Restriction> declared = (await configuration
-                .ReadAsync(Settings.Restrictions, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<Restriction>>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
-        Restriction? before = declared.FirstOrDefault(one =>
-            string.Equals(one.Name, name, StringComparison.Ordinal));
-
         if (replacement is not null && Unsupplied(replacement) is Error unsupplied)
         {
             return Result.Failure(unsupplied);
         }
 
+        // OPS-CFG-008: an edit of the set is a change to a runtime setting, and every
+        // such change carries its reason whichever way it moves.
+        if (Unexplained(reason, Error.From(
+                ErrorCodes.ConfigurationChangeReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString()))) is Error unexplained)
+        {
+            return Result.Failure(unexplained);
+        }
+
+        string stated = reason!.Trim();
+
+        // INT-SMS-003: a set the key does not admit, a name outside the rule among it,
+        // is refused before anything is begun, since the refusal writes nothing.
+        if ((await ReplacedAsync(name, replacement, cancellationToken).ConfigureAwait(false))
+            .Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.RestrictionEdit, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the set is read again under its row's lock and the edit made on what
+        // is committed, so an edit of another restriction at the same moment is kept
+        // rather than written over with the set as it stood before it.
+        await administration.HoldAsync(Settings.Restrictions, cancellationToken).ConfigureAwait(false);
+
+        Error? failure = null;
+
+        Replaced replaced = (await ReplacedAsync(name, replacement, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Replaced>(error, ref failure));
+
+        if (failure is Error unread)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unread);
+        }
+
+        Restriction? before = replaced.Before;
         bool loosening = Restrictions.IsLoosening(before, replacement);
-
-        if (loosening && string.IsNullOrWhiteSpace(reason))
-        {
-            return Result.Failure(Error.From(ErrorCodes.RestrictionReasonRequired));
-        }
-
-        List<Restriction> written =
-            [.. declared.Where(one => !string.Equals(one.Name, name, StringComparison.Ordinal))];
-
-        if (replacement is not null)
-        {
-            written.Add(replacement with { Name = name });
-        }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         // OPS-CFG-002, OPS-CFG-005: every runtime write goes through the one operation
         // that classifies it, gates it and writes it down. The restriction set carries
@@ -129,22 +163,33 @@ internal sealed class RestrictionAdministration(
         Result changed = await administration
             .ChangeAsync(
                 Settings.Restrictions,
-                written,
-                reason,
+                replaced.Written,
+                stated,
                 challenge,
-                AccessContext.Of(actor),
+                context,
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (changed.Match(() => (Error?)null, error => error) is Error unchanged)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unchanged);
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
         await audit
-            .EditedAsync(name, before, replacement, loosening, reason, actor, now, cancellationToken)
+            .EditedAsync(
+                name,
+                before,
+                replacement,
+                loosening,
+                stated,
+                actor,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
             .ConfigureAwait(false);
 
         Result published = await events
@@ -152,12 +197,15 @@ internal sealed class RestrictionAdministration(
                 new SendingRestrictionChanged(now, Edit + ":" + name + ":" + now.Ticks, name, loosening)
                 {
                     Actor = actor,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -171,11 +219,17 @@ internal sealed class RestrictionAdministration(
 
             if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unalerted);
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -189,32 +243,40 @@ internal sealed class RestrictionAdministration(
     /// <param name="credit">How many sends the credit is worth.</param>
     /// <param name="reason">The written reason, which a grant requires.</param>
     /// <param name="challenge">What the <c>restriction:grant</c> gate answered.</param>
-    /// <param name="actor">Who is granting it.</param>
+    /// <param name="context">Who is granting it.</param>
     /// <param name="cancellationToken">Abandons the grant.</param>
     /// <returns>Whether the credit was added, or why it was refused.</returns>
-    /// <exception cref="ArgumentNullException">A value or the challenge is absent.</exception>
+    /// <exception cref="ArgumentNullException">A value, the challenge or the context is absent.</exception>
     public async ValueTask<Result> GrantAsync(
         string name,
         string keyValue,
         int credit,
         string? reason,
         StepUpChallenge challenge,
-        SubjectId actor,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(keyValue);
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId actor)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         if (!StepUpRefusal.Met(challenge))
         {
             return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
-        if (string.IsNullOrWhiteSpace(reason))
+        if (Unexplained(reason, Error.From(ErrorCodes.ConfigurationChangeReasonRequired)) is Error unexplained)
         {
-            return Result.Failure(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Result.Failure(unexplained);
         }
+
+        string stated = reason!.Trim();
 
         Error? failure = null;
 
@@ -228,8 +290,14 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(failure);
         }
 
-        if (credit <= 0
-            || !declared.Any(one => string.Equals(one.Name, name, StringComparison.Ordinal)))
+        // X5, D-166: a path naming a restriction the set does not hold names no record.
+        if (declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal))
+            is not Restriction granted)
+        {
+            return Result.Failure(Error.From(ErrorCodes.RestrictionNotFound));
+        }
+
+        if (credit <= 0)
         {
             return Result.Failure(
                 new Error(
@@ -237,21 +305,35 @@ internal sealed class RestrictionAdministration(
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["key"] = JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString()),
-                        ["allowed"] = JsonSerializer.SerializeToElement(
-                            "a declared restriction and a credit above zero"),
+                        ["allowed"] = JsonSerializer.SerializeToElement("a credit above zero"),
                     }));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.RestrictionGrant, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
 
         await ledger
-            .GrantAsync(new RestrictionKey(name, keyValue), credit, cancellationToken)
+            .GrantAsync(new RestrictionKey(name, granted.Key, keyValue), credit, cancellationToken)
             .ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
 
         await audit
-            .GrantedAsync(name, credit, reason, actor, now, cancellationToken)
+            .GrantedAsync(name, credit, stated, actor, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
         // The plain key value never leaves this method: the event carries the
@@ -263,15 +345,18 @@ internal sealed class RestrictionAdministration(
                     Grant + ":" + name + ":" + now.Ticks,
                     name,
                     credit,
-                    reason)
+                    stated)
                 {
                     Actor = actor,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -283,12 +368,35 @@ internal sealed class RestrictionAdministration(
 
         if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
+    }
+
+    private static Result<Replaced> Accepted(IReadOnlyList<Restriction> declared, string name, Restriction? replacement)
+    {
+        List<Restriction> written =
+            [.. declared.Where(one => !string.Equals(one.Name, name, StringComparison.Ordinal))];
+
+        if (replacement is not null)
+        {
+            written.Add(replacement with { Name = name });
+        }
+
+        return Settings.Restrictions.Accept(written).Match(
+            _ => Result.Success(new Replaced(
+                declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal)),
+                written)),
+            Result.Failure<Replaced>);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -298,11 +406,35 @@ internal sealed class RestrictionAdministration(
         return default!;
     }
 
+    // API-CONV-002, X4: a reason is 1 to 1024 characters after trimming. A blank one is
+    // the refusal 10 names for a change without one; one past the limit is a request
+    // the boundary does not read.
+    private static Error? Unexplained(string? reason, Error blank) =>
+        (reason?.Trim().Length ?? 0) switch
+        {
+            0 => blank,
+            > 1024 => Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")),
+            _ => null,
+        };
+
     private static Dictionary<string, JsonElement> Named(string restriction) =>
         new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
         {
             ["restriction"] = JsonSerializer.SerializeToElement(restriction),
         };
+
+    // The set in force with the one restriction replaced or deleted, and what that
+    // restriction was, or why the set the edit would leave is not one the key admits.
+    private async ValueTask<Result<Replaced>> ReplacedAsync(
+        string name,
+        Restriction? replacement,
+        CancellationToken cancellationToken) =>
+        (await configuration
+            .ReadAsync(Settings.Restrictions, cancellationToken)
+            .ConfigureAwait(false))
+            .Match(
+                declared => Accepted(declared, name, replacement),
+                Result.Failure<Replaced>);
 
     // Chapter 09 section 8: a host key no supplier answers for is a value the set does
     // not admit, refused where it is edited (422) rather than as the startup fault the
@@ -318,4 +450,7 @@ internal sealed class RestrictionAdministration(
                     ["supplier"] = JsonSerializer.SerializeToElement(replacement.HostKeyName ?? string.Empty),
                 })
             : null;
+
+    // One edit of the set: the restriction it replaces, and the set it leaves.
+    private sealed record Replaced(Restriction? Before, IReadOnlyList<Restriction> Written);
 }

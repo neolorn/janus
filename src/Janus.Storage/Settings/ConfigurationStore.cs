@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
+using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.EntityFrameworkCore;
@@ -14,14 +16,48 @@ namespace Janus.Storage.Settings;
 /// The value in force for a configuration key, over the <c>settings</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="connections">The connection and transaction the operation holds.</param>
 /// <remarks>
 /// Implements OPS-CFG-008, OPS-CFG-001 and OPS-CFG-004. Every read goes to the table,
 /// so a change put in force anywhere in the deployment is seen by the next read
 /// without a restart; a key the deployment never wrote has no row and reads as the
-/// default the catalogue gives it.
+/// default the catalogue gives it. A row that does not read under its key is a fault
+/// (CONV-ERR-001): the read throws, and nothing stands in for the value.
 /// </remarks>
-internal sealed class ConfigurationStore(StoreContext context) : IConfigurationStore
+internal sealed class ConfigurationStore(StoreContext context, DataConnections connections)
+    : IConfigurationStore, IConfigurationWrites
 {
+    private const string Hold =
+        """
+        SELECT 1 FROM identity.settings WHERE key = @key FOR UPDATE;
+        """;
+
+    /// <inheritdoc/>
+    public async ValueTask HoldAsync(ConfigurationKey key, CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ambient.Transaction is null)
+        {
+            throw new InvalidOperationException("A settings row is held only inside the operation's transaction.");
+        }
+
+        _ = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Hold,
+                new { key = key.ToString() },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the operation decides on is the value committed when the lock was taken.
+        if (context.Settings.Local.FirstOrDefault(record => record.Key == key) is SettingRecord tracked)
+        {
+            await context.Entry(tracked).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <inheritdoc/>
     public async ValueTask<Result<TValue>> ReadAsync<TValue>(
         Setting<TValue> setting,
@@ -33,7 +69,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         if (record is not null)
         {
-            return setting.Read(record.Value);
+            return Result.Success(Readable(setting.Key, setting.Read(record.Value)));
         }
 
         return setting.IsRequired
@@ -54,7 +90,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         if (record is not null)
         {
-            return family.Read(parameter, record.Value);
+            return Result.Success(Readable(key, family.Read(parameter, record.Value)));
         }
 
         return family.HasDefault
@@ -91,15 +127,8 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
             }
 
             string parameter = key[prefix.Length..];
-            Error? refused = null;
 
-            family.Read(parameter, row.Value)
-                .Switch(value => written[parameter] = value, error => refused = error);
-
-            if (refused is Error failure)
-            {
-                return Result.Failure<IReadOnlyDictionary<string, TValue>>(failure);
-            }
+            written[parameter] = Readable(row.Key, family.Read(parameter, row.Value));
         }
 
         return Result.Success<IReadOnlyDictionary<string, TValue>>(written);
@@ -145,7 +174,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
+    public async ValueTask<Result> WriteAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
         TValue value,
@@ -157,7 +186,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         if (family.Scope is SettingScope.Protected)
         {
-            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Naming(key)));
+            return Result.Failure(new Error(ErrorCodes.ConfigurationKeyProtected, Naming(key)));
         }
 
         string written = family.Write(value);
@@ -167,10 +196,9 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         if (refused is { } failure)
         {
-            return Result.Failure<TValue>(failure);
+            return Result.Failure(failure);
         }
 
-        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken).ConfigureAwait(false);
         SettingRecord? record = await RowAsync(key, cancellationToken).ConfigureAwait(false);
 
         if (record is null)
@@ -181,7 +209,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         record.Value = written;
 
-        return before;
+        return Result.Success();
     }
 
     // A key that exists once for the deployment can sit under a family's prefix, as
@@ -189,6 +217,15 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
     // catalogue is what says so.
     private static bool Deployment(ConfigurationKey key) =>
         Janus.Core.Configuration.Settings.All.Any(setting => setting.Key == key);
+
+    // OPS-CFG-008, D-166: a stored value that does not read is a fault, named by its key
+    // and the code of the constraint it misses, and never by the stored text, which
+    // can be anything a write once put there.
+    private static TValue Readable<TValue>(ConfigurationKey key, Result<TValue> read) =>
+        read.Match(
+            value => value,
+            failure => throw new InvalidOperationException(
+                "The stored value of " + key + " does not read (" + failure.Code + ")."));
 
     private static Error Undeclared(ConfigurationKey key) =>
         new(ErrorCodes.StartupDeclarationMissing, Naming(key));

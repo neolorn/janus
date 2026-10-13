@@ -7,8 +7,8 @@ namespace Janus.Hosting.Background;
 /// </summary>
 /// <remarks>
 /// Implements INF-BG-001, CONV-LOG-001 and CONV-LOG-003. A job is named by its
-/// principal and a failure by its code, or by the type of what was thrown, so nothing
-/// a run read reaches the log.
+/// principal and a failure by its code, or by the fault log entry of what was thrown,
+/// so nothing a run read reaches the log.
 /// </remarks>
 internal static partial class BackgroundLog
 {
@@ -17,7 +17,7 @@ internal static partial class BackgroundLog
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="job">Which job.</param>
-    /// <param name="failure">The failure's code, or the type of what was thrown.</param>
+    /// <param name="failure">The failure's code, or the fault log entry of what was thrown.</param>
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Error,
@@ -29,7 +29,7 @@ internal static partial class BackgroundLog
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="job">Which job.</param>
-    /// <param name="failure">The failure's code, or the type of what was thrown.</param>
+    /// <param name="failure">The failure's code, or the fault log entry of what was thrown.</param>
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Error,
@@ -38,11 +38,11 @@ internal static partial class BackgroundLog
 
     /// <summary>
     /// A step of the restore test threw rather than failed, which the test reads as the
-    /// failure of that step; the type is what says why.
+    /// failure of that step; the fault log entry is what says why.
     /// </summary>
     /// <param name="log">The logger.</param>
     /// <param name="outcome">The failure the step's fault is read as.</param>
-    /// <param name="fault">The type of what was thrown.</param>
+    /// <param name="fault">The fault log entry of what was thrown.</param>
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Warning,

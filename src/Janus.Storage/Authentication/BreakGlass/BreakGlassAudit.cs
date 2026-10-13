@@ -24,6 +24,7 @@ internal sealed class BreakGlassAudit(IAuditStore records, TimeProvider time) : 
     /// <inheritdoc/>
     public async ValueTask GeneratedAsync(
         SubjectId acting,
+        string? breakGlassReason,
         BreakGlassCredentialId credential,
         BreakGlassCredentialId? replaced,
         DateTimeOffset at,
@@ -47,6 +48,7 @@ internal sealed class BreakGlassAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     acting,
                     acting,
+                    breakGlassReason,
                     organization: null,
                     details),
                 cancellationToken)
@@ -56,6 +58,7 @@ internal sealed class BreakGlassAudit(IAuditStore records, TimeProvider time) : 
     /// <inheritdoc/>
     public async ValueTask UsedAsync(
         SubjectId emergency,
+        string? breakGlassReason,
         BreakGlassCredentialId credential,
         SessionId session,
         DateTimeOffset at,
@@ -68,6 +71,7 @@ internal sealed class BreakGlassAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     emergency,
                     emergency,
+                    breakGlassReason,
                     organization: null,
                     new Dictionary<string, JsonElement>(StringComparer.Ordinal)
                     {

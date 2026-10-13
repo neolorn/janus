@@ -19,6 +19,10 @@ namespace Janus.Authorization.Tests.Gate;
 [Trait("kind", "unit")]
 public sealed class AccessSeamTests
 {
+    // The head every library assembly's name carries, read from the core's
+    // namespace so no string spells the product name (CONV-NAME-001).
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
+
     /// <summary>
     /// AUTHZ-SEAM-001 AC1: one type stands behind the interface, so there is one
     /// evaluation path and nothing else answering the same question.
@@ -164,8 +168,8 @@ public sealed class AccessSeamTests
 
         Assert.Equal(
             [
+                Path.Combine("Janus.Authorization", "AuthorizationRegistration.cs"),
                 Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
-                Path.Combine("Janus.Hosting", "HostingRegistration.cs"),
             ],
             naming);
     }
@@ -197,7 +201,7 @@ public sealed class AccessSeamTests
         IEnumerable<string> referenced = typeof(AccessGate).Assembly
             .GetReferencedAssemblies()
             .Select(reference => reference.Name!)
-            .Where(name => name.StartsWith("Janus.", StringComparison.Ordinal))
+            .Where(name => name.StartsWith(Library, StringComparison.Ordinal))
             .Order(StringComparer.Ordinal);
 
         Assert.Equal(["Janus.Core"], referenced);

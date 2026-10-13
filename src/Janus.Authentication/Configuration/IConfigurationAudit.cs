@@ -9,7 +9,7 @@ namespace Janus.Authentication.Configuration;
 
 /// <summary>
 /// What is written down when a runtime setting changes: who, what, from, to, when and
-/// why, and read back by the setting or by the actor.
+/// why, and read back by the setting, by the actor or by the system principal.
 /// </summary>
 /// <remarks>
 /// Implements OPS-CFG-005, IDN-PRIN-001 and CONV-DESIGN-003. The trail is the one the permission
@@ -67,5 +67,17 @@ internal interface IConfigurationAudit
     /// <returns>The changes.</returns>
     ValueTask<IReadOnlyList<ConfigurationChange>> OfActorAsync(
         SubjectId actor,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every change a system principal made, most recent first: bootstrap's values and
+    /// the changes of protected keys from the server.
+    /// </summary>
+    /// <param name="principal">The principal's name.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The changes.</returns>
+    /// <remarks>Implements OPS-CFG-005 and IDN-PRIN-001 (D-166, 319).</remarks>
+    ValueTask<IReadOnlyList<ConfigurationChange>> OfPrincipalAsync(
+        string principal,
         CancellationToken cancellationToken);
 }

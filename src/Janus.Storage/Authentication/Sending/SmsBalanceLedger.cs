@@ -59,4 +59,13 @@ internal sealed class SmsBalanceLedger(StoreContext context) : ISmsBalanceLedger
             .Select(reading => new BalanceReading(reading.ReadAt, reading.Balance))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<BalanceReading?> LatestAsync(CancellationToken cancellationToken) =>
+        await context.SmsBalanceReadings
+            .AsNoTracking()
+            .OrderByDescending(reading => reading.ReadAt)
+            .Select(reading => new BalanceReading(reading.ReadAt, reading.Balance))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 }

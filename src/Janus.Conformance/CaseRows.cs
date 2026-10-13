@@ -16,6 +16,9 @@ namespace Janus.Conformance;
 /// </summary>
 /// <param name="connect">Opens a connection to the deployment's database.</param>
 /// <param name="clock">The deployment's clock, which expiry is read against.</param>
+/// <param name="randomness">
+/// The deployment's randomness, which the case's accounts and roles are named from.
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-TEST-001 and LIB-API-001. The rows are written into the
 /// library-owned tables, whose structure is part of the public contract, by
@@ -24,7 +27,10 @@ namespace Janus.Conformance;
 /// writers produced. The host opens the connection, so the library retrieves none
 /// outside its own accessor (OPS-DATA-002).
 /// </remarks>
-internal sealed class CaseRows(Func<CancellationToken, ValueTask<DbConnection>> connect, TimeProvider clock)
+internal sealed class CaseRows(
+    Func<CancellationToken, ValueTask<DbConnection>> connect,
+    TimeProvider clock,
+    RandomNumberGenerator randomness)
 {
     // Every grant a case writes was written before the case is asked, so none of them
     // is judged at the instant it was granted.
@@ -38,13 +44,16 @@ internal sealed class CaseRows(Func<CancellationToken, ValueTask<DbConnection>> 
     public async ValueTask<OrganizationId> OrganizationAsync(CancellationToken cancellationToken)
     {
         var organization = OrganizationId.New(clock);
+        string name = "Conformance " + organization.Value.ToString("n", CultureInfo.InvariantCulture);
 
         await ExecuteAsync(
-            "INSERT INTO identity.organizations (id, name, created_at) VALUES (@id, @name, @at);",
+            "INSERT INTO identity.organizations (id, name, canonical_name, created_at) "
+                + "VALUES (@id, @name, @canonicalName, @at);",
             new
             {
                 id = organization.Value,
-                name = "Conformance " + organization.Value.ToString("n", CultureInfo.InvariantCulture),
+                name,
+                canonicalName = CanonicalForm.Of(name),
                 at = clock.GetUtcNow() - Before,
             },
             cancellationToken).ConfigureAwait(false);
@@ -59,12 +68,7 @@ internal sealed class CaseRows(Func<CancellationToken, ValueTask<DbConnection>> 
     /// <returns>The subject the account was issued.</returns>
     public async ValueTask<SubjectId> AccountAsync(CancellationToken cancellationToken)
     {
-        SubjectId subject;
-
-        using (var randomness = RandomNumberGenerator.Create())
-        {
-            subject = SubjectId.New(randomness);
-        }
+        var subject = SubjectId.New(randomness);
 
         await ExecuteAsync(
             "INSERT INTO identity.accounts (subject, created_at, state) VALUES (@subject, @at, 'active');",
@@ -82,8 +86,11 @@ internal sealed class CaseRows(Func<CancellationToken, ValueTask<DbConnection>> 
     /// <returns>The role.</returns>
     public async ValueTask<RoleName> RoleAsync(Permission? allows, CancellationToken cancellationToken)
     {
-        var role = RoleName.Parse(
-            "conformance" + Guid.NewGuid().ToString("n", CultureInfo.InvariantCulture)[..12]);
+        Span<byte> drawn = stackalloc byte[6];
+
+        randomness.GetBytes(drawn);
+
+        var role = RoleName.Parse("conformance" + Convert.ToHexStringLower(drawn));
 
         await ExecuteAsync(
             "INSERT INTO identity.roles (name) VALUES (@role);",

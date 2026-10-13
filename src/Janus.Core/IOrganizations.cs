@@ -48,8 +48,8 @@ public interface IOrganizations
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>identity.organization.protected</c> for the
-    /// administrative organization, <c>api.request.malformed</c> naming <c>id</c> where
-    /// the deployment holds no such organization.
+    /// administrative organization, <c>identity.organization.notfound</c> where the
+    /// deployment holds no such organization.
     /// </returns>
     ValueTask<Result> RequestDeletionAsync(
         AccessContext context,
@@ -70,8 +70,8 @@ public interface IOrganizations
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>identity.deletion.windowelapsed</c> where the window
-    /// has closed, <c>api.request.malformed</c> naming <c>id</c> where the deployment
-    /// holds no such organization.
+    /// has closed, <c>identity.organization.notfound</c> where the deployment holds no
+    /// such organization.
     /// </returns>
     ValueTask<Result> CancelDeletionAsync(
         AccessContext context,
@@ -88,8 +88,8 @@ public interface IOrganizations
     /// <param name="organization">Which organization.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The policy, or the refusal: <c>api.request.malformed</c> naming <c>id</c> where
-    /// the deployment holds no such organization.
+    /// The policy, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment holds no such organization.
     /// </returns>
     ValueTask<Result<OrganizationPolicy>> PolicyAsync(
         AccessContext context,
@@ -110,9 +110,11 @@ public interface IOrganizations
     /// <returns>
     /// Success, or the refusal: <c>config.policy.belowsystem</c> where a field is looser
     /// than the system policy, <c>config.value.belowfloor</c> where the administrative
-    /// organization would fall below its assurance floor, and
-    /// <c>api.request.malformed</c> naming <c>id</c>, <c>reason</c> or
-    /// <c>emailDomains</c>.
+    /// organization would fall below its assurance floor,
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization, <c>config.change.reasonrequired</c> naming the organization's policy
+    /// key where the reason is blank, and <c>api.request.malformed</c> naming
+    /// <c>reason</c> where it is longer than 1024 characters, or <c>emailDomains</c>.
     /// </returns>
     ValueTask<Result> ReplacePolicyAsync(
         AccessContext context,

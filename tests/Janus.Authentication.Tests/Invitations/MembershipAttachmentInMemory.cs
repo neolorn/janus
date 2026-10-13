@@ -27,6 +27,21 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
     public List<AttachedMembership> Attached { get; } = [];
 
     /// <inheritdoc/>
+    public async ValueTask<Error?> RefusedAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        bool multiple,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<OrganizationId> held = await lookup.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return held.Contains(organization) || (!multiple && held.Count > 0)
+            ? Error.From(ErrorCodes.MembershipLimitReached)
+            : null;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<MembershipId>> AttachAsync(
         SubjectId subject,
         OrganizationId organization,

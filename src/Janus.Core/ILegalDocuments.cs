@@ -23,7 +23,7 @@ public interface ILegalDocuments
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The version, or the refusal where the deployment published none.</returns>
     ValueTask<Result<DocumentVersion>> ReadAsync(
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken);
 
@@ -53,7 +53,7 @@ public interface ILegalDocuments
     /// <returns>Success, or the refusal and its code.</returns>
     ValueTask<Result> TranslateAsync(
         AccessContext context,
-        string document,
+        DocumentName document,
         string version,
         DocumentTranslation translation,
         CancellationToken cancellationToken);

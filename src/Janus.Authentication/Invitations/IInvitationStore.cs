@@ -26,6 +26,17 @@ internal interface IInvitationStore
     ValueTask<Invitation?> FindAsync(InvitationId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one invitation under a lock on its row held until the operation's
+    /// transaction ends, so an opening, a revocation or an acknowledgement decided on it
+    /// cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="id">Which invitation.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The invitation as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Invitation?> FindForUpdateAsync(InvitationId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads the invitation a link's token opens.
     /// </summary>
     /// <param name="token">What is stored against the token.</param>

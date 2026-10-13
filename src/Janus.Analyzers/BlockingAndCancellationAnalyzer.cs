@@ -18,6 +18,14 @@ internal sealed class BlockingAndCancellationAnalyzer : DiagnosticAnalyzer
 {
     private const string CancellationTokenName = "System.Threading.CancellationToken";
 
+    private const string UnitOfWorkName = "Janus.Core.IUnitOfWork";
+
+    private const string RollbackName = "RollbackAsync";
+
+    // The first part of the name of every assembly whose interfaces are the library's
+    // own contracts, which is the first part of this one's namespace.
+    private static readonly string Library = typeof(BlockingAndCancellationAnalyzer).Namespace.Split('.')[0];
+
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(Rules.BlockingOnTask);
@@ -81,14 +89,15 @@ internal sealed class BlockingAndCancellationAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        // An override or an interface implementation carries a signature declared
-        // elsewhere; the declaration is where CONV-CODE-002 applies.
-        if (method.IsOverride || ImplementsAnInterfaceMember(method))
+        if (method.Parameters.Any(parameter => SymbolEqualityComparer.Default.Equals(parameter.Type, token)))
         {
             return;
         }
 
-        if (method.Parameters.Any(parameter => SymbolEqualityComparer.Default.Equals(parameter.Type, token)))
+        // An override carries a signature declared elsewhere. So does a member that
+        // implements an interface, and CONV-CODE-002 exempts it where the interface is
+        // not the library's own, and where it is the rollback of the unit of work.
+        if (method.IsOverride || ImplementsAnExemptMember(method))
         {
             return;
         }
@@ -102,12 +111,27 @@ internal sealed class BlockingAndCancellationAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool ImplementsAnInterfaceMember(IMethodSymbol method)
+    private static bool ImplementsAnExemptMember(IMethodSymbol method)
     {
         return method.ContainingType.AllInterfaces
             .SelectMany(contract => contract.GetMembers().OfType<IMethodSymbol>())
-            .Any(member => SymbolEqualityComparer.Default.Equals(
-                method.ContainingType.FindImplementationForInterfaceMember(member),
-                method));
+            .Any(member => IsExempt(member, method.ContainingAssembly)
+                && SymbolEqualityComparer.Default.Equals(
+                    method.ContainingType.FindImplementationForInterfaceMember(member),
+                    method));
+    }
+
+    private static bool IsExempt(IMethodSymbol member, IAssemblySymbol implementing)
+    {
+        if (member.Name == RollbackName && member.ContainingType.ToDisplayString() == UnitOfWorkName)
+        {
+            return true;
+        }
+
+        IAssemblySymbol declaring = member.ContainingAssembly;
+
+        return !SymbolEqualityComparer.Default.Equals(declaring, implementing)
+            && declaring.Name != Library
+            && !declaring.Name.StartsWith(Library + ".", StringComparison.Ordinal);
     }
 }

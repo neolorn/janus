@@ -12,6 +12,7 @@ using Janus.Cli.Configuration;
 using Janus.Cli.Erasures;
 using Janus.Cli.Rotation;
 using Janus.Core;
+using Janus.Storage;
 
 namespace Janus.Cli;
 
@@ -19,7 +20,7 @@ namespace Janus.Cli;
 /// Entry point of the command-line application of CONV-LAYOUT-001.
 /// </summary>
 /// <remarks>
-/// Implements OPS-BOOT-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
+/// Implements OPS-BOOT-001, OPS-SEC-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
 /// goes to standard output; a refusal goes to standard error as the code and the
 /// structured data the API carries, never as a sentence.
 /// </remarks>
@@ -67,13 +68,23 @@ internal static class Program
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(terminal);
 
+        // OPS-SEC-001 and D-166 (308): a command the executable does not carry is refused
+        // as any unreadable argument is, naming it; an invocation that names none failed
+        // before any member was read and carries the code alone.
         if (arguments.Count is 0
             || !Commands.TryGetValue(arguments[0], out Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>>? command))
         {
+            Error unknown = arguments.Count is 0
+                ? Error.From(ErrorCodes.RequestMalformed)
+                : Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(arguments[0]));
+
+            await terminal.Error.WriteLineAsync(Written(unknown)).ConfigureAwait(false);
+
             return UnknownCommandExitCode;
         }
 
-        Result<string> outcome = await command([.. arguments.Skip(1)], terminal, cancellationToken).ConfigureAwait(false);
+        Result<string> outcome = await RanAsync(command, [.. arguments.Skip(1)], terminal, cancellationToken)
+            .ConfigureAwait(false);
 
         return await outcome
             .Match(
@@ -90,6 +101,24 @@ internal static class Program
                     return RefusedExitCode;
                 })
             .ConfigureAwait(false);
+    }
+
+    // OPS-SEC-003 AC3 (D-183): a fault that carries a code ends the command with that
+    // code, written as a refusal is.
+    private static async Task<Result<string>> RanAsync(
+        Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>> command,
+        IReadOnlyList<string> arguments,
+        Terminal terminal,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await command(arguments, terminal, cancellationToken).ConfigureAwait(false);
+        }
+        catch (CodedFault fault)
+        {
+            return Result.Failure<string>(fault.Failure);
+        }
     }
 
     // The runtime fixes the entry point's signature, so the token starts here.

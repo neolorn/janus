@@ -27,10 +27,12 @@ internal interface IPasswordStore
     ValueTask SetAsync(Password password, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Carries a rehash at raised parameters onto the row.
+    /// Carries a rehash at raised parameters onto the row, only where the row still holds
+    /// the hash the rehash was computed from, so a password set meanwhile stands (D-166 X3).
     /// </summary>
     /// <param name="password">The password as it now stands.</param>
+    /// <param name="read">The hash the password verified against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
-    ValueTask RehashAsync(Password password, CancellationToken cancellationToken);
+    ValueTask RehashAsync(Password password, PasswordHash read, CancellationToken cancellationToken);
 }

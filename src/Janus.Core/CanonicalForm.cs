@@ -51,4 +51,24 @@ public static class CanonicalForm
 
         return Canonicalization.AsciiDigits(value);
     }
+
+    /// <summary>
+    /// The ASCII form of a domain: the ToASCII operation of UTS #46 at
+    /// <see cref="UnicodeVersion"/>, nontransitional, with UseSTD3ASCIIRules,
+    /// CheckHyphens, CheckBidi, CheckJoiners and VerifyDnsLength set and
+    /// IgnoreInvalidPunycode not, with the Punycode of RFC 3492, in lower case. The
+    /// conversion takes its input as it stands; a caller that compares domains gives it
+    /// the canonical form (<see cref="Of"/>).
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001.</remarks>
+    /// <param name="domain">The domain.</param>
+    /// <param name="ascii">Its ASCII form, or empty.</param>
+    /// <returns>Whether the domain has an ASCII form.</returns>
+    /// <exception cref="ArgumentNullException">The domain is absent.</exception>
+    public static bool TryDomainToAscii(string domain, out string ascii)
+    {
+        ArgumentNullException.ThrowIfNull(domain);
+
+        return Idna.TryToAscii(domain, out ascii);
+    }
 }

@@ -80,6 +80,6 @@ public interface IMailServer
     /// </returns>
     ValueTask<Result> RevokeAppPasswordAsync(
         string accessToken,
-        string id,
+        AppPasswordId id,
         CancellationToken cancellationToken);
 }

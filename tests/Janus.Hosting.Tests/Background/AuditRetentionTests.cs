@@ -57,7 +57,10 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
             scope.ServiceProvider.GetRequiredService<IConfigurationStore>(),
             TestContext.Current.CancellationToken);
 
-        Result ran = await job.RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        Result ran = await job.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(job.Principal),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(("PRIV-RET-002", true), (job.Principal.Reason, job.Principal.MayRun(SystemOperation.RetentionPurge)));
         Assert.Equal(TimeSpan.FromDays(1), interval.Match(value => value, _ => TimeSpan.Zero));
@@ -93,9 +96,12 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
         await using ServiceProvider services = Deployed(at, host.ConnectionString);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
-        Result ran = await BackgroundJobs.All
-            .Single(job => job.Name == Job)
-            .RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        BackgroundJob purge = BackgroundJobs.All.Single(job => job.Name == Job);
+
+        Result ran = await purge.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(purge.Principal),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, ran.Match(() => (ErrorCode?)null, error => error.Code));
         Assert.True(await StandingAsync(connection, "2019_06"));
@@ -134,22 +140,16 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
     // A deployment over the fixture's database at the case's own instant, handed the
     // maintenance credential the case names.
     private ServiceProvider Deployed(DateTimeOffset at, string maintenance) =>
-        new ServiceCollection()
+        HostFixture.Started(new ServiceCollection()
             .AddSingleton<TimeProvider>(new FixedTime(at))
-            .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
-            .AddJanus(
-                host.ConnectionString,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                Encoding.UTF8.GetBytes("the secret this application presents"),
-                Encoding.UTF8.GetBytes(maintenance),
-                HostFixture.Declaration(),
-                ApplicationKind.Public)
-            .BuildServiceProvider();
+            .AddSingleton<ISecretSource>(HostFixture.Secrets(maintenance))
+            .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public)
+            .BuildServiceProvider());
 }

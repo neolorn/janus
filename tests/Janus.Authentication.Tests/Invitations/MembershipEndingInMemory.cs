@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Invitations;
@@ -23,6 +24,20 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
     /// </summary>
     public List<EndedMembership> Ended { get; } = [];
 
+    /// <summary>
+    /// What happens while an end waits for the membership's row, where a test sets it.
+    /// </summary>
+    public Action? Ending { get; set; }
+
+    /// <inheritdoc/>
+    public async ValueTask<MembershipId?> FindAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await lookup.OfAsync(subject, cancellationToken).ConfigureAwait(false)).Contains(organization)
+            ? new MembershipId(Guid.CreateVersion7())
+            : null;
+
     /// <inheritdoc/>
     public ValueTask<MembershipId?> EndAsync(
         SubjectId subject,
@@ -30,6 +45,8 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        Ending?.Invoke();
+
         if (!lookup.Leave(subject, organization))
         {
             return ValueTask.FromResult<MembershipId?>(null);

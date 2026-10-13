@@ -21,6 +21,10 @@ internal interface IGroupAudit
     /// <param name="group">Which group.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who created it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -28,6 +32,7 @@ internal interface IGroupAudit
         Group group,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -37,6 +42,10 @@ internal interface IGroupAudit
     /// <param name="group">Which group.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who removed it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -44,6 +53,7 @@ internal interface IGroupAudit
         Group group,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -54,6 +64,10 @@ internal interface IGroupAudit
     /// <param name="member">The account or group that joined.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who added it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -62,6 +76,7 @@ internal interface IGroupAudit
         GrantSubject member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -72,6 +87,10 @@ internal interface IGroupAudit
     /// <param name="member">The account or group that left.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who took it out.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -80,6 +99,7 @@ internal interface IGroupAudit
         GrantSubject member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

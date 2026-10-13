@@ -7,7 +7,8 @@ namespace Janus.Core;
 /// <summary>
 /// The one thing a principal resolves to: the assurance floor, the factors a person
 /// may sign in with, what each step-up action costs, whether a second credential is
-/// required, whether recovery is self-service, and the domains a membership admits.
+/// required, whether recovery is self-service, the domains a membership admits, and
+/// whether the account shows a profile photo.
 /// </summary>
 /// <param name="RequiredAssurance">
 /// The stated floor. Every rule that says "where the policy requires AAL2" reads this
@@ -29,8 +30,12 @@ namespace Janus.Core;
 /// The domains verified by DNS whose addresses members may sign in with. Empty is the
 /// domain lock off. Written only through the organization's domain operations.
 /// </param>
+/// <param name="Photos">
+/// Whether the account shows a profile photo, which needs the image codec the host
+/// declares (IDN-ATTR-002).
+/// </param>
 /// <remarks>
-/// Implements chapter 10 section 4.1a, AUTH-PRIN-002, AUTH-STEP-002a. An organization
+/// Implements chapter 10 section 4.1a, AUTH-PRIN-002, AUTH-STEP-002a, IDN-ATTR-002. An organization
 /// stores only what it overrides and may tighten any field, never loosen below the
 /// system default.
 /// </remarks>
@@ -44,7 +49,8 @@ public sealed record Policy(
     IReadOnlyDictionary<StepUpAction, Gate> Gates,
     CredentialRedundancy CredentialRedundancy,
     bool SelfServiceRecovery,
-    IReadOnlyList<string> EmailDomains)
+    IReadOnlyList<string> EmailDomains,
+    bool Photos)
 {
     /// <summary>
     /// The stated floor.

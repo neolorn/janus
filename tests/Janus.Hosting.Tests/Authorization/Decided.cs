@@ -27,6 +27,37 @@ public enum Decided
     ConsentRequired,
 
     /// <summary>
+    /// The action is refused until the record's data subject consents again, the consent
+    /// held having been superseded (<c>privacy.consent.superseded</c>).
+    /// </summary>
+    ConsentSuperseded,
+
+    /// <summary>
+    /// The action is refused until the record's data subject gives the written consent
+    /// the purpose asks (<c>privacy.consent.writtenrequired</c>).
+    /// </summary>
+    ConsentWrittenRequired,
+
+    /// <summary>
+    /// The action is refused until the caller proves what the gate bound to it costs
+    /// (<c>auth.stepup.required</c>).
+    /// </summary>
+    StepUpRequired,
+
+    /// <summary>
+    /// The action is refused for step-up, and its capability asks the caller to
+    /// authenticate again: the session would meet the gate but for proof last reached before
+    /// its last downgrade (<c>reauthenticate</c>).
+    /// </summary>
+    ReauthenticationRequired,
+
+    /// <summary>
+    /// The action is refused where nothing reports what the caller proved
+    /// (<c>auth.stepup.unavailable</c>).
+    /// </summary>
+    StepUpUnavailable,
+
+    /// <summary>
     /// The question is the calling code's fault, raised before anything is read.
     /// </summary>
     Raised,

@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
 using Janus.Core;
-using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sessions;
@@ -16,7 +16,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// <c>preauthentication_sessions</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions the proof key is wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which the proof key is wrapped under.</param>
 /// <remarks>
 /// Implements BFF-CSRF-005a, BFF-SESS-006, CONV-DESIGN-003 and OPS-SEC-001. Nothing
 /// here is a personal field: the row is two fingerprints, two instants and what the
@@ -26,7 +26,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// </remarks>
 internal sealed class PreAuthenticationStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys) : IPreAuthenticationStore
+    DeploymentDataKeyStore deployment) : IPreAuthenticationStore
 {
     /// <inheritdoc/>
     public async ValueTask<PreAuthentication?> FindAsync(
@@ -48,7 +48,7 @@ internal sealed class PreAuthenticationStore(
                 record.ExpiresAt,
                 record.Registration,
                 record.Enrolment,
-                Read(record));
+                await ReadAsync(record, cancellationToken).ConfigureAwait(false));
     }
 
     /// <inheritdoc/>
@@ -89,7 +89,7 @@ internal sealed class PreAuthenticationStore(
         record.Registration = preAuthentication.Registration;
         record.Enrolment = preAuthentication.Enrolment;
 
-        Write(record, preAuthentication.SignOn);
+        await WriteAsync(record, preAuthentication.SignOn, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -107,57 +107,61 @@ internal sealed class PreAuthenticationStore(
         }
     }
 
-    // BFF-SESS-006: the four columns are written together, so a row either carries a
+    // BFF-SESS-006: the three columns are written together, so a row either carries a
     // whole sign-on or carries none, and the proof key goes down wrapped.
-    private void Write(PreAuthenticationRecord record, SignOnAttempt? attempt)
+    private async ValueTask WriteAsync(
+        PreAuthenticationRecord record,
+        SignOnAttempt? attempt,
+        CancellationToken cancellationToken)
     {
         if (attempt is null)
         {
             record.SignOnState = null;
             record.SignOnVerifier = null;
-            record.SignOnKeyVersion = null;
             record.SignOnReturn = null;
 
             return;
         }
 
         byte[] verifier = Encoding.ASCII.GetBytes(attempt.Verifier);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
             record.SignOnState = attempt.StateFingerprint;
-            record.SignOnVerifier = PersonalFieldCipher.Wrap(verifier, keyEncryptionKeys.Current.Span);
-            record.SignOnKeyVersion = keyEncryptionKeys.CurrentVersion;
+            record.SignOnVerifier = PersonalFieldCipher.Wrap(verifier, deploymentKey);
             record.SignOnReturn = attempt.ReturnTo;
         }
         finally
         {
             CryptographicOperations.ZeroMemory(verifier);
+            CryptographicOperations.ZeroMemory(deploymentKey);
         }
     }
 
-    private SignOnAttempt? Read(PreAuthenticationRecord record)
+    private async ValueTask<SignOnAttempt?> ReadAsync(
+        PreAuthenticationRecord record,
+        CancellationToken cancellationToken)
     {
         if (record.SignOnState is not byte[] state
             || record.SignOnVerifier is not byte[] wrapped
-            || record.SignOnKeyVersion is not int version
             || record.SignOnReturn is not string returnTo)
         {
             return null;
         }
 
-        byte[] verifier = PersonalFieldCipher.Unwrap(
-            PersonalDataFormat.Marker,
-            version,
-            wrapped,
-            keyEncryptionKeys);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+        byte[] verifier = [];
 
         try
         {
+            verifier = PersonalFieldCipher.Unwrap(wrapped, deploymentKey);
+
             return new SignOnAttempt(state, Encoding.ASCII.GetString(verifier), returnTo);
         }
         finally
         {
+            CryptographicOperations.ZeroMemory(deploymentKey);
             CryptographicOperations.ZeroMemory(verifier);
         }
     }

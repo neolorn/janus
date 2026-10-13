@@ -21,7 +21,8 @@ internal sealed record ThrottleAttempt(string Source, byte[]? Identifier)
 
     /// <summary>
     /// Whether the source arrived with a browser the account already knows, which
-    /// exempts it from the components an attacker raises from anywhere.
+    /// exempts it from being held by the components an attacker raises from anywhere,
+    /// never from being counted by them.
     /// </summary>
     public bool Recognised { get; init; }
 }

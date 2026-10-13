@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Roles;
@@ -99,7 +102,7 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARoleIsChangedInPlaceAsync()
+    public async Task AUTHZ_GRANT_004_AC4_ARoleIsChangedInPlaceAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
 
@@ -161,12 +164,12 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// OPS-CFG-007 AC1: a role manager without system administration can neither give a
+    /// OPS-CFG-007 AC3: a role manager without system administration can neither give a
     /// role the permission nor change a role that carries it, and one holding it can.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_CFG_007_AC1_ARoleCarryingSystemAdministrationNeedsItAsync()
+    public async Task OPS_CFG_007_AC3_ARoleCarryingSystemAdministrationNeedsItAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
 
@@ -204,7 +207,6 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Answer removed = await RemovedAsync(administrator, "editor");
         Answer derived = await RemovedAsync(administrator, "reader");
         Answer granted = await RemovedAsync(administrator, "auditor");
-        Answer unknown = await RemovedAsync(administrator, "no-such-role");
 
         Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
@@ -212,7 +214,273 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status409Conflict, derived.Status);
         Assert.Equal(ErrorCodes.RoleInUse.ToString(), derived.Text("code"));
         Assert.Equal(StatusCodes.Status409Conflict, granted.Status);
-        Assert.Equal("name", Member(unknown));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6 and REG-INV-001: a role an open invitation names grants at
+    /// the acknowledgement, so it is not removed while the invitation stands, and is
+    /// removed once the invitation is revoked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC6_ARoleAnOpenInvitationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading);
+
+        Invitation invitation = await InvitedAsync(actor, Editor, _deployment.Clock.GetUtcNow());
+
+        Answer refused = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+
+        invitation.Revoke(_deployment.Clock.GetUtcNow());
+
+        Answer removed = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6: an invitation stands until it is acknowledged or revoked,
+    /// expired or not, so a role an expired one names is not removed either.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC6_ARoleAStandingInvitationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading);
+
+        Invitation invitation = await InvitedAsync(actor, Editor, _deployment.Clock.GetUtcNow().AddDays(-8));
+
+        Answer refused = await RemovedAsync(administrator, "editor");
+
+        Assert.True(invitation.HasExpired(_deployment.Clock.GetUtcNow()));
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6: a role a grant names, live, expired or revoked, and a role a
+    /// declared derivation confers are each refused removal with
+    /// <c>authz.role.inuse</c>, and every one of them stands with no removal written
+    /// down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC6_ARoleAGrantOrADerivationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+        string[] named = ["granted", "lapsed", "auditor", "reader"];
+
+        foreach (string name in named)
+        {
+            _ = await DefinedAsync(administrator, Reading, name: name);
+        }
+
+        await GrantOfAsync(RoleName.Parse("granted"), actor, expiresAt: null);
+        await GrantOfAsync(RoleName.Parse("lapsed"), actor, _deployment.Clock.GetUtcNow().AddMinutes(1));
+        await RevokedGrantOfAsync(RoleName.Parse("auditor"), actor);
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        var refusals = new List<Answer>();
+
+        foreach (string name in named)
+        {
+            refusals.Add(await RemovedAsync(administrator, name));
+        }
+
+        Assert.All(
+            refusals,
+            refused =>
+            {
+                Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+                Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+            });
+
+        foreach (string name in named)
+        {
+            Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse(name), CancellationToken.None));
+        }
+
+        Assert.DoesNotContain(_deployment.RoleChanges.Changes, change => change.Action == AuditActions.RoleRemoved);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC3: a definition, a change and a removal whose reason is absent,
+    /// or blank after trimming, are refused naming it to a caller who may make the
+    /// change, and the roles stand as they were with nothing more written down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC3_ARoleChangeWithoutAReasonChangesNothingAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Editing, name: "writer");
+
+        int recorded = _deployment.RoleChanges.Changes.Count;
+
+        Answer[] refusals =
+        [
+            await administrator.SendAsync("POST", "/admin/roles", ("name", "editor"), ("permissions", Editing)),
+            await DefinedAsync(administrator, Editing, reason: " "),
+            await administrator.SendAsync("POST", "/admin/roles", ("name", "writer"), ("permissions", Reading)),
+            await DefinedAsync(administrator, Reading, name: "writer", reason: " "),
+            await administrator.SendAsync("DELETE", "/admin/roles/writer", "{}"),
+            await administrator.SendAsync("DELETE", "/admin/roles/writer", ("reason", " ")),
+        ];
+
+        Assert.All(refusals, refused => Assert.Equal("reason", Member(refused)));
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.True((await _deployment.Roles.FindAsync(RoleName.Parse("writer"), CancellationToken.None))!
+            .Allows(Permission.Parse("article:edit")));
+        Assert.Equal(recorded, _deployment.RoleChanges.Changes.Count);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC5: a change taking a library-owned permission out of the role
+    /// the reserved account holds, and a revocation of that account's grant of the
+    /// role, are each refused with <c>authz.denied</c> to a stepped-up system
+    /// administrator, and the role, the grant and the record of changes stand as they
+    /// were.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC5_TheReservedAccountsRoleAndGrantAreNotTakenAwayAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(
+            Permissions.RoleManage,
+            Permissions.GrantManage,
+            Permissions.SystemAdminister);
+        var reserved = new SubjectId(Guid.NewGuid());
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(reserved),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                actor,
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(reserved);
+
+        Answer narrowed = await DefinedAsync(
+            administrator,
+            [.. Permissions.All.Skip(1).Select(permission => permission.ToString())],
+            name: SystemAdministrator.ToString());
+        Answer revoked = await administrator.SendAsync(
+            "DELETE",
+            "/admin/grants/" + bootstrapped.Id,
+            ("reason", "No longer needed."));
+
+        Assert.All(
+            [narrowed, revoked],
+            refused =>
+            {
+                Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+                Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+            });
+
+        Role standing = (await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!;
+
+        Assert.All(Permissions.All, permission => Assert.True(standing.Allows(permission)));
+        Assert.Null((await _deployment.AccessGrants.FindAsync(bootstrapped.Id, CancellationToken.None))!.RevokedAt);
+        Assert.Empty(_deployment.RoleChanges.Changes);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004, D-166: a path naming a role the deployment does not hold is a
+    /// record not found, answered after the permission and the reason are judged, and
+    /// nothing is written down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AnUnknownRoleIsNotFoundAsync()
+    {
+        (Browser administrator, SubjectId subject) = await AuthorisedAsync();
+
+        Answer refused = await RemovedAsync(administrator, "no-such-role");
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.RoleManage);
+
+        Answer unreasoned = await administrator.SendAsync("DELETE", "/admin/roles/no-such-role", "{}");
+        Answer unknown = await RemovedAsync(administrator, "no-such-role");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.RoleNotFound.ToString(), unknown.Text("code"));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC7, D-166: the role the reserved account holds keeps every permission
+    /// the library declares, so a stepped-up system administrator taking one out is
+    /// refused and nothing changes; adding a permission the host declares stays
+    /// allowed, and a role the reserved account does not hold is narrowed as before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC7_TheReservedAccountsRoleKeepsEveryLibraryPermissionAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(
+            Permissions.RoleManage,
+            Permissions.SystemAdminister);
+        var reserved = new SubjectId(Guid.NewGuid());
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(reserved),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                actor,
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(reserved);
+
+        string[] library = [.. Permissions.All.Select(permission => permission.ToString())];
+
+        Answer narrowed = await DefinedAsync(administrator, [.. library.Skip(1)], name: SystemAdministrator.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, narrowed.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), narrowed.Text("code"));
+        Role standing = (await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!;
+
+        Assert.All(Permissions.All, permission => Assert.True(standing.Allows(permission)));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+
+        Answer widened = await DefinedAsync(administrator, [.. library, "article:read"], name: SystemAdministrator.ToString());
+        Answer other = await DefinedAsync(administrator, Administering, name: "auditor");
+        Answer otherNarrowed = await DefinedAsync(administrator, Reading, name: "auditor");
+
+        Assert.Equal(StatusCodes.Status204NoContent, widened.Status);
+        Assert.True((await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!
+            .Allows(Permission.Parse("article:read")));
+        Assert.Equal(StatusCodes.Status201Created, other.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, otherNarrowed.Status);
     }
 
     /// <summary>
@@ -241,9 +509,67 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires
-    /// is refused naming it before the service is reached, so a caller the service would
-    /// refuse for want of the permission is answered for the body, and nothing changes.
+    /// CONV-DESIGN-003 AC5: a definition and a removal refused after the unit of work
+    /// began, under the role's lock or for want of the step-up, each roll it back, so
+    /// no unit of work is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADefinitionOrARemovalRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Editing);
+        _ = await DefinedAsync(administrator, Reading, name: "reader");
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer conferred = await DefinedAsync(administrator, Administering);
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), conferred.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        Answer narrowed = await RemovedAsync(administrator, "system-administrator");
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), narrowed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+
+        Answer unknown = await RemovedAsync(administrator, "no-such-role");
+
+        Assert.Equal(ErrorCodes.RoleNotFound.ToString(), unknown.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 3), Ended());
+
+        Answer derived = await RemovedAsync(administrator, "reader");
+
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), derived.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 4), Ended());
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer changed = await DefinedAsync(administrator, Reading);
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), changed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 5), Ended());
+
+        Answer removed = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), removed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 6), Ended());
+
+        // Whether a unit of work is open, how many were left neither committed nor rolled
+        // back, and how many were rolled back.
+        (bool Open, int Unended, int RolledBack) Ended() =>
+            (
+                _deployment.Work.Open,
+                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+                _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires,
+    /// or carrying one past 1024 characters (API-CONV-002), is refused naming it before
+    /// the service is reached, so a caller the service would refuse for want of the
+    /// permission is answered for the body, and nothing changes.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -257,13 +583,55 @@ public sealed class RoleEndpointTests : IAsyncLifetime
             ("name", "editor"),
             ("permissions", Editing));
         Answer unremoved = await caller.SendAsync("DELETE", "/admin/roles/" + SystemAdministrator, "{}");
+        Answer overlong = await DefinedAsync(caller, Editing, reason: new string('r', 1025));
 
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), undefined.Text("code"));
         Assert.Equal("reason", Member(undefined));
         Assert.Equal("reason", Member(unremoved));
+        Assert.Equal("reason", Member(overlong));
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
         Assert.NotNull(await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None));
         Assert.Empty(_deployment.RoleChanges.Changes);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step and before the
+    /// first write refuses a role's definition and its removal inside their unit of
+    /// work, which rolls back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesARoleChangeAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        Assert.Equal(StatusCodes.Status201Created, (await DefinedAsync(administrator, Reading, "reader")).Status);
+
+        int recorded = _deployment.RoleChanges.Changes.Count;
+
+        foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
+        {
+            () => DefinedAsync(administrator, Editing),
+            () => RemovedAsync(administrator, "reader"),
+        })
+        {
+            int rolledBack = _deployment.Work.RolledBack;
+
+            _deployment.Gate.Admitted = _ => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+
+            Answer refused = await change();
+
+            _deployment.Gate.Lift(actor);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+            Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+            Assert.False(_deployment.Work.Open);
+        }
+
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("reader"), CancellationToken.None));
+        Assert.Equal(recorded, _deployment.RoleChanges.Changes.Count);
     }
 
     private static string Member(Answer answer)
@@ -287,6 +655,48 @@ public sealed class RoleEndpointTests : IAsyncLifetime
 
     private static Task<Answer> RemovedAsync(Browser administrator, string name) =>
         administrator.SendAsync("DELETE", "/admin/roles/" + name, ("reason", "No longer used."));
+
+    // An invitation into the branch naming the role, standing, for seven days from
+    // when it was issued.
+    private async Task<Invitation> InvitedAsync(SubjectId inviter, RoleName role, DateTimeOffset issuedAt)
+    {
+        var invitation = Invitation.Issued(
+            InvitationId.New(_deployment.Clock),
+            Branch,
+            inviter,
+            new InvitedIdentifiers("invited@example.test", null, null),
+            [role],
+            [],
+            mailbox: null,
+            OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
+            issuedAt,
+            TimeSpan.FromDays(7));
+
+        await _deployment.Invitations.AddAsync(invitation, CancellationToken.None);
+
+        return invitation;
+    }
+
+    // A grant of the role in the branch that stands, until it expires where it does.
+    private async Task GrantOfAsync(RoleName role, SubjectId actor, DateTimeOffset? expiresAt)
+    {
+        Grant grant = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(actor),
+                role,
+                Branch,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt,
+                actor,
+                _deployment.Clock.GetUtcNow(),
+                "Works in the branch.")
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(grant, CancellationToken.None);
+    }
 
     // A grant of the role that has since been revoked, whose row still names it.
     private async Task RevokedGrantOfAsync(RoleName role, SubjectId actor)

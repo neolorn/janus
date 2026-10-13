@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using OtpNet;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authentication;
@@ -45,7 +48,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 MessageKind.SignInLink,
                 kind,
                 Language,
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {token}"));
+                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
         }
     }
 
@@ -201,6 +204,811 @@ public sealed class SignInFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, landed.Status);
         Assert.Equal(ErrorCodes.CodeExpired.ToString(), landed.Text("code"));
         Assert.False(browser.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a link token presented under a factor that is not a link is
+    /// refused naming the factor before the service is reached, so a refused press is
+    /// only ever recorded under the link factor the request named.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ALinkTokenUnderAnotherFactorIsRefusedAsMalformedAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        Answer landed = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("linkToken", "nothing-answers-to-this"),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, landed.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), landed.Text("code"));
+        Assert.Equal("factor", landed.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC4 and AC6: the text code is asked for at the second step by
+    /// naming it with no value, which is answered 202; the code it sends, presented,
+    /// completes the sign-in at AAL2.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC4_ATextCodeAskedForAndPresentedCompletesAtAal2Async()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        await RegisteredAsync();
+
+        _deployment.Authenticators.Hold(Authenticator.Existing(
+            AuthenticatorId.New(_deployment.Clock),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.PhoneCode,
+            CredentialLabel.TryParse("Phone", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _deployment.Clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            null,
+            isPreferred: false,
+            number: Flow.Number));
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer first = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+        Answer asked = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"),
+            ("value", _deployment.Sms.Taken[^1].Text));
+
+        Assert.Equal("factorRequired", first.Text("status"));
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal(sent + 1, _deployment.Sms.Taken.Count);
+        Assert.Equal(StatusCodes.Status200OK, completed.Status);
+        Assert.Equal("complete", completed.Text("status"));
+        Assert.Equal("aal2", completed.Text("assuranceLevel"));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC20, `10` section 5.16a: under the restrictions as shipped, a
+    /// second text code asked for inside three minutes is refused
+    /// <c>auth.restriction.exceeded</c>, and the first's code presented right admits the
+    /// next at once though a refusal follows it: with the code's credential suspended
+    /// since the text went out, the right code is answered 422
+    /// <c>auth.credential.suspended</c>, and once the credential is active again the
+    /// next ask sends its text at once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC20_ARightTextCodeARefusalFollowsAdmitsTheNextTextAtOnceAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        await RegisteredAsync();
+
+        var held = Authenticator.Existing(
+            AuthenticatorId.New(_deployment.Clock),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.PhoneCode,
+            CredentialLabel.TryParse("Phone", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _deployment.Clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            null,
+            isPreferred: false,
+            number: Flow.Number);
+
+        _deployment.Authenticators.Hold(held);
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        _ = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer first = await AskedAsync();
+        Answer paced = await AskedAsync();
+        string code = _deployment.Sms.Taken[^1].Text;
+
+        held.Suspend(_deployment.Clock.GetUtcNow() + TimeSpan.FromDays(7));
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"),
+            ("value", code));
+
+        held.Restore();
+
+        Answer next = await AskedAsync();
+
+        Assert.Equal(StatusCodes.Status202Accepted, first.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, paced.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), paced.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.CredentialSuspended.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, next.Status);
+        Assert.Equal(sent + 2, _deployment.Sms.Taken.Count);
+
+        Task<Answer> AskedAsync() =>
+            browser.SendAsync(
+                "POST",
+                "/auth/factor",
+                ("challengeId", challenge),
+                ("factor", "phoneCode"));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7 and AUTH-FACT-002b AC6: a text code asked for after the first
+    /// factor, where the number's signal answers <c>risk</c> by then, sends nothing and
+    /// is answered with what the challenge still offers: 200 <c>factorRequired</c>
+    /// naming the factors left, and 422 <c>auth.factor.rejected</c> once none is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_ATextCodeAskedForAReportedNumberIsAnsweredWithWhatIsLeftAsync()
+    {
+        PhoneSignal reported = PhoneSignal.Clear;
+
+        await using var changing = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(reported)));
+
+        Flow.Prepare(changing);
+
+        changing.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        changing.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        _ = await Flow.SignedInAsync(changing);
+
+        changing.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = changing.Directory.Created[^1].Subject;
+        Authenticator generator = Held(Factor.Totp, "Generator");
+
+        changing.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        changing.Authenticators.Hold(generator);
+
+        var browser = new Browser(changing);
+        string challenge = await BegunAsync(browser);
+
+        Answer first = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        reported = PhoneSignal.Risk;
+
+        int sent = changing.Sms.Taken.Count;
+        Answer left = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        generator.Invalidate();
+
+        Answer none = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        Assert.Equal("factorRequired", first.Text("status"));
+        Assert.Equal(StatusCodes.Status200OK, left.Status);
+        Assert.Equal("factorRequired", left.Text("status"));
+        Assert.Equal(
+            ["totp"],
+            left.Json().GetProperty("required").EnumerateArray().Select(factor => factor.GetString()));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, none.Status);
+        Assert.Equal("auth.factor.rejected", none.Text("code"));
+        Assert.Equal(sent, changing.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(changing.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                changing.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC7, `09` `POST /auth/factor`: a second step presented at a
+    /// sign-in before a first factor has been accepted on the challenge is answered 422
+    /// <c>auth.factor.notpermitted</c>, the same for an identifier whose account holds
+    /// the generator and presents its right code and for one no account holds, with no
+    /// failed authentication recorded; a text code asked for after it is still an ask
+    /// before a first factor, answered 202 and sent nothing (AUTH-FACT-002 AC8); and
+    /// the password and then the same code complete the sign-in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC7_ASecondStepBeforeAFirstFactorIsAnswered422TheSameForEveryIdentifierAsync()
+    {
+        await using var reporting = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(reporting);
+
+        reporting.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        reporting.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        _ = await Flow.SignedInAsync(reporting);
+
+        reporting.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = reporting.Directory.Created[^1].Subject;
+
+        reporting.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        reporting.Authenticators.Hold(Held(Factor.Totp, "Generator"));
+
+        var browser = new Browser(reporting);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        string held = (await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address)))
+            .Text("challengeId");
+        string nobody = (await browser.SendAsync("POST", "/auth/begin", ("identifier", "nobody@example.test")))
+            .Text("challengeId");
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(reporting.Clock.GetUtcNow().UtcDateTime);
+        int sent = reporting.Sms.Taken.Count;
+        int failed = reporting.SessionAudit.Failed.Count;
+
+        Answer before = await PresentedAsync(held, "totp", generated);
+        Answer unknown = await PresentedAsync(nobody, "totp", generated);
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, before.Status);
+        Assert.Equal("auth.factor.notpermitted", before.Text("code"));
+        Assert.Equal(before.Status, unknown.Status);
+        Assert.Equal(before.Text("code"), unknown.Text("code"));
+        Assert.Equal(failed, reporting.SessionAudit.Failed.Count);
+
+        Answer asked = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", held),
+            ("factor", "phoneCode"));
+        Answer first = await PresentedAsync(held, "password", Flow.Password);
+        Answer second = await PresentedAsync(held, "totp", generated);
+
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal(sent, reporting.Sms.Taken.Count);
+        Assert.Equal(StatusCodes.Status200OK, first.Status);
+        Assert.Equal("factorRequired", first.Text("status"));
+        Assert.Equal("aal1", first.Text("assuranceLevel"));
+        Assert.Equal(StatusCodes.Status200OK, second.Status);
+        Assert.Equal("complete", second.Text("status"));
+        Assert.Equal("aal2", second.Text("assuranceLevel"));
+
+        Task<Answer> PresentedAsync(string challenge, string factor, string value) =>
+            browser.SendAsync(
+                "POST",
+                "/auth/factor",
+                ("challengeId", challenge),
+                ("factor", factor),
+                ("value", value));
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(reporting.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                reporting.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC8, `09` `POST /auth/factor`: a text code asked for at a sign-in
+    /// on whose challenge a generated code was presented and refused, no first factor
+    /// having been accepted (AUTH-FACT-002b AC7), is answered
+    /// 202, asks no signal and sends nothing, whether the number it would go to is
+    /// active or suspended.
+    /// </summary>
+    /// <param name="suspended">Whether the account's number is suspended.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTH_FACT_002_AC8_ATextCodeAskedAfterASecondStepRefusedBeforeAnyFirstFactorIsAnswered202AndSendsNothingAsync(
+        bool suspended)
+    {
+        int signalled = 0;
+
+        await using var clear = new Deployment(
+            signals: new PhoneSignalProvider((_, _) =>
+            {
+                signalled++;
+
+                return ValueTask.FromResult(PhoneSignal.Clear);
+            }));
+
+        Flow.Prepare(clear);
+
+        clear.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        clear.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        clear.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        _ = await Flow.SignedInAsync(clear);
+
+        clear.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = clear.Directory.Created[^1].Subject;
+        Authenticator phone = Held(Factor.PhoneCode, "Phone");
+
+        clear.Authenticators.Hold(phone);
+        clear.Authenticators.Hold(Held(Factor.Totp, "Generator"));
+
+        if (suspended)
+        {
+            phone.Suspend(clear.Clock.GetUtcNow() + TimeSpan.FromDays(7));
+        }
+
+        var browser = new Browser(clear);
+        string challenge = await BegunAsync(browser);
+
+        Answer second = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "totp"),
+            ("value", new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+                .ComputeTotp(clear.Clock.GetUtcNow().UtcDateTime)));
+
+        int sent = clear.Sms.Taken.Count;
+        int before = signalled;
+
+        Answer asked = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, second.Status);
+        Assert.Equal("auth.factor.notpermitted", second.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal(before, signalled);
+        Assert.Equal(sent, clear.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(clear.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                clear.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a text code asked for at a step-up,
+    /// where the number's signal answers <c>risk</c>, sends nothing and is answered 200
+    /// <c>factorRequired</c> naming the factors of the combinations left without the
+    /// entry and reporting what the factors accepted on the challenge reach, which is
+    /// <c>delegated</c>, not phishing-resistant, none having been (AUTH-STEP-002 AC4e),
+    /// and 403 <c>auth.stepup.required</c> with <c>report-loss</c> once none is left.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithWhatIsLeftAsync()
+    {
+        await using var reporting = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(reporting);
+
+        reporting.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        reporting.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        Browser owner = await Flow.SignedInAsync(reporting);
+
+        reporting.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = reporting.Directory.Created[^1].Subject;
+        Authenticator generator = Held(Factor.Totp, "Generator");
+
+        reporting.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        reporting.Authenticators.Hold(generator);
+
+        Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        string challenge = began.Text("challengeId");
+        int sent = reporting.Sms.Taken.Count;
+
+        Answer left = await owner.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        generator.Invalidate();
+
+        Answer none = await owner.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        Assert.Equal(StatusCodes.Status200OK, left.Status);
+        Assert.Equal("factorRequired", left.Text("status"));
+        Assert.Equal("delegated", left.Text("assuranceLevel"));
+        Assert.False(left.Json().GetProperty("phishingResistant").GetBoolean());
+        Assert.Equal(
+            ["password", "totp"],
+            left.Json().GetProperty("required").EnumerateArray().Select(factor => factor.GetString()));
+        Assert.Equal(StatusCodes.Status403Forbidden, none.Status);
+        Assert.Equal("auth.stepup.required", none.Text("code"));
+        Assert.Equal("report-loss", none.Json().GetProperty("details").GetProperty("outcome").GetString());
+        Assert.Empty(none.Json().GetProperty("details").GetProperty("options").EnumerateArray());
+        Assert.Equal(sent, reporting.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(reporting.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                reporting.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a text code asked for at a step-up,
+    /// where the number's signal answers <c>risk</c> and the account's other second step
+    /// is under a loss report in flight, sends nothing and is answered 403
+    /// <c>auth.stepup.required</c> with the outcome <c>pending</c> and the instant the
+    /// report completes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpWithALossReportInFlightIsAnsweredPendingAsync()
+    {
+        await using var reporting = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(reporting);
+
+        reporting.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        reporting.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        Browser owner = await Flow.SignedInAsync(reporting);
+
+        reporting.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = reporting.Directory.Created[^1].Subject;
+        DateTimeOffset completes = reporting.Clock.GetUtcNow() + TimeSpan.FromDays(7);
+        Authenticator generator = Held(Factor.Totp, "Generator");
+
+        generator.Suspend(completes);
+        reporting.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        reporting.Authenticators.Hold(generator);
+
+        Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        int sent = reporting.Sms.Taken.Count;
+
+        Answer pending = await owner.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "phoneCode"));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, pending.Status);
+        Assert.Equal("auth.stepup.required", pending.Text("code"));
+        Assert.Equal("pending", pending.Json().GetProperty("details").GetProperty("outcome").GetString());
+        Assert.Equal(completes, pending.Json().GetProperty("details").GetProperty("pendingUntil").GetDateTimeOffset());
+        Assert.Empty(pending.Json().GetProperty("details").GetProperty("options").EnumerateArray());
+        Assert.Equal(sent, reporting.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(reporting.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                reporting.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false,
+                number: Authenticator.IsBoundToNumber(factor) ? Flow.Number : null);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-006 and AUTH-ABUSE-001: a generator's code presented a second time
+    /// is answered 422 `auth.code.replayed` at a step-up and, once a first factor is
+    /// accepted, at a sign-in alike, a code
+    /// each route declares with the rest of the failed attempts chapter 09 lists.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_006_AReplayedCodeIsAnsweredAtAStepUpAndAtASignInAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        Browser owner = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+        _deployment.Authenticators.Hold(Authenticator.Existing(
+            AuthenticatorId.New(_deployment.Clock),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.Totp,
+            CredentialLabel.TryParse("Generator", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _deployment.Clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            new TotpMaterial(new byte[20], null),
+            null,
+            isPreferred: false));
+
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_deployment.Clock.GetUtcNow().UtcDateTime);
+
+        var fresh = new Browser(_deployment);
+
+        _ = await fresh.SendAsync("GET", "/register");
+
+        Answer raised = await PresentedAsync(owner, "/auth/step-up");
+        Answer again = await PresentedAsync(owner, "/auth/step-up");
+        Answer elsewhere = await PresentedAsync(fresh, "/auth/factor");
+
+        Assert.Equal(StatusCodes.Status200OK, raised.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, again.Status);
+        Assert.Equal("auth.code.replayed", again.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, elsewhere.Status);
+        Assert.Equal("auth.code.replayed", elsewhere.Text("code"));
+
+        async Task<Answer> PresentedAsync(Browser browser, string route)
+        {
+            Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+
+            // AUTH-FACT-002b AC7: at a sign-in a second step follows a first factor.
+            if (browser == fresh)
+            {
+                _ = await browser.SendAsync(
+                    "POST",
+                    "/auth/factor",
+                    ("challengeId", began.Text("challengeId")),
+                    ("factor", "password"),
+                    ("value", Flow.Password));
+            }
+
+            return await browser.SendAsync(
+                "POST",
+                route,
+                ("challengeId", began.Text("challengeId")),
+                ("factor", "totp"),
+                ("value", generated));
+        }
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC14, `09` `POST /auth/step-up`: at a step-up a right email code sent to an
+    /// address the domain lock now refuses answers 422
+    /// <c>identity.identifier.domainnotallowed</c>, and the code is spent: presented
+    /// again it answers as a code that is gone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AC14_ARightEmailCodeAtAStepUpToAnAddressTheLockRefusesAnswersTheLocksCodeAsync()
+    {
+        var locked = new OrganizationId(Guid.NewGuid());
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SignInCode,
+            SendKind.Email,
+            Language,
+            new MessageTemplate("code", "{code}"));
+        Browser owner = await Flow.SignedInAsync(_deployment);
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+        Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        _ = await owner.SendAsync("POST", "/auth/email-otp", ("identifier", Flow.Address));
+        string code = Emailed();
+        _deployment.Memberships.Place(_deployment.Directory.Created[^1].Subject, locked);
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            locked.ToString(),
+            PolicyOverride.None with { EmailDomains = ["elsewhere.test"] });
+
+        Answer refused = await PresentedAsync();
+        Answer again = await PresentedAsync();
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, again.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), again.Text("code"));
+
+        Task<Answer> PresentedAsync() =>
+            owner.SendAsync(
+                "POST",
+                "/auth/step-up",
+                ("challengeId", began.Text("challengeId")),
+                ("factor", "emailCode"),
+                ("value", code));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a sign-in link asked for by text to a
+    /// number the carrier reports a recent change for is not sent, and the ask is
+    /// answered 202 in the bytes an ask for a number no account holds is answered in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_ALinkByTextToAReportedNumberIsAnsweredAsAnyAskAsync()
+    {
+        await using var risky = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(risky);
+
+        risky.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneLink]),
+            });
+        risky.Templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code} {token}"));
+
+        _ = await Flow.SignedInAsync(risky);
+
+        risky.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        int sent = risky.Sms.Taken.Count;
+        var browser = new Browser(risky);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer held = await browser.SendAsync("POST", "/auth/link", ("identifier", Flow.Number));
+        Answer nobodys = await browser.SendAsync("POST", "/auth/link", ("identifier", "+441632960099"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        Assert.Equal(held.Status, nobodys.Status);
+        Assert.Equal(held.Body, nobodys.Body);
+        Assert.Equal(sent, risky.Sms.Taken.Count);
     }
 
     /// <summary>

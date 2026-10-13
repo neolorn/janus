@@ -40,6 +40,36 @@ public sealed class ApiStatusTests
     }
 
     /// <summary>
+    /// REG-SESS-002 AC1, API-CONV-003: a step whose predecessor is incomplete is a
+    /// failed state precondition, so it answers 409 and not as a body refused on what
+    /// it says.
+    /// </summary>
+    [Fact]
+    public void REG_SESS_002_AC1_AStepOutOfOrderIsAConflict() =>
+        Assert.Equal(StatusCodes.Status409Conflict, ApiStatus.Of(ErrorCodes.RegistrationIncomplete));
+
+    /// <summary>
+    /// REG-IDENT-005 AC2, REG-IDENT-002: an unverified identifier made primary or named
+    /// as the backup is a failed state precondition, and an identifier the account does
+    /// not hold is a body refused on what it says.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_005_AC2_AnUnverifiedIdentifierIsAConflict()
+    {
+        Assert.Equal(StatusCodes.Status409Conflict, ApiStatus.Of(ErrorCodes.IdentifierUnverified));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, ApiStatus.Of(ErrorCodes.IdentifierInvalid));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012, chapter 10 section 6: a social provider that could not be reached
+    /// or read is a dependency outside the deployment, so its code maps to 502, which
+    /// only a navigation's redirect carries.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_012_AProviderThatCannotBeReachedMapsToBadGateway() =>
+        Assert.Equal(StatusCodes.Status502BadGateway, ApiStatus.Of(ErrorCodes.ProviderUnavailable));
+
+    /// <summary>
     /// API-CONV-003: 401 is session death and nothing else, so no other failure may
     /// take it however much it looks like one.
     /// </summary>
@@ -55,12 +85,16 @@ public sealed class ApiStatusTests
     }
 
     /// <summary>
-    /// API-CONV-003: the table decides every code the library raises, so no code can
-    /// reach the boundary and be given a status by accident.
+    /// REF-001 AC3, API-CONV-003: the table decides every code a request can be answered
+    /// with, so no code can reach the boundary and be given a status by accident. A mail
+    /// server's answer to the provisioning job is answered by no request and needs none
+    /// (chapter 10 section 6).
     /// </summary>
     [Fact]
-    public void Of_ACodeTheLibraryRaises_HasAStatusOfItsOwn() =>
-        Assert.All(Catalogue(), code => Assert.True(ApiStatus.Names(code), code.ToString()));
+    public void REF_001_AC3_ACodeARequestCanBeAnsweredWithHasAStatus() =>
+        Assert.All(
+            Catalogue().Where(code => code != ErrorCodes.MailServerConflict),
+            code => Assert.True(ApiStatus.Names(code), code.ToString()));
 
     /// <summary>
     /// BFF-ERR-002 AC1: a fault answers as a fault. The code behind it, and anything

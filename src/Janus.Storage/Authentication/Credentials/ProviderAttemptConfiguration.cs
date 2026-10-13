@@ -14,12 +14,11 @@ namespace Janus.Storage.Authentication.Credentials;
 /// Implements IDN-LIFE-012, REG-IDENT-008, BFF-CSRF-005a and OPS-SEC-001. A browser has
 /// at most one in flight, bound to exactly one of its pre-authentication session and
 /// its session, which the database holds rather than a read before a write; the
-/// attempt goes with what it is bound to. The proof key and the version it is wrapped
-/// under move together.
+/// attempt goes with what it is bound to.
 /// </remarks>
 internal sealed class ProviderAttemptConfiguration : IEntityTypeConfiguration<ProviderAttemptRecord>
 {
-    /// <summary>The table, which the re-wrap of the key-encryption key names.</summary>
+    /// <summary>The table.</summary>
     public const string Table = "provider_attempts";
 
     /// <inheritdoc/>
@@ -42,9 +41,6 @@ internal sealed class ProviderAttemptConfiguration : IEntityTypeConfiguration<Pr
                 "ck_provider_attempts_fingerprints",
                 $"octet_length(state) = {Fingerprint.Length} AND "
                     + $"octet_length(nonce) = {Fingerprint.Length}");
-            table.HasCheckConstraint(
-                "ck_provider_attempts_verifier",
-                "num_nulls(verifier, key_version) IN (0, 2)");
         });
 
         builder.HasKey(attempt => attempt.Id).HasName("pk_provider_attempts");
@@ -76,7 +72,6 @@ internal sealed class ProviderAttemptConfiguration : IEntityTypeConfiguration<Pr
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(attempt => attempt.Verifier).HasColumnName("verifier");
-        builder.Property(attempt => attempt.KeyVersion).HasColumnName("key_version");
         builder.Property(attempt => attempt.ReturnTo).HasColumnName("return_to");
         builder.Property(attempt => attempt.CreatedAt).HasColumnName("created_at");
 

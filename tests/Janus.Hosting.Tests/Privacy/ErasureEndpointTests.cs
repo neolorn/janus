@@ -121,6 +121,28 @@ public sealed class ErasureEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-GATE-006 AC3 and DR-016: a restriction of the operator committed after the
+    /// gate step refuses the manual completion 403 <c>authz.restricted</c> inside its
+    /// unit of work; the erasure stays failed, and the ledger line appended before the
+    /// unit of work stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesACompletionAsync()
+    {
+        Delivery delivery = await FailedAsync();
+        Browser browser = await AuthorisedAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", $"{Path}/{delivery.Id.Value}/complete"));
+
+        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+        Assert.Equal(ErasureStatus.Failed, Assert.Single(_deployment.Erasures.Erasures).Status);
+        Assert.Single(_deployment.Ledger.Lines);
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-005: a customer holding nothing but their own session is refused
     /// every one of the three, and nothing is closed.
     /// </summary>

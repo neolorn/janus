@@ -128,6 +128,24 @@ internal sealed class RegistrationSession
     /// </summary>
     public IReadOnlyList<PasswordHash>? RecoveryCodes { get; private set; }
 
+    /// <summary>
+    /// The instant the security step's response returned those codes, which the set
+    /// records as when it was viewed once the terms step writes it (AUTH-FACT-008).
+    /// </summary>
+    public DateTimeOffset? RecoveryCodesViewedAt { get; private set; }
+
+    /// <summary>
+    /// The WebAuthn creation ceremony the session has open, where it has one. It is
+    /// spent or replaced under the lock on the session (REG-SESS-001).
+    /// </summary>
+    public StagedCeremony? Ceremony { get; private set; }
+
+    /// <summary>
+    /// The code generator the session has begun and not confirmed, where it has one.
+    /// It is spent or replaced under the lock on the session (REG-SESS-001).
+    /// </summary>
+    public StagedGenerator? Generator { get; private set; }
+
     /// <summary>The version of the terms accepted, where they have been.</summary>
     public string? TermsVersion { get; private set; }
 
@@ -238,9 +256,12 @@ internal sealed class RegistrationSession
     /// <param name="passwordStandsAlone">Whether it reaches the single-factor floor.</param>
     /// <param name="phoneSkipped">Whether the phone step was passed over.</param>
     /// <param name="recoveryCodes">The set drawn at the security step.</param>
+    /// <param name="recoveryCodesViewedAt">When the security step returned that set.</param>
     /// <param name="termsVersion">The terms version accepted.</param>
     /// <param name="noticeVersion">The notice version presented.</param>
     /// <param name="invitation">The invitation that opened it, where one did.</param>
+    /// <param name="ceremony">The creation ceremony it has open, where it has one.</param>
+    /// <param name="generator">The generator begun and not confirmed, where there is one.</param>
     public void Restore(
         RegistrationStep step,
         DateOnly? dateOfBirth,
@@ -252,9 +273,12 @@ internal sealed class RegistrationSession
         bool passwordStandsAlone,
         bool phoneSkipped,
         IReadOnlyList<PasswordHash>? recoveryCodes,
+        DateTimeOffset? recoveryCodesViewedAt,
         string? termsVersion,
         string? noticeVersion,
-        InvitationId? invitation)
+        InvitationId? invitation,
+        StagedCeremony? ceremony,
+        StagedGenerator? generator)
     {
         Step = step;
         DateOfBirth = dateOfBirth;
@@ -266,9 +290,12 @@ internal sealed class RegistrationSession
         PasswordStandsAlone = passwordStandsAlone;
         PhoneSkipped = phoneSkipped;
         RecoveryCodes = recoveryCodes;
+        RecoveryCodesViewedAt = recoveryCodesViewedAt;
         TermsVersion = termsVersion;
         NoticeVersion = noticeVersion;
         Invitation = invitation;
+        Ceremony = ceremony;
+        Generator = generator;
     }
 
     /// <summary>
@@ -481,6 +508,41 @@ internal sealed class RegistrationSession
     }
 
     /// <summary>
+    /// Opens a creation ceremony, in place of any the session had open.
+    /// </summary>
+    /// <param name="ceremony">The ceremony.</param>
+    /// <exception cref="ArgumentNullException">It is absent.</exception>
+    public void Open(StagedCeremony ceremony)
+    {
+        ArgumentNullException.ThrowIfNull(ceremony);
+
+        Ceremony = ceremony;
+    }
+
+    /// <summary>
+    /// Spends the creation ceremony the session has open, which answers once.
+    /// </summary>
+    public void SpendCeremony() => Ceremony = null;
+
+    /// <summary>
+    /// Begins a code generator, in place of any the session had begun and not
+    /// confirmed.
+    /// </summary>
+    /// <param name="generator">The generator.</param>
+    /// <exception cref="ArgumentNullException">It is absent.</exception>
+    public void Begin(StagedGenerator generator)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+
+        Generator = generator;
+    }
+
+    /// <summary>
+    /// Spends the generator the session had begun, which a code confirms once.
+    /// </summary>
+    public void SpendGenerator() => Generator = null;
+
+    /// <summary>
     /// Stages a social provider's identity, in place of any identity of the same
     /// provider staged before, since an account holds one of each (IDN-LIFE-012).
     /// </summary>
@@ -496,15 +558,17 @@ internal sealed class RegistrationSession
 
     /// <summary>
     /// Stages the set of recovery codes the security step drew, replacing whatever
-    /// was staged.
+    /// was staged, with the instant the step's response returns them.
     /// </summary>
     /// <param name="codes">The hashes, in the order the codes were drawn.</param>
+    /// <param name="viewedAt">When the response that returns the codes is produced.</param>
     /// <exception cref="ArgumentNullException">The set is absent.</exception>
-    public void StageRecoveryCodes(IReadOnlyList<PasswordHash> codes)
+    public void StageRecoveryCodes(IReadOnlyList<PasswordHash> codes, DateTimeOffset viewedAt)
     {
         ArgumentNullException.ThrowIfNull(codes);
 
         RecoveryCodes = codes;
+        RecoveryCodesViewedAt = viewedAt;
     }
 
     /// <summary>

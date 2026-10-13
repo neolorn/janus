@@ -32,7 +32,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class NonExistenceNotice(
     IConfigurationStore configuration,
-    INotificationHandler sending,
+    IGovernedSend sending,
     ISendingRestrictions restrictions,
     INoticeLedger ledger,
     IUnitOfWork work,
@@ -40,6 +40,32 @@ internal sealed class NonExistenceNotice(
     TimeProvider time)
 {
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// The expiry sweep's pass over the notices: each one neither the window nor the
+    /// probe alert reads again goes, whatever version of the fingerprint key it is under
+    /// (D-166, 318).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the pass.</param>
+    /// <returns>Success, or the failure to read the window.</returns>
+    public async ValueTask<Result> SweepAsync(CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan window = (await configuration
+                .ReadAsync(Settings.AbuseNonexistentWindow, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        await ledger.SweepAsync(time.GetUtcNow(), window, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
+    }
 
     /// <summary>
     /// Answers one ask whose message is not going out.
@@ -95,30 +121,56 @@ internal sealed class NonExistenceNotice(
 
         // Whoever holds the address, the ask is judged as the message it asked for,
         // in the language an address no account holds is written to.
-        var asked = new SendRequest(
+        var asked = new OutboundMessage(
             destination,
             message,
             purpose,
             source,
             RecipientLanguage.Found(language, languages));
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         if (unheld && destination.Kind is SendKind.Email)
         {
             DateTimeOffset now = time.GetUtcNow();
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            // D-166 X3: whether the address was told is read with its notices held, so
+            // two asks at once tell it once.
+            await ledger.HoldAsync(destination.Canonical, cancellationToken).ConfigureAwait(false);
 
-            if (await ledger
-                .FirstAsync(destination.Canonical, now, window, cancellationToken)
+            if (!await ledger
+                .WasToldAsync(destination.Canonical, now, window, cancellationToken)
                 .ConfigureAwait(false))
             {
-                return await ToldAsync(asked, now, threshold, cancellationToken).ConfigureAwait(false);
+                return await ToldAsync(asked, now, window, threshold, cancellationToken).ConfigureAwait(false);
             }
-
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return await restrictions.DrawAsync(asked, cancellationToken).ConfigureAwait(false);
+        // AUTH-ABUSE-004: an ask that sends nothing is judged and counted in this unit
+        // of work as its message would be, and a refusal leaves nothing of it.
+        Result drawn = await restrictions.DrawAsync(asked, cancellationToken).ConfigureAwait(false);
+
+        if (drawn.Match(() => (Error?)null, error => error) is Error refused)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            // AUTH-ABUSE-006: the gateway floor's refusal of the message an ask stands
+            // for answers the ask as it would have been answered, whoever holds the
+            // number, so the floor tells nothing of an account.
+            return refused.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(refused);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -134,19 +186,28 @@ internal sealed class NonExistenceNotice(
     // all: a template that named the asker would turn the notice itself into the
     // disclosure it exists to prevent.
     private async ValueTask<Result> ToldAsync(
-        SendRequest asked,
+        OutboundMessage asked,
         DateTimeOffset now,
+        TimeSpan window,
         int threshold,
         CancellationToken cancellationToken)
     {
         Result<SendReference> sent = await sending
-            .SendAsync(asked with { Message = MessageKind.NoAccount }, cancellationToken)
+            .UndertakeAsync(asked with { Message = MessageKind.NoAccount }, cancellationToken)
             .ConfigureAwait(false);
 
         if (sent.Match(_ => (Error?)null, error => error) is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
+
+        // AUTH-ABUSE-003, D-188: the mark that spends the window is written only here,
+        // where the send is admitted.
+        await ledger
+            .MarkAsync(asked.Destination.Canonical, now, window, cancellationToken)
+            .ConfigureAwait(false);
 
         int recent = await ledger.SinceAsync(now - Hour, cancellationToken).ConfigureAwait(false);
 
@@ -158,11 +219,17 @@ internal sealed class NonExistenceNotice(
 
             if (published.Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unpublished);
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

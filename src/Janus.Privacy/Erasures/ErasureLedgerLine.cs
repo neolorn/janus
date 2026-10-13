@@ -95,6 +95,12 @@ internal sealed record ErasureLedgerLine(DateTimeOffset ErasedAt, SubjectId Subj
             Subject.ToString(),
             Spelling(Reason));
 
-    private static string Spelling(ErasureReason reason) =>
+    /// <summary>
+    /// A reason in the spelling of chapter 10 section 5.12a, the one the ledger, the
+    /// erasures table and the audit record write.
+    /// </summary>
+    /// <param name="reason">The reason.</param>
+    /// <returns>Its written name.</returns>
+    public static string Spelling(ErasureReason reason) =>
         JsonSerializer.SerializeToElement(reason, Spelled).GetString()!;
 }

@@ -21,7 +21,13 @@ internal sealed class GrantVersionConfiguration : IEntityTypeConfiguration<Grant
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.ToTable("grant_versions", table =>
-            table.HasCheckConstraint("ck_grant_versions_version", "version >= 0"));
+        {
+            table.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
+
+            table.HasCheckConstraint(
+                "ck_grant_versions_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
+        });
 
         builder.HasKey(version => version.Subject).HasName("pk_grant_versions");
 

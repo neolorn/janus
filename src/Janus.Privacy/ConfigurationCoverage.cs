@@ -50,7 +50,7 @@ internal sealed class ConfigurationCoverage(
         AttributeRequirement affirmation = (await configuration
                 .ReadAsync(Settings.RegistrationAdultAffirmation, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(read => read, _ => Settings.RegistrationAdultAffirmation.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // PRIV-MINOR-001: a deployment that takes minors holds a child's data, which
         // is sensitive, and sensitive data on consent is held on written consent.

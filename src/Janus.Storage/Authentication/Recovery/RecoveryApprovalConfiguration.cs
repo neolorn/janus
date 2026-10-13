@@ -29,7 +29,16 @@ internal sealed class RecoveryApprovalConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table =>
+        {
+            table.HasCheckConstraint(
+                "ck_recovery_approvals_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
+
+            table.HasCheckConstraint(
+                "ck_recovery_approvals_approver_not_max_uuid",
+                MaxUuid.Refused("approver"));
+        });
 
         builder.HasKey(approval => new { approval.Subject, approval.Approver, approval.At })
             .HasName("pk_recovery_approvals");

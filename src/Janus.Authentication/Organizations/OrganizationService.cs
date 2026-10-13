@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
@@ -25,6 +26,9 @@ namespace Janus.Authentication.Organizations;
 /// <param name="administration">Where an organization's policy key is written and recorded.</param>
 /// <param name="policies">Where what a change of policy raised is recorded.</param>
 /// <param name="alerts">Where a change of policy that weakens a step-up gate is told.</param>
+/// <param name="codec">
+/// What the deployment reads uploaded images with, or nothing where it declared none.
+/// </param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -45,6 +49,7 @@ internal sealed class OrganizationService(
     ConfigurationAdministration administration,
     PolicyResolution policies,
     IAlertChannels alerts,
+    ImageCodec? codec,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
@@ -97,7 +102,23 @@ internal sealed class OrganizationService(
         DateTimeOffset now = time.GetUtcNow();
         var organization = OrganizationId.New(time);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<OrganizationId>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.OrganizationManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationId>(since);
+        }
+
         await directory.CreateAsync(organization, named, now, cancellationToken).ConfigureAwait(false);
 
         // IDN-ORG-002 and chapter 10 section 4: the organization's policy key is created
@@ -107,21 +128,29 @@ internal sealed class OrganizationService(
                     Settings.OrganizationPolicy,
                     organization.ToString(),
                     PolicyOverride.None,
+                    before: PolicyOverride.None,
                     loosening: false,
                     stated,
                     acting,
+                    context.BreakGlassReason,
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error unwritten)
+            .Match<Error?>(() => null, error => error) is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<OrganizationId>(unwritten);
         }
 
         await audit
-            .RecordedAsync(AuditActions.OrganizationCreated, organization, stated, acting, now, cancellationToken)
+            .RecordedAsync(AuditActions.OrganizationCreated, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<OrganizationId>(notCommitted);
+        }
 
         return Result.Success(organization);
     }
@@ -155,7 +184,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         // IDN-ORG-004: the refusal is the domain's, answered before anything else is
@@ -180,11 +209,39 @@ internal sealed class OrganizationService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.OrganizationManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: decided again on the organization's row under its lock, so a second
+        // request at the same moment finds the first and answers as it would after it.
+        if ((await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false))?.DeletionRequestedAt
+            is not null)
+        {
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
 
         if ((await directory.RequestDeletionAsync(organization, now, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error protectedOrganization)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(protectedOrganization);
         }
 
@@ -196,10 +253,14 @@ internal sealed class OrganizationService(
         }
 
         await audit
-            .RecordedAsync(AuditActions.OrganizationDeletionRequested, organization, stated, acting, now, cancellationToken)
+            .RecordedAsync(AuditActions.OrganizationDeletionRequested, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -233,7 +294,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         if (standing.DeletionRequestedAt is not DateTimeOffset requestedAt)
@@ -245,7 +306,7 @@ internal sealed class OrganizationService(
 
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.OrganizationDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.OrganizationDeletionGrace.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // IDN-ORG-003: cancellable at any point before the window closes, whether or not
         // the pass that erases has reached it yet.
@@ -264,13 +325,55 @@ internal sealed class OrganizationService(
             return Result.Failure(challenged);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.OrganizationManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: decided again on the organization's row under its lock, which the
+        // erasure at the window's end holds too, so of the two only the first stands.
+        OrganizationStanding held = await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("An organization's row is never removed.");
+
+        if (held.ErasedAt is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed));
+        }
+
+        // A deletion cancelled meanwhile stands as asked: the operation is done with
+        // nothing to write.
+        if (held.DeletionRequestedAt is null)
+        {
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
+
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);
         await audit
-            .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, now, cancellationToken)
+            .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -291,7 +394,7 @@ internal sealed class OrganizationService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure<OrganizationPolicy>(Malformed("id"));
+            return Result.Failure<OrganizationPolicy>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         Error? failure = null;
@@ -337,10 +440,15 @@ internal sealed class OrganizationService(
             return Result.Failure(refused);
         }
 
-        if (Stated(reason) is not string stated)
+        // 09 section 8a: a replacement is a configuration change of the organization's
+        // policy key, so a blank reason is refused as a change without one is.
+        if (ConfigurationAdministration.Unexplained(Settings.OrganizationPolicy.For(organization.ToString()), reason)
+            is Error unexplained)
         {
-            return Result.Failure(Malformed("reason"));
+            return Result.Failure(unexplained);
         }
+
+        string stated = reason.Trim();
 
         // Chapter 10 section 4.1a: the domain lock is written only through the domain
         // operations, never through the policy.
@@ -349,11 +457,44 @@ internal sealed class OrganizationService(
             return Result.Failure(Malformed("emailDomains"));
         }
 
+        // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos needs the codec the host
+        // declares, so it is refused while there is none.
+        if (replacement.Photos is true && codec is null)
+        {
+            return Result.Failure(ProfilePhotos.Undeclared);
+        }
+
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
+
+        // OPS-CFG-002 AC6, X3: the direction, the system's floor and the lock the change
+        // keeps are decided on the values in force under their rows' locks, taken in the
+        // order every change takes them, so a concurrent change waits and cannot turn
+        // this one into another.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.OrganizationManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        await administration.HoldAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false);
+        await administration
+            .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+            .ConfigureAwait(false);
 
         Error? failure = null;
 
@@ -366,6 +507,8 @@ internal sealed class OrganizationService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
@@ -375,10 +518,13 @@ internal sealed class OrganizationService(
         // below the system policy.
         if (PolicyStrictness.BelowSystem(system, after) is string looser)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.ConfigurationPolicyBelowSystem,
-                "field",
-                JsonSerializer.SerializeToElement(looser)));
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                Error.From(
+                    ErrorCodes.ConfigurationPolicyBelowSystem,
+                    "field",
+                    JsonSerializer.SerializeToElement(looser)));
         }
 
         Policy was = PolicyStrictness.Tighten(system, before);
@@ -388,10 +534,13 @@ internal sealed class OrganizationService(
         // AAL2, which no change of its policy takes it below.
         if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.ConfigurationValueBelowFloor,
-                "field",
-                JsonSerializer.SerializeToElement("requiredAssurance")));
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                Error.From(
+                    ErrorCodes.ConfigurationValueBelowFloor,
+                    "field",
+                    JsonSerializer.SerializeToElement("requiredAssurance")));
         }
 
         bool loosening = PolicyStrictness.Loosens(was, becomes);
@@ -402,6 +551,8 @@ internal sealed class OrganizationService(
             && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
                 is Error withheld)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(withheld);
         }
 
@@ -410,23 +561,27 @@ internal sealed class OrganizationService(
                 .ConfigureAwait(false)
             is Error challenged)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(challenged);
         }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         if ((await administration
                 .ChangeMemberAsync(
                     Settings.OrganizationPolicy,
                     organization.ToString(),
                     after,
+                    before,
                     loosening,
                     stated,
                     acting,
+                    context.BreakGlassReason,
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error unwritten)
+            .Match<Error?>(() => null, error => error) is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unwritten);
         }
 
@@ -450,10 +605,16 @@ internal sealed class OrganizationService(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

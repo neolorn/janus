@@ -40,17 +40,21 @@ internal sealed class RelyingParty
     }
 
     /// <summary>
-    /// The identifier every credential is bound to and recorded against.
+    /// The identifier every credential is bound to and recorded against, in its ASCII
+    /// form.
     /// </summary>
     public string Id { get; }
 
     /// <summary>
-    /// The origins a ceremony may run from, each of which the identifier sits over.
+    /// The origins a ceremony may run from, each of which the identifier sits over,
+    /// each held in its serialization, which a ceremony's origin is matched against
+    /// ordinally.
     /// </summary>
     public IReadOnlyList<string> Origins { get; }
 
     /// <summary>
-    /// The further origins the allowlist is served from, on their own domains.
+    /// The further origins the allowlist is served from, on their own domains, each
+    /// held in its serialization.
     /// </summary>
     public IReadOnlyList<string> RelatedOrigins { get; }
 
@@ -93,16 +97,29 @@ internal sealed class RelyingParty
                 "no origin is configured for it to sit over");
         }
 
+        // The identifier and the hosts are compared in the ASCII form the conversion
+        // gives both, so one written in either form sits over one written in the other.
         string[] hosts = [.. origins.Select(Host)];
-        string resolved = identifier.Length == 0 ? Common(hosts) : identifier;
+        string resolved = identifier.Length == 0 ? Common(hosts) : Identifier(identifier);
 
-        if (Labels(resolved).Length < 2)
+        // Origins that share no label have no domain in common to derive an identifier
+        // from, so no identifier sits over all of them.
+        if (resolved.Length == 0)
+        {
+            throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "origins",
+                string.Join(", ", hosts),
+                "they share no domain for an identifier to sit over");
+        }
+
+        if (PublicSuffixList.Shipped.IsSuffix(resolved))
         {
             throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "rpid",
                 resolved,
-                "it carries no registrable parent domain");
+                "it is a public suffix and carries no registrable domain");
         }
 
         foreach (string host in hosts)
@@ -118,7 +135,9 @@ internal sealed class RelyingParty
         }
 
         string[] related = [.. relatedOrigins.Select(Host)];
-        HashSet<string> labels = [.. related.Append(resolved).Select(Registrable)];
+        HashSet<string> labels = new(
+            related.Append(resolved).Select(PublicSuffixList.Shipped.Label),
+            StringComparer.OrdinalIgnoreCase);
 
         return labels.Count > LabelLimit
             ? throw Refused(
@@ -128,7 +147,11 @@ internal sealed class RelyingParty
                 "a browser reads no more than "
                 + LabelLimit.ToString(CultureInfo.InvariantCulture)
                 + " of them from an allowlist")
-            : new RelyingParty(resolved, [.. origins], [.. relatedOrigins], [.. algorithms]);
+            : new RelyingParty(
+                resolved,
+                [.. origins.Select(Serialized)],
+                [.. relatedOrigins.Select(Serialized)],
+                [.. algorithms]);
     }
 
     /// <summary>
@@ -178,14 +201,49 @@ internal sealed class RelyingParty
     public bool Binds(string recorded) =>
         string.Equals(Id, recorded, StringComparison.OrdinalIgnoreCase);
 
-    private static string Host(string origin) =>
-        Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) && parsed.Host.Length > 0
-            ? parsed.Host
+    // A host the suffix list cannot read has no registrable domain, so no identifier
+    // sits over it and no label of it can be counted. What is read is its ASCII form.
+    private static string Host(string origin) => Ascii(origin, Parsed(origin));
+
+    // The serialization of an origin, which a browser writes into a ceremony's client
+    // data and its URL parser gives an entry of the allowlist: the scheme, the host in
+    // its ASCII form, and the port only where it is not the scheme's default.
+    private static string Serialized(string origin)
+    {
+        Uri parsed = Parsed(origin);
+        string held = parsed.Scheme + Uri.SchemeDelimiter + Ascii(origin, parsed);
+
+        return parsed.IsDefaultPort
+            ? held
+            : held + ":" + parsed.Port.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static Uri Parsed(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) && parsed.Host.Length != 0
+            ? parsed
             : throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "origin",
                 origin,
                 "it is not an absolute origin with a host");
+
+    private static string Ascii(string origin, Uri parsed) =>
+        PublicSuffixList.TryAscii(parsed.Host, out string ascii)
+            ? ascii
+            : throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "origin",
+                origin,
+                "its host has no ASCII form and so no registrable domain");
+
+    private static string Identifier(string identifier) =>
+        PublicSuffixList.TryAscii(identifier, out string ascii)
+            ? ascii
+            : throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "rpid",
+                identifier,
+                "it has no ASCII form and so no registrable domain");
 
     private static string[] Labels(string host) => host.Split('.');
 
@@ -198,7 +256,7 @@ internal sealed class RelyingParty
 
         while (reversed.All(labels =>
             labels.Length > shared
-            && string.Equals(labels[shared], reversed[0][shared], StringComparison.OrdinalIgnoreCase)))
+            && string.Equals(labels[shared], reversed[0][shared], StringComparison.Ordinal)))
         {
             shared++;
         }
@@ -207,16 +265,8 @@ internal sealed class RelyingParty
     }
 
     private static bool Over(string identifier, string host) =>
-        string.Equals(host, identifier, StringComparison.OrdinalIgnoreCase)
-        || host.EndsWith("." + identifier, StringComparison.OrdinalIgnoreCase);
-
-    // The name a browser counts an allowlist by: the label before the public suffix.
-    private static string Registrable(string host)
-    {
-        string[] labels = Labels(host);
-
-        return labels.Length < 2 ? labels[0] : labels[^2];
-    }
+        string.Equals(host, identifier, StringComparison.Ordinal)
+        || host.EndsWith("." + identifier, StringComparison.Ordinal);
 
     private static async ValueTask<TValue> ValueAsync<TValue>(
         IConfigurationStore configuration,

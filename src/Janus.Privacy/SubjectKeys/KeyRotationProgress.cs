@@ -1,11 +1,10 @@
 using System;
-using Janus.Core;
 
 namespace Janus.Privacy.SubjectKeys;
 
 /// <summary>
-/// How far one rotation has gone: the version it rotates to, the last subject it has
-/// passed, how many values it has moved to that version (subject keys re-wrapped, or
+/// How far one rotation has gone: the version it rotates to, the last row of the
+/// subject-key table it has passed, how many values it has moved to that version (subject keys re-wrapped, or
 /// fingerprints computed again), and when it started, completed and retired the versions
 /// before it.
 /// </summary>
@@ -19,7 +18,7 @@ internal sealed class KeyRotationProgress
     private KeyRotationProgress(
         KeyRotationKind kind,
         int version,
-        SubjectId? lastSubject,
+        SubjectKeyId? lastKey,
         int processed,
         DateTimeOffset startedAt,
         DateTimeOffset? completedAt,
@@ -27,7 +26,7 @@ internal sealed class KeyRotationProgress
     {
         Kind = kind;
         Version = version;
-        LastSubject = lastSubject;
+        LastKey = lastKey;
         Processed = processed;
         StartedAt = startedAt;
         CompletedAt = completedAt;
@@ -45,10 +44,11 @@ internal sealed class KeyRotationProgress
     public int Version { get; }
 
     /// <summary>
-    /// The last subject whose key the ordered pass has reached, or nothing before the
-    /// first batch.
+    /// The last row of the subject-key table the ordered pass has reached, or nothing
+    /// before the first batch. It names a row, not a subject: the last row is the
+    /// deployment's.
     /// </summary>
-    public SubjectId? LastSubject { get; private set; }
+    public SubjectKeyId? LastKey { get; private set; }
 
     /// <summary>
     /// How many values the rotation has moved to the version.
@@ -83,7 +83,7 @@ internal sealed class KeyRotationProgress
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(version, 1);
 
-        return new KeyRotationProgress(kind, version, lastSubject: null, processed: 0, at, completedAt: null, retiredAt: null);
+        return new KeyRotationProgress(kind, version, lastKey: null, processed: 0, at, completedAt: null, retiredAt: null);
     }
 
     /// <summary>
@@ -92,7 +92,7 @@ internal sealed class KeyRotationProgress
     /// </summary>
     /// <param name="kind">Which key is rotated.</param>
     /// <param name="version">The version it moves every value to.</param>
-    /// <param name="lastSubject">The last subject the ordered pass reached.</param>
+    /// <param name="lastKey">The last row the ordered pass reached.</param>
     /// <param name="processed">How many values it has moved to the version.</param>
     /// <param name="startedAt">When it started.</param>
     /// <param name="completedAt">When it completed.</param>
@@ -101,23 +101,23 @@ internal sealed class KeyRotationProgress
     public static KeyRotationProgress Existing(
         KeyRotationKind kind,
         int version,
-        SubjectId? lastSubject,
+        SubjectKeyId? lastKey,
         int processed,
         DateTimeOffset startedAt,
         DateTimeOffset? completedAt,
         DateTimeOffset? retiredAt) =>
-        new(kind, version, lastSubject, processed, startedAt, completedAt, retiredAt);
+        new(kind, version, lastKey, processed, startedAt, completedAt, retiredAt);
 
     /// <summary>
     /// Records a batch of the ordered pass.
     /// </summary>
-    /// <param name="lastSubject">The last subject the batch reached.</param>
+    /// <param name="lastKey">The last row the batch reached.</param>
     /// <param name="moved">How many values it moved to the version.</param>
     /// <exception cref="InvalidOperationException">The rotation has completed.</exception>
-    public void Passed(SubjectId lastSubject, int moved)
+    public void Passed(SubjectKeyId lastKey, int moved)
     {
         Counted(moved);
-        LastSubject = lastSubject;
+        LastKey = lastKey;
     }
 
     /// <summary>

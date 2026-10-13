@@ -33,7 +33,8 @@ internal sealed class RecoveryCodeService(
 {
     /// <summary>
     /// Issues a set, replacing whatever the account held: no code of the previous set
-    /// validates afterwards.
+    /// validates afterwards. The set is written as viewed, since the response of the
+    /// operation that calls this returns the codes (AUTH-FACT-008).
     /// </summary>
     /// <param name="subject">Whose set.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -52,12 +53,26 @@ internal sealed class RecoveryCodeService(
             return Result.Failure<IReadOnlyList<string>>(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await sets.ReplaceAsync(
-                RecoveryCodeSet.Of(subject, drawn.Hashes, time.GetUtcNow()),
-                cancellationToken)
-            .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IReadOnlyList<string>>(notBegun);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+        var issued = RecoveryCodeSet.Of(subject, drawn.Hashes, now);
+
+        // AUTH-FACT-008: the response of the unit of work this write joins returns the
+        // codes, the one time they are shown, so the set is viewed where it is written.
+        issued.Viewed(now);
+
+        await sets.ReplaceAsync(issued, cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IReadOnlyList<string>>(notCommitted);
+        }
 
         return Result.Success(drawn.Codes);
     }
@@ -114,40 +129,53 @@ internal sealed class RecoveryCodeService(
     }
 
     /// <summary>
-    /// Records that the codes were shown, which is what lets the account say whether
-    /// the person ever saw them.
+    /// Whether the account holds a set, which a report of an export is refused without
+    /// before any unit of work begins.
     /// </summary>
     /// <param name="subject">Whose set.</param>
-    /// <param name="exported">Whether they were copied, downloaded or printed.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>Whether a set stands.</returns>
+    public async ValueTask<bool> IssuedAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false) is not null;
+
+    /// <summary>
+    /// Records that the codes were copied, downloaded or printed, which is what lets
+    /// the account say whether the person ever saved them. The first report stands.
+    /// It begins no unit of work: it writes in its caller's, which decides on its answer
+    /// whether anything is kept (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose set.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the failure where the account holds no set.</returns>
-    public async ValueTask<Result> ShownAsync(
+    /// <returns>
+    /// Whether the report was written, which it is not where an earlier one stands, or
+    /// the failure where the account holds no set.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Result<bool>> ExportedAsync(
         SubjectId subject,
-        bool exported,
         CancellationToken cancellationToken)
     {
-        RecoveryCodeSet? held = await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false);
+        // CONV-DESIGN-003: recording the set writes each code's spend as the set read
+        // holds it, so the set is read under its lock and a code spent meanwhile stays
+        // spent.
+        RecoveryCodeSet? held = await sets.FindForUpdateAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
 
         if (held is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
+            return Result.Failure<bool>(Error.From(ErrorCodes.FactorNotEnrolled));
         }
 
-        DateTimeOffset now = time.GetUtcNow();
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        held.Viewed(now);
-
-        if (exported)
+        if (held.ExportedAt is not null)
         {
-            held.Exported(now);
+            return Result.Success(false);
         }
+
+        held.Exported(time.GetUtcNow());
 
         await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success();
+        return Result.Success(true);
     }
 
     /// <summary>
@@ -165,16 +193,31 @@ internal sealed class RecoveryCodeService(
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
-        RecoveryCodeSet? held = await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the set is read under its lock, so a second presentation of the
+        // same code waits for this one to commit and finds it spent.
+        RecoveryCodeSet? held = await sets.FindForUpdateAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
 
         if (held is null || !held.Spend(code, time.GetUtcNow()))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

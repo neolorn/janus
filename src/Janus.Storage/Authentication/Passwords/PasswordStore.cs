@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Passwords;
 using Janus.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Passwords;
 
@@ -46,14 +48,20 @@ internal sealed class PasswordStore(StoreContext context) : IPasswordStore
     }
 
     /// <inheritdoc/>
-    public async ValueTask RehashAsync(Password password, CancellationToken cancellationToken)
+    public async ValueTask RehashAsync(Password password, PasswordHash read, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(read);
 
-        PasswordRecord record = await RowAsync(password.Subject, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("The account has no password row to rehash.");
+        // D-166 X3: one update conditional on the hash the password verified against, so
+        // a sign-in with the old password never writes it back over a new one.
+        string written = password.Hash.Encoded;
+        string verified = read.Encoded;
 
-        record.Hash = password.Hash.Encoded;
+        _ = await context.Passwords
+            .Where(record => record.Subject == password.Subject && record.Hash == verified)
+            .ExecuteUpdateAsync(columns => columns.SetProperty(record => record.Hash, written), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async ValueTask<PasswordRecord?> RowAsync(

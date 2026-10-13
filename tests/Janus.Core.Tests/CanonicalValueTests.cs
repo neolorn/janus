@@ -42,8 +42,10 @@ public sealed class CanonicalValueTests
         }
     }
 
-    // A value with rules is a value type that reads itself from text: its own Parse, or
-    // its own TryParse, taking the text first.
+    // A value with rules is a value type that reads itself from text alone: its own
+    // Parse, or its own TryParse, taking the text first and no format. An identifier
+    // read from a route takes a format as every parsable type does, and holds no rule
+    // its default breaks.
     private static bool IsReadFromText(Type type) =>
         type.IsValueType
         && type
@@ -51,5 +53,6 @@ public sealed class CanonicalValueTests
             .Any(method => method.Name is "Parse" or "TryParse"
                 && method.GetParameters() is [{ } first, ..] parameters
                 && first.ParameterType == typeof(string)
+                && !parameters.Any(parameter => parameter.ParameterType == typeof(IFormatProvider))
                 && (method.ReturnType == type || parameters[^1].ParameterType == type.MakeByRefType()));
 }

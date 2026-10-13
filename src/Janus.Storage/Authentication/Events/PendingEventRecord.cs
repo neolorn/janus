@@ -35,4 +35,10 @@ internal sealed class PendingEventRecord
 
     /// <summary>The <c>failed_at</c> column.</summary>
     public DateTimeOffset? FailedAt { get; set; }
+
+    /// <summary>
+    /// The <c>claimed_until</c> column: when the claim of the pass that holds the row
+    /// times out, or nothing where no pass holds it.
+    /// </summary>
+    public DateTimeOffset? ClaimedUntil { get; set; }
 }

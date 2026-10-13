@@ -39,9 +39,10 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
             .UseCollation(StoreContext.CaseInsensitiveCollation);
 
         // IDN-ACCT-004: the key is the canonical form itself, already folded, so it takes
-        // the default collation and compares by code point. OPS-MIG-005 AC1: it is added
-        // nullable, and the constraint is tightened in a later release.
-        builder.Property(organization => organization.CanonicalName).HasColumnName("canonical_name");
+        // the default collation and compares by code point.
+        builder.Property(organization => organization.CanonicalName)
+            .HasColumnName("canonical_name")
+            .IsRequired();
 
         builder.Property(organization => organization.CreatedAt).HasColumnName("created_at");
 

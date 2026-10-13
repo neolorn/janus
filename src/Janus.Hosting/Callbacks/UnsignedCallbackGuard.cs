@@ -40,7 +40,8 @@ internal sealed class UnsignedCallbackGuard(IUnsignedCallback callback) : IMiddl
         IUnitOfWork work = context.RequestServices.GetRequiredService<IUnitOfWork>();
         ILogger log = context.RequestServices.GetRequiredService<ILogger<UnsignedCallbackGuard>>();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback.Name, callback.Sources, admission, work, log, cancellationToken)
@@ -63,13 +64,15 @@ internal sealed class UnsignedCallbackGuard(IUnsignedCallback callback) : IMiddl
             return;
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         Result confirmed = await callback.ConfirmAsync(delivery, cancellationToken).ConfigureAwait(false);
 
         if (!confirmed.Match(() => true, _ => false))
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
             await CallbackIntake
                 .RefusedAsync(context, callback.Name, CallbackCheck.Confirmation, admission, work, log, cancellationToken)
                 .ConfigureAwait(false);

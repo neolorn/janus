@@ -19,12 +19,12 @@ namespace Janus.Hosting.Bff;
 /// framework's own answers to these are a bare status or, where the host turns its
 /// error pages on, a page for a person to read; both are replaced here by the one
 /// writer's body. A fault answers <c>system.fault</c> with the correlation identifier
-/// and nothing else, and the type of what was thrown is all that is kept of it, in the
-/// log the writer keeps under that identifier, because a message can carry a value
-/// (CONV-LOG-003). A path matched under another method answers as a path matched under
-/// none, since the methods a path takes are not something a refusal discloses. An
-/// answer that has begun is not replaced, and a request the caller abandoned is not
-/// answered.
+/// and nothing else, and what was thrown is kept by its type and frames and those of
+/// each inner fault (<see cref="FaultLog"/>), in the log the writer keeps under that
+/// identifier, never by a message, because a message can carry a value (CONV-LOG-003).
+/// A path matched under another method answers as a path matched under none, since the
+/// methods a path takes are not something a refusal discloses. An answer that has begun
+/// is not replaced, and a request the caller abandoned is not answered.
 /// </remarks>
 internal sealed class ErrorTranslation(ConcealedRefusals refusals) : IMiddleware
 {
@@ -56,7 +56,7 @@ internal sealed class ErrorTranslation(ConcealedRefusals refusals) : IMiddleware
     }
 
     // BFF-ERR-002: what escaped becomes the request's failure, as a job's fault becomes
-    // the job's (INF-BG-001), by its type alone. A cancellation is the caller going
+    // the job's (INF-BG-001), by its fault log entry. A cancellation is the caller going
     // away only when the caller has gone, which the server already knows and nobody is
     // left to read; one anything else threw is a fault like any other.
     private static async ValueTask<Result> ContainedAsync(
@@ -77,7 +77,7 @@ internal sealed class ErrorTranslation(ConcealedRefusals refusals) : IMiddleware
             return Result.Failure(Error.From(
                 ErrorCodes.SystemFault,
                 Fault,
-                JsonSerializer.SerializeToElement(fault.GetType().Name)));
+                JsonSerializer.SerializeToElement(FaultLog.Of(fault))));
         }
     }
 

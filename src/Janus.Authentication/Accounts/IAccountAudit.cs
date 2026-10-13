@@ -21,6 +21,10 @@ internal interface IAccountAudit
     /// </summary>
     /// <param name="action">What changed.</param>
     /// <param name="acting">Who made the change.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="subject">Whose account it was made on.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -28,6 +32,7 @@ internal interface IAccountAudit
     ValueTask RecordedAsync(
         AuditAction action,
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken);
@@ -38,6 +43,10 @@ internal interface IAccountAudit
     /// </summary>
     /// <param name="action">What changed.</param>
     /// <param name="acting">The administrator.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="subject">Whose account it was made on.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -45,6 +54,7 @@ internal interface IAccountAudit
     ValueTask AdministeredAsync(
         AuditAction action,
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken);
@@ -54,6 +64,10 @@ internal interface IAccountAudit
     /// against the out-of-band erasure request that began it where one did.
     /// </summary>
     /// <param name="acting">The administrator.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="subject">Whose account.</param>
     /// <param name="request">The erasure request the window was begun for, if any.</param>
     /// <param name="at">When.</param>
@@ -61,6 +75,7 @@ internal interface IAccountAudit
     /// <returns>The work of recording it.</returns>
     ValueTask CancelledOnBehalfAsync(
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         PrivacyRequestId? request,
         DateTimeOffset at,

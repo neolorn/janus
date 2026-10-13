@@ -116,7 +116,7 @@ public sealed class ProviderAttemptStoreTests(DatabaseFixture database)
             "/register");
 
     private ProviderAttemptStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, TimeProvider.System);
+        new(context, _deployment.DataKey(context), TimeProvider.System);
 
     private async Task<ProviderBinding> ContactedAsync(string token)
     {
@@ -124,7 +124,7 @@ public sealed class ProviderAttemptStoreTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new PreAuthenticationStore(writing, _deployment.Keys).AddAsync(
+        await new PreAuthenticationStore(writing, _deployment.DataKey(writing)).AddAsync(
             PreAuthentication.Issue(
                 secret,
                 OpaqueToken.Of("the-csrf-token-of-" + token),

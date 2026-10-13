@@ -27,8 +27,9 @@ public sealed class SerializedModelTests
 
     /// <summary>
     /// OPS-MIG-003a AC2, AC4: the maintenance credential's functions and the rights it
-    /// holds on the wrapped keys, the rotation's progress and the trail are read in the
-    /// serialized model, not only in the migration that grants them.
+    /// holds on the wrapped keys, the rotation's progress, the fingerprints and the trail
+    /// are read in the serialized model, not only in the migration that grants them; no
+    /// value wrapped under the deployment's data key is among them (D-166, 316).
     /// </summary>
     [Fact]
     public void OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel()
@@ -45,11 +46,13 @@ public sealed class SerializedModelTests
                 "TABLE identity.subject_keys",
                 "TABLE identity.key_rotations",
                 "TABLE identity.audit_records",
-                "COLUMN identity.signing_keys.private_key",
+                "COLUMN identity.identifiers.fingerprint",
             })
         {
             Assert.Contains(listed, written, StringComparison.Ordinal);
         }
+
+        Assert.DoesNotContain("COLUMN identity.signing_keys", written, StringComparison.Ordinal);
 
         Assert.Contains("\"maintenanceGrants\"", written, StringComparison.Ordinal);
     }
@@ -95,8 +98,8 @@ public sealed class SerializedModelTests
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .Permission("article:edit")
             .Permission("article:read")
-            .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("interest", "Interest", false, false, true, true))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
             .Relationship<HostDomain.Folder>(
                 "reviewer",
                 "folder",
@@ -109,7 +112,7 @@ public sealed class SerializedModelTests
             .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["content", "identity"], subjects: ["members"])
-                .Encrypted(item => item.Body, item => item.Author))
+                .Encrypted(item => item.Body, item => item.Author, "content"))
             .Resource<HostDomain.Folder>("folder", folder => folder
                 .ContainedIn("workspace")
                 .Derivation("reviewer", "reader")

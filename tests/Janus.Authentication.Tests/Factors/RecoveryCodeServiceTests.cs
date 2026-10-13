@@ -38,6 +38,18 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC2: the symbols are drawn from the generator the service is
+    /// given, each from the five low bits of one byte.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator()
+    {
+        using var randomness = new FixedRandomness(0x3F);
+
+        Assert.Equal("ZZZZZ-ZZZZZ", RecoveryCode.Draw(randomness));
+    }
+
+    /// <summary>
     /// AUTH-FACT-008: codes are issued in sets of ten, each ten symbols of Crockford
     /// base32 shown as two groups of five.
     /// </summary>
@@ -70,12 +82,21 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
             subject,
             codes[0],
             TestContext.Current.CancellationToken)));
+
+        int committed = _work.Committed;
+
         Assert.Equal(
             ErrorCodes.CodeInvalid,
             Refusal(await Service.SpendAsync(
                 subject,
                 codes[0],
                 TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work it was decided in
+        // with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(committed, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -101,8 +122,9 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-008 AC4: the set records when the codes were shown and when they
-    /// were exported, and the export stays unset otherwise.
+    /// AUTH-FACT-008 AC4: the set is written as viewed by the generation that returns
+    /// its codes, and the export stays unset until it is reported and leaves the view
+    /// where it stood.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_008_AC4_TheSetRecordsWhenItWasShownAndExportedAsync()
@@ -110,15 +132,13 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         await GeneratedAsync(subject);
 
-        await Service.ShownAsync(subject, exported: false, TestContext.Current.CancellationToken);
-
         RecoveryCodeSet shown = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
 
         Assert.Equal(Noon, shown.ViewedAt);
         Assert.Null(shown.ExportedAt);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
-        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+        Assert.True(Value(await Service.ExportedAsync(subject, TestContext.Current.CancellationToken)));
 
         RecoveryCodeSet exported = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
 
@@ -137,12 +157,12 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         await GeneratedAsync(subject);
 
-        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+        Assert.True(Value(await Service.ExportedAsync(subject, TestContext.Current.CancellationToken)));
 
         Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
-        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+        Assert.False(Value(await Service.ExportedAsync(subject, TestContext.Current.CancellationToken)));
 
         Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
     }
@@ -233,6 +253,17 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
                 Subject(),
                 "ABCDE-FGHJK",
                 TestContext.Current.CancellationToken)));
+
+    /// <summary>
+    /// AUTH-FACT-008: an account holding no set has none to record as exported, and
+    /// the refusal names that.
+    /// </summary>
+    [Fact]
+    public async Task ExportedAsync_AnAccountHoldingNoSet_IsRefusedAsNotEnrolledAsync() =>
+        Assert.Equal(
+            ErrorCodes.FactorNotEnrolled,
+            (await Service.ExportedAsync(Subject(), TestContext.Current.CancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
 
     private static TValue Value<TValue>(Result<TValue> result) =>
         result.Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));

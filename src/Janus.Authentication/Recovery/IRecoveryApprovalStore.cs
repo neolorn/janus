@@ -14,6 +14,14 @@ namespace Janus.Authentication.Recovery;
 internal interface IRecoveryApprovalStore
 {
     /// <summary>
+    /// Holds the approvals until the operation's transaction ends, so the day limits are
+    /// counted and an approval written one approval after another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the hold.</returns>
+    ValueTask HoldAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records one approval.
     /// </summary>
     /// <param name="approval">The approval.</param>

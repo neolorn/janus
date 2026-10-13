@@ -23,14 +23,14 @@ namespace Janus.Cli.Tests;
 public sealed class BootstrapAgeTests
 {
     /// <summary>
-    /// PRIV-MINOR-001 AC3: under the default <c>registration.adultaffirmation</c> of
+    /// OPS-BOOT-001 AC6 and PRIV-MINOR-001 AC3: under the default <c>registration.adultaffirmation</c> of
     /// <c>required</c>, an administrator whose date makes them under eighteen is refused
     /// by the code the age screen refuses with, and nothing is written, so no account
     /// exists whose subject has not affirmed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_MINOR_001_AC3_BootstrapRefusesAnAdministratorUnderEighteenAsync()
+    public async Task OPS_BOOT_001_AC6_BootstrapRefusesAnAdministratorUnderEighteenAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 

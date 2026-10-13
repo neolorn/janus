@@ -47,7 +47,7 @@ internal sealed class ProviderEvents(
     IAccountDirectory accounts,
     IIdentifierDirectory identifiers,
     ICredentialAudit audit,
-    INotificationHandler sending,
+    IGovernedSend sending,
     IConfigurationStore configuration,
     IEvents events,
     TimeProvider time)
@@ -116,7 +116,7 @@ internal sealed class ProviderEvents(
         ArgumentNullException.ThrowIfNull(source);
 
         bool claimed = await admission
-            .ClaimAsync(CallbackOf(notice.Provider), notice.EventId, cancellationToken)
+            .CarryAsync(CallbackOf(notice.Provider), notice.EventId, cancellationToken)
             .ConfigureAwait(false);
 
         Authenticator? linked = notice.Subject is null
@@ -256,23 +256,37 @@ internal sealed class ProviderEvents(
         return Result.Success(ProviderEventOutcome.SessionsEnded);
     }
 
-    // IDN-LIFE-012a AC2: the credential is unlinked where the account keeps another way
-    // in; where it is the last (IDN-LIFE-012 AC3), the account is suspended instead, and
-    // told either way, as every removal of a credential is.
+    // IDN-LIFE-012a AC2: the credential is unlinked where another usable credential, the
+    // password included, may begin a sign-in; where none may (IDN-LIFE-012 AC3), one a
+    // provider holds among them, the account is suspended instead, and told either way,
+    // as every removal of a credential is.
     private async ValueTask<Result<ProviderEventOutcome>> WithdrawnAsync(
         Authenticator linked,
         string source,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: what the account keeps is judged on its credentials under their
+        // locks, so a withdrawal and an unlink or a removal at once never leave it with
+        // no way in; an identity unlinked meanwhile has nothing left to withdraw. The
+        // account's row is held first, as everything that holds both holds them.
+        await accounts.HoldAsync(linked.Subject, cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<Authenticator> enrolled = await authenticators
-            .OfAsync(linked.Subject, cancellationToken)
+            .OfForUpdateAsync(linked.Subject, cancellationToken)
             .ConfigureAwait(false);
+
+        if (enrolled.All(credential => credential.Id != linked.Id))
+        {
+            return Result.Success(ProviderEventOutcome.Recorded);
+        }
 
         bool password = await SecondStep.AvailableAsync(passwords, linked.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (HeldFactors.KeptWithout(enrolled, linked, password))
+        if (HeldFactors.Of([.. enrolled.Where(credential => credential.Id != linked.Id)], password)
+            .Usable
+            .Any(factor => FactorCatalogue.Of(factor).CanBePrimary))
         {
             await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
 
@@ -294,6 +308,10 @@ internal sealed class ProviderEvents(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: what the account stands in is read on its row under the lock, so a
+        // deletion begun or a suspension made meanwhile is the one this follows.
+        await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
         AccountState? state = await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         if (state is null or AccountState.Deleting or AccountState.Deleted)
@@ -374,8 +392,8 @@ internal sealed class ProviderEvents(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         MessageKind.SecurityNotice,
                         RestrictionPurpose.Notification,
@@ -402,7 +420,7 @@ internal sealed class ProviderEvents(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }

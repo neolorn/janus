@@ -36,11 +36,38 @@ internal static class GroupEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/groups", InAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/groups", CreateAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id:guid}", RemoveAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id:guid}/members", AddMemberAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id:guid}/members", RemoveMemberAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/groups", InAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<OrganizationId>("organization"))
+            .Produces<IReadOnlyList<GroupView>>();
+        _ = SessionRequired.On(endpoints.MapPost("/admin/groups", CreateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted))
+            .Produces<CreatedGroupView>(StatusCodes.Status201Created);
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}", RemoveAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.GroupInUse)
+                .Binding<GroupId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id}/members", AddMemberAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
+                .Binding<GroupId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}/members", RemoveMemberAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
+                .Binding<GroupId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -48,22 +75,17 @@ internal static class GroupEndpoints
     private static async Task<IResult> InAsync(
         IGroups groups,
         RequestSession browser,
-        string? organization,
+        OrganizationId organization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (!Guid.TryParse(organization, out Guid whose))
-        {
-            return Answers.Malformed("organization");
-        }
-
         return Answers.Of(
             await groups
                 .InAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new OrganizationId(whose),
+                    browser.Asking,
+                    organization,
                     cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<GroupView>>(
@@ -88,12 +110,14 @@ internal static class GroupEndpoints
             return Answers.Malformed("organization");
         }
 
-        if (body.Name is not { Length: > 0 } name)
+        // API-CONV-002, X4: free text is 1 to 1024 characters after trimming, refused
+        // before the service is called (CONV-CODE-006 AC2).
+        if (body.Name?.Trim() is not { Length: > 0 and <= 1024 } name)
         {
             return Answers.Malformed("name");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -101,7 +125,7 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .CreateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new OrganizationId(organization),
                     name,
                     reason,
@@ -120,14 +144,14 @@ internal static class GroupEndpoints
         [FromBody] GroupRemovalBody body,
         IGroups groups,
         RequestSession browser,
-        Guid id,
+        GroupId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -135,8 +159,8 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .RemoveAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new GroupId(id),
+                    browser.Asking,
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -147,7 +171,7 @@ internal static class GroupEndpoints
         MemberBody body,
         IGroups groups,
         RequestSession browser,
-        Guid id,
+        GroupId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -161,7 +185,7 @@ internal static class GroupEndpoints
             return Answers.Malformed(member);
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -169,9 +193,9 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .AddMemberAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new GroupId(id),
+                    id,
                     joining,
                     reason,
                     cancellationToken)
@@ -185,7 +209,7 @@ internal static class GroupEndpoints
         [FromBody] MemberBody body,
         IGroups groups,
         RequestSession browser,
-        Guid id,
+        GroupId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -199,7 +223,7 @@ internal static class GroupEndpoints
             return Answers.Malformed(member);
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -207,9 +231,9 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .RemoveMemberAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new GroupId(id),
+                    id,
                     leaving,
                     reason,
                     cancellationToken)

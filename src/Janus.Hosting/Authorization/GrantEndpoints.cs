@@ -40,9 +40,26 @@ internal static class GrantEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/grants", HeldAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/grants", GrantAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id:guid}", RevokeAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/grants", HeldAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<OrganizationId>("organization"))
+            .Produces<IReadOnlyList<HeldGrantView>>();
+        _ = SessionRequired.On(endpoints.MapPost("/admin/grants", GrantAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantDuplicate, ErrorCodes.GrantExpired,
+                    ErrorCodes.GrantReasonRequired, ErrorCodes.GrantUnresolved))
+            .Produces<CreatedGrantView>(StatusCodes.Status201Created);
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id}", RevokeAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantNotFound, ErrorCodes.GrantReasonRequired)
+                .Binding<GrantId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -50,18 +67,13 @@ internal static class GrantEndpoints
     private static async Task<IResult> HeldAsync(
         IGrants grants,
         RequestSession browser,
-        string? organization,
+        OrganizationId organization,
         string? subjectType,
         string? subjectId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!Guid.TryParse(organization, out Guid whose))
-        {
-            return Answers.Malformed("organization");
-        }
 
         SubjectType? type = subjectType switch
         {
@@ -83,8 +95,8 @@ internal static class GrantEndpoints
         return Answers.Of(
             await grants
                 .HeldAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new OrganizationId(whose),
+                    browser.Asking,
+                    organization,
                     new GrantSubject(holderType, holder),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -105,9 +117,17 @@ internal static class GrantEndpoints
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        // API-CONV-002, X4: a reason absent or blank is refused with its own code, and one
+        // past 1024 characters after trimming is malformed, both before the service is
+        // called (CONV-CODE-006 AC2).
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Unreasoned);
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         (GrantRequest? request, string member) = body.Read(reason);
@@ -120,7 +140,7 @@ internal static class GrantEndpoints
         return Answers.Of(
             await grants
                 .GrantAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     request,
                     cancellationToken)
@@ -138,24 +158,29 @@ internal static class GrantEndpoints
         [FromBody] GrantRevocationBody body,
         IGrants grants,
         RequestSession browser,
-        Guid id,
+        GrantId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Unreasoned);
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         return Answers.Of(
             await grants
                 .RevokeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new GrantId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),

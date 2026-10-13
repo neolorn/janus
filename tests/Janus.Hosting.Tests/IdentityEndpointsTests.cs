@@ -53,9 +53,6 @@ public sealed class IdentityEndpointsTests
         "POST /auth/step-up",
         "POST /register/terms",
 
-        // The break-glass credential, whose service entry 297 keeps off the contract.
-        "POST /admin/break-glass/generate",
-
         // What a gateway or a provider sends, which no person and no host calls
         // (chapter 09 section 10, IDN-LIFE-012a AC3, entry 282).
         "GET /callbacks/sms/dlr",

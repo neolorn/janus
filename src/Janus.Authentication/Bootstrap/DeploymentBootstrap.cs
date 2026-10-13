@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -28,15 +29,16 @@ namespace Janus.Authentication.Bootstrap;
 /// <param name="identifiers">Where the administrator takes on the corporate address.</param>
 /// <param name="mailboxes">Where the administrator's mailbox is queued.</param>
 /// <param name="links">Where the enrolment link is held.</param>
-/// <param name="alerts">Where the alert that no emergency credential exists is raised.</param>
+/// <param name="alerts">Where the alert that no emergency credential exists is raised, with its event.</param>
+/// <param name="events">Where each membership bootstrap attaches is announced.</param>
 /// <param name="configuration">Where the values bootstrap reads are.</param>
 /// <param name="work">The one transaction bootstrap runs in.</param>
 /// <param name="randomness">Where subject identifiers and the link's token come from.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements OPS-BOOT-001, OPS-BOOT-002, INT-MAIL-006 AC1a and AC1b, DR-007,
-/// IDN-PRIN-001, IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, chapter 10 sections 3 and
-/// 4.1a, and D-133. There is no gate: whoever reaches the database already holds more
+/// IDN-PRIN-001, IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, AUTHZ-GRANT-003, chapter
+/// 10 sections 3 and 4.1a, D-133 and D-162. There is no gate: whoever reaches the database already holds more
 /// than the first account will (D-028), and what stands in for one is that nothing
 /// runs while a system administrator exists. No break-glass credential is made here;
 /// the management application issues it (OPS-BOOT-004), and until it does the alert
@@ -49,7 +51,8 @@ internal sealed class DeploymentBootstrap(
     IIdentifierDirectory identifiers,
     IMailboxStore mailboxes,
     IRecoveryLinkStore links,
-    IRaisedAlerts alerts,
+    IAlertChannels alerts,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     RandomNumberGenerator randomness,
@@ -67,10 +70,20 @@ internal sealed class DeploymentBootstrap(
 
     private static readonly RoleName SystemAdministrator = RoleName.Parse("system-administrator");
 
+    // AUTHZ-GRANT-003 and D-166 (308): no person granted what bootstrap grants, so the
+    // grants name the identity no account holds rather than their holders.
+    private static readonly SubjectId Ungranted = new(Guid.Empty);
+
+    /// <summary>
+    /// The name of the principal bootstrap records what it does under, which chapter 10
+    /// section 5 gives its <c>identity.organization.created</c> record.
+    /// </summary>
+    internal const string PrincipalName = "bootstrap";
+
     // IDN-PRIN-001: nobody is signed in while bootstrap runs, so what it defines and
     // sets is recorded under a principal of its own that may do nothing else.
     private static readonly SystemPrincipal Principal =
-        SystemPrincipal.ForDeployment("bootstrap", Reason, SystemOperation.Bootstrap);
+        SystemPrincipal.ForDeployment(PrincipalName, Reason, SystemOperation.Bootstrap);
 
     // Chapter 10 section 3: the three administrative roles seeded so the system is
     // usable at once.
@@ -143,15 +156,24 @@ internal sealed class DeploymentBootstrap(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<BootstrapEnrolment>(notBegun);
+        }
 
         // OPS-BOOT-001 AC1: a deployment that has a system administrator is stood up.
         if (await seed.AdministeredAsync(cancellationToken).ConfigureAwait(false))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.Denied));
         }
 
-        await seed.ConfigureAsync(request.Named, Principal, now, cancellationToken).ConfigureAwait(false);
+        // Bootstrap takes only required keys, which have no default.
+        await seed
+            .ConfigureAsync(request.Named, new Dictionary<ConfigurationKey, string>(), Principal, now, cancellationToken)
+            .ConfigureAwait(false);
 
         TimeSpan recency = (await configuration.ReadAsync(Settings.SessionStepUpRecency, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
@@ -178,6 +200,8 @@ internal sealed class DeploymentBootstrap(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(failure);
         }
 
@@ -189,12 +213,9 @@ internal sealed class DeploymentBootstrap(
 
         if (affirmation is not AttributeRequirement.Off && !adult)
         {
-            return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.ProfileUnderage));
-        }
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        if (origins.Count is 0 || !Uri.TryCreate(origins[0], UriKind.Absolute, out Uri? origin))
-        {
-            return Result.Failure<BootstrapEnrolment>(Malformed(Settings.WebAuthnOrigins.Key.ToString()));
+            return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.ProfileUnderage));
         }
 
         await seed.DefineRolesAsync(Roles, Principal, now, cancellationToken).ConfigureAwait(false);
@@ -215,10 +236,31 @@ internal sealed class DeploymentBootstrap(
                     [Settings.OrganizationPolicy.For(organization.ToString())] =
                         Settings.OrganizationPolicy.Write(Administrative(recency)),
                 },
+                new Dictionary<ConfigurationKey, string>
+                {
+                    [Settings.OrganizationPolicy.For(organization.ToString())] =
+                        Settings.OrganizationPolicy.Write(Settings.OrganizationPolicy.Default),
+                },
                 Principal,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        // REG-SESS-005, CONV-DESIGN-003: every value the bootstrap writes to an account is
+        // written under its lock, all of them taken in one order.
+        List<(IdentifierKind Kind, string Canonical)> written =
+        [
+            (IdentifierKind.Email, email.Canonical),
+            (IdentifierKind.Phone, phone!.Canonical),
+            (IdentifierKind.Email, Canary().Canonical),
+        ];
+
+        if (mailbox is not null)
+        {
+            written.Add((IdentifierKind.Email, mailbox.Canonical));
+        }
+
+        await identifiers.LockValuesAsync(written, cancellationToken).ConfigureAwait(false);
 
         var administrator = SubjectId.New(randomness);
         var personal = IdentifierId.New(time);
@@ -238,6 +280,8 @@ internal sealed class DeploymentBootstrap(
         if (await JoinAsync(administrator, organization, [SystemAdministrator], now, cancellationToken).ConfigureAwait(false)
             is Error unjoined)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unjoined);
         }
 
@@ -272,6 +316,8 @@ internal sealed class DeploymentBootstrap(
         if (await JoinAsync(emergency, organization, [SystemAdministrator], now, cancellationToken).ConfigureAwait(false)
             is Error unjoinedEmergency)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unjoinedEmergency);
         }
 
@@ -296,6 +342,8 @@ internal sealed class DeploymentBootstrap(
         if (await JoinAsync(canary, organization, [], now, cancellationToken).ConfigureAwait(false)
             is Error unjoinedCanary)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unjoinedCanary);
         }
 
@@ -304,6 +352,11 @@ internal sealed class DeploymentBootstrap(
                 new Dictionary<ConfigurationKey, string>
                 {
                     [Settings.BackupRestoreTestCanary.Key] = Settings.BackupRestoreTestCanary.Write(canary.ToString()),
+                },
+                new Dictionary<ConfigurationKey, string>
+                {
+                    [Settings.BackupRestoreTestCanary.Key] =
+                        Settings.BackupRestoreTestCanary.Write(Settings.BackupRestoreTestCanary.Default),
                 },
                 Principal,
                 now,
@@ -318,17 +371,26 @@ internal sealed class DeploymentBootstrap(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        // OPS-BOOT-001 AC3 and D-133: the deployment has no emergency credential until the
-        // management application issues one, and the alert says so from the start.
-        await alerts
-            .AddAsync(
-                new RaisedAlert(RaisedAlertId.Of(now), Alerts.Of(AlertCondition.NoEmergencyCredential, scope: null, now)),
-                cancellationToken)
-            .ConfigureAwait(false);
+        // OPS-BOOT-001 AC3, D-133 and OPS-ALERT-001: the deployment has no emergency
+        // credential until the management application issues one, and the alert says so
+        // from the start, its event written with it in the one transaction.
+        if ((await alerts
+                .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, named: null, now), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return Result.Failure<BootstrapEnrolment>(unannounced);
+        }
 
-        return Result.Success(new BootstrapEnrolment(Enrolment(origin, token), now + lifetime));
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<BootstrapEnrolment>(notCommitted);
+        }
+
+        return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime));
     }
 
     private static string? Stated(string text) =>
@@ -387,6 +449,8 @@ internal sealed class DeploymentBootstrap(
 
     // Chapter 10 section 4.1a, the column "Administrative organization, at bootstrap".
     // The domain lock stays off, which is the system default, so it is not overridden.
+    // IDN-ATTR-002, OPS-BOOT-001: photos are written off, because bootstrap cannot see
+    // whether the host declares an image codec.
     private static PolicyOverride Administrative(TimeSpan recency) =>
         new(
             AssuranceLevel.Aal2,
@@ -396,26 +460,51 @@ internal sealed class DeploymentBootstrap(
                 _ => new Gate(GateLevel.Aal2, PhishingResistant: true, recency)),
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
-            EmailDomains: null);
+            EmailDomains: null,
+            Photos: false);
 
-    // API-LAND-001: the link lands on the authentication application's own route. The
-    // token travels in the fragment, which no request carries, so neither a server log
-    // nor a referrer ever holds it.
-    private static Uri Enrolment(Uri origin, OpaqueToken token) =>
-        new(origin.GetLeftPart(UriPartial.Authority) + "/enrol#token=" + token.Value);
+    // API-LAND-001 and R2 of D-166: the link lands on the authentication application's
+    // own route at the first configured origin, which the command settled as the start
+    // does. The token travels in the fragment, which no request carries, so neither a
+    // server log nor a referrer ever holds it.
+    private static Uri Enrolment(string origin, OpaqueToken token) =>
+        new(origin + "/link#enrolment." + token.Value);
+
+    private static string Key(MembershipId membership, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{membership.Value}@{at.UtcTicks}");
 
     // Bootstrap names no document, since none is published yet, and the subject holds no
-    // other membership, so the limit on memberships has nothing to count.
+    // other membership, so the limit on memberships has nothing to count. D-162: the
+    // membership is announced inside the transaction that attaches it.
     private async ValueTask<Error?> JoinAsync(
         SubjectId subject,
         OrganizationId organization,
         IReadOnlyList<RoleName> roles,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
-        (await memberships
-                .AttachAsync(subject, organization, [], roles, subject, Reason, multiple: false, at, cancellationToken)
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        MembershipId membership = (await memberships
+                .AttachAsync(subject, organization, [], roles, Ungranted, Reason, multiple: false, at, cancellationToken)
                 .ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error);
+            .Match(value => value, error => Withheld<MembershipId>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        return (await events
+                .PublishAsync(
+                    new MembershipChanged(at, Key(membership, at), membership, organization, MembershipChange.Began)
+                    {
+                        Subject = subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+    }
 
     private sealed record Entered(string Value, string Canonical, EmailAddress? Address);
 }

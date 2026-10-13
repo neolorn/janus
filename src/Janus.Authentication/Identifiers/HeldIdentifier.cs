@@ -22,7 +22,7 @@ namespace Janus.Authentication.Identifiers;
 /// When it was proved, or for a username when it was chosen, which is what a cooling
 /// off is measured from (REG-IDENT-009).
 /// </param>
-/// <remarks>Implements REG-IDENT-002 and CONV-LAYOUT-001.</remarks>
+/// <remarks>Implements REG-IDENT-002, REG-IDENT-004 and CONV-LAYOUT-001.</remarks>
 internal sealed record HeldIdentifier(
     IdentifierId Id,
     IdentifierKind Kind,
@@ -32,4 +32,44 @@ internal sealed record HeldIdentifier(
     bool IsPrimary,
     bool IsLocked,
     bool IsPersonal,
-    DateTimeOffset? VerifiedAt);
+    DateTimeOffset? VerifiedAt)
+{
+    /// <summary>
+    /// Whether it is an add still waiting to verify, which the account lists as an
+    /// unverified identifier and holds on its pending verification alone: no identifier
+    /// is written until it verifies (REG-IDENT-004).
+    /// </summary>
+    public bool IsPending { get; private init; }
+
+    /// <summary>
+    /// A pending add as the account lists it: unverified, under the identifier the
+    /// verified identifier then keeps.
+    /// </summary>
+    /// <param name="add">The pending verification that holds the value.</param>
+    /// <returns>The add as an unverified identifier of the account.</returns>
+    /// <exception cref="ArgumentNullException">The pending verification is absent.</exception>
+    /// <exception cref="ArgumentException">It is a replace, which the account does not list.</exception>
+    public static HeldIdentifier Pending(PendingVerification add)
+    {
+        ArgumentNullException.ThrowIfNull(add);
+
+        if (add.IsReplacement)
+        {
+            throw new ArgumentException("A replace is not listed on the account.", nameof(add));
+        }
+
+        return new HeldIdentifier(
+            add.Identifier,
+            add.Staged.Kind,
+            add.Staged.Entered,
+            add.Staged.Canonical,
+            IsVerified: false,
+            IsPrimary: false,
+            IsLocked: false,
+            IsPersonal: false,
+            VerifiedAt: null)
+        {
+            IsPending = true,
+        };
+    }
+}

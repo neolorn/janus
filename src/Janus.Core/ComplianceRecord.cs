@@ -6,8 +6,8 @@ namespace Janus.Core;
 /// The three fields of the records of processing that are declared by a person rather
 /// than derived from the deployment, as the deployment last stated them.
 /// </summary>
-/// <param name="DataOwner">Who owns the data inside the organisation.</param>
-/// <param name="OrganisationalSecurityMeasures">
+/// <param name="DataOwner">Who owns the data inside the organization.</param>
+/// <param name="OrganizationalSecurityMeasures">
 /// The measures that are not the software's: training, access review, clear desk.
 /// </param>
 /// <param name="AssessmentLinks">
@@ -19,5 +19,5 @@ namespace Janus.Core;
 /// </remarks>
 public sealed record ComplianceRecord(
     string? DataOwner,
-    string? OrganisationalSecurityMeasures,
+    string? OrganizationalSecurityMeasures,
     IReadOnlyList<string> AssessmentLinks);

@@ -30,6 +30,12 @@ internal sealed class RecoveryCodeStoreInMemory : IRecoveryCodeStore
         ValueTask.FromResult(_held.GetValueOrDefault(subject));
 
     /// <inheritdoc/>
+    public ValueTask<RecoveryCodeSet?> FindForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        FindAsync(subject, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask ReplaceAsync(RecoveryCodeSet set, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(set);

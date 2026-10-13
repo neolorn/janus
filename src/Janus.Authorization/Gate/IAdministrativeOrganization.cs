@@ -19,4 +19,17 @@ internal interface IAdministrativeOrganization
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The organization, or nothing before bootstrap has created it.</returns>
     ValueTask<OrganizationId?> FindAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The administrative organization, where an account holds no current membership
+    /// of it.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The organization, or nothing where the account is a member of it or bootstrap
+    /// has not created it.
+    /// </returns>
+    /// <remarks>Implements IDN-LIFE-009a and D-166.</remarks>
+    ValueTask<OrganizationId?> WithoutMembershipAsync(SubjectId subject, CancellationToken cancellationToken);
 }

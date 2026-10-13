@@ -18,9 +18,11 @@ namespace Janus.Core;
 public interface IIdentifiers
 {
     /// <summary>
-    /// Adds an email or a phone, unverified, and sends a code and a link to it. The
-    /// answer is the same whether or not the value already belongs to an account: a
-    /// value that does receives nothing and its holder is told instead.
+    /// Stages the add of an email or a phone and sends a code and a link to it. The
+    /// account lists the add as an unverified identifier, and the identifier is written
+    /// only when it verifies. The answer is the same whether or not the value already
+    /// belongs to an account: a value that does is staged alike, receives nothing and
+    /// its holder is told instead.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="session">The session the request arrived on.</param>
@@ -41,9 +43,12 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Proves an identifier with the code its message carried.
+    /// Proves an identifier with the code its message carried. Where the proof completes
+    /// a replacement, the session it is presented under is the one the account keeps,
+    /// and every other session ends (IDN-LIFE-008).
     /// </summary>
     /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the code is presented under.</param>
     /// <param name="identifier">Which identifier.</param>
     /// <param name="code">The code typed in.</param>
     /// <param name="source">The address the request came from.</param>
@@ -51,6 +56,7 @@ public interface IIdentifiers
     /// <returns>Success, or the refusal and its code.</returns>
     ValueTask<Result> VerifyAsync(
         AccessContext context,
+        SessionId session,
         IdentifierId identifier,
         [NeverLogged] string code,
         string source,
@@ -141,7 +147,9 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts a removed identifier back from the undo link its message carried.
+    /// Puts a removed identifier back from the undo link its message carried. The undo
+    /// completes under no session, so every session of the account ends with it
+    /// (IDN-LIFE-008).
     /// </summary>
     /// <param name="linkToken">The token the undo link carried.</param>
     /// <param name="source">The address the request came from.</param>
@@ -193,7 +201,33 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Proves a value staged from an enrolment session by the code sent to it.
+    /// What a verification link does where the browser that opened it holds an
+    /// enrolment session. The session reaches the pending verification of the replace
+    /// it staged and no other: a press of a token that names any other is refused as
+    /// one that opens nothing, and a press of the link of the replace it staged proves
+    /// the new value, as a press in the browser that staged any change does.
+    /// Everything else is answered as a browser that holds no session is answered.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session the browser opened.</param>
+    /// <param name="linkToken">The token the message carried.</param>
+    /// <param name="press">Whether the person pressed the control.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether the press proved it, and where it did not, what the landing shows.
+    /// </returns>
+    ValueTask<Result<LinkLanding>> LandAsync(
+        EnrolmentSessionId enrolment,
+        [NeverLogged] string linkToken,
+        bool press,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Proves the value of the replace an enrolment session staged by the code sent to
+    /// it. The session reaches that pending verification and no other: a code that
+    /// names any other is refused as one that names no pending verification of the
+    /// account.
     /// </summary>
     /// <param name="enrolment">The enrolment session the browser opened.</param>
     /// <param name="identifier">Which identifier the code was sent for.</param>

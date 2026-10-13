@@ -42,9 +42,9 @@ internal sealed class KeyRotationConfiguration : IEntityTypeConfiguration<KeyRot
 
         builder.Property(rotation => rotation.Version).HasColumnName("version");
 
-        builder.Property(rotation => rotation.LastSubject)
+        builder.Property(rotation => rotation.LastKey)
             .HasColumnName("last_subject")
-            .HasConversion(subject => subject!.Value.Value, value => new SubjectId(value));
+            .HasConversion(key => key!.Value.Value, value => new SubjectKeyId(value));
 
         builder.Property(rotation => rotation.Processed).HasColumnName("processed");
         builder.Property(rotation => rotation.StartedAt).HasColumnName("started_at");

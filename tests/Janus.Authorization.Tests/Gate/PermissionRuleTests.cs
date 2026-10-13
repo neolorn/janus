@@ -247,6 +247,190 @@ public sealed class PermissionRuleTests
         Assert.Equal("folder", Assert.IsType<string>(fragment.Parameters["identity_authz_derived0_on"]));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-004, D-166: where derivations on two containers admit one record, the
+    /// row an explanation names is the nearest container's, whichever the host's query
+    /// answers first.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_004_TheNearestAdmittingContainerIsNamed()
+    {
+        SubjectId reviewer = Subject();
+        var organization = new OrganizationId(Guid.NewGuid());
+        HostDomain.Workspace workspace = HostDomain.NewWorkspace(organization.Value);
+        HostDomain.Folder folder = HostDomain.NewFolder(workspace.Id, reviewer);
+        HostDomain.Article article = HostDomain.NewArticle(folder.Id, reviewer);
+        RelationshipDeclaration[] declared =
+        [
+            .. HostDomain.Declared()
+                .Relationship<HostDomain.Article>(
+                    "author",
+                    "article",
+                    "host.articles",
+                    item => item.Author,
+                    "author",
+                    item => item.Id,
+                    "id")
+                .Build()
+                .Relationships
+                .OrderBy(relationship => relationship.On.ToString(), StringComparer.Ordinal)
+                .Reverse(),
+        ];
+        var rule = new PermissionRule(
+            [Permission.Parse("article:read")],
+            Article,
+            organization,
+            SubjectSet.Of(reviewer, [], 1, restricted: false),
+            DateTimeOffset.UnixEpoch,
+            declared);
+        AncestryEntry[] ancestry =
+        [
+            new("article", article.Id, "article", article.Id, 0, organization.Value),
+            new("article", article.Id, "folder", folder.Id, 1, organization.Value),
+            new("article", article.Id, "workspace", workspace.Id, 2, organization.Value),
+        ];
+        FilterSources<HostDomain.Article> sources = new FilterSources<HostDomain.Article>(
+                ancestry.AsQueryable(),
+                Array.Empty<EffectiveGrant>().AsQueryable(),
+                Array.Empty<ConsentedResource>().AsQueryable(),
+                item => item.Id)
+            .Relationship("reviewer", new[] { folder }.AsQueryable())
+            .Relationship("author", new[] { article }.AsQueryable());
+
+        AdmittedRecord[] admitted = [.. rule.ToAdmittedRecords(sources, [ResourceId.Parse(article.Id)])!];
+
+        Assert.Equal("reviewer", admitted[0].Relationship);
+        Assert.Equal(2, admitted.Length);
+        Assert.Equal(
+            new AdmittedRecord(article.Id, article.Id, "author", 0),
+            AdmittedRecord.Nearest(admitted));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-002 AC3, AC4: the consent a permission bound to a consent-based purpose
+    /// asks is one more condition of the fragment, over the library's view, with the
+    /// purpose, the document and the kind carried as parameters.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_002_AC4_TheFragmentAsksTheConsentByParameter()
+    {
+        PermissionRule rule = Rule(new RequiredConsent("recommendations", "newsletter-terms", ConsentKind.Written));
+
+        SqlFilter fragment = rule.ToFragment("identity_authz_row", "id");
+
+        Assert.Contains("identity.consented_resources", fragment.Text, StringComparison.Ordinal);
+        Assert.Contains(".resource_id = identity_authz_row.id", fragment.Text, StringComparison.Ordinal);
+        Assert.Contains(".purpose = @identity_authz_purpose", fragment.Text, StringComparison.Ordinal);
+        Assert.Contains(".document = @identity_authz_document", fragment.Text, StringComparison.Ordinal);
+        Assert.Contains(".kind = @identity_authz_consent_kind", fragment.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("recommendations", fragment.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("newsletter-terms", fragment.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("written", fragment.Text, StringComparison.Ordinal);
+        Assert.Equal("recommendations", fragment.Parameters["identity_authz_purpose"]);
+        Assert.Equal("newsletter-terms", fragment.Parameters["identity_authz_document"]);
+        Assert.Equal("written", fragment.Parameters["identity_authz_consent_kind"]);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-002 AC4: a purpose that asks an ordinary consent admits either kind,
+    /// so the fragment asks no kind and carries no parameter it never names.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_002_AC4_AnOrdinaryConsentAsksNoKind()
+    {
+        PermissionRule rule = Rule(new RequiredConsent("recommendations", "newsletter-terms", ConsentKind.Ordinary));
+
+        SqlFilter fragment = rule.ToFragment("identity_authz_row", "id");
+
+        Assert.Contains("identity.consented_resources", fragment.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("consent_kind", fragment.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("identity_authz_consent_kind", fragment.Parameters.Keys);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-002 AC4: a permission bound to no consent-based purpose reads no
+    /// consent, in either rendering.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_002_AC4_ARuleBoundToNoConsentReadsNoConsentedResource()
+    {
+        PermissionRule rule = Rule();
+
+        SqlFilter fragment = rule.ToFragment("identity_authz_row", "id");
+
+        Assert.DoesNotContain("consented", fragment.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("identity_authz_purpose", fragment.Parameters.Keys);
+        Assert.DoesNotContain("identity_authz_document", fragment.Parameters.Keys);
+        Assert.DoesNotContain(
+            nameof(ConsentedResource),
+            rule.ToExpression(Sources([], [], [])).ToString(),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-002 AC1, AC4: the expression adds the same condition, so a record a
+    /// grant reaches is admitted only where its data subject holds a consent for the
+    /// purpose, against the document the purpose names and of the kind it requires.
+    /// </summary>
+    /// <param name="purpose">The purpose the consent held was given for.</param>
+    /// <param name="document">The document it was recorded against.</param>
+    /// <param name="kind">Its kind.</param>
+    /// <param name="required">The kind the purpose requires.</param>
+    /// <param name="admitted">Whether the record is listed.</param>
+    [Theory]
+    [InlineData("recommendations", "newsletter-terms", "written", ConsentKind.Written, true)]
+    [InlineData("recommendations", "newsletter-terms", "ordinary", ConsentKind.Written, false)]
+    [InlineData("recommendations", "newsletter-terms", "ordinary", ConsentKind.Ordinary, true)]
+    [InlineData("recommendations", "newsletter-terms", "written", ConsentKind.Ordinary, true)]
+    [InlineData("recommendations", "privacy-notice", "written", ConsentKind.Written, false)]
+    [InlineData("newsletters", "newsletter-terms", "written", ConsentKind.Written, false)]
+    public void AUTHZ_GATE_002_AC4_TheExpressionAdmitsOnlyAConsentedRecord(
+        string purpose,
+        string document,
+        string kind,
+        ConsentKind required,
+        bool admitted)
+    {
+        SubjectId reader = Subject();
+        var organization = new OrganizationId(Guid.NewGuid());
+        var article = new HostDomain.Article { Id = Guid.NewGuid().ToString() };
+        var other = new HostDomain.Article { Id = Guid.NewGuid().ToString() };
+        var rule = new PermissionRule(
+            [Permission.Parse("article:read")],
+            Article,
+            organization,
+            SubjectSet.Of(reader, [], 1, restricted: false),
+            DateTimeOffset.UnixEpoch,
+            consent: new RequiredConsent("recommendations", "newsletter-terms", required));
+
+        Func<HostDomain.Article, bool> listed = rule
+            .ToExpression(Sources(
+                [
+                    new("article", article.Id, "article", article.Id, 0, organization.Value),
+                    new("article", other.Id, "article", other.Id, 0, organization.Value),
+                ],
+                [
+                    new(
+                        Guid.NewGuid(),
+                        "user",
+                        reader.Value,
+                        "reader",
+                        "article:read",
+                        ResourceType: null,
+                        ResourceId: null,
+                        Deny: false,
+                        "direct",
+                        organization.Value,
+                        ExpiresAt: null,
+                        RevokedAt: null),
+                ],
+                [new("article", article.Id, purpose, document, kind)]))
+            .Compile();
+
+        Assert.Equal(admitted, listed(article));
+        Assert.False(listed(other));
+    }
+
     // What a rendering reads from, in the two words a statement names it by.
     private static Regex Read() => new(
         @"(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_.]*)",
@@ -280,7 +464,16 @@ public sealed class PermissionRuleTests
         rule.ToPage().Text,
     ];
 
-    private static PermissionRule Rule(params RelationshipDeclaration[] derivations)
+    private static FilterSources<HostDomain.Article> Sources(
+        AncestryEntry[] ancestry,
+        EffectiveGrant[] grants,
+        ConsentedResource[] consented) =>
+        new(ancestry.AsQueryable(), grants.AsQueryable(), consented.AsQueryable(), item => item.Id);
+
+    private static PermissionRule Rule(params RelationshipDeclaration[] derivations) =>
+        Rule(consent: null, derivations);
+
+    private static PermissionRule Rule(RequiredConsent? consent, params RelationshipDeclaration[] derivations)
     {
         var subjects = SubjectSet.Of(
             Subject(),
@@ -294,7 +487,8 @@ public sealed class PermissionRuleTests
             new OrganizationId(Guid.NewGuid()),
             subjects,
             DateTimeOffset.UnixEpoch,
-            derivations);
+            derivations,
+            consent);
     }
 
     private static SubjectId Subject()

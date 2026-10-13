@@ -42,16 +42,10 @@ internal sealed class PreAuthenticationRecord
 
     /// <summary>
     /// The <c>signon_verifier</c> column: the proof key the token request presents,
-    /// wrapped under the key-encryption key.
+    /// wrapped under the deployment's data key.
     /// </summary>
     [NeverLogged]
     public byte[]? SignOnVerifier { get; set; }
-
-    /// <summary>
-    /// The <c>signon_key_version</c> column: which version the proof key is wrapped
-    /// under.
-    /// </summary>
-    public int? SignOnKeyVersion { get; set; }
 
     /// <summary>
     /// The <c>signon_return</c> column: the path on this application the browser was

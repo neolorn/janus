@@ -7,14 +7,14 @@ using Janus.Core;
 namespace Janus.Authentication.Factors;
 
 /// <summary>
-/// What a step-up gate asks of a session, and what the account may present to reach
-/// it.
+/// What a step-up gate asks of a session, and whether the session meets it.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-STEP-002, AUTH-STEP-004, AUTH-STEP-005, AUTH-STEP-006,
-/// AUTH-STEP-007 and AUTH-STEP-008. The decision reads the session record and the
-/// account's reachable assurance; the offer reads which of the account's factors can
-/// be presented. Neither asks what a factor is called.
+/// Implements AUTH-STEP-002 step 1, AUTH-STEP-004, AUTH-STEP-005, AUTH-STEP-006,
+/// AUTH-STEP-007 and AUTH-STEP-008. The judgement reads the session record and the
+/// account's reachable assurance, and is permission logic (CONV-VCS-004). What a gate
+/// the session does not meet offers the account is <see cref="StepUpOffer"/>'s, which
+/// admits and refuses nothing. Neither asks what a factor is called.
 /// </remarks>
 internal static class StepUp
 {
@@ -117,95 +117,18 @@ internal static class StepUp
             now);
     }
 
-    private static StepUpChallenge Answered(
-        Session session,
-        Gate gate,
-        HeldFactors held,
-        AssuranceLevel required,
-        bool phishingResistant,
-        Assurance reachable,
-        DateTimeOffset now)
+    /// <summary>
+    /// Every combination a set of factors makes, whatever each reaches: one factor that
+    /// begins an authentication, and at most one that stands beside it, nothing in the
+    /// table reaching further with a third.
+    /// </summary>
+    /// <param name="factors">The factors to combine.</param>
+    /// <returns>The combinations.</returns>
+    /// <exception cref="ArgumentNullException">The set is absent.</exception>
+    public static IReadOnlyList<IReadOnlyList<Factor>> Combinations(IReadOnlySet<Factor> factors)
     {
-        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(factors);
 
-        if (Proved(session, gate, required, phishingResistant, now))
-        {
-            return new StepUpChallenge(
-                StepUpOutcome.Satisfied,
-                required,
-                phishingResistant,
-                gate.MaximumAge,
-                [],
-                null);
-        }
-
-        IReadOnlyList<IReadOnlyList<Factor>> offered =
-            [.. Combinations(held.Usable).Where(combination => Meets(combination, required, phishingResistant))];
-
-        if (offered.Count > 0)
-        {
-            return new StepUpChallenge(
-                StepUpOutcome.Present,
-                required,
-                phishingResistant,
-                gate.MaximumAge,
-                offered,
-                null);
-        }
-
-        // Three answers and never a bare refusal: the account has never held what the
-        // gate asks; it holds it and cannot present it; or it is already waiting for
-        // the report it made to complete (AUTH-STEP-002).
-        StepUpOutcome outcome = !Reaches(reachable, required, phishingResistant)
-            ? StepUpOutcome.Enrol
-            : held.LossCompletes is null
-                ? StepUpOutcome.ReportLoss
-                : StepUpOutcome.LossPending;
-
-        return new StepUpChallenge(
-            outcome,
-            required,
-            phishingResistant,
-            gate.MaximumAge,
-            [],
-            outcome is StepUpOutcome.LossPending ? held.LossCompletes : null);
-    }
-
-    // The emergency credential satisfies every gate for the session's lifetime, which
-    // is what an emergency credential is for; the alerting is the control that pays
-    // for it (AUTH-STEP-004).
-    private static bool Proved(
-        Session session,
-        Gate gate,
-        AssuranceLevel required,
-        bool phishingResistant,
-        DateTimeOffset now) =>
-        session.SatisfiesEveryGate
-        || (session.Attained >= required
-            && Within(session.AttainedAt, gate.MaximumAge, now)
-            && (!phishingResistant
-                || (session.PhishingResistant
-                    && session.PhishingResistantAt is { } proved
-                    && Within(proved, gate.MaximumAge, now))));
-
-    private static bool Within(DateTimeOffset at, TimeSpan age, DateTimeOffset now) =>
-        now - at <= age;
-
-    private static AssuranceLevel Stated(Gate gate, Assurance reachable) =>
-        gate.Level switch
-        {
-            GateLevel.Aal1 => AssuranceLevel.Aal1,
-            GateLevel.Aal2 => AssuranceLevel.Aal2,
-
-            // The gate asks for the most the account can do and never more, and never
-            // for less than one factor (AUTH-STEP-002a).
-            _ => reachable.Level < AssuranceLevel.Aal1 ? AssuranceLevel.Aal1 : reachable.Level,
-        };
-
-    // A combination is one factor that begins an authentication, and at most one that
-    // stands beside it: nothing in the table reaches further with a third.
-    private static IReadOnlyList<IReadOnlyList<Factor>> Combinations(IReadOnlySet<Factor> factors)
-    {
         List<Factor> primaries =
             [.. factors.Where(factor => FactorCatalogue.Of(factor).CanBePrimary).Order()];
         List<Factor> seconds =
@@ -220,15 +143,84 @@ internal static class StepUp
         ];
     }
 
-    private static bool Meets(
-        IReadOnlyList<Factor> combination,
+    private static StepUpChallenge Answered(
+        Session session,
+        Gate gate,
+        HeldFactors held,
         AssuranceLevel required,
-        bool phishingResistant) =>
-        Assurance.Proved(Properties(combination)) is { } proved
-        && Reaches(proved, required, phishingResistant);
+        bool phishingResistant,
+        Assurance reachable,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(session);
 
-    private static bool Reaches(Assurance reached, AssuranceLevel required, bool phishingResistant) =>
-        reached.Level >= required && (!phishingResistant || reached.PhishingResistant);
+        if (Proved(session, gate, required, phishingResistant, now, sinceDowngrade: true))
+        {
+            return new StepUpChallenge(
+                StepUpOutcome.Satisfied,
+                required,
+                phishingResistant,
+                gate.MaximumAge,
+                [],
+                null);
+        }
+
+        // AUTH-SESS-009, AUTHZ-GATE-005: a gate the session would meet but for proof it
+        // last reached up to its last downgrade asks the person to authenticate again.
+        bool downgraded = Proved(session, gate, required, phishingResistant, now, sinceDowngrade: false);
+
+        return StepUpOffer.To(held, required, phishingResistant, gate.MaximumAge, reachable) with
+        {
+            Downgraded = downgraded,
+        };
+    }
+
+    // The emergency credential satisfies every gate for the session's lifetime, which
+    // is what an emergency credential is for; the alerting is the control that pays
+    // for it (AUTH-STEP-004).
+    private static bool Proved(
+        Session session,
+        Gate gate,
+        AssuranceLevel required,
+        bool phishingResistant,
+        DateTimeOffset now,
+        bool sinceDowngrade) =>
+        session.SatisfiesEveryGate
+        || (session.LastReached(required) is { } reached
+            && Counted(session, reached, gate, required, now, sinceDowngrade)
+            && (!phishingResistant
+                || (session.PhishingResistantAt is { } resisted
+                    && Counted(session, resisted, gate, required, now, sinceDowngrade))));
+
+    // AUTH-STEP-002 step 1: a level at or above the gate's, and phishing resistance
+    // where the gate asks for it, each count where they were last reached within the
+    // maximum age and after the session's last downgrade (AUTH-SESS-001). A gate whose
+    // level is delegated asks no maximum age, the one factor that reaches that level
+    // never being offered at a step-up, and counts what was reached however long ago
+    // (AUTH-STEP-007, D-192).
+    private static bool Counted(
+        Session session,
+        DateTimeOffset at,
+        Gate gate,
+        AssuranceLevel required,
+        DateTimeOffset now,
+        bool sinceDowngrade) =>
+        (required is AssuranceLevel.Delegated || Within(at, gate.MaximumAge, now))
+        && (!sinceDowngrade || session.Counts(at));
+
+    private static bool Within(DateTimeOffset at, TimeSpan age, DateTimeOffset now) =>
+        now - at <= age;
+
+    private static AssuranceLevel Stated(Gate gate, Assurance reachable) =>
+        gate.Level switch
+        {
+            GateLevel.Aal1 => AssuranceLevel.Aal1,
+            GateLevel.Aal2 => AssuranceLevel.Aal2,
+
+            // The gate asks for the most the account can do and never more, and never
+            // for less than one factor (AUTH-STEP-002a).
+            _ => reachable.Level < AssuranceLevel.Aal1 ? AssuranceLevel.Aal1 : reachable.Level,
+        };
 
     private static IReadOnlyCollection<FactorProperties> Properties(IReadOnlyList<Factor> combination) =>
         [.. combination.Select(FactorCatalogue.Of)];

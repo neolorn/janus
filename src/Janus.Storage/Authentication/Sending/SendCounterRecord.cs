@@ -3,15 +3,15 @@ using System;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// The <c>send_counters</c> row: one restriction key and the times counted against
-/// it, and nothing else.
+/// The <c>send_counters</c> row: one destination and the times counted against it, and
+/// nothing else.
 /// </summary>
 /// <remarks>
 /// Implements AUTH-ABUSE-004. The plain address is never here: the key is an HMAC of
 /// the restriction name and the value, so a dump of the table yields no address. Nothing
 /// derived is held beside them: the row is deleted when its newest time is older than
-/// the longest interval any restriction now declares, so a tightened interval reaches
-/// the sends already counted.
+/// the longest interval any destination restriction now declares, so a tightened
+/// interval reaches the sends already counted (PRIV-RET-005).
 /// </remarks>
 internal sealed class SendCounterRecord
 {

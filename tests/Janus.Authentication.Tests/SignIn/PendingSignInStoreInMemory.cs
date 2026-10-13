@@ -23,6 +23,12 @@ internal sealed class PendingSignInStoreInMemory : IPendingSignInStore
         ValueTask.FromResult(_pending.GetValueOrDefault(Key(fingerprint)));
 
     /// <inheritdoc/>
+    public ValueTask<PendingSignIn?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken) =>
+        FindAsync(fingerprint, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<PendingSignIn?> FindAsync(
         SubjectId subject,
         Factor factor,

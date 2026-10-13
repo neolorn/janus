@@ -29,8 +29,18 @@ internal static class ExplanationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/explanations/{correlationId:guid}", ResolveAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/account/explanations/{correlationId:guid}", ResolveOwnAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/explanations/{correlationId}", ResolveAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied)
+                .Binding<AuditRecordId>("correlationId"))
+            .Produces<ExplanationView>();
+        _ = SessionRequired.On(endpoints.MapGet("/account/explanations/{correlationId}", ResolveOwnAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied)
+                .Binding<AuditRecordId>("correlationId"))
+            .Produces<ExplanationView>();
 
         return endpoints;
     }
@@ -38,7 +48,7 @@ internal static class ExplanationEndpoints
     private static async Task<IResult> ResolveAsync(
         IAccessGate gate,
         RequestSession browser,
-        Guid correlationId,
+        AuditRecordId correlationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -47,8 +57,8 @@ internal static class ExplanationEndpoints
         return Answers.Of(
             await gate
                 .ResolveAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new AuditRecordId(correlationId),
+                    browser.Asking,
+                    correlationId,
                     cancellationToken)
                 .ConfigureAwait(false),
             Explained);
@@ -57,7 +67,7 @@ internal static class ExplanationEndpoints
     private static async Task<IResult> ResolveOwnAsync(
         IAccessGate gate,
         RequestSession browser,
-        Guid correlationId,
+        AuditRecordId correlationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -66,8 +76,8 @@ internal static class ExplanationEndpoints
         return Answers.Of(
             await gate
                 .ResolveOwnAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new AuditRecordId(correlationId),
+                    browser.Asking,
+                    correlationId,
                     cancellationToken)
                 .ConfigureAwait(false),
             Explained);

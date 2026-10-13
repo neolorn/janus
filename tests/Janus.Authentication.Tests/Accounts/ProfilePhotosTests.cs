@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Tests.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -54,43 +55,51 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ATTR-002 AC1: availability is the organization's, read from its key and
-    /// from nothing about the account, so an account in no organization shows no photo
-    /// and is refused one.
+    /// IDN-ATTR-002 AC1: availability is the policy field photos, read from the policy
+    /// in force and from nothing about the account, so an account in no organization
+    /// shows a photo exactly when the system policy does.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ATTR_002_AC1_AnAccountInNoOrganizationShowsNoPhotoAsync()
+    public async Task IDN_ATTR_002_AC1_AnAccountInNoOrganizationShowsAPhotoExactlyWhenTheSystemPolicyDoesAsync()
     {
         Result refused = await Photos.SetAsync(Asking, Bytes(Upload), Cancellation);
 
         Assert.Equal(ErrorCodes.PhotoNotEnabled, Failure(refused).Code);
         Assert.True((await ShownAsync()).IsEmpty);
         Assert.Empty(_audit.Recorded);
-    }
 
-    /// <summary>
-    /// IDN-ATTR-002 AC2: an organization is given photos by writing its key, so the
-    /// same code that refused the account a moment ago accepts its upload.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task IDN_ATTR_002_AC2_AnOrganizationIsGivenPhotosByItsKeyAloneAsync()
-    {
-        _memberships.Place(_person, _organization);
-
-        Assert.Equal(
-            ErrorCodes.PhotoNotEnabled,
-            Failure(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)).Code);
-
-        Enable(_organization);
+        ShowPhotos();
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
         Assert.Equal(ImageCodecInMemory.Reencoded(Upload).ToArray(), (await ShownAsync()).ToArray());
     }
 
     /// <summary>
-    /// IDN-ATTR-002: an account of several organizations shows a photo only where
+    /// IDN-ATTR-002 AC2: an organization's photos are its policy's to state, so the
+    /// same code that refused the account under a policy withholding them accepts its
+    /// upload once the policy inherits the system's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC2_AnOrganizationIsGivenPhotosByItsPolicyAloneAsync()
+    {
+        _memberships.Place(_person, _organization);
+        ShowPhotos();
+        Withhold(_organization, photos: false);
+
+        Assert.Equal(
+            ErrorCodes.PhotoNotEnabled,
+            Failure(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)).Code);
+
+        Withhold(_organization, photos: null);
+
+        Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
+        Assert.Equal(ImageCodecInMemory.Reencoded(Upload).ToArray(), (await ShownAsync()).ToArray());
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002 AC5: an account of several organizations shows a photo only where
     /// every one of them shows one, which is how a principal of several resolves a
     /// policy (AUTH-PRIN-002).
     /// </summary>
@@ -102,33 +111,34 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
 
         _memberships.Place(_person, _organization);
         _memberships.Place(_person, elsewhere);
-        Enable(_organization);
+        ShowPhotos();
+        Withhold(elsewhere, photos: false);
 
         Result refused = await Photos.SetAsync(Asking, Bytes(Upload), Cancellation);
 
         Assert.Equal(ErrorCodes.PhotoNotEnabled, Failure(refused).Code);
 
-        Enable(elsewhere);
+        Withhold(elsewhere, photos: null);
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
     }
 
     /// <summary>
     /// LIB-HOST-001, IDN-ATTR-004: the library reads no image, so a deployment whose
-    /// key was turned on without a codec refuses the upload rather than storing bytes
-    /// nothing has read.
+    /// policy was turned on without a codec refuses the upload rather than storing
+    /// bytes nothing has read.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task LIB_HOST_001_AnUploadIsRefusedWhereTheDeploymentDeclaredNoCodecAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
 
         var photos = new ProfilePhotos(
             _directory,
             new SettingsRestrictionInMemory(),
-            _memberships,
+            Policies,
             _configuration,
             _audit,
             _work,
@@ -150,7 +160,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_ATTR_004_AC1_AnUploadTheCodecDoesNotRecogniseIsRefusedAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
         _codec.Refuses();
 
         Result refused = await Photos.SetAsync(Asking, Bytes(Upload), Cancellation);
@@ -168,7 +178,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_ATTR_004_AC2_WhatIsStoredIsWhatTheCodecAnsweredAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
 
@@ -187,7 +197,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_ATTR_004_TheCodecIsHandedTheConfiguredLongestSideAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
         _configuration.Set(Settings.PhotoMaxDimension, 256);
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
@@ -204,7 +214,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_ATTR_004_AnUploadOverTheConfiguredLengthIsRefusedUnreadAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
         _configuration.Set(Settings.PhotoMaxBytes, Upload.Length - 1);
 
         Result refused = await Photos.SetAsync(Asking, Bytes(Upload), Cancellation);
@@ -223,13 +233,15 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_ATTR_003_AnAccountGivesUpTheImageItShowsAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
         Assert.True(Succeeded(await Photos.RemoveAsync(Asking, Cancellation)));
 
         Assert.True((await ShownAsync()).IsEmpty);
-        Assert.True((await Photos.ReadAsync(Asking, Cancellation)).Match(read => read, _ => default).IsEmpty);
+        Assert.Equal(
+            ErrorCodes.PhotoNotFound,
+            (await Photos.ReadAsync(Asking, Cancellation)).Match(_ => default, error => error.Code));
     }
 
     /// <summary>
@@ -242,13 +254,15 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_ATTR_002_AnImageIsWithheldByAPolicyAndStillGivenUpByItsAccountAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
 
-        _configuration.Set(Settings.OrganizationPhoto, _organization.ToString(), false);
+        Withhold(_organization, photos: false);
 
-        Assert.True((await Photos.ReadAsync(Asking, Cancellation)).Match(read => read, _ => default).IsEmpty);
+        Assert.Equal(
+            ErrorCodes.PhotoNotFound,
+            (await Photos.ReadAsync(Asking, Cancellation)).Match(_ => default, error => error.Code));
         Assert.False((await ShownAsync()).IsEmpty);
 
         Assert.True(Succeeded(await Photos.RemoveAsync(Asking, Cancellation)));
@@ -265,7 +279,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     public async Task IDN_AUD_001_SettingAndGivingUpAPhotoAreRecordedAsProfileChangesAsync()
     {
         _memberships.Place(_person, _organization);
-        Enable(_organization);
+        ShowPhotos();
 
         Assert.True(Succeeded(await Photos.SetAsync(Asking, Bytes(Upload), Cancellation)));
         Assert.True(Succeeded(await Photos.RemoveAsync(Asking, Cancellation)));
@@ -288,7 +302,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
     private ProfilePhotos Photos => new(
         _directory,
         new SettingsRestrictionInMemory(),
-        _memberships,
+        Policies,
         _configuration,
         _audit,
         _work,
@@ -297,8 +311,19 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
 
     private AccessContext Asking => AccessContext.Of(_person);
 
-    private void Enable(OrganizationId organization) =>
-        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+    private PolicyResolution Policies => new(_memberships, _configuration, new PolicyRaiseStoreInMemory());
+
+    // IDN-ATTR-002: the system policy shows photos, which is what an organization that
+    // states nothing inherits.
+    private void ShowPhotos() =>
+        _configuration.Set(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault with { Photos = true });
+
+    // What one organization's policy states about photos, nothing being to inherit.
+    private void Withhold(OrganizationId organization, bool? photos) =>
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { Photos = photos });
 
     // What the directory holds, which a read may withhold and a removal empties.
     private async ValueTask<ReadOnlyMemory<byte>> ShownAsync() =>

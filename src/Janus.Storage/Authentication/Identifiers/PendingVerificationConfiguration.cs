@@ -43,6 +43,10 @@ internal sealed class PendingVerificationConfiguration
                 "ck_identifier_verifications_old",
                 "is_replacement OR (NOT old_must_confirm AND old_confirmed_at IS NULL "
                     + "AND old_link IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_identifier_verifications_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(pending => pending.Identifier).HasName("pk_identifier_verifications");
@@ -58,6 +62,12 @@ internal sealed class PendingVerificationConfiguration
         builder.Property(pending => pending.Browser)
             .HasColumnName("browser")
             .HasConversion(session => session!.Value.Value, value => new SessionId(value));
+
+        // REG-IDENT-007 (D-189): the enrolment session a replace was staged from, which
+        // is the only enrolment session its code is taken from.
+        builder.Property(pending => pending.Enrolment)
+            .HasColumnName("enrolment")
+            .HasConversion(session => session!.Value.Value, value => new EnrolmentSessionId(value));
 
         builder.Property(pending => pending.IsReplacement).HasColumnName("is_replacement");
         builder.Property(pending => pending.OldMustConfirm).HasColumnName("old_must_confirm");

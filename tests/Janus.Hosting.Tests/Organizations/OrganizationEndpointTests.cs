@@ -114,6 +114,108 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ORG-003 AC8: the request ends the session of every current member as it
+    /// suspends the organization, so a member's own browser is refused
+    /// at its next request; the member then signs in again with the password and holds a
+    /// session. What the organization's grants confer meanwhile is the gate's to say
+    /// (AUTHZ-CACHE-001).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC8_TheRequestEndsEveryMemberSessionAndTheMemberSignsInAgainAsync()
+    {
+        // The new-device check would hold the sign-in for a code (AUTH-FACT-016), which
+        // is not what this test is about.
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        (Browser member, SubjectId subject) = await AuthorisedAsync(Administration);
+        Session colleague = await SessionOfAsync(new SubjectId(Guid.NewGuid()));
+
+        _deployment.Memberships.Place(subject, Branch);
+        _deployment.Memberships.Place(colleague.Subject, Branch);
+
+        Answer requested = await RequestedAsync(member, Branch);
+        Answer refused = await member.SendAsync("GET", "/auth/session");
+        Browser again = await SignedInAgainAsync();
+        Answer read = await again.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status204NoContent, requested.Status);
+        Assert.Equal(_deployment.Clock.GetUtcNow(), (await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(_deployment.Clock.GetUtcNow(), colleague.EndedAt);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC9: a cancellation restores the organization and no session the
+    /// request ended, so the browser the request signed out is still refused, and the
+    /// session of another member stays ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC9_ACancellationRestoresNoEndedSessionAsync()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        (Browser member, SubjectId subject) = await AuthorisedAsync(Administration);
+        Session colleague = await SessionOfAsync(new SubjectId(Guid.NewGuid()));
+
+        _deployment.Memberships.Place(subject, Branch);
+        _deployment.Memberships.Place(colleague.Subject, Branch);
+
+        _ = await RequestedAsync(member, Branch);
+        DateTimeOffset ended = _deployment.Clock.GetUtcNow();
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
+
+        Browser again = await SignedInAgainAsync();
+        Answer cancelled = await CancelledAsync(again, Branch);
+        Answer refused = await member.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+        Assert.Null((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
+        Assert.Equal(ended, colleague.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC10: a cancellation at the window's end, after it, and after the
+    /// erasure has run is refused with the one code, and changes and records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC10_ACancellationAtOrAfterTheWindowsEndIsRefusedErasedOrNotAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        OrganizationId overdue = new(Guid.NewGuid());
+        OrganizationId erased = new(Guid.NewGuid());
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        _deployment.Organizations.Seed(Branch, deletionRequestedAt: now - TimeSpan.FromDays(30));
+        _deployment.Organizations.Seed(overdue, deletionRequestedAt: now - TimeSpan.FromDays(45));
+        _deployment.Organizations.Seed(
+            erased,
+            deletionRequestedAt: now - TimeSpan.FromDays(31),
+            erasedAt: now - TimeSpan.FromDays(1));
+
+        Answer atTheEnd = await CancelledAsync(administrator, Branch);
+        Answer afterIt = await CancelledAsync(administrator, overdue);
+        Answer afterTheErasure = await CancelledAsync(administrator, erased);
+
+        Assert.All(
+            [atTheEnd, afterIt, afterTheErasure],
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+                Assert.Equal(ErrorCodes.DeletionWindowElapsed.ToString(), answer.Text("code"));
+            });
+        Assert.NotNull((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.NotNull((await StandingAsync(overdue)).DeletionRequestedAt);
+        Assert.NotNull((await StandingAsync(erased)).ErasedAt);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
     /// IDN-ORG-003: a request for an organization whose deletion is already requested
     /// changes nothing and records nothing.
     /// </summary>
@@ -247,8 +349,7 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-ORG-002 and API-CONV-002: a change names a name and a reason of 1 to 1024
-    /// characters and an organization the deployment holds; anything else is a
-    /// malformed request naming the field.
+    /// characters; anything else is a malformed request naming the field.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -271,27 +372,46 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             "/admin/organizations",
             ("name", "Southern branch"));
         Answer silent = await RequestedAsync(administrator, Branch, reason: " ");
-        Answer unheld = await RequestedAsync(administrator, new OrganizationId(Guid.NewGuid()));
-        Answer unknown = await CancelledAsync(administrator, new OrganizationId(Guid.NewGuid()));
 
         Assert.Equal("name", Member(unnamed));
         Assert.Equal("name", Member(overlong));
         Assert.Equal("reason", Member(unreasoned));
         Assert.Equal("reason", Member(silent));
-        Assert.Equal("id", Member(unheld));
-        Assert.Equal("id", Member(unknown));
         Assert.Empty(_deployment.OrganizationChanges.Changes);
     }
 
     /// <summary>
-    /// IDN-ACCT-005 AC3 and IDN-ACCT-004 AC3: an organization name is judged on its
+    /// IDN-ORG-003 AC13 and 09 section 8a: a deletion request or cancellation whose path
+    /// names no organization the deployment holds is <c>404</c>
+    /// <c>identity.organization.notfound</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC13_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        var unheld = new OrganizationId(Guid.NewGuid());
+
+        Answer requested = await RequestedAsync(administrator, unheld);
+        Answer cancelled = await CancelledAsync(administrator, unheld);
+
+        Assert.Equal(StatusCodes.Status404NotFound, requested.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), requested.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, cancelled.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), cancelled.Text("code"));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC5 and IDN-ACCT-004 AC3: an organization name is judged on its
     /// comparison key, so a word that mixes scripts once its circled letters are
     /// normalized is refused by the named code naming the field, as a plainly mixed one
     /// is, and nothing is created; whole words of separate scripts are accepted.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ACCT_005_AC3_AnOrganizationNameMixingScriptsInAWordIsRefusedByItsCodeAsync()
+    public async Task IDN_ACCT_005_AC5_AnOrganizationNameMixingScriptsInAWordIsRefusedByItsCodeAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Administration);
 
@@ -379,11 +499,77 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.OrganizationChanges.Changes);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a name or a reason past 1024 characters
+    /// after trimming is malformed before the service is reached, so a caller without
+    /// the permission is answered for the body, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await SignedInAsync();
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer named = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", overlong),
+            ("reason", "Opening a branch."));
+        Answer created = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Southern branch"),
+            ("reason", overlong));
+        Answer requested = await RequestedAsync(caller, Branch, reason: overlong);
+        Answer cancelled = await caller.SendAsync(
+            "POST",
+            "/admin/organizations/" + Branch + "/delete/cancel",
+            ("reason", overlong));
+
+        Assert.Equal("name", Member(named));
+        Assert.Equal("reason", Member(created));
+        Assert.Equal("reason", Member(requested));
+        Assert.Equal("reason", Member(cancelled));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
 
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the creating of an organization, a
+    /// deletion's request and its cancelling, and nothing of any is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachLifecycleChangeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        OrganizationId leaving = new(Guid.NewGuid());
+        DateTimeOffset requested = _deployment.Clock.GetUtcNow() - TimeSpan.FromDays(2);
+
+        _deployment.Organizations.Seed(leaving, deletionRequestedAt: requested);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "POST",
+                "/admin/organizations",
+                ("name", "Northern branch"),
+                ("reason", "Opening a branch.")));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => RequestedAsync(administrator, Branch));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => CancelledAsync(administrator, leaving));
+
+        Assert.Null((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(requested, (await StandingAsync(leaving)).DeletionRequestedAt);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     private static Task<Answer> RequestedAsync(
@@ -412,7 +598,7 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             _deployment.Clock.GetUtcNow(),
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         await _deployment.Sessions.AddAsync(
             session,
@@ -421,6 +607,27 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         return session;
+    }
+
+    // The person the flow registered, signed in afresh with their password in a browser
+    // that holds nothing of the earlier session.
+    private async Task<Browser> SignedInAgainAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer signedIn = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Equal("complete", signedIn.Text("status"));
+
+        return browser;
     }
 
     // The policy key the deployment holds for the organization, where one was written.

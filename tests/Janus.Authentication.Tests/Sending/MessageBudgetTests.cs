@@ -56,6 +56,21 @@ public sealed class MessageBudgetTests
     }
 
     /// <summary>
+    /// INT-SMS-003: a text that carries a link holds two segments of its alphabet, three
+    /// hundred and six units in the default one and a hundred and thirty-four outside it.
+    /// </summary>
+    [Fact]
+    public void INT_SMS_003_ATextCarryingALinkHoldsTwoSegments()
+    {
+        Assert.Equal(306, MessageBudget.Of("follow https://a.example.test/link#x.y", linked: true));
+        Assert.False(MessageBudget.Exceeds(new string('a', 306), linked: true));
+        Assert.True(MessageBudget.Exceeds(new string('a', 307), linked: true));
+        Assert.Equal(134, MessageBudget.Of("م", linked: true));
+        Assert.False(MessageBudget.Exceeds(new string('م', 134), linked: true));
+        Assert.True(MessageBudget.Exceeds(new string('م', 135), linked: true));
+    }
+
+    /// <summary>
     /// One character outside the default alphabet moves the whole message to the
     /// narrow budget, which is the doubling the chapter warns of (AUTH-ABUSE-005).
     /// </summary>

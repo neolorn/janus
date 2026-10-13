@@ -26,12 +26,13 @@ public interface IResources
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>api.request.malformed</c> naming <c>resourceType</c>
-    /// where the model declares no such type, <c>resourceId</c> where the record is
-    /// registered already, <c>containedIn</c> where the container is not of the type
-    /// the declaration contains the record in, is absent where the declaration requires
-    /// one, is not registered, or belongs to another organization, or <c>subject</c>
-    /// where the type is sensitive and the record names no subject holding an account
-    /// that is neither being deleted nor deleted (IDN-LIFE-002a).
+    /// where the model declares no such type; <c>api.request.invalid</c> naming
+    /// <c>resourceId</c> where the record is registered already, <c>containedIn</c>
+    /// where the container is not of the type the declaration contains the record in,
+    /// is absent where the declaration requires one, is not registered, or belongs to
+    /// another organization, or <c>subject</c> where the type is sensitive and the
+    /// record names no subject holding an account that is neither being deleted nor
+    /// deleted (IDN-LIFE-002a).
     /// </returns>
     ValueTask<Result> RegisterAsync(
         ResourceRegistration registration,
@@ -56,9 +57,10 @@ public interface IResources
     /// <param name="containedIn">Its new container, or nothing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>resourceId</c>
-    /// where the record is not registered, or <c>containedIn</c> where the container
-    /// could not hold it at registration.
+    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>resourceType</c>
+    /// where the model declares no such type; <c>api.request.invalid</c> naming
+    /// <c>resourceId</c> where the record is not registered, or <c>containedIn</c> where
+    /// the container could not hold it at registration.
     /// </returns>
     ValueTask<Result> MoveAsync(
         ResourceReference resource,

@@ -45,6 +45,7 @@ internal sealed class PhoneSignalAudit(IAuditStore records, TimeProvider time) :
                     // whose it is, so there is not always an account to name.
                     subject ?? default,
                     default,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {

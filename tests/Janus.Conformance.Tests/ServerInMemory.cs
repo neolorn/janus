@@ -21,24 +21,17 @@ namespace Janus.Conformance.Tests;
 /// </summary>
 internal sealed class ServerInMemory : IServer
 {
-    private readonly Handler _handler;
-
     private Func<IFeatureCollection, Task>? _serve;
-
-    /// <summary>
-    /// Stands the server up, taking nothing until the host starts it.
-    /// </summary>
-    public ServerInMemory() => _handler = new Handler(this);
 
     /// <inheritdoc/>
     public IFeatureCollection Features { get; } = new FeatureCollection();
 
     /// <summary>
-    /// A client whose requests this server takes.
+    /// A handler whose requests this server takes, for a named client of the host's
+    /// factory, which disposes it when it is done with it.
     /// </summary>
-    /// <param name="origin">The origin the client's relative addresses resolve against.</param>
-    /// <returns>The client.</returns>
-    public HttpClient Client(Uri origin) => new(_handler, disposeHandler: false) { BaseAddress = origin };
+    /// <returns>The handler.</returns>
+    public HttpMessageHandler Channel() => new Handler(this);
 
     /// <inheritdoc/>
     public Task StartAsync<TContext>(IHttpApplication<TContext> application, CancellationToken cancellationToken)
@@ -76,11 +69,7 @@ internal sealed class ServerInMemory : IServer
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        _serve = null;
-        _handler.Dispose();
-    }
+    public void Dispose() => _serve = null;
 
     private Func<IFeatureCollection, Task> Serving() =>
         _serve ?? throw new InvalidOperationException("The server is not running.");

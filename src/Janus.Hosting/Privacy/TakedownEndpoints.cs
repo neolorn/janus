@@ -31,11 +31,30 @@ internal static class TakedownEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject:guid}/takedown");
+        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject}/takedown");
 
-        _ = SessionRequired.On(group.MapPost("/", ExecuteAsync));
-        _ = SessionRequired.On(group.MapGet("/", ReadAsync));
-        _ = SessionRequired.On(group.MapPost("/reverse", ReverseAsync));
+        _ = SessionRequired.On(group.MapPost("/", ExecuteAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.AccountNotFound, ErrorCodes.TakedownActive,
+                    ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"))
+            .Produces<ExecutedTakedownView>(StatusCodes.Status202Accepted);
+        _ = SessionRequired.On(group.MapGet("/", ReadAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.TakedownNotFound, ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<TakedownProgressView>();
+        _ = SessionRequired.On(group.MapPost("/reverse", ReverseAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.TakedownNotFound, ErrorCodes.AccountNotFound,
+                    ErrorCodes.TakedownWindowElapsed)
+                .Binding<SubjectId>("subject"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -44,7 +63,7 @@ internal static class TakedownEndpoints
         TakedownBody body,
         ITakedowns takedowns,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -56,7 +75,9 @@ internal static class TakedownEndpoints
             return Answers.Malformed("trigger");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming,
+        // refused here before the service is asked.
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -64,9 +85,9 @@ internal static class TakedownEndpoints
         return Answers.Of(
             await takedowns
                 .ExecuteAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     trigger,
                     reason,
                     cancellationToken)
@@ -81,7 +102,7 @@ internal static class TakedownEndpoints
     private static async Task<IResult> ReadAsync(
         ITakedowns takedowns,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(takedowns);
@@ -90,8 +111,8 @@ internal static class TakedownEndpoints
         return Answers.Of(
             await takedowns
                 .ReadAsync(
-                    AccessContext.Of(browser.Required.Subject),
-                    new SubjectId(subject),
+                    browser.Asking,
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             progress => TypedResults.Json(
@@ -105,14 +126,16 @@ internal static class TakedownEndpoints
         TakedownReversalBody body,
         ITakedowns takedowns,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(takedowns);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming,
+        // refused here before the service is asked.
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -120,9 +143,9 @@ internal static class TakedownEndpoints
         return Answers.Of(
             await takedowns
                 .ReverseAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),

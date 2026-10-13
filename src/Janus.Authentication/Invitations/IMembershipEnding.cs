@@ -16,6 +16,21 @@ namespace Janus.Authentication.Invitations;
 internal interface IMembershipEnding
 {
     /// <summary>
+    /// The account's current membership of the organization, read without ending it.
+    /// </summary>
+    /// <param name="subject">Whose membership.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The membership, or nothing where the account holds no current membership of the
+    /// organization.
+    /// </returns>
+    ValueTask<MembershipId?> FindAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Ends the account's current membership of the organization. The account and the
     /// organization persist, and the record stays with its end.
     /// </summary>

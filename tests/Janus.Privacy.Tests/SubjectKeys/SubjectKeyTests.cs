@@ -21,7 +21,7 @@ public sealed class SubjectKeyTests
     [Fact]
     public void Wrapped_ANewKey_CarriesTheSchemeAndTheVersion()
     {
-        var key = SubjectKey.Wrapped(Ahmed, 1, new byte[40]);
+        var key = SubjectKey.Wrapped(SubjectKeyId.Of(Ahmed), 1, new byte[40]);
 
         Assert.Equal(PersonalDataFormat.Marker, key.FormatMarker);
         Assert.Equal(1, key.KeyVersion);
@@ -34,7 +34,7 @@ public sealed class SubjectKeyTests
     /// </summary>
     [Fact]
     public void Wrapped_AValueOfAnotherLength_Throws() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => SubjectKey.Wrapped(Ahmed, 1, new byte[32]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SubjectKey.Wrapped(SubjectKeyId.Of(Ahmed), 1, new byte[32]));
 
     /// <summary>
     /// PRIV-RIGHT-005a AC9: erasure overwrites the wrapped key with 32 zero bytes under
@@ -43,14 +43,14 @@ public sealed class SubjectKeyTests
     [Fact]
     public void PRIV_RIGHT_005a_AC9_ErasureOverwritesTheWrappedKey()
     {
-        var key = SubjectKey.Wrapped(Ahmed, 1, new byte[40]);
+        var key = SubjectKey.Wrapped(SubjectKeyId.Of(Ahmed), 1, new byte[40]);
 
         key.Erase();
 
         Assert.True(key.IsErased);
         Assert.Equal(PersonalDataFormat.ErasedMarker, key.FormatMarker);
         Assert.Equal(new byte[32], key.WrappedKey.ToArray());
-        Assert.Equal(Ahmed, key.Subject);
+        Assert.Equal(SubjectKeyId.Of(Ahmed), key.Id);
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ public sealed class SubjectKeyTests
     [Fact]
     public void ReWrap_ALaterVersion_MovesTheKeyToIt()
     {
-        var key = SubjectKey.Wrapped(Ahmed, 1, new byte[40]);
+        var key = SubjectKey.Wrapped(SubjectKeyId.Of(Ahmed), 1, new byte[40]);
         byte[] reWrapped = [.. new byte[39], 0x01];
 
         key.ReWrap(2, reWrapped);
@@ -76,7 +76,7 @@ public sealed class SubjectKeyTests
     [Fact]
     public void ReWrap_TheVersionAlreadyHeld_Throws()
     {
-        var key = SubjectKey.Wrapped(Ahmed, 2, new byte[40]);
+        var key = SubjectKey.Wrapped(SubjectKeyId.Of(Ahmed), 2, new byte[40]);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => key.ReWrap(2, new byte[40]));
     }
@@ -87,7 +87,7 @@ public sealed class SubjectKeyTests
     [Fact]
     public void ReWrap_AnErasedKey_Throws()
     {
-        var key = SubjectKey.Wrapped(Ahmed, 1, new byte[40]);
+        var key = SubjectKey.Wrapped(SubjectKeyId.Of(Ahmed), 1, new byte[40]);
         key.Erase();
 
         Assert.Throws<InvalidOperationException>(() => key.ReWrap(2, new byte[40]));

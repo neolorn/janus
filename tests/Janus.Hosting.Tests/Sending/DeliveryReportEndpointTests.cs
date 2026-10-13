@@ -1,9 +1,16 @@
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Callbacks;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Sending;
@@ -28,7 +35,7 @@ public sealed class DeliveryReportEndpointTests
         await using Deployment deployment = Prepared();
 
         string reference = await SentAsync(deployment);
-        var destination = new RestrictionKey("sms.destination", Flow.Number);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
 
         Assert.Single(deployment.SendLedger.Sends(destination));
 
@@ -38,6 +45,67 @@ public sealed class DeliveryReportEndpointTests
         Assert.Equal(StatusCodes.Status200OK, reported.Status);
         Assert.Empty(reported.SetCookie);
         Assert.Empty(deployment.SendLedger.Sends(destination));
+    }
+
+    /// <summary>
+    /// Chapter 09 section 10 AC2, INT-SMS-005 AC3 and AUTH-ABUSE-004 AC20: a report that a
+    /// text was delivered is taken and answered 200. For a registration's code, whose
+    /// purpose is not <c>secondfactor</c>, it advances and releases nothing; for a send of
+    /// purpose <c>secondfactor</c> it releases the send's one count from
+    /// <c>sms.resend</c> and nothing else.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_005_AC3_ADeliveredReportReleasesOnlyASecondFactorSendsResendCountAsync()
+    {
+        await using Deployment deployment = Prepared();
+
+        string reference = await SentAsync(deployment);
+        var machine = new Machine(deployment);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
+        var resend = new RestrictionKey("sms.resend", RestrictionKeyKind.Destination, Flow.Number);
+
+        Answer verification = await machine
+            .CallAsync("/callbacks/sms/dlr?reference=" + reference + "&status=delivered");
+
+        Assert.Equal(StatusCodes.Status200OK, verification.Status);
+        Assert.Single(deployment.SendLedger.Sends(destination));
+        Assert.Single(deployment.SendLedger.Sends(resend));
+
+        const string other = "+201001234999";
+        string second;
+
+        await using (AsyncServiceScope scope = deployment.Scope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            _ = await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(PhoneNumber.TryParse(other, out PhoneNumber number));
+
+            second = (await scope.ServiceProvider.GetRequiredService<IGovernedSend>().UndertakeAsync(
+                    new OutboundMessage(
+                        SendDestination.Of(number),
+                        MessageKind.SecondStepCode,
+                        RestrictionPurpose.SecondFactor,
+                        "203.0.113.7",
+                        "en")
+                    {
+                        Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "123456" },
+                    },
+                    TestContext.Current.CancellationToken))
+                .Match(sent => sent.Value, error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
+
+            _ = await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Answer secondFactor = await machine
+            .CallAsync("/callbacks/sms/dlr?reference=" + second + "&status=delivered");
+
+        Assert.Equal(StatusCodes.Status200OK, secondFactor.Status);
+        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, other)));
+        Assert.Empty(deployment.SendLedger.Sends(new RestrictionKey("sms.resend", RestrictionKeyKind.Destination, other)));
+        Assert.Single(deployment.SendLedger.Sends(resend));
     }
 
     /// <summary>
@@ -53,24 +121,27 @@ public sealed class DeliveryReportEndpointTests
 
         _ = await SentAsync(deployment);
         var machine = new Machine(deployment);
-        var destination = new RestrictionKey("sms.destination", Flow.Number);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
 
         Answer forged = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed");
         Answer unreadable = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA");
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, forged.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Status);
         Assert.Equal(ErrorCodes.CallbackRejected.ToString(), forged.Text("code"));
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unreadable.Status);
+        Assert.Null(forged.Header(HeaderNames.RetryAfter));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
+        Assert.Null(unreadable.Header(HeaderNames.RetryAfter));
         Assert.Single(deployment.SendLedger.Sends(destination));
     }
 
     /// <summary>
-    /// BFF-MACH-001 AC2: the delivery report refuses a request carrying a browser's
-    /// session cookie, as every machine route does.
+    /// BFF-MACH-001 AC2, chapter 09 section 10: a delivery report carrying a browser's
+    /// session cookie is refused as every rejected callback is, 422 with no interval,
+    /// is counted as a rejection, and releases nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRefusedAsync()
+    public async Task BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRejectedAndCountedAsync()
     {
         await using Deployment deployment = Prepared();
 
@@ -80,8 +151,42 @@ public sealed class DeliveryReportEndpointTests
             "/callbacks/sms/dlr?reference=" + reference + "&status=failed",
             BrowserCookies.Session + "=stale");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", Flow.Number)));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), refused.Text("code"));
+        Assert.Null(refused.Header(HeaderNames.RetryAfter));
+        Assert.Single(Counted(deployment), callback => callback.Rejected);
+        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number)));
+    }
+
+    /// <summary>
+    /// INT-GEN-003 AC4 and BFF-MACH-001 AC2: a delivery report carrying a session
+    /// cookie from a source past <c>integration.callback.ratelimit</c> is answered 429
+    /// with the interval, as any report past it is, and is not counted as a rejection.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_GEN_003_AC4_ADeliveryReportCarryingASessionCookiePastTheRateLimitIsAnswered429Async()
+    {
+        await using Deployment deployment = Prepared();
+
+        deployment.Configuration.Set(Settings.IntegrationCallbackRateLimit, 0);
+
+        Answer flooded = await new Machine(deployment).CallCarryingAsync(
+            "/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed",
+            BrowserCookies.Session + "=stale");
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, flooded.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), flooded.Text("code"));
+        Assert.NotNull(flooded.Header(HeaderNames.RetryAfter));
+        Assert.DoesNotContain(Counted(deployment), callback => callback.Rejected);
+    }
+
+    // Every callback the deployment counted, in order.
+    private static List<(string Source, DateTimeOffset At, bool Rejected)> Counted(Deployment deployment)
+    {
+        using AsyncServiceScope scope = deployment.Scope();
+
+        return ((CallbackLedgerInMemory)scope.ServiceProvider.GetRequiredService<ICallbackLedger>()).Counted;
     }
 
     // A deployment whose messages carry the code, as the shipped templates do.

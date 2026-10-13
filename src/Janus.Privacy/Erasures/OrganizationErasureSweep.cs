@@ -20,11 +20,12 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction each organization is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-ORG-003, IDN-ORG-005, IDN-MEM-001 and INF-BG-002. Nothing here waits
-/// on a human: the window is the whole of the decision, and an organization that
-/// reaches its end without a cancellation is erased. One organization per transaction,
-/// so a deployment that falls over mid-pass has erased whole organizations and begun
-/// none.
+/// Implements IDN-ORG-003, IDN-ORG-005, IDN-MEM-001, INF-BG-002 and CONV-DESIGN-002.
+/// Nothing here waits on a human: the window is the whole of the decision, and an
+/// organization that reaches its end without a cancellation is erased. One organization
+/// per transaction, carrying the erasure, its audit record and its events, so a
+/// deployment that falls over mid-pass has erased whole organizations and begun none. A
+/// window that cannot be read is a fault, and the pass erases nothing (X2 of D-166).
 /// </remarks>
 internal sealed class OrganizationErasureSweep(
     IOrganizationStates organizations,
@@ -54,7 +55,7 @@ internal sealed class OrganizationErasureSweep(
 
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.OrganizationDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.OrganizationDeletionGrace.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         IReadOnlyList<PendingOrganizationDeletion> elapsed = await organizations
             .DeletingSinceAsync(now - grace, cancellationToken)
@@ -64,15 +65,15 @@ internal sealed class OrganizationErasureSweep(
 
         foreach (PendingOrganizationDeletion deletion in elapsed)
         {
-            Error? refusal = await ErasedAsync(principal, deletion, grace, now, cancellationToken)
+            Result<int> done = await ErasedAsync(principal, deletion, grace, now, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (refusal is not null)
+            if (done.Match<Error?>(_ => null, error => error) is Error refusal)
             {
                 return Result.Failure<int>(refusal);
             }
 
-            erased++;
+            erased += done.Match(count => count, _ => 0);
         }
 
         return Result.Success(erased);
@@ -87,32 +88,44 @@ internal sealed class OrganizationErasureSweep(
                 "The pass runs as a system principal that may sweep what has expired.",
                 nameof(context));
 
-    private async ValueTask<Error?> ErasedAsync(
+    private async ValueTask<Result<int>> ErasedAsync(
         SystemPrincipal principal,
         PendingOrganizationDeletion deletion,
         TimeSpan grace,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
 
-        IReadOnlyList<EndedMembership> ended = await organizations
-            .EraseAsync(deletion.Organization, now, grace, cancellationToken)
-            .ConfigureAwait(false);
+        // D-166 X3: a cancellation committed since the pass read its list is the one
+        // the organization follows, and the erasure leaves it be.
+        if (await organizations.EraseAsync(deletion.Organization, now, grace, cancellationToken).ConfigureAwait(false)
+            is not IReadOnlyList<EndedMembership> ended)
+        {
+            // CONV-DESIGN-003: the erasure wrote nothing.
+            await work.RollbackAsync().ConfigureAwait(false);
 
+            return Result.Success(0);
+        }
+
+        // IDN-ORG-005: the record is filed under the organization it erased.
         await audit
             .RecordedAsync(
                 AuditActions.OrganizationErased,
                 principal,
                 subject: null,
+                deletion.Organization,
                 now,
                 Named(deletion, ended.Count),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        // The erasure has committed, so the announcements are the outstanding work and
-        // a consumer that refuses one stops the pass rather than the erasure.
+        // X1 of D-166: each event is a row written in the erasure's transaction, so a
+        // row that cannot be written fails the erasure and nothing commits.
         foreach (EndedMembership membership in ended)
         {
             if ((await events
@@ -130,11 +143,13 @@ internal sealed class OrganizationErasureSweep(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, failure => failure) is Error refused)
             {
-                return refused;
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<int>(refused);
             }
         }
 
-        return (await events
+        if ((await events
                 .PublishAsync(
                     new OrganizationErased(
                         now,
@@ -143,7 +158,15 @@ internal sealed class OrganizationErasureSweep(
                         ended.Count),
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(() => (Error?)null, failure => failure);
+            .Match(() => (Error?)null, failure => failure) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<int>(unannounced);
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(1), Result.Failure<int>);
     }
 
     private static string Key(OrganizationId organization, DateTimeOffset at) =>

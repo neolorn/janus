@@ -17,10 +17,20 @@ namespace Janus.Hosting.Credentials;
 /// the keys alike; a document that names either wrongly verifies nothing. An endpoint
 /// that is not HTTPS is read as not named, and a list of response modes or proof-key
 /// methods the document leaves out is read as the discovery standard's default, which
-/// holds neither a posted form nor S256.
+/// holds neither a posted form nor S256. A reading that fails leaves the part it was
+/// at, the discovery document or the keys, for what answers the failure
+/// (IDN-LIFE-012 AC6).
 /// </remarks>
 internal sealed class ProviderMetadataReading : IConfigurationRetriever<ProviderMetadata>
 {
+    private int _part;
+
+    /// <summary>
+    /// The part the last reading was at: where it failed, the part of the provider
+    /// that could not be reached or read.
+    /// </summary>
+    public ProviderPart Part => (ProviderPart)Volatile.Read(ref _part);
+
     /// <inheritdoc/>
     public async Task<ProviderMetadata> GetConfigurationAsync(
         string address,
@@ -29,11 +39,16 @@ internal sealed class ProviderMetadataReading : IConfigurationRetriever<Provider
     {
         ArgumentNullException.ThrowIfNull(retriever);
 
+        Volatile.Write(ref _part, (int)ProviderPart.Discovery);
+
         using var document = JsonDocument.Parse(
             await retriever.GetDocumentAsync(address, cancel).ConfigureAwait(false));
 
         string issuer = Named(document.RootElement, "issuer");
         string keys = Named(document.RootElement, "jwks_uri");
+
+        Volatile.Write(ref _part, (int)ProviderPart.Keys);
+
         var set = new JsonWebKeySet(await retriever.GetDocumentAsync(keys, cancel).ConfigureAwait(false));
 
         return new ProviderMetadata(

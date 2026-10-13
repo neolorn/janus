@@ -5,7 +5,8 @@ namespace Janus.Core;
 /// branches on. The library never reads the key: a jurisdiction with a different list
 /// declares it and the library changes not at all.
 /// </summary>
-/// <param name="Key">The basis as the declaration and the generated records name it.</param>
+/// <param name="Key">The basis as the declaration names it, and a purpose refers to it.</param>
+/// <param name="Label">The basis as the generated records name it.</param>
 /// <param name="IsConsent">Whether processing on it rests on consent.</param>
 /// <param name="RequiresWrittenConsentForSensitive">
 /// Whether sensitive data on this basis needs written consent.
@@ -15,6 +16,7 @@ namespace Janus.Core;
 /// <remarks>Implements PRIV-BASIS-001, chapter 10 section 5.7, AUTHZ-MODEL-003.</remarks>
 public sealed record LawfulBasisDeclaration(
     string Key,
+    string Label,
     bool IsConsent,
     bool RequiresWrittenConsentForSensitive,
     bool RequiresAssessment,

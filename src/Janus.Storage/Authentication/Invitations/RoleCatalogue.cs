@@ -37,4 +37,22 @@ internal sealed class RoleCatalogue(StoreContext context) : IRoleCatalogue
 
         return new DefinedRole(name, permissions);
     }
+
+    /// <inheritdoc/>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<DefinedRole?> FindForUpdateAsync(RoleName name, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new System.InvalidOperationException("A role's row is held only inside the operation's transaction.");
+        }
+
+        return (await context.Roles
+                .FromSql($"SELECT * FROM identity.roles WHERE name = {name.ToString()} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Count is 0
+            ? null
+            : await FindAsync(name, cancellationToken).ConfigureAwait(false);
+    }
 }

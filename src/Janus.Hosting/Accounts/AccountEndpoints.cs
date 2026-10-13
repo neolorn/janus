@@ -31,10 +31,6 @@ internal static class AccountEndpoints
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
 
-    // 09 section 6: an account that shows no photo, and one whose policy shows none,
-    // answer alike and say nothing of which of the two they are.
-    private static readonly IResult NoPhoto = TypedResults.NotFound();
-
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
     private const string StoredPhoto = "image/jpeg";
 
@@ -50,37 +46,145 @@ internal static class AccountEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/account");
 
-        _ = SessionRequired.On(group.MapGet("/", ReadAsync));
-        _ = SessionRequired.On(group.MapPut("/profile", EditProfileAsync));
-        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync));
-        _ = SessionRequired.On(group.MapPut("/photo", SetPhotoAsync));
-        _ = SessionRequired.On(group.MapDelete("/photo", RemovePhotoAsync));
-        _ = SessionRequired.On(group.MapGet("/preferences", ReadPreferencesAsync));
-        _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync));
+        _ = SessionRequired.On(group.MapGet("/", ReadAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<AccountView>();
+        _ = SessionRequired.On(group.MapPut("/profile", EditProfileAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.UsernameTaken, ErrorCodes.UsernameReserved,
+                    ErrorCodes.UsernameCoolingOff, ErrorCodes.IdentifierMixedScript,
+                    ErrorCodes.ProfileInvalid, ErrorCodes.ProfileNotAccepted))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PhotoNotFound))
+            .Produces<byte[]>(StatusCodes.Status200OK, StoredPhoto);
+        _ = SessionRequired.On(group.MapPut("/photo", SetPhotoAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Restricted, ErrorCodes.PhotoNotEnabled, ErrorCodes.PhotoInvalid,
+                    ErrorCodes.PhotoTooLarge))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapDelete("/photo", RemovePhotoAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapGet("/preferences", ReadPreferencesAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<PreferencesView>();
+        _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Restricted, ErrorCodes.PreferenceUndeclared,
+                    ErrorCodes.PreferenceWrongType, ErrorCodes.PreferenceTooLarge,
+                    ErrorCodes.PreferenceAdministratorOnly))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapPost("/identifiers", AddIdentifierAsync));
-        _ = group.MapPost("/identifiers/{id:guid}/verify", VerifyIdentifierAsync);
-        _ = SessionRequired.On(group.MapPost("/identifiers/{id:guid}/primary", MakePrimaryAsync));
-        _ = SessionRequired.On(group.MapPut("/identifiers/backup", SetBackupAsync));
-        _ = SessionRequired.On(group.MapDelete("/identifiers/{id:guid}", RemoveIdentifierAsync));
-        _ = group.MapPost("/identifiers/{id:guid}/undo", UndoIdentifierAsync);
-        _ = group.MapPut("/identifiers/{id:guid}/replace", ReplaceIdentifierAsync);
-        _ = group.MapPost("/identifiers/{id:guid}/abandon", AbandonIdentifierAsync);
+        _ = SessionRequired.On(group.MapPost("/identifiers", AddIdentifierAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierMixedScript,
+                    ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.IdentifierInvalid,
+                    ErrorCodes.SmsBalanceFloor, ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = EnrolmentRoute.On(group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.IdentifierMaximum,
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled)
+                .Binding<IdentifierId>("id"))
+            .Produces<IdentifierLandingView>()
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/identifiers/{id}/primary", MakePrimaryAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Restricted, ErrorCodes.IdentifierUnverified)
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPut("/identifiers/backup", SetBackupAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.IdentifierUnverified))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapDelete("/identifiers/{id}", RemoveIdentifierAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.IdentifierPrimary,
+                    ErrorCodes.IdentifierLastOfKind)
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = group.MapPost("/identifiers/{id}/undo", UndoIdentifierAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.ChangeWindowElapsed)
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = EnrolmentRoute.On(group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.ChangePending, ErrorCodes.IdentifierMixedScript,
+                    ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.SmsBalanceFloor,
+                    ErrorCodes.RestrictionExceeded)
+                .Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/identifiers/{id}/abandon", AbandonIdentifierAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted).Binding<IdentifierId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapGet("/credentials", ListCredentialsAsync));
-        _ = SessionRequired.On(group.MapPatch("/credentials/{id:guid}", LabelCredentialAsync));
-        _ = SessionRequired.On(group.MapPut("/secondstep/preferred", PreferSecondStepAsync));
+        _ = SessionRequired.On(group.MapGet("/credentials", ListCredentialsAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<CredentialView>>();
+        _ = SessionRequired.On(group.MapPatch("/credentials/{id}", LabelCredentialAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Restricted, ErrorCodes.CredentialNotFound,
+                    ErrorCodes.CredentialLabelInvalid)
+                .Binding<AuthenticatorId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPut("/secondstep/preferred", PreferSecondStepAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapGet("/sessions", ListSessionsAsync));
-        _ = SessionRequired.On(group.MapDelete("/sessions/{id:guid}", EndSessionAsync));
+        _ = SessionRequired.On(group.MapGet("/sessions", ListSessionsAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<SessionView>>();
+        _ = SessionRequired.On(group.MapDelete("/sessions/{id}", EndSessionAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound).Binding<SessionId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync));
-        _ = group.MapPost("/reactivate", ReactivateAsync);
-        _ = SessionRequired.On(group.MapPost("/delete", DeleteAsync));
-        _ = group.MapPost("/delete/cancel", CancelDeletionAsync);
+        _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/reactivate", ReactivateAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.AccountAdministrativelySuspended,
+                    ErrorCodes.ReactivationTokenInvalid))
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapPost("/delete", DeleteAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied))
+            .Produces<DeletionView>(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/delete/cancel", CancelDeletionAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed))
+            .Produces(StatusCodes.Status204NoContent);
 
-        _ = SessionRequired.On(group.MapGet("/invitation", ReadInvitationAsync));
-        _ = SessionRequired.On(group.MapPost("/invitation/acknowledge", AcknowledgeInvitationAsync));
+        _ = SessionRequired.On(group.MapGet("/invitation", ReadInvitationAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.InvitationNotFound))
+            .Produces<AttachedInvitationView>();
+        _ = SessionRequired.On(group.MapPost("/invitation/acknowledge", AcknowledgeInvitationAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.InvitationNotFound, ErrorCodes.MembershipLimitReached,
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.InvitationExpired,
+                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.IdentifierDomainNotAllowed))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -144,9 +248,7 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await accounts.ReadPhotoAsync(holder, cancellationToken).ConfigureAwait(false),
-            image => image.IsEmpty
-                ? NoPhoto
-                : TypedResults.Bytes(image, StoredPhoto));
+            image => TypedResults.Bytes(image, StoredPhoto));
     }
 
     private static async Task<IResult> SetPhotoAsync(
@@ -301,7 +403,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> VerifyIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         VerifyIdentifierRequest request,
         IIdentifiers identifiers,
         SessionService sessions,
@@ -318,14 +420,24 @@ internal static class AccountEndpoints
         string source = RequestOrigin.Source(context.Request);
 
         // API-LAND-001: a link merely opened, or opened somewhere else, changes
-        // nothing and is answered with the code to type instead.
+        // nothing and is answered with the code to type instead. IDN-LIFE-008: only a
+        // press from the browser that staged the change completes it under a session,
+        // so only that session is kept and rotated; the displaced address's press keeps
+        // none.
         if (request.LinkToken is { Length: > 0 } token)
         {
-            Result<LinkLanding> landed = await identifiers
-                .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
-                .ConfigureAwait(false);
+            // REG-IDENT-007 (D-189): a browser that holds an enrolment session and no
+            // other reaches the pending verification of the replace that session staged.
+            Result<LinkLanding> landed = browser.Live is null && Opened(browser) is EnrolmentSessionId opened
+                ? await identifiers
+                    .LandAsync(opened, token, request.Press, source, cancellationToken)
+                    .ConfigureAwait(false)
+                : await identifiers
+                    .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
+                    .ConfigureAwait(false);
 
-            return browser.Live is Session pressing && landed.Match(landing => landing.Verified, _ => false)
+            return browser.Live is Session pressing
+                && landed.Match(landing => landing.Verified && landing.SameBrowser, _ => false)
                 ? await RotatedAsync(sessions, cookies, pressing, context, Answers.Of(landed, Landed), cancellationToken)
                     .ConfigureAwait(false)
                 : Answers.Of(landed, Landed);
@@ -336,29 +448,29 @@ internal static class AccountEndpoints
             return Answers.Malformed("code");
         }
 
-        if (browser.Context is not AccessContext holder)
+        if (browser.Live is not Session typing)
         {
             return Opened(browser) is not EnrolmentSessionId enrolment
                 ? Nobody()
                 : Answers.Of(
                     await identifiers
-                        .VerifyAsync(enrolment, new IdentifierId(id), code, source, cancellationToken)
+                        .VerifyAsync(enrolment, id, code, source, cancellationToken)
                         .ConfigureAwait(false),
                     Nothing);
         }
 
         Result verified = await identifiers
-            .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
+            .VerifyAsync(browser.Asking, typing.Id, id, code, source, cancellationToken)
             .ConfigureAwait(false);
 
-        return browser.Live is Session typing && verified.Match(() => true, _ => false)
+        return verified.Match(() => true, _ => false)
             ? await RotatedAsync(sessions, cookies, typing, context, Nothing, cancellationToken)
                 .ConfigureAwait(false)
             : Answers.Of(verified, Nothing);
     }
 
     private static async Task<IResult> MakePrimaryAsync(
-        Guid id,
+        IdentifierId id,
         IIdentifiers identifiers,
         RequestSession browser,
         HttpContext context,
@@ -373,7 +485,7 @@ internal static class AccountEndpoints
             await identifiers
                 .MakePrimaryAsync(
                     holder,
-                    new IdentifierId(id),
+                    id,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -492,7 +604,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> RemoveIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         IIdentifiers identifiers,
         SessionService sessions,
         BrowserSessionCookies cookies,
@@ -511,7 +623,7 @@ internal static class AccountEndpoints
             .RemoveAsync(
                 holder,
                 browser.Required.Id,
-                new IdentifierId(id),
+                id,
                 RequestOrigin.Source(context.Request),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -544,7 +656,7 @@ internal static class AccountEndpoints
     // REG-IDENT-006: link-borne, because after a hostile removal the account has no
     // session that could reach this on its own.
     private static async Task<IResult> UndoIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         LinkTokenRequest request,
         IIdentifiers identifiers,
         HttpContext context,
@@ -564,7 +676,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> ReplaceIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         ReplaceIdentifierRequest request,
         IIdentifiers identifiers,
         RequestSession browser,
@@ -592,7 +704,7 @@ internal static class AccountEndpoints
                     await identifiers
                         .ReplaceAsync(
                             enrolment,
-                            new IdentifierId(id),
+                            id,
                             value,
                             source,
                             cancellationToken)
@@ -605,7 +717,7 @@ internal static class AccountEndpoints
                 .ReplaceAsync(
                     holder,
                     browser.Live.Id,
-                    new IdentifierId(id),
+                    id,
                     value,
                     source,
                     cancellationToken)
@@ -616,7 +728,7 @@ internal static class AccountEndpoints
     // REG-SESS-003: the ending control of a link opened in another browser, which
     // needs no session and answers the same way whatever the token resolves to.
     private static async Task<IResult> AbandonIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         LinkTokenRequest request,
         IIdentifiers identifiers,
         CancellationToken cancellationToken)
@@ -650,7 +762,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> LabelCredentialAsync(
-        Guid id,
+        AuthenticatorId id,
         LabelRequest request,
         IAccount accounts,
         RequestSession browser,
@@ -665,7 +777,7 @@ internal static class AccountEndpoints
             ? Answers.Malformed("label")
             : Answers.Of(
                 await accounts
-                    .LabelCredentialAsync(holder, new AuthenticatorId(id), label, cancellationToken)
+                    .LabelCredentialAsync(holder, id, label, cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
     }
@@ -681,11 +793,11 @@ internal static class AccountEndpoints
 
         AccessContext holder = Asking(browser);
 
-        return request.Credential is not Guid credential
-            ? Answers.Malformed("credential")
+        return request.Method is not Guid method
+            ? Answers.Malformed("method")
             : Answers.Of(
                 await accounts
-                    .PreferSecondStepAsync(holder, new AuthenticatorId(credential), cancellationToken)
+                    .PreferSecondStepAsync(holder, new AuthenticatorId(method), cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
     }
@@ -711,7 +823,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> EndSessionAsync(
-        Guid id,
+        SessionId id,
         ISessions sessions,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -722,7 +834,7 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await sessions
-                .EndAsync(holder, new SessionId(id), cancellationToken)
+                .EndAsync(holder, id, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -766,13 +878,13 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 
-    // D-148: the enrolment session the browser's first contact carries, which reaches
-    // the two operations chapter 09 section 3 names and nothing else here.
+    // D-148, D-189: the enrolment session stage 5 resolved, which it does here on the
+    // two routes chapter 09 section 3 names and on nothing else.
     private static EnrolmentSessionId? Opened(RequestSession browser) =>
-        browser.FirstContact?.Enrolment;
+        browser.Enrolment;
 
     private static IResult Landed(LinkLanding landing)
     {

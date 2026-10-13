@@ -6,7 +6,10 @@ namespace Janus.Storage;
 /// Where a personal value is stored. A ciphertext is bound to its location, so a value
 /// moved to another row, another column or another subject no longer decrypts.
 /// </summary>
-/// <param name="Subject">The subject whose key the value is encrypted under.</param>
+/// <param name="Subject">
+/// The subject whose key the value is encrypted under, or, for a row that belongs to no
+/// subject, the row's own identifier in its place (PRIV-RIGHT-005a, D-173).
+/// </param>
 /// <param name="Table">The table holding it.</param>
 /// <param name="Column">The column holding it.</param>
 /// <remarks>Implements PRIV-RIGHT-005a.</remarks>

@@ -149,6 +149,12 @@ internal sealed class Machine(Deployment deployment)
             context.Response.StatusCode,
             answered.Taken(),
             context.Response.Headers.Location.ToString() is { Length: > 0 } where ? where : null,
-            [.. context.Response.Headers.SetCookie.Select(header => header!)]);
+            [.. context.Response.Headers.SetCookie.Select(header => header!)])
+        {
+            Headers = context.Response.Headers.ToDictionary(
+                written => written.Key,
+                written => written.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase),
+        };
     }
 }

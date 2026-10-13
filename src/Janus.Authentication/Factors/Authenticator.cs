@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Janus.Core;
 
 namespace Janus.Authentication.Factors;
@@ -74,6 +75,14 @@ internal sealed class Authenticator
     public WebAuthnMaterial? WebAuthn { get; private set; }
 
     /// <summary>
+    /// The number it is bound to, canonically, where it is a second step the library
+    /// texts: the number its code confirmed it on, to which every later code goes, and
+    /// nothing once that number has left the account (AUTH-FACT-002).
+    /// </summary>
+    [NeverLogged]
+    public string? Number { get; private set; }
+
+    /// <summary>
     /// Whether the person chose this one to be offered first at a second step. Where
     /// the account has chosen none, the most recently enrolled second factor is
     /// offered first and no credential carries the mark (IDN-ATTR-008).
@@ -85,6 +94,15 @@ internal sealed class Authenticator
     /// confirming code and a suspended one may not.
     /// </summary>
     public bool IsUsable => State is AuthenticatorState.Active && Confirmed;
+
+    /// <summary>
+    /// Whether a loss report, or a removal that would lower the account's reachable
+    /// assurance, suspended it: suspended with the instant at which it is invalidated.
+    /// Presented anyway, it is judged as an active one would be and refused as
+    /// suspended only where what it presented verifies (AUTH-RECOV-007).
+    /// </summary>
+    public bool IsAwaitingInvalidation =>
+        State is AuthenticatorState.Suspended && InvalidatesAt is not null && Confirmed;
 
     /// <summary>
     /// A code generator, enrolled but not yet confirmed: one valid code has to be
@@ -179,6 +197,60 @@ internal sealed class Authenticator
     }
 
     /// <summary>
+    /// Whether an entry's credential is bound to a number: a second step the library
+    /// texts, which goes to the number it was confirmed on and to no other
+    /// (AUTH-FACT-002).
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    /// <returns>Whether its credential is bound to a number.</returns>
+    public static bool IsBoundToNumber(Factor factor) =>
+        FactorCatalogue.Of(factor).CanBeSecondFactor
+        && FactorCatalogue.Sent.Any(sent => sent.Key.Channel is IdentifierKind.Phone && sent.Value == factor);
+
+    /// <summary>
+    /// A second step the library texts, confirmed by the code texted to the number it
+    /// is bound to from then on (AUTH-FACT-002).
+    /// </summary>
+    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="factor">Which catalogue entry the code confirmed.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="number">The number the code was texted to, canonically.</param>
+    /// <param name="at">When it was confirmed.</param>
+    /// <returns>The credential.</returns>
+    /// <exception cref="ArgumentException">
+    /// The entry's credential is bound to no number, or the number is absent.
+    /// </exception>
+    public static Authenticator Bound(
+        AuthenticatorId id,
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        [NeverLogged] string number,
+        DateTimeOffset at)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(number);
+
+        if (!IsBoundToNumber(factor))
+        {
+            throw new ArgumentException("Only a second step the library texts is bound to a number.", nameof(factor));
+        }
+
+        return new Authenticator(
+            id,
+            subject,
+            factor,
+            label,
+            at,
+            confirmed: true,
+            totp: null,
+            webAuthn: null)
+        {
+            Number = number,
+        };
+    }
+
+    /// <summary>
     /// The credential as it already stands, which is the store's translation of a row
     /// and no change to it.
     /// </summary>
@@ -194,6 +266,7 @@ internal sealed class Authenticator
     /// <param name="totp">The shared secret, where it is a code generator.</param>
     /// <param name="webAuthn">The key material, where it holds a key.</param>
     /// <param name="isPreferred">Whether the person chose it to be offered first.</param>
+    /// <param name="number">The number it is bound to, where it is bound to one.</param>
     /// <returns>The credential.</returns>
     public static Authenticator Existing(
         AuthenticatorId id,
@@ -207,13 +280,15 @@ internal sealed class Authenticator
         bool confirmed,
         TotpMaterial? totp,
         WebAuthnMaterial? webAuthn,
-        bool isPreferred = false) =>
+        bool isPreferred = false,
+        [NeverLogged] string? number = null) =>
         new(id, subject, factor, label, addedAt, confirmed, totp, webAuthn)
         {
             State = state,
             LastUsedAt = lastUsedAt,
             InvalidatesAt = invalidatesAt,
             IsPreferred = isPreferred,
+            Number = number,
         };
 
     /// <summary>
@@ -244,7 +319,7 @@ internal sealed class Authenticator
 
     /// <summary>
     /// The signature counter the authenticator reported, which is recorded so that one
-    /// moving backwards is caught.
+    /// that does not advance is caught.
     /// </summary>
     /// <param name="counter">What the authenticator reported.</param>
     /// <exception cref="InvalidOperationException">The credential holds no key.</exception>
@@ -252,6 +327,18 @@ internal sealed class Authenticator
         WebAuthn = WebAuthn is null
             ? throw new InvalidOperationException("The credential holds no key.")
             : WebAuthn with { Counter = counter };
+
+    /// <summary>
+    /// The backup state the authenticator reported with an accepted assertion, which is
+    /// recorded so that a credential that became synced, or stopped being, is told
+    /// apart afterwards (AUTH-FACT-013, AUTH-FACT-014).
+    /// </summary>
+    /// <param name="backedUp">Whether the credential is backed up now.</param>
+    /// <exception cref="InvalidOperationException">The credential holds no key.</exception>
+    public void BackedUp(bool backedUp) =>
+        WebAuthn = WebAuthn is null
+            ? throw new InvalidOperationException("The credential holds no key.")
+            : WebAuthn with { BackupState = backedUp };
 
     /// <summary>
     /// The person renamed it.
@@ -279,6 +366,20 @@ internal sealed class Authenticator
             InvalidatesAt = invalidatesAt;
         }
     }
+
+    /// <summary>
+    /// Whether it is a second step the library texts whose number is no longer the
+    /// account's: the number it was bound to left the account, or it was never bound to
+    /// one. No code is texted for it and no cancel returns it (AUTH-FACT-002,
+    /// AUTH-RECOV-007).
+    /// </summary>
+    public bool IsUnbound => IsBoundToNumber(Factor) && Number is null;
+
+    /// <summary>
+    /// The number it is bound to left the account, so it is bound to none from now; an
+    /// undo that restores the number does not bind it again (AUTH-FACT-002).
+    /// </summary>
+    public void Unbind() => Number = null;
 
     /// <summary>
     /// Whether a social provider's security event holds it: suspended with no instant

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -11,7 +12,8 @@ using Janus.Privacy.Policies;
 namespace Janus.Privacy.Erasures;
 
 /// <summary>
-/// The erasures an operator reads and, where a subscriber could not finish, completes.
+/// The erasures an operator reads and, where a subscriber could not finish an erasure,
+/// a takedown or a restriction, the delivery it completes.
 /// </summary>
 /// <param name="scope">Whether the caller may work the erasures.</param>
 /// <param name="stepUp">What the manual completion asks of the caller's session.</param>
@@ -23,13 +25,14 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction a completion runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b and DR-016. An erasure is read
-/// from the delivery its host-side work travels on, which carries its subject, reason,
-/// status, attempts and confirmations, and which the erasures row follows step for
-/// step. The manual path is for permanent failure and is itself recorded, so an erasure
+/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b, AUTHZ-GATE-006 and DR-016. An
+/// erasure is read from the delivery its host-side work travels on, which carries its
+/// subject, reason, status, attempts and confirmations, and which the erasures row
+/// follows step for step. The manual path is for permanent failure and is itself recorded, so a delivery
 /// never closes without a trace of who closed it or what was outstanding. The operator
-/// vouches for the host's subscribers and never for the ledger line: the path appends
-/// it where it is outstanding, and closes nothing until it is durable (DR-016 AC2).
+/// vouches for the host's subscribers and never for an erasure's ledger line: the path
+/// appends it where it is outstanding, and closes nothing until it is durable (DR-016
+/// AC2).
 /// </remarks>
 internal sealed class ErasureService(
     AdministrativeScope scope,
@@ -43,6 +46,17 @@ internal sealed class ErasureService(
     TimeProvider time) : IErasures
 {
     private static readonly AuditAction Completed = AuditActions.ErasureCompleted;
+
+    private static readonly JsonSerializerOptions Spelled =
+        new() { Converters = { new JsonStringEnumConverter() } };
+
+    // IDN-LIFE-003a: the deliveries whose spent retries the manual path closes.
+    private static readonly SubjectEventKind[] Completable =
+    [
+        SubjectEventKind.ErasureRequested,
+        SubjectEventKind.TakedownExecuted,
+        SubjectEventKind.RestrictionChanged,
+    ];
 
     private readonly IReadOnlyList<ISubjectEventSubscriber> _waitedFor =
         ErasureLedgerSubscriber.Joined(subscribers, ledger);
@@ -100,14 +114,16 @@ internal sealed class ErasureService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await RefusedAsync(context, session, cancellationToken).ConfigureAwait(false)
-            is Error refused)
+        if (await scope
+                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+                .ConfigureAwait(false) is Error denied)
         {
-            return Result.Failure(refused);
+            return Result.Failure(denied);
         }
 
         if (await outbox.FindAsync(new DeliveryId(erasure.Value), cancellationToken).ConfigureAwait(false)
-            is not { Kind: SubjectEventKind.ErasureRequested } delivery)
+                is not Delivery delivery
+            || !Completable.Contains(delivery.Kind))
         {
             return Result.Failure(Error.From(ErrorCodes.ErasureNotFound));
         }
@@ -117,36 +133,95 @@ internal sealed class ErasureService(
             return Result.Failure(Error.From(ErrorCodes.ErasureNotFailed));
         }
 
-        if (await LedgeredAsync(delivery, cancellationToken).ConfigureAwait(false) is Error unwritten)
+        if (await SteppedUpAsync(context, session, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        bool erased = delivery.Kind is SubjectEventKind.ErasureRequested;
+
+        if (erased && await LedgeredAsync(delivery, cancellationToken).ConfigureAwait(false) is Error unwritten)
         {
             return Result.Failure(unwritten);
         }
 
-        string[] outstanding = Outstanding(delivery);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
-        delivery.CompleteManually();
+        // AUTHZ-GATE-006, D-186: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the completion before anything is written. The ledger line
+        // appended above names an erasure committed before, so it is no effect of the
+        // completion and stands; a line appended again later is one erasure to a replay
+        // (DR-016).
+        if (await scope
+                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await outbox.RecordAsync(delivery, cancellationToken).ConfigureAwait(false);
-        await ClosedAsync(delivery.Subject, cancellationToken).ConfigureAwait(false);
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the delivery is closed under its row's lock, so a second operator
+        // at the same moment finds it closed and closes nothing. A ledger line the
+        // second appended as well is one line to a replay (DR-016 AC2).
+        if (await outbox.FindForUpdateAsync(delivery.Id, cancellationToken).ConfigureAwait(false)
+            is not { Status: ErasureStatus.Failed } held)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.ErasureNotFailed));
+        }
+
+        if (delivery.Confirmed.Contains(ErasureLedgerSubscriber.Called))
+        {
+            held.Confirm(ErasureLedgerSubscriber.Called);
+        }
+
+        string[] outstanding = Outstanding(held);
+
+        held.CompleteManually();
+
+        await outbox.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+
+        if (erased)
+        {
+            await ClosedAsync(held.Subject, cancellationToken).ConfigureAwait(false);
+        }
+
         await audit
             .RecordedAsync(
                 Completed,
                 context.Acting,
-                delivery.Subject,
+                context.BreakGlassReason,
+                held.Subject,
                 time.GetUtcNow(),
-                Named(erasure, outstanding),
+                Named(erasure, held.Kind, outstanding),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
 
-    private static Dictionary<string, JsonElement> Named(ErasureId erasure, string[] outstanding) =>
-        new(capacity: 2, StringComparer.Ordinal)
+    private static Dictionary<string, JsonElement> Named(
+        ErasureId erasure,
+        SubjectEventKind kind,
+        string[] outstanding) =>
+        new(capacity: 3, StringComparer.Ordinal)
         {
             ["erasure"] = JsonSerializer.SerializeToElement(erasure.ToString()),
+            ["kind"] = JsonSerializer.SerializeToElement(kind, Spelled),
             ["outstanding"] = JsonSerializer.SerializeToElement(outstanding),
         };
 
@@ -222,25 +297,16 @@ internal sealed class ErasureService(
         await erasures.RecordAsync(row, cancellationToken).ConfigureAwait(false);
     }
 
-    // The gate before anything is read, then the session's proof: a caller without the
-    // permission learns nothing of the erasure, and one with it proves it is them.
-    private async ValueTask<Error?> RefusedAsync(
+    // X8 of D-166: the session's proof is judged after every other refusal, so a caller
+    // is asked to step up only for a delivery the path would close.
+    private async ValueTask<Error?> SteppedUpAsync(
         AccessContext context,
         SessionId session,
-        CancellationToken cancellationToken)
-    {
-        if (await scope
-                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
-                .ConfigureAwait(false) is Error denied)
-        {
-            return denied;
-        }
-
-        return context.Acting is not SubjectId acting
+        CancellationToken cancellationToken) =>
+        context.Acting is not SubjectId acting
             ? Error.From(ErrorCodes.Denied)
             : (await stepUp
                     .RequireAsync(acting, session, StepUpAction.ErasureComplete, cancellationToken)
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error);
-    }
 }

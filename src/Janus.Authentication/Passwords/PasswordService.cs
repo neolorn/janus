@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -14,12 +16,13 @@ namespace Janus.Authentication.Passwords;
 /// <param name="passwords">Where the account's password is read and written.</param>
 /// <param name="screening">What every password is screened against.</param>
 /// <param name="hasher">What a password is hashed with.</param>
+/// <param name="events">Where a password set on an account is announced.</param>
 /// <param name="configuration">Where the floors and the parameters are read from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-PASS-001, AUTH-PASS-001a, AUTH-PASS-002, AUTH-PASS-004,
-/// AUTH-PASS-005 and AUTH-PASS-007. Nothing here imposes a composition rule: a
+/// AUTH-PASS-005, AUTH-PASS-007 and AUTH-STEP-007. Nothing here imposes a composition rule: a
 /// password is refused for its length or for a source that rejected it, and for
 /// nothing else.
 /// </remarks>
@@ -27,6 +30,7 @@ internal sealed class PasswordService(
     IPasswordStore passwords,
     PasswordScreening screening,
     Argon2idHasher hasher,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time)
@@ -122,6 +126,10 @@ internal sealed class PasswordService(
     /// What the account reaches with the credentials it holds, which is what decides
     /// whether the shorter floor applies (AUTH-PASS-001a).
     /// </param>
+    /// <param name="actor">
+    /// The context of who set it, where a person the library knows did; its acting and
+    /// effective identity are carried on the event (AUTHZ-IMP-001).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The advice to show beside the password that was accepted, or the failure that
@@ -133,6 +141,7 @@ internal sealed class PasswordService(
         [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         AssuranceLevel reachable,
+        AccessContext? actor,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -149,7 +158,11 @@ internal sealed class PasswordService(
         DateTimeOffset now = time.GetUtcNow();
         Password? held = await passwords.FindAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<PasswordFeedback>(notBegun);
+        }
 
         if (held is null)
         {
@@ -163,7 +176,35 @@ internal sealed class PasswordService(
             await passwords.SetAsync(held, cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        // AUTH-STEP-007 AC4: a password set on an account is an enrolment of the
+        // catalogue entry with no credential identifier, announced in the transaction
+        // that sets it (CONV-DESIGN-002).
+        if ((await events
+                .PublishAsync(
+                    new CredentialEnrolled(
+                        now,
+                        string.Create(CultureInfo.InvariantCulture, $"credential-enrolled:password:{subject.Value}@{now.UtcTicks}"),
+                        Credential: null,
+                        FactorCatalogue.Password)
+                    {
+                        Subject = subject,
+                        Actor = actor?.Acting,
+                        Effective = actor?.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<PasswordFeedback>(unannounced);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<PasswordFeedback>(notCommitted);
+        }
 
         return Result.Success(prepared.Feedback);
     }
@@ -220,12 +261,22 @@ internal sealed class PasswordService(
 
         if (Raised(held.Hash, parameters, parallelism))
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(_ => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<PasswordVerification>(notBegun);
+            }
+
+            PasswordHash read = held.Hash;
 
             held.Rehash(hasher.Hash(password, parameters, parallelism));
-            await passwords.RehashAsync(held, cancellationToken).ConfigureAwait(false);
+            await passwords.RehashAsync(held, read, cancellationToken).ConfigureAwait(false);
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<PasswordVerification>(notCommitted);
+            }
         }
 
         // AUTH-RECOV-007a: an invalidation that left the account on this password

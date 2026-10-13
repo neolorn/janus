@@ -31,6 +31,13 @@ internal sealed class RegistrationSourcesInMemory : IRegistrationSources
     }
 
     /// <inheritdoc/>
+    public ValueTask SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        _started.RemoveAll(started => started.At < now - TimeSpan.FromHours(1));
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask<int> SinceAsync(
         string source,
         DateTimeOffset from,

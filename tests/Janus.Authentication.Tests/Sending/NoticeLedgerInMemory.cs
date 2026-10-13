@@ -18,26 +18,52 @@ internal sealed class NoticeLedgerInMemory : INoticeLedger
     /// </summary>
     public List<(string Destination, DateTimeOffset At)> Told { get; } = [];
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for an
+    /// address's notices, so a test may tell it under an ask about to be judged.
+    /// </summary>
+    public Action<string>? Holding { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask<bool> FirstAsync(
+    public ValueTask HoldAsync(string destination, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(destination);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> WasToldAsync(
+        string destination,
+        DateTimeOffset at,
+        TimeSpan window,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Told.Any(notice =>
+            string.Equals(notice.Destination, destination, StringComparison.Ordinal)
+            && notice.At > at - window));
+
+    /// <inheritdoc/>
+    public ValueTask MarkAsync(
         string destination,
         DateTimeOffset at,
         TimeSpan window,
         CancellationToken cancellationToken)
     {
-        if (Told.Any(notice =>
-            string.Equals(notice.Destination, destination, StringComparison.Ordinal)
-            && notice.At > at - window))
-        {
-            return ValueTask.FromResult(false);
-        }
-
         Told.Add((destination, at));
 
-        return ValueTask.FromResult(true);
+        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>
+    public ValueTask SweepAsync(DateTimeOffset now, TimeSpan window, CancellationToken cancellationToken)
+    {
+        TimeSpan kept = window > TimeSpan.FromHours(1) ? window : TimeSpan.FromHours(1);
+
+        Told.RemoveAll(notice => notice.At < now - kept);
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask<int> SinceAsync(DateTimeOffset from, CancellationToken cancellationToken) =>
         ValueTask.FromResult(Told.Count(notice => notice.At >= from));
 }

@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
-/// A host's own context, as small as a host can be: one table of its own, and the two
+/// A host's own context, as small as a host can be: one table of its own, and the three
 /// tables a permission filter reads mapped into it.
 /// </summary>
 /// <param name="options">Where the context reaches its database.</param>
@@ -36,6 +36,11 @@ internal sealed class HostContext(DbContextOptions<HostContext> options) : DbCon
     /// The grants and the permissions their roles allow, read from the library's schema.
     /// </summary>
     public DbSet<EffectiveGrant> Grants => Set<EffectiveGrant>();
+
+    /// <summary>
+    /// The records whose data subject holds a live consent, read from the library's schema.
+    /// </summary>
+    public DbSet<ConsentedResource> Consented => Set<ConsentedResource>();
 
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)

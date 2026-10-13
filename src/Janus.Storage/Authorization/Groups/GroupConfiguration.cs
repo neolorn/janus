@@ -32,7 +32,9 @@ internal sealed class GroupConfiguration : IEntityTypeConfiguration<GroupRecord>
             .HasColumnName("organization")
             .HasConversion(id => id.Value, value => new OrganizationId(value));
 
-        builder.Property(group => group.Name).HasColumnName("name");
+        builder.Property(group => group.Name)
+            .HasColumnName("name")
+            .UseCollation(StoreContext.CaseInsensitiveCollation);
 
         builder.HasOne<OrganizationRecord>()
             .WithMany()

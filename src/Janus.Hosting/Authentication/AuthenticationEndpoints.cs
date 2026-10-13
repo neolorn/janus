@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Core;
@@ -43,23 +44,66 @@ internal static class AuthenticationEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/auth");
 
-        _ = group.MapPost("/begin", BeginAsync);
-        _ = group.MapPost("/factor", PresentAsync);
-        _ = group.MapPost("/device/verify", VerifyDeviceAsync);
-        _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync));
-        _ = group.MapPost("/link", LinkAsync);
-        _ = group.MapPost("/link/abandon", AbandonLinkAsync);
-        _ = group.MapPost("/email-otp", CodeAsync);
-        _ = SessionRequired.On(group.MapPost("/logout", LogoutAsync));
-        _ = SessionRequired.On(group.MapGet("/session", SessionAsync));
+        _ = group.MapPost("/begin", BeginAsync)
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<SignInChallengeView>();
+        _ = group.MapPost("/factor", PresentAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.PolicyGraceExpired,
+                    ErrorCodes.FactorRejected, ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.CodeInvalid,
+                    ErrorCodes.CodeExpired, ErrorCodes.CodeReplayed, ErrorCodes.CredentialSuspended,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
+                    ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Produces<SignInProgressView>()
+            .Produces<SignInLandingView>()
+            .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/device/verify", VerifyDeviceAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded))
+            .Produces<SignInProgressView>();
+        _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.FactorNotPermitted, ErrorCodes.FactorRejected,
+                    ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired,
+                    ErrorCodes.CodeReplayed, ErrorCodes.CredentialSuspended,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed,
+                    ErrorCodes.WebAuthnCounterMismatch, ErrorCodes.WebAuthnRelyingPartyChanged,
+                    ErrorCodes.WebAuthnUserVerificationRequired, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Produces<SignInProgressView>()
+            .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/link", LinkAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = group.MapPost("/link/abandon", AbandonLinkAsync)
+            .Declares(EndpointDeclaration.Answering())
+            .Produces(StatusCodes.Status204NoContent);
+        _ = group.MapPost("/email-otp", CodeAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Produces(StatusCodes.Status202Accepted);
+        _ = SessionRequired.On(group.MapPost("/logout", LogoutAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(group.MapGet("/session", SessionAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<SessionDetailView>();
 
         // Chapter 09 section 3 lists the browsers the account knows under the account
         // and the sessions elsewhere, so the two lists are never read as one
         // (AUTH-SESS-013).
         RouteGroupBuilder devices = endpoints.MapGroup("/account/devices");
 
-        _ = SessionRequired.On(devices.MapGet("/", ListDevicesAsync));
-        _ = SessionRequired.On(devices.MapDelete("/{id:guid}", ForgetDeviceAsync));
+        _ = SessionRequired.On(devices.MapGet("/", ListDevicesAsync))
+            .Declares(EndpointDeclaration.Answering())
+            .Produces<IReadOnlyList<DeviceView>>();
+        _ = SessionRequired.On(devices.MapDelete("/{id}", ForgetDeviceAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound).Binding<DeviceId>("id"))
+            .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
@@ -119,12 +163,20 @@ internal static class AuthenticationEndpoints
 
         if (request.LinkToken is { Length: > 0 } token)
         {
+            // A link token is answered only under a link factor, which is what a press
+            // that opens nothing is recorded under (CONV-LOG-005).
+            if (!FactorCatalogue.Sent.Any(sent => sent.Key.CarriesLink && sent.Value == request.Factor))
+            {
+                return Answers.Malformed("factor");
+            }
+
             return await LandedAsync(
                     await authentication
                         .LandAsync(
                             challenge,
                             Carried(context.Request, BrowserCookies.PreAuthentication),
                             token,
+                            request.Factor,
                             request.Press,
                             origin,
                             Carried(context.Request, BrowserCookies.Browser),
@@ -138,11 +190,32 @@ internal static class AuthenticationEndpoints
                 .ConfigureAwait(false);
         }
 
+        if (request.Presented() is not FactorPresentation presented)
+        {
+            return Answers.Malformed("value");
+        }
+
+        if (Asking(request))
+        {
+            return Answers.Of(
+                await authentication
+                    .AskAsync(
+                        challenge,
+                        request.Factor,
+                        stepping: null,
+                        session: null,
+                        origin.Source,
+                        RequestOrigin.Language(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Asked);
+        }
+
         return await ReachedAsync(
                 await authentication
                     .PresentAsync(
                         challenge,
-                        Presented(request),
+                        presented,
                         origin,
                         Carried(context.Request, BrowserCookies.Browser),
                         Carried(context.Request, BrowserCookies.Device),
@@ -217,13 +290,34 @@ internal static class AuthenticationEndpoints
             return Answers.Malformed("challengeId");
         }
 
+        if (request.Presented() is not FactorPresentation presented)
+        {
+            return Answers.Malformed("value");
+        }
+
+        if (Asking(request))
+        {
+            return Answers.Of(
+                await authentication
+                    .AskAsync(
+                        challenge,
+                        request.Factor,
+                        holder.Effective,
+                        browser.Required.Id,
+                        RequestOrigin.Source(context.Request),
+                        RequestOrigin.Language(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Asked);
+        }
+
         return await ReachedAsync(
                 await authentication
                     .RaiseAsync(
                         holder,
                         browser.Required.Id,
                         challenge,
-                        Presented(request),
+                        presented,
                         RequestOrigin.Source(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
@@ -375,7 +469,7 @@ internal static class AuthenticationEndpoints
     }
 
     private static async Task<IResult> ForgetDeviceAsync(
-        Guid id,
+        DeviceId id,
         IAuthentication authentication,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -387,18 +481,15 @@ internal static class AuthenticationEndpoints
 
         return Answers.Of(
             await authentication
-                .ForgetDeviceAsync(holder, new DeviceId(id), cancellationToken)
+                .ForgetDeviceAsync(holder, id, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
 
-    private static FactorPresentation Presented(PresentFactorRequest request) =>
-        new(request.Factor)
-        {
-            Value = request.Value,
-            Assertion = request.Assertion,
-            TrustDevice = request.TrustDevice,
-        };
+    // AUTH-FACT-002 AC6: a second step the library texts is asked for by naming it with
+    // nothing to present, and the ask is answered 202 whatever it finds (D-166).
+    private static bool Asking(PresentFactorRequest request) =>
+        !request.Presents() && AuthenticationService.Asks(request.Factor);
 
     private static async Task<IResult> LandedAsync(
         Result<LandedSignIn> outcome,
@@ -429,6 +520,17 @@ internal static class AuthenticationEndpoints
         return await CarriedAsync(signedIn, cookies, configuration, time, context, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    // AUTH-FACT-002: an ask is accepted, save at a sign-in or a step-up whose number's
+    // signal withheld the code, which is answered with what the challenge then offers.
+    private static IResult Asked(SignInProgress? offered) =>
+        offered is null
+            ? Accepted
+            : TypedResults.Json(
+                SignInProgressView.Of(offered),
+                AuthenticationJson.Default.SignInProgressView,
+                contentType: null,
+                StatusCodes.Status200OK);
 
     private static async Task<IResult> ReachedAsync(
         Result<SignInOutcome> outcome,
@@ -510,7 +612,7 @@ internal static class AuthenticationEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 
     // How long the browser is to carry what it was just handed. A deployment that has
@@ -520,7 +622,7 @@ internal static class AuthenticationEndpoints
         DurationSetting setting,
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => setting.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private static string? Carried(HttpRequest request, string cookie) =>
         request.Cookies[cookie] is { Length: > 0 } value ? value : null;

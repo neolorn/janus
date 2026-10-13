@@ -29,6 +29,10 @@ internal sealed class BreakGlassConfiguration
             table.HasCheckConstraint(
                 "ck_break_glass_credentials_ended",
                 "consumed_at IS NULL OR replaced_at IS NULL");
+
+            table.HasCheckConstraint(
+                "ck_break_glass_credentials_issued_by_not_max_uuid",
+                MaxUuid.Refused("issued_by"));
         });
 
         builder.HasKey(credential => credential.Id).HasName("pk_break_glass_credentials");

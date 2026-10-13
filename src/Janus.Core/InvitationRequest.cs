@@ -20,10 +20,22 @@ namespace Janus.Core;
 /// The documents the person is shown at the membership step, each at the version
 /// current when the invitation is issued.
 /// </param>
-/// <remarks>Implements REG-INV-001, REG-MAIL-001 and IDN-LIFE-009a.</remarks>
+/// <remarks>Implements REG-INV-001, REG-MAIL-001, REG-MAIL-003 and IDN-LIFE-009a.</remarks>
 public sealed record InvitationRequest(
     string? Email,
     string? Phone,
     string? CorporateEmail,
     IReadOnlyList<RoleName> Roles,
-    IReadOnlyList<string> Documents);
+    IReadOnlyList<string> Documents)
+{
+    /// <summary>
+    /// What becomes of the mailbox someone has held at the corporate address, where one
+    /// stands for it; nothing otherwise.
+    /// </summary>
+    public FormerMailbox? FormerMailbox { get; init; }
+
+    /// <summary>
+    /// Why, where the invitation names a <see cref="FormerMailbox"/>.
+    /// </summary>
+    public string? Reason { get; init; }
+}

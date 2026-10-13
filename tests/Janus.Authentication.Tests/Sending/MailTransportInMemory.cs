@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,9 +27,16 @@ internal sealed class MailTransportInMemory : IMailTransport
     /// </summary>
     public int Takes { get; set; } = int.MaxValue;
 
+    /// <summary>
+    /// What a test runs as each mail is handed over, where it watches for the moment.
+    /// </summary>
+    public Action? Handed { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<Result> SendAsync(MailMessage mail, CancellationToken cancellationToken)
     {
+        Handed?.Invoke();
+
         if (!Accepts || Taken.Count >= Takes)
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));

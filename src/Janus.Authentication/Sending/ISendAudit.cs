@@ -22,6 +22,10 @@ internal interface ISendAudit
     /// <param name="loosening">Whether the edit lets more through than before.</param>
     /// <param name="reason">The written reason, which a loosening requires.</param>
     /// <param name="actor">Who made it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of recording it.</returns>
@@ -32,6 +36,7 @@ internal interface ISendAudit
         bool loosening,
         string? reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -42,6 +47,10 @@ internal interface ISendAudit
     /// <param name="credit">How many sends the credit is worth.</param>
     /// <param name="reason">The written reason, which a grant requires.</param>
     /// <param name="actor">Who granted it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of recording it.</returns>
@@ -50,6 +59,7 @@ internal interface ISendAudit
         int credit,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

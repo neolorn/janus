@@ -34,6 +34,14 @@ internal sealed class RequestSession
     public OpaqueToken? FirstContactSecret { get; private set; }
 
     /// <summary>
+    /// The enrolment session the browser carries, where the request reached one of the
+    /// routes chapter 09 lists for it at <c>POST /enrol/begin</c>, or nothing: on any
+    /// other route the request goes on as one that carried none (BFF-ORDER-001 stage
+    /// 5, D-189).
+    /// </summary>
+    public EnrolmentSessionId? Enrolment { get; private set; }
+
+    /// <summary>
     /// The session the request arrived on, where the stage that requires one let the
     /// request through.
     /// </summary>
@@ -55,7 +63,16 @@ internal sealed class RequestSession
     /// Who is asking, or nothing where nobody is.
     /// </summary>
     public AccessContext? Context =>
-        Live is null ? null : AccessContext.Of(Live.Subject);
+        Live is null ? null : Of(Live);
+
+    /// <summary>
+    /// Who is asking on the session the request arrived on, where the stage that
+    /// requires one let the request through.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The endpoint was reached without being marked as one that needs a session.
+    /// </exception>
+    public AccessContext Asking => Of(Required);
 
     /// <summary>
     /// Records the session the request arrived on.
@@ -95,4 +112,17 @@ internal sealed class RequestSession
         FirstContact = contact;
         FirstContactSecret = secret;
     }
+
+    /// <summary>
+    /// Records the enrolment session the browser carries, on a route that resolves one.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session.</param>
+    public void Resolved(EnrolmentSessionId enrolment) => Enrolment = enrolment;
+
+    // OPS-BOOT-002, D-170: a break-glass session hands the reason given at its use to
+    // every operation made on it, with the account, and no other session has one.
+    private static AccessContext Of(Session session) =>
+        session.BreakGlassReason is string reason
+            ? AccessContext.InBreakGlass(session.Subject, reason)
+            : AccessContext.Of(session.Subject);
 }

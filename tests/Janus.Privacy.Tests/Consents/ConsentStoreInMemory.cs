@@ -9,16 +9,41 @@ using Janus.Privacy.Consents;
 namespace Janus.Privacy.Tests.Consents;
 
 /// <summary>
-/// The consent and objection records, one a subject and purpose, in the order they
-/// were first decided.
+/// The consent and objection records, a record a grant and a record an objection, in
+/// the order they were added, with at most one live record a subject and purpose.
 /// </summary>
 internal sealed class ConsentStoreInMemory : IConsentStore
 {
-    private readonly Dictionary<(SubjectId Subject, string Purpose), ConsentRecord> _consents =
-        [];
+    private readonly List<(SubjectId Subject, ConsentRecord Record)> _consents = [];
 
-    private readonly Dictionary<(SubjectId Subject, string Purpose), ObjectionRecord> _objections =
-        [];
+    private readonly List<(SubjectId Subject, ObjectionRecord Record)> _objections = [];
+
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for the
+    /// subject's records, so a test may change one under a decision already made.
+    /// </summary>
+    public Action? Holding { get; set; }
+
+    /// <summary>
+    /// Gets or sets what another transaction commits between this one's read and its
+    /// addition, so a test may write a record under a decision already made.
+    /// </summary>
+    public Action? Adding { get; set; }
+
+    /// <summary>
+    /// Keeps a record as one written earlier, in whatever state it is given.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="consent">The record.</param>
+    public void Keep(SubjectId subject, ConsentRecord consent) => _consents.Add((subject, consent));
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke();
+
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<ConsentRecord>> ConsentsAsync(
@@ -27,8 +52,8 @@ internal sealed class ConsentStoreInMemory : IConsentStore
         ValueTask.FromResult<IReadOnlyList<ConsentRecord>>(
         [
             .. _consents
-                .Where(held => held.Key.Subject == subject)
-                .Select(held => held.Value)
+                .Where(held => held.Subject == subject)
+                .Select(held => held.Record)
                 .OrderBy(record => record.GrantedAt),
         ]);
 
@@ -39,40 +64,133 @@ internal sealed class ConsentStoreInMemory : IConsentStore
         ValueTask.FromResult<IReadOnlyList<ObjectionRecord>>(
         [
             .. _objections
-                .Where(held => held.Key.Subject == subject)
-                .Select(held => held.Value)
+                .Where(held => held.Subject == subject)
+                .Select(held => held.Record)
                 .OrderBy(record => record.RecordedAt),
         ]);
 
     /// <inheritdoc/>
-    public ValueTask RecordAsync(
+    public ValueTask<bool> AddAsync(
         SubjectId subject,
         ConsentRecord consent,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(consent);
 
-        _consents[(subject, consent.Purpose)] = consent;
+        if (!consent.Live)
+        {
+            throw new ArgumentException("A consent is added live.", nameof(consent));
+        }
 
-        return ValueTask.CompletedTask;
+        Action? meanwhile = Adding;
+
+        Adding = null;
+        meanwhile?.Invoke();
+
+        if (_consents.Exists(held => held.Subject == subject && held.Record.Live && Same(held.Record.Purpose, consent.Purpose)))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        _consents.Add((subject, consent));
+
+        return ValueTask.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public ValueTask RecordAsync(
+    public ValueTask<bool> AddAsync(
         SubjectId subject,
         ObjectionRecord objection,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(objection);
 
-        _objections[(subject, objection.Purpose)] = objection;
+        if (!objection.Standing)
+        {
+            throw new ArgumentException("An objection is added standing.", nameof(objection));
+        }
 
-        return ValueTask.CompletedTask;
+        Action? meanwhile = Adding;
+
+        Adding = null;
+        meanwhile?.Invoke();
+
+        if (_objections.Exists(held => held.Subject == subject && held.Record.Standing && Same(held.Record.Purpose, objection.Purpose)))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        _objections.Add((subject, objection));
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> WithdrawConsentAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        int standing = _consents.FindLastIndex(held => held.Subject == subject && held.Record.Live && Same(held.Record.Purpose, purpose));
+
+        if (standing < 0)
+        {
+            standing = _consents.FindLastIndex(held => held.Subject == subject && Same(held.Record.Purpose, purpose));
+        }
+
+        if (standing < 0 || _consents[standing].Record.WithdrawnAt is not null)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        _consents[standing] = (subject, _consents[standing].Record with { WithdrawnAt = at });
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> SupersedeAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        int live = _consents.FindIndex(held => held.Subject == subject && held.Record.Live && Same(held.Record.Purpose, purpose));
+
+        if (live < 0)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        _consents[live] = (subject, _consents[live].Record with { SupersededAt = at });
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> WithdrawObjectionAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        int standing = _objections.FindIndex(held => held.Subject == subject && held.Record.Standing && Same(held.Record.Purpose, purpose));
+
+        if (standing < 0)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        _objections[standing] = (subject, _objections[standing].Record with { WithdrawnAt = at });
+
+        return ValueTask.FromResult(true);
     }
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
         IReadOnlyCollection<string> purposes,
+        string document,
         string version,
         CancellationToken cancellationToken)
     {
@@ -81,11 +199,40 @@ internal sealed class ConsentStoreInMemory : IConsentStore
         return ValueTask.FromResult<IReadOnlyList<HeldConsent>>(
         [
             .. _consents
-                .Where(held => held.Value.Live
-                    && purposes.Contains(held.Value.Purpose)
-                    && !string.Equals(held.Value.NoticeVersion, version, StringComparison.Ordinal))
-                .Select(held => new HeldConsent(held.Key.Subject, held.Value))
+                .Where(held => held.Record.Live
+                    && purposes.Contains(held.Record.Purpose)
+                    && (!string.Equals(held.Record.Document, document, StringComparison.Ordinal)
+                        || !string.Equals(held.Record.NoticeVersion, version, StringComparison.Ordinal)))
+                .Select(held => new HeldConsent(held.Subject, held.Record))
                 .OrderBy(one => one.Consent.GrantedAt),
         ]);
     }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<EndedConsent>> SupersedeAgainstAnotherAsync(
+        IReadOnlyDictionary<string, string> documents,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        List<EndedConsent> ended = [];
+
+        for (int index = 0; index < _consents.Count; index++)
+        {
+            (SubjectId subject, ConsentRecord record) = _consents[index];
+
+            if (record.Live
+                && documents.TryGetValue(record.Purpose, out string? named)
+                && !Same(record.Document, named))
+            {
+                _consents[index] = (subject, record with { SupersededAt = at });
+                ended.Add(new EndedConsent(subject, record.Purpose));
+            }
+        }
+
+        return ValueTask.FromResult<IReadOnlyList<EndedConsent>>(ended);
+    }
+
+    private static bool Same(string one, string other) => string.Equals(one, other, StringComparison.Ordinal);
 }

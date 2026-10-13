@@ -42,4 +42,10 @@ internal sealed class RecoveryLinkRecord
 
     /// <summary>The <c>spent_at</c> column, and nothing while the link is unspent.</summary>
     public DateTimeOffset? SpentAt { get; set; }
+
+    /// <summary>
+    /// The <c>codes_shown_at</c> column, and nothing where no second step enrolled in
+    /// the session showed recovery codes.
+    /// </summary>
+    public DateTimeOffset? CodesShownAt { get; set; }
 }

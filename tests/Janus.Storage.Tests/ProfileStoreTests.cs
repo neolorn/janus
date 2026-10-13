@@ -218,7 +218,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
     }
 
     private ProfileStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private async Task RecordAsync(SubjectId subject, Action<Profile> change)
     {

@@ -12,13 +12,17 @@ namespace Janus.Hosting.Sending;
 /// <param name="Name">The restriction's name.</param>
 /// <param name="Key">What it counts by: <c>destination</c>, <c>account</c>, <c>source</c>, <c>global</c> or <c>host:&lt;name&gt;</c>.</param>
 /// <param name="Purpose">Which sends it counts.</param>
+/// <param name="Channel">Which channel's sends it counts.</param>
 /// <param name="Buckets">The limits it holds.</param>
+/// <param name="Resend">Whether it is marked <c>resend</c>.</param>
 /// <remarks>Implements chapter 09 section 8 and AUTH-ABUSE-004.</remarks>
 internal sealed record RestrictionView(
     string Name,
     string Key,
     string Purpose,
-    IReadOnlyList<BucketView> Buckets)
+    string Channel,
+    IReadOnlyList<BucketView> Buckets,
+    bool Resend)
 {
     /// <summary>
     /// The prefix a key a host supplies is written with.
@@ -41,6 +45,8 @@ internal sealed record RestrictionView(
                 ? HostPrefix + restriction.HostKeyName
                 : SettingText.Of(restriction.Key),
             SettingText.Of(restriction.Purpose),
-            [.. restriction.Buckets.Select(BucketView.Of)]);
+            SettingText.Of(restriction.Channel),
+            [.. restriction.Buckets.Select(BucketView.Of)],
+            restriction.Resend);
     }
 }

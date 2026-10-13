@@ -23,8 +23,12 @@ public sealed class SettingFamily<TValue> : SettingFamily
         HasDefault = true;
     }
 
-    internal SettingFamily(string prefix, SettingScope scope, SettingForm<TValue> form)
-        : base(prefix, scope, SettingDirection.AnyChange)
+    internal SettingFamily(
+        string prefix,
+        SettingScope scope,
+        SettingForm<TValue> form,
+        SettingDirection loosening = SettingDirection.AnyChange)
+        : base(prefix, scope, loosening)
     {
         _fallback = default!;
         _form = form;

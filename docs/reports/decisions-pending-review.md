@@ -3498,6 +3498,8 @@ sent,
 `GateBehaviourTests.AUTHZ_GATE_005_AC1_APageOfFiftyIsAnsweredWithoutAQueryPerRecordAsync`,
 `GateBehaviourTests.AUTHZ_GATE_005_AC2_ADerivedGrantReachesTheCapabilityPageAsync`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 111. An explanation takes the host's rows and names the grant a fact produced
@@ -3618,6 +3620,8 @@ which holds no file at all,
 `StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsSelfHosted_RequiresItsAddress`,
 `StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsNotSelfHosted_NeedsNoAddress`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 115. The verification code is an aggregate of its own, and the device check issues through it
@@ -3660,6 +3664,8 @@ which D-162 does not reverse.
 `ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`, which carries
 the new table's columns and no longer the challenge's two.
 
+**Superseded by D-166.**
+
 ---
 
 ## 116. The configuration store stands, and the area's services are the container's
@@ -3684,6 +3690,8 @@ malformed row read as the key's default.
 `ConfigurationStoreTests.ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync`,
 beside `ConfigurationStoreTests.OPS_CFG_008_AC1_AChangedSettingIsInForceForTheNextReadAsync`
 and the registration the hosting tests exercise end to end.
+
+**Superseded by D-166.**
 
 ---
 
@@ -3786,6 +3794,8 @@ the outbox publisher and the alert router beside the hosted worker. LIB-EXT-001'
 LIB-API-001 should carry it, `SendRequest`, `SendDestination` and `SendReference` in the
 public surface.
 
+**Superseded by D-166.**
+
 ---
 
 ## 119. Every send is written to the library's own outbox and carried from the row
@@ -3857,6 +3867,8 @@ written to, that the row is removed once a transport has taken it (IDN-PRIN-003)
 that the row's message is encrypted under a key of the row's own because a send may name
 no subject. `10` should carry the `send_outbox` table and its six columns.
 
+**Superseded by D-166.**
+
 ---
 
 ## 120. A template is measured at startup with every place it names at its widest
@@ -3911,6 +3923,8 @@ template"), and the item should state that the render is done at startup with ea
 at its defined width, that the widths are defined once per place beside the message
 kinds, and that a place the library does not fill is left as it stands. `10` should carry
 the places and their widths, which are listed under "Rows for chapter 10".
+
+**Superseded by D-166.**
 
 ---
 
@@ -3978,6 +3992,8 @@ should carry `IEvents.PublishAsync` with its new return. An item of `02` should 
 that an operation publishes inside its transaction and commits nothing it could not
 publish.
 
+**Superseded by D-166.**
+
 ---
 
 ## 122. A send counter is kept for what the restrictions now declare, not for what a send was written under
@@ -4031,6 +4047,8 @@ schedule behind it. D-162 asks for it there and nowhere else.
 deleted and against what, and should say whether the interval is taken over the
 destination restrictions or over all of them. PRIV-RET-005 AC2 should say that the
 retention of a counter follows the declaration as it now stands.
+
+**Superseded by D-166.**
 
 ---
 
@@ -4088,6 +4106,8 @@ what is refused is a message with no text in a declared language or over budget,
 that a deployment which registers no catalogue is answered out of the shipped one.
 LIB-HOST-001 should not list a message catalogue among the declarations a deployment
 must make.
+
+**Superseded by D-166.**
 
 ---
 
@@ -4191,6 +4211,8 @@ list says and what D-162 item 34 decides. Chapter 10 section 4 should say that a
 whose chapter states its direction governs, naming the restriction set as the one that
 does. Chapter 10 needs a row for the audit action `ops.configuration.changed`, listed
 under **Rows for chapter 10**.
+
+**Revised by entry 407.**
 
 ---
 
@@ -4387,6 +4409,8 @@ does, is judged as before.
 `POST /auth/webauthn/register/begin`, including the `user` object, and say that the
 assertion may carry the handle the authenticator returned.
 
+**Superseded by D-166.**
+
 ---
 
 ## 130. Three privacy refusals take names of their own
@@ -4421,6 +4445,8 @@ carries.
 *Chapter text that should change.* `10` section 1.4 needs the three rows, listed under
 **Rows for chapter 10**. `09` section 7 should carry the three statuses on the consent
 and document endpoints.
+
+**Superseded by D-166.**
 
 ---
 
@@ -4527,6 +4553,8 @@ the column its type declares for its encrypted fields, and that the library hold
 the `resources` row because LIB-HOST-002 forbids it the host's table. AUTHZ-MODEL-003
 should list the new startup refusal, and `10` should carry the `subject` column of
 `resources`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -4638,6 +4666,8 @@ trail that already holds such a refusal fails rather than removing an audit row
 lifecycle events and that an authorization refusal made under no account names neither
 identity, the absence being the recorded fact. AUTHZ-CONCEAL-004 should say the
 identifier is carried whoever asked.
+
+**Superseded by D-166.**
 
 ---
 
@@ -4790,6 +4820,8 @@ the moment the window runs out the same offer stages a verification.
 unavailable to other accounts until the undo window ends, and that an account offering it
 meanwhile is answered as REG-IDENT-001 AC2 answers an account offering a held value.
 
+**Superseded by D-166.**
+
 ---
 
 ## 142. A dead cookie leaves the request anonymous and one stage requires a session
@@ -4895,6 +4927,8 @@ interval is now the new key rather than a constant.
 `registration.events.pollinterval`, from the row below. REG-SESS-003 should say what
 drives the stream and that the interval is the fallback.
 
+**Superseded by D-166.**
+
 ---
 
 ## 144. The photo is the library's and the codec is the host's
@@ -4988,6 +5022,10 @@ host's and that the library stores what it answers. `09` section 6 should say th
 upload is the request body and that `DELETE` is not held to the policy. `10` section 1.1
 should drop the **(new)** mark from the three photo codes, which are now raised.
 
+**Superseded by D-166.**
+
+**Revised by entry 315.**
+
 ---
 
 ## 145. The registry is the list, and the default is a client it holds
@@ -5065,6 +5103,8 @@ carry no code. API-REDIR-002 AC2 should say that the default is the configured c
 and that a deployment naming none stores nothing. `10` section 4 should carry
 `redirect.defaultclient` and section 1.5 `model.startup.redirectclient`, both below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 146. A reported change of SIM withholds the entry that rides the number
@@ -5130,6 +5170,8 @@ sign-in with nothing left is refused with `auth.factor.rejected`. It should say 
 question is asked of the number and that the answer to an ask is the same whether or not
 an account holds it, so AUTH-ABUSE-003 AC1 still holds. `09` section 3 should add
 `auth.factor.rejected` to what `POST /auth/link` can answer.
+
+**Superseded by D-166.**
 
 ---
 
@@ -5197,6 +5239,8 @@ to the exact text of the governing document. LIB-HOST-001's purpose declaration 
 carry the governing document. `09` section 7 should say that `noticeVersion` carries the
 version of the document that governs the purpose.
 
+**Superseded by D-166.**
+
 ---
 
 ## 148. The dashboard records whether it was asked again
@@ -5239,6 +5283,8 @@ has to tell them apart.
 records `reconsent` where the subject holds a superseded, unwithdrawn consent for the
 purpose and `dashboard` otherwise, and that a host calling the contract names its own
 mechanism. `10` section 5.21's `reconsent` row should say the library writes it.
+
+**Superseded by D-166.**
 
 ---
 
@@ -5322,6 +5368,8 @@ stored flag, so the export and the account page agree on which one is offered fi
 every group of REG-ACCT-001 the person may see and the whole of the standing group, and
 list the sections above, in place of the three it names now. The sentence entry 102
 asked for, that credentials are not among them, should not be written.
+
+**Superseded by D-166.**
 
 ---
 
@@ -5430,6 +5478,8 @@ and reported again, and three reports of one credential are three facts.
 
 *Chapter text that should change.* None. `10` section 5b already names all four and
 says what each is raised for.
+
+**Superseded by D-166.**
 
 ---
 
@@ -5612,6 +5662,8 @@ the memberships and the name, and whether the grants and the member accounts are
 them. `10` section 5b already names `OrganizationErased`; the row should say it carries
 the organization and the count of memberships ended and no subject. `10` section 5 needs
 the new audit action `identity.organization.erased` (listed under "Rows for chapter 10").
+
+**Superseded by D-166.**
 
 ---
 
@@ -6164,6 +6216,8 @@ requires, is unchanged); and the double-migration gate's worktree folder, now
 reads, and that the solution file and the lock files' lower-case identifiers count as
 project and package identifiers.
 
+**Superseded by D-166.**
+
 ---
 
 ## 168. A takedown is identified by the outbox record its trigger writes
@@ -6238,6 +6292,8 @@ account holds no takedown.
 `GET /admin/accounts/{subject}/takedown`; 10 section 1.1 gains
 `identity.takedown.notfound` (404), listed below under the rows for chapter 10.
 
+**Superseded by D-166.**
+
 ---
 
 ## 170. A takedown starts from active, restricted or suspended, and from nothing else
@@ -6280,6 +6336,8 @@ chapter grants a trigger. A second trigger writes nothing and answers **409**
 starts from, and `10` section 1.1 could widen `identity.takedown.active` to a second
 trigger.
 
+**Superseded by D-166.**
+
 ---
 
 ## 171. `AccountSuspended` is published after the trigger commits, and `TakedownExecuted` travels on the outbox
@@ -6317,6 +6375,8 @@ shows the delivery.
 
 *Chapter text that should change.* IDN-LIFE-003 could say that `TakedownExecuted` is
 the outbox record and `AccountSuspended` follows the commit.
+
+**Superseded by D-166.**
 
 ---
 
@@ -6454,6 +6514,8 @@ administrative organization through a port of its own, as each reads memberships
 
 *Chapter text that should change.* AUTHZ-SCOPE-001 could say that an operation on the
 deployment, or on an account, is scoped to the administrative organization.
+
+**Revised by entries 194 and 205.**
 
 ---
 
@@ -6647,6 +6709,8 @@ route lists no 404, and the name is part of the request.
 *Chapter text that should change.* 09 section 8 could say which keys the route serves
 and add the 400 for a name that is not one of them.
 
+**Superseded by D-166.**
+
 ---
 
 ## 181. A configuration value crosses the interface in its own JSON type
@@ -6679,6 +6743,8 @@ every other view writes an enum.
 
 *Chapter text that should change.* 09 section 8 could show one `GET` answer and name
 the spelling of `direction`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -6752,6 +6818,8 @@ of a name the set does not hold.
 *Chapter text that should change.* 09 section 8 could show `reason` in the `PUT` body,
 give `DELETE` its body, and add the 400 for a name the set does not hold.
 
+**Superseded by D-166.**
+
 ---
 
 ## 184. How a grant names the whole organization, and what else it must name
@@ -6795,6 +6863,8 @@ hold.
 *Chapter text that should change.* 09 section 8 could say how the body names the whole
 organization, that `grant:manage` is asked in the grant's organization, and add the 400
 for a role, record or group the deployment does not hold.
+
+**Superseded by D-166.**
 
 ---
 
@@ -6918,6 +6988,8 @@ organization.
 and 204, the path and body of `DELETE`, the 400s, and say that `role:manage` is asked
 in the administrative organization.
 
+**Superseded by D-166.**
+
 ---
 
 ## 188. A change to a role is reasoned, audited, and guarded as a grant of what it carries
@@ -6959,6 +7031,8 @@ which is the "one step removed" OPS-CFG-007 exists to prevent, and would let the
 *Chapter text that should change.* AUTHZ-GRANT-004 could require the reason and the
 audit record of a role change, and OPS-CFG-007 could name role changes.
 
+**Superseded by D-166.**
+
 ---
 
 ## 189. A role a grant or a derivation names is not removed, and the refusal has a code of its own
@@ -6992,6 +7066,8 @@ the others in 10 section 1.3.
 *Chapter text that should change.* 10 section 1.3 could add
 `authz.role.inuse`: "A grant or a derivation names the role, so it cannot be removed;
 409", and 09 section 8 could list it under `DELETE /admin/roles`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -7044,6 +7120,8 @@ chapter says where the permission is asked or which organization a listing reads
 bodies of `POST` and of both member routes, the path and body of `DELETE`, the 201 and
 204 answers and the 400s, and say that `group:manage` is asked in the group's
 organization.
+
+**Revised by entry 411.**
 
 ---
 
@@ -7180,6 +7258,8 @@ organization is". The configuration store had no write for one member of such a 
 *Chapter text that should change.* 09 section 8a could give the bodies of the three
 routes, the 201 and 204 answers, the 400s and the answer to a repeat, and say the policy
 row is `{}` and recorded as a configuration change.
+
+**Superseded by D-166.**
 
 ---
 
@@ -7425,6 +7505,8 @@ The configuration route already takes a reason on every change (D-147).
 
 *Chapter text that should change.* 09 section 8a could say whether a tightening is
 stepped up, in the same words as 10 section 5a.
+
+**Superseded by D-166.**
 
 ---
 
@@ -7720,6 +7802,8 @@ failure is about the domain's proof.
 *Chapter text that should change.* 10 section 1.1 needs the row for
 `identity.domain.unverified` (below, under the rows for chapter 10).
 
+**Superseded by D-166.**
+
 ---
 
 ## 210. A failed scheduled check keeps the domain verified; only verified domains are re-checked
@@ -7922,6 +8006,8 @@ methods the adapter sends, and 07 LIB-HOST-001 the declaration (row below); the 
 phase 8 line could say "provisioning through the mail-server abstraction, the adapter
 in Milestone 2 step 5".
 
+**Superseded by D-166.**
+
 ---
 
 ## 216. Which organization's mail is integrated
@@ -8057,6 +8143,8 @@ are not the account's. A server that throws is a server that did not confirm.
 *Chapter text that should change.* INT-MAIL-007 could name the end of the budget; 10
 section 5.23 could give `degradation`'s details for a push.
 
+**Superseded by D-177.**
+
 ---
 
 ## 220. What reconciliation compares and what it reports
@@ -8129,6 +8217,8 @@ revoke and re-invite tests land with the invitation endpoints.
 
 *Chapter text that should change.* REG-MAIL-003 could say the retired mailbox is
 reserved again rather than recreated.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8204,6 +8294,8 @@ disabled. Where the mail is not integrated, `corporateEmail` is
 *Chapter text that should change.* 09 section 8a could name the members `email`,
 `phone`, `corporateEmail`, `roles` and `documents`, and the 422 code.
 
+**Superseded by D-166.**
+
 ---
 
 ## 224. Which address the domain lock judges at issue, and what a refusal names
@@ -8266,6 +8358,8 @@ none never would, so the membership step would be unreachable.
 
 *Chapter text that should change.* REG-INV-001 could say a phone is bound only where
 `registration.phone` is not `off`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8330,6 +8424,8 @@ restrictions a notification answers to judge it, as they judge a recovery link
 
 *Chapter text that should change.* Chapter 10 could list the message kind (row below).
 
+**Superseded by D-166.**
+
 ---
 
 ## 228. The roles an invitation attaches ask what a grant asks
@@ -8364,6 +8460,8 @@ the store implements over the roles tables.
 *Chapter text that should change.* 09 section 8a could name `roles` and say that
 naming one asks `grant:manage`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 229. The documents an invitation attaches, at the version current when it is issued
@@ -8392,6 +8490,8 @@ after it. A document never published, or a blank name, is
 
 *Chapter text that should change.* 09 section 8a could name `documents` and say the
 version is fixed at issue.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8447,6 +8547,8 @@ neither revoked nor acknowledged, holds it whatever a service does.
 
 *Chapter text that should change.* REG-MAIL-001 could say re-inviting revokes the
 expired invitation.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8504,6 +8606,8 @@ where nobody ever held it (entry 221).
 
 *Chapter text that should change.* 09 section 8a could define unused as not yet
 acknowledged, and give the `204` and the refusals.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8609,6 +8713,8 @@ request the recipient made, and that a tag is matched against
 `notification.languages` by RFC 4647 lookup. The `notification.languages` row in
 chapter 10 could say that step 3 is one message per language. AUTH-ABUSE-004 could
 say that such a request is judged once and each language counts as one send.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8868,6 +8974,8 @@ carries both.
 `identity.invitation.notfound` for the 404, and say which invitation is read.
 Chapter 10 section 1.1 could add the row for `identity.invitation.notfound`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 243. How the account keeps the personal email through the membership
@@ -8994,6 +9102,8 @@ registration, and both are already enforced where they are used.
 *Chapter text that should change.* Chapter 09 section 6a could read "a bound identifier
 is not verified on the account accepting, or the corporate address is already held".
 
+**Superseded by D-166.**
+
 ---
 
 ## 246. How the credential policy is met before the membership attaches
@@ -9031,6 +9141,8 @@ the membership makes the organization's policy the one in force.
 *Chapter text that should change.* Chapter 09 section 6a could name the details of the
 **403** and say that only the factors the policy permits are counted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 247. How the roles of an invitation are granted
@@ -9062,6 +9174,8 @@ of the issue explains the grant; the words are the frontend's (CONV-CONTENT-001)
 *Chapter text that should change.* REG-INV-001 could state the scope, the grantor and
 the reason of the grants an invitation attaches.
 
+**Superseded by D-166.**
+
 ---
 
 ## 248. What the corporate address does at the acknowledgement
@@ -9089,6 +9203,8 @@ events of chapter 09 are the only ones published.
 
 *Chapter text that should change.* REG-MAIL-001 could say that the security-notice set
 is told of the corporate address when it is taken on.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9167,6 +9283,8 @@ actions).
 *Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
 answers, and chapter 10 could hold the audit action row below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 251. What the end of a membership does to the corporate address
@@ -9215,6 +9333,8 @@ account holds more than one.
 as it stands after the change is told once, and that only the end of the administrative
 organization's membership retires the address.
 
+**Superseded by D-166.**
+
 ---
 
 ## 252. Whether the end of a membership removes the member's grants
@@ -9248,6 +9368,8 @@ pins everything the end writes.
 *Chapter text that should change.* IDN-MEM-001 could state that ending a membership does
 not remove the account's grants in the organization, pointing at chapter 16 step 4, or
 the owner could decide that it does and reorder chapter 16.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9333,6 +9455,8 @@ actions).
 their answers, and chapter 10 could hold the audit rows below, with the category of
 `identity.account.reactivated` depending on who acted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 255. An administrator's suspension of an account its owner deactivated
@@ -9376,6 +9500,8 @@ choice is theirs, by the link or by recovery.
 *Chapter text that should change.* IDN-LIFE-013 could say that an administrator's
 suspension of a self-deactivated account makes it the administrator's to reverse, and
 that an administrator does not reactivate an account its owner deactivated.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9462,6 +9588,8 @@ while the account is suspended or deleting is held and in force when it returns,
 chapter 09 section 8a could say that the takedown reversal restores `restricted` where
 the account was restricted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 258. What lifting a restriction answers, writes and asks
@@ -9508,6 +9636,8 @@ actions).
 answers and say whether its preamble's "touches another person's account" adds gates
 chapter 10 section 5a does not list; chapter 10 could hold the audit row below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 259. Whether a restriction held away from the restricted state is lifted
@@ -9531,6 +9661,8 @@ The refusal is `authz.denied`, as for an account not restricted at all.
 
 *Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction held
 while the account is suspended or deleting is lifted only once the account is back.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9581,6 +9713,8 @@ request's status vocabulary has no value for it.
 answers and say which origins it cancels, and IDN-LIFE-003 could say that "recorded
 against the request" is the audit row naming it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 261. What reading an account's photo as an administrator answers and whose policy withholds it
@@ -9623,6 +9757,8 @@ administrative organization never declared for anyone but its own members.
 
 *Chapter text that should change.* Chapter 09 section 8a could say that "the policy" is
 that of the account's organizations and give the endpoint its other answers.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9741,6 +9877,8 @@ actions).
 other answers and say what "present only" answers; chapter 10 could hold the audit
 rows below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 264. What an erasure's identifier is, what the erasure endpoints read, and what the manual completion records
@@ -9821,6 +9959,8 @@ the same widening for the listing). Under this:
 `id` is the identifier of its delivery and give the completion its **204** and its
 refusals; IDN-LIFE-003a could say whether a takedown's or a restriction's failed
 delivery has a manual path; chapter 10 could hold the rows below.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9906,6 +10046,8 @@ above, the permission and the organization it is asked in, the 400 and 500 refus
 and say how the HTTP view reaches the host's relation, or that it does not and the
 view on a derived type is the host's own call; AUTHZ-DERIVE-007 could say that a grant
 conferring nothing is not reported and that `unevaluated` names relationships.
+
+**Superseded by D-166.**
 
 ---
 
@@ -10265,6 +10407,8 @@ declarations carry the marker (types, members and parameters), that session
 identifiers include the fingerprints they are found by, and that locals cannot carry
 it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 273. Where the required keys are checked, and when the register counts as generated
@@ -10529,6 +10673,8 @@ the confirmation a host supplies; 10 section 1 could give `integration.callback.
 429 for every cause; 04 or 06 could give `callback_events` and `callback_references` a
 retention.
 
+**Superseded by D-166.**
+
 ---
 
 ## 277. A report of delivery is held to a live send
@@ -10682,6 +10828,8 @@ sends the code nowhere but the registered destination. Under it:
 spent by the first answer it is given; 09 section 9 could say that API-REDIR-001's
 replacement applies at `POST /oidc/par`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 280. What the provider's conformance suite is and what it asserts
@@ -10735,6 +10883,8 @@ host-run suite runs the same refusals. Each named form is read at its widest:
 *Chapter text that should change.* 02 AUTH-OIDC-006 AC1 could say whether the suite is
 the library's own or part of LIB-TEST-001's package; 07 LIB-TEST-001 could name the
 provider's refusals among what the host-run suite verifies.
+
+**Revised by entry 356.**
 
 ---
 
@@ -10876,6 +11026,8 @@ and holds the audience in runtime configuration an administrator can change. Und
 *Chapter text that should change.* 07 LIB-HOST-001 could list `SocialProvider` as an
 optional host declaration with the startup refusals above; 10 could carry its row.
 
+**Revised by entries 343 and 349.**
+
 ---
 
 ## 284. How a provider's event finds the account it concerns
@@ -10917,6 +11069,8 @@ never shown. Under it:
 *Chapter text that should change.* 01 IDN-LIFE-012 could say the provider's subject
 identifier is held as a keyed fingerprint on the linked credential; 04 PRIV-RIGHT-005c
 could list it among the fingerprints erasure neutralises.
+
+**Revised by entry 318.**
 
 ---
 
@@ -11005,6 +11159,8 @@ the account back to whoever holds the owner's mail. Under it:
 *Chapter text that should change.* 01 IDN-LIFE-012a could say that the last credential
 is the last way to begin a sign-in and that the suspension is recorded as the
 administrator's.
+
+**Superseded by D-166.**
 
 ---
 
@@ -11170,6 +11326,8 @@ that can raise. Under it:
 after the transaction that raised it commits, and chapter 10 section 5b that the alert
 channels read it from the committed row.
 
+**Revised by entry 320.**
+
 ---
 
 ## 291. Generating the break-glass credential raises the break-glass alert
@@ -11203,6 +11361,8 @@ the owner (OPS-ALERT-004), which is what AC2 asks. Under it:
 
 *Chapter text that should change.* OPS-ALERT-001's break-glass row could read "used or
 generated", and chapter 10 section 5.23 could name the `event` detail.
+
+**Superseded by D-166.**
 
 ---
 
@@ -11364,6 +11524,8 @@ is itself the only session the account has.
 *Chapter text that should change.* OPS-BOOT-002 could name `authz.denied` as the
 refusal and list the gated actions the session does not pass.
 
+**Superseded by D-166.**
+
 ---
 
 ## 296. How long the break-glass session lives
@@ -11427,6 +11589,8 @@ analyser; `BreakGlassEndpointTests`.
 
 *Chapter text that should change.* Chapter 07 could say that the break-glass
 operations are reached through the endpoints alone.
+
+**Superseded by D-166.**
 
 ---
 
@@ -11597,6 +11761,8 @@ a page for someone who is not technical is what FE-BG-001 forbids. Under it:
 reason", or chapter 09 and FE-BG-001 gain the member and the control; the owner
 decides which.
 
+**Superseded by D-166.**
+
 ---
 
 ## 303. How an action of background work is audited, and what refuses it to nobody
@@ -11644,6 +11810,8 @@ as its actor and no reason.
 *Chapter text that should change.* IDN-AUD-001 could name the two columns beside the
 acting and effective subjects.
 
+**Superseded by D-166.**
+
 ---
 
 ## 304. Which pool-wide operations the scheduled jobs run as
@@ -11686,6 +11854,8 @@ enumeration by a member for every job. Under 3:
 beside the four operations it lists, or say which of the four each of the jobs of
 INF-BG-001 runs as.
 
+**Superseded by D-166.**
+
 ---
 
 ## 305. How often the jobs run that no setting paces
@@ -11717,6 +11887,8 @@ would raise `background-job-failed` every hour for a gateway that does not exist
 
 *Chapter text that should change.* The `outbox.poll.interval` row of `10` could name
 OPS-ALERT-001 among the passes it paces.
+
+**Superseded by D-166.**
 
 ---
 
@@ -11755,6 +11927,8 @@ runs the sweep over the database; the reach itself is the constant `LongestSessi
 
 *Chapter text that should change.* AUTH-KEY-003 could say how long a consumed refresh
 token is kept, and chapter `20` how long a staged identifier verification stands.
+
+**Superseded by D-166.**
 
 ---
 
@@ -12041,6 +12215,8 @@ action where a person stood behind the command. Under this:
 administrator, and OPS-BOOT-001 could name the granter of the first grants and say the
 alert is queued rather than sent.
 
+**Superseded by D-166.**
+
 ---
 
 ## 314. What bootstrap records in the audit trail
@@ -12122,6 +12298,8 @@ with no record. Under 3:
 *Chapter text that should change.* OPS-CFG-005 could say how the values set at
 bootstrap are recorded, and what `before` holds where no value stood.
 
+**Revised by entry 319.**
+
 ---
 
 ## 316. What the key-encryption key's rotation re-wraps, and what the maintenance credential reaches for it
@@ -12188,6 +12366,8 @@ reading 2 goes round the one path. Under 3:
 key rather than the subject keys alone, and say what becomes of tokens protected under
 a derived key; OPS-MIG-003a AC4 could list the column rights on the six tables and the
 append to the trail beside the subject-key and progress tables.
+
+**Superseded by D-166.**
 
 ---
 
@@ -12267,6 +12447,8 @@ version to the secrets manager, how the seal is confirmed, what the escrow copy 
 and that retirement is the operator's removal once the command records it; chapter 10
 could list the four `ops.keyrotation` actions and the `key-rotation` operation; the
 runbook's section 9 could give the order above.
+
+**Superseded by D-166.**
 
 ---
 
@@ -12381,6 +12563,8 @@ IDN-LIFE-012a could say the provider's subject is held encrypted beside its
 fingerprint; AUTH-ABUSE-004 AC6 could admit the version; OPS-MIG-003a AC4 could list
 the rights above; the runbook's "printed but not rotated" could point at the command.
 
+**Superseded by D-166.**
+
 ---
 
 ## 319. How a protected key is changed from the server, and what the change records and raises
@@ -12482,6 +12666,8 @@ OPS-ALERT-001 could say whether the governing language raises one alert or both;
 CONV-LAYOUT-001 could list `configure` among what `Janus.Cli` carries, beside bootstrap
 and key rotation.
 
+**Superseded by D-166.**
+
 ---
 
 ## 320. The library carries its own events: a row on the transaction, and a publisher that offers it to the host's consumers
@@ -12558,6 +12744,10 @@ library carries its events through a row of its own and that a host consumes the
 registering `IEventConsumer<TEvent>`; INF-BG-001 should name the event publisher beside
 the outbox publisher; chapter 10 should name a retention for a marked row, or say that
 a marked row is removed.
+
+**Superseded by D-166.**
+
+**Revised by entry 366.**
 
 ---
 
@@ -12674,6 +12864,8 @@ first attempt and the worker the rest; AUTH-ABUSE-004 could say that a retry is 
 again; chapter 10 section 4 could name send delivery beside IDN-LIFE-003a on the
 `outbox.*` rows and say that a spent send is removed and raises `degradation` per
 channel.
+
+**Superseded by D-166.**
 
 ---
 
@@ -12911,6 +13103,8 @@ record are one session, and that the alert names the sessions and not the places
 AUTH-SESS-013 could say that the place kept under the person's key includes where the
 city lies.
 
+**Superseded by D-166.**
+
 ---
 
 ## 327. Where read volume is counted from, and how a person's normal is kept
@@ -13052,6 +13246,8 @@ compared with, or return the three values a gate needs.
 
 **Revised by entry 399.**
 
+**Superseded by D-166.**
+
 ---
 
 ## 329. What an export operation is, and what it asks
@@ -13146,6 +13342,8 @@ permissions whose action is `export`, that the gate applies all three requiremen
 one export is, that the limit is per actor over a rolling hour and answered with
 `auth.throttled` and `retryAt`, what a system principal meets at the gate, and whether
 an export carries a reason (and so whether the gate should take one).
+
+**Superseded by D-166.**
 
 ---
 
@@ -13254,6 +13452,8 @@ administrators only, `{ "standing": true|false, "issuedAt": ... }`), so the mana
 application can show the alert of OPS-BOOT-001 AC3; OPS-BOOT-001 AC3 could say the
 alert is raised again every window until one is generated, a spent one included.
 
+**Superseded by D-166.**
+
 ---
 
 ## 332. How the off-host erasure ledger is written, and what an erasure waits for
@@ -13340,6 +13540,8 @@ confirmation on the erasure's outbox record, that the manual completion appends 
 never vouches for it, and could show its illustration to the second with one space.
 IDN-LIFE-003a could say that subscriber names are distinct and that `erasure-ledger` is
 the library's. `10` section 1.5 could add `model.startup.subscribername`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -13509,6 +13711,8 @@ test and that a failed one raises. Chapter 10 could list `ops.restoretest.comple
 If "at least quarterly" means once in every calendar quarter, the
 `backup.restoretest.interval` row could be written as `P90D`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 335. How the recovery-code reminder is sent
@@ -13571,6 +13775,8 @@ What is built:
 (the security-notice set), that only an active account is reminded, and the daily pass.
 Chapter 09 could list `remindedAt` in the account's `recoveryCodes` object. Chapter 10
 could carry `recovery-codes-reminder` if it lists message kinds.
+
+**Superseded by D-166.**
 
 ---
 
@@ -13834,6 +14040,8 @@ identifier and nothing the endpoint wrote. AUTHZ-CONCEAL-001 could say that a ho
 the gate before it looks the record up, since a record the library holds no row for is
 the genuine absence a concealed refusal is identical to.
 
+**Superseded by D-166.**
+
 ---
 
 ## 340. How a client enters the registry, and how its secret is rotated
@@ -13937,6 +14145,8 @@ OPS-SEC-003's values could name the command beside `rotate-kek`. OPS-SEC-002 nee
 owner's answer on AC1 for client secrets. Chapter 10 needs the audit-action row, and
 section 4.9 could say that a replaced client secret keeps the signing keys' overlap.
 
+**Superseded by D-166.**
+
 ---
 
 ## 341. How the key-encryption key's cryptoperiod is kept
@@ -13990,6 +14200,8 @@ the last annual operation and say it is warned of from the maintenance log.
 OPS-MAINT-001 could list the annual operation beside the licences and permits it warns
 of, under `expiry-approaching` with the scope `envelope-rotation`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 342. A restriction names no channel
@@ -14030,6 +14242,8 @@ yet say "this one is for mail".
 channel filter (`sms` · `email` · `any`) beside the purpose, with the shipped defaults
 filtered by the channel their names give, or say that a restriction applies across
 channels and that the shipped names are names only.
+
+**Superseded by D-166.**
 
 ---
 
@@ -14083,6 +14297,8 @@ What is built:
 discovery address, the return address and the secret, say that the first client
 identifier is the one a sign-in runs under, and say that Apple's signed secret is
 minted by the host; the rows owed for LIB-HOST-001 below carry the three members.
+
+**Superseded by D-166.**
 
 ---
 
@@ -14607,6 +14823,8 @@ from opening one.
 table in the library's scenarios, and list them; OPS-DATA-002 could say whether the
 conformance package is the service layer its AC2 speaks of.
 
+**Superseded by D-166.**
+
 ---
 
 ## 356. The provider probe a host runs asks what a registered client can be refused
@@ -14928,6 +15146,8 @@ a session it already held or out of band (PRIV-RIGHT-001 to PRIV-RIGHT-004).
 covers and say that the refusal is `authz.restricted`, and say whether the sign-in
 paths admit a restricted account, since the table and the code disagree.
 
+**Superseded by D-166.**
+
 ---
 
 ## 363. A replacement ends the other sessions when it applies, and the session that completes an identifier change rotates
@@ -14966,6 +15186,8 @@ is kept and is not rotated, since its browser is not there to receive a new secr
 *Chapter text that should change.* IDN-LIFE-008 could say that a replacement ends the
 other sessions when it applies, and that the rotation is of the session that completes
 the change.
+
+**Superseded by D-166.**
 
 ---
 
@@ -15171,6 +15393,8 @@ change and break-glass use. AC1 says raising the minimum level does not suppress
 | --- | --- | --- | --- |
 | `auth.authentication.failed` | security | `AuditActions.AuthenticationFailed` | A factor presented at sign-in, or the break-glass credential, was refused. The acting subject is the nil subject; the effective subject is the account the attempt was made against, or the nil subject where the identifier resolved to none or the break-glass code was refused before the reserved account was read; `details.factor` names the factor. Nothing that was typed is written. The row names no organization. (CONV-LOG-005) |
 | `auth.stepup.failed` | security | `AuditActions.StepUpFailed` | A factor presented to step a live session up was refused, including against a challenge that is not the asker's. The acting and effective subject is the session's account; `details.session` names the session and `details.factor` the factor. The row names no organization. (CONV-LOG-005) |
+
+**Revised by entry 400.**
 
 **Revised by entry 402.**
 
@@ -15507,6 +15731,8 @@ after live flows, since the rotations exist only as commands.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-166.**
+
 ---
 
 ## 378. The destructive-operation report reads what the added migrations' Up runs, and reports more than the chapter's list
@@ -15562,6 +15788,8 @@ exclusion, the range, the unset and the invalid variable, and the message.
 *Chapter text that should change.* `08` section 1b could list the constraint forms of
 OPS-DEP-001 beside `ADD CONSTRAINT`, and say which `DROP` forms count. OPS-DEP-001
 could say what an unset variable means.
+
+**Superseded by D-166.**
 
 ---
 
@@ -15722,6 +15950,8 @@ permissions.
 *Chapter text that should change.* REF-001 AC2 could say the bump is judged at the
 release commit, against the previous release, by the contract files.
 
+**Superseded by D-166.**
+
 ---
 
 ## 383. Every path of the library is a security path for a catch, and a catch ends the operation
@@ -15827,6 +16057,8 @@ contract method's refusals.
 *Tests that pin it.* `LibraryStructureTests.CONV_ERR_001_AC1_NoDenialIsSignalledByAnException`.
 
 *Chapter text that should change.* None.
+
+**Superseded by D-166.**
 
 ---
 
@@ -16015,6 +16247,8 @@ counts are kept, or what a deployment of several instances admits.
 - the count is kept per instance, by connection address after trusted proxies;
 - a deployment of several instances sets its share.
 
+**Superseded by D-166.**
+
 ---
 
 ## 390. Stage 4 is the one file of the boundary that reads a key, and it reads that key alone
@@ -16167,6 +16401,8 @@ and port. The chapter does not say where in the pipeline the fault is caught.
 *Chapter text that should change.* BFF-ERR-002 AC2 could say that the detail kept is
 the fault's type, since CONV-LOG-003 keeps its message out of the log.
 
+**Superseded by D-166.**
+
 ---
 
 ## 394. An authorization refusal the server cannot send to a client is answered to the browser in the envelope; the back-channel endpoints keep the protocol's JSON
@@ -16211,6 +16447,8 @@ could change:
   `details.error`";
 - LIB-API-003 could note that the OAuth error JSON at the back channel is the
   protocol's and not a user-facing error.
+
+**Superseded by D-166.**
 
 ---
 
@@ -16287,6 +16525,8 @@ does the answer hold for such a permission: nothing, false, or a refusal?
 
 *Chapter text that should change.* BFF-CAP-002 AC2 could say "is left out of the
 answer".
+
+**Superseded by D-166.**
 
 ---
 
@@ -16610,6 +16850,8 @@ could name these as failed authentication.
 
 **Revised by entry 422.**
 
+**Superseded by D-166.**
+
 ---
 
 ## 403. The rows REF-001 counts are chapter 10's live rows and the ledger's owed rows, and the boundary's codes are the literals parsed
@@ -16635,6 +16877,8 @@ could name these as failed authentication.
 
 *Chapter text that should change.* REF-001 AC1 could say that a row owed in the ledger counts until the chapter takes it. Permissions, which the REF-001 statement names, have no criterion.
 
+**Superseded by D-183.**
+
 ---
 
 ## 404. The seven protected keys outside OPS-CFG-004 are facts the deployment declares
@@ -16658,6 +16902,8 @@ could name these as failed authentication.
 `SettingsCatalogueTests.OPS_CFG_001_AC1_ARedeployScopedKeyIsOnTheOpsCfg004ListOrDeclared`.
 
 *Chapter text that should change.* OPS-CFG-001 AC1 could read "listed in OPS-CFG-004 or marked P in `10` section 4 as a fact the deployment declares".
+
+**Superseded by D-166.**
 
 ---
 
@@ -16710,6 +16956,8 @@ could name these as failed authentication.
 
 *Chapter text that should change.* INT-HOST-002 AC1 could say that startup refuses a consent-based purpose named for the hosting or its transfer. Chapter 10's AUTHZ-MODEL-003 startup refusals could carry the row proposed above.
 
+**Superseded by D-166.**
+
 ---
 
 ## 407. Every change to a runtime setting carries a reason, and the rule is the operation's
@@ -16755,6 +17003,8 @@ Every request that was refused is still refused; only which refusal comes first 
 *Chapter text that should change.*
 - `09` section 8's `422` line could read "`auth.restriction.reasonrequired` where a change arrives without a reason", matching its body.
 - OPS-CFG-002 could say that a tightening costs a reason but no step-up.
+
+**Superseded by D-166.**
 
 ---
 
@@ -17073,6 +17323,8 @@ chapters do not say:
 - OPS-MIG-005 could name the contract step that makes `canonical_name` not null in a
   later release.
 
+**Superseded by D-166.**
+
 ---
 
 ## 414. A missing body member is refused at the endpoint by the code chapter 10 names for it, and three members stay optional
@@ -17258,6 +17510,8 @@ description:
   the other.
 - AUTH-FACT-001 AC5 could say whether a label is unique regardless of case.
 
+**Superseded by D-166.**
+
 ---
 
 ## 418. A default instance of a value with rules gives no text, and fails where it is first read
@@ -17372,6 +17626,8 @@ first read.
   the identifier's canonical form, carried by the sign-in, and counted on every refused
   factor whether or not an account holds it.
 - OPS-SEC-003 AC6 could list sign-ins in progress among what a retirement forgets.
+
+**Superseded by D-166.**
 
 ---
 
@@ -17489,6 +17745,8 @@ first read.
 - It could say the exemption covers the identifier component as well as the account
   component, and never the source.
 
+**Superseded by D-166.**
+
 ---
 
 ## 422. A provider's return asks the source delay before the code is traded
@@ -17525,6 +17783,8 @@ first read.
 
 - AUTH-ABUSE-001 could say that a provider's return asks the source's delay before the
   code is traded.
+
+**Superseded by D-166.**
 
 ---
 

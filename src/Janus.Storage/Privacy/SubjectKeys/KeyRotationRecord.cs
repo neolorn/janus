@@ -19,8 +19,8 @@ internal sealed class KeyRotationRecord
     /// <summary>The <c>version</c> column, the second part of this table's key.</summary>
     public int Version { get; set; }
 
-    /// <summary>The <c>last_subject</c> column.</summary>
-    public SubjectId? LastSubject { get; set; }
+    /// <summary>The <c>last_subject</c> column: a row of the subject-key table, not a subject (D-174).</summary>
+    public SubjectKeyId? LastKey { get; set; }
 
     /// <summary>The <c>processed</c> column.</summary>
     public int Processed { get; set; }

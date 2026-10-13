@@ -24,7 +24,10 @@ public interface IPrivacyRequests
     /// <param name="type">What is asked for: restriction or rectification.</param>
     /// <param name="detail">What the subject wrote.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The receipt, or the refusal.</returns>
+    /// <returns>
+    /// The receipt, or the refusal: <c>api.request.malformed</c> naming <c>detail</c>
+    /// where it is blank or longer than 1024 characters after trimming.
+    /// </returns>
     ValueTask<Result<PrivacyRequestReceipt>> SubmitAsync(
         AccessContext context,
         PrivacyRequestType type,
@@ -38,7 +41,11 @@ public interface IPrivacyRequests
     /// <param name="entry">The request as it arrived.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The receipt, or the refusal: <c>privacy.request.receivedfuture</c> for a date
+    /// The receipt, or the refusal: <c>api.request.malformed</c> naming <c>channel</c>
+    /// or <c>identityConfirmation</c> where either is blank or longer than 1024
+    /// characters after trimming, or <c>detail</c> where one is given and is,
+    /// <c>api.request.invalid</c> naming <c>subject</c> where no account bears the
+    /// subject, <c>privacy.request.receivedfuture</c> for a date
     /// later than today in the deployment's zone, <c>privacy.request.duplicate</c>
     /// where an identical request is already open.
     /// </returns>
@@ -58,14 +65,22 @@ public interface IPrivacyRequests
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Decides to do what was asked.
+    /// Decides to do what was asked. Every fulfilment, whatever the request's type, is
+    /// the <c>privacyrequest:fulfil</c> step-up action.
     /// </summary>
     /// <param name="context">Who is deciding.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="request">Which request.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or the refusal.</returns>
+    /// <returns>
+    /// Success, or the refusal: <c>authz.denied</c> for an erasure of the reserved
+    /// emergency account, <c>auth.stepup.required</c> where the session has not proved
+    /// it recently enough, judged after every other refusal. An erasure refuses nothing
+    /// on the account's state.
+    /// </returns>
     ValueTask<Result> FulfilAsync(
         AccessContext context,
+        SessionId session,
         PrivacyRequestId request,
         CancellationToken cancellationToken);
 
@@ -76,7 +91,10 @@ public interface IPrivacyRequests
     /// <param name="request">Which request.</param>
     /// <param name="reason">Why, in the words of the person deciding.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or the refusal.</returns>
+    /// <returns>
+    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>reason</c> where
+    /// it is blank or longer than 1024 characters after trimming.
+    /// </returns>
     ValueTask<Result> RefuseAsync(
         AccessContext context,
         PrivacyRequestId request,

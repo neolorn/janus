@@ -56,9 +56,15 @@ internal sealed class CategoryRetention(
                 : Result.Failure<TimeSpan>(error));
     }
 
-    // The shape every refused value carries (OPS-CFG-003): the key, and the floor
-    // written as the settings table holds it.
-    private static Error BelowFloor(ConfigurationKey key, TimeSpan floor) =>
+    /// <summary>
+    /// The refusal of a period below a category's floor, in the shape every refused
+    /// value carries (OPS-CFG-003): the key, and the floor written as the settings
+    /// table holds it.
+    /// </summary>
+    /// <param name="key">The category's key.</param>
+    /// <param name="floor">The floor the host declared for it.</param>
+    /// <returns>The refusal.</returns>
+    internal static Error BelowFloor(ConfigurationKey key, TimeSpan floor) =>
         new(
             ErrorCodes.ConfigurationValueBelowFloor,
             new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)

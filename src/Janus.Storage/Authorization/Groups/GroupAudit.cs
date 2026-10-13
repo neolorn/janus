@@ -34,9 +34,10 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
         Group group,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await AppendAsync(Created, group, member: null, reason, actor, at, cancellationToken)
+        await AppendAsync(Created, group, member: null, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
@@ -44,9 +45,10 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
         Group group,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await AppendAsync(Removed, group, member: null, reason, actor, at, cancellationToken)
+        await AppendAsync(Removed, group, member: null, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
@@ -55,9 +57,10 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
         GrantSubject member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await AppendAsync(MemberAdded, group, member, reason, actor, at, cancellationToken)
+        await AppendAsync(MemberAdded, group, member, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
@@ -66,9 +69,10 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
         GrantSubject member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await AppendAsync(MemberRemoved, group, member, reason, actor, at, cancellationToken)
+        await AppendAsync(MemberRemoved, group, member, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
     private async ValueTask AppendAsync(
@@ -77,6 +81,7 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
         GrantSubject? member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
@@ -105,6 +110,7 @@ internal sealed class GroupAudit(IAuditStore records, TimeProvider time) : IGrou
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     group.Organization,
                     details),
                 cancellationToken)

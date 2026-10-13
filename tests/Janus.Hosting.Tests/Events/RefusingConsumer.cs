@@ -27,10 +27,16 @@ internal sealed class RefusingConsumer : IEventConsumer<AccountRegistered>
     /// </summary>
     public int Offered { get; private set; }
 
+    /// <summary>
+    /// What a test does while the consumer holds an event.
+    /// </summary>
+    public Action? Meanwhile { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<Result> HandleAsync(AccountRegistered raised, CancellationToken cancellationToken)
     {
         Offered++;
+        Meanwhile?.Invoke();
 
         if (Throws)
         {

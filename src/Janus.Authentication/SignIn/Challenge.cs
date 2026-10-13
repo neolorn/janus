@@ -26,7 +26,7 @@ internal sealed class Challenge
         byte[] fingerprint,
         SubjectId? subject,
         IdentifierId? email,
-        byte[]? identifier,
+        byte[] identifier,
         string webAuthn,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
@@ -57,10 +57,9 @@ internal sealed class Challenge
 
     /// <summary>
     /// The keyed hash of the identifier it was opened with, which the identifier
-    /// component of the delay counts a refused factor against; absent only where it was
-    /// opened before challenges carried it.
+    /// component of the delay counts a refused factor against.
     /// </summary>
-    public byte[]? Identifier { get; }
+    public byte[] Identifier { get; }
 
     /// <summary>The value an assertion against this challenge has to sign over.</summary>
     public string WebAuthn { get; }
@@ -106,9 +105,7 @@ internal sealed class Challenge
     /// <param name="fingerprint">What the handle hashes to.</param>
     /// <param name="subject">Whose sign-in, or nothing.</param>
     /// <param name="email">The email it was opened with, where the account holds it.</param>
-    /// <param name="identifier">
-    /// The keyed hash of the identifier it was opened with, where the store holds one.
-    /// </param>
+    /// <param name="identifier">The keyed hash of the identifier it was opened with.</param>
     /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
     /// <param name="createdAt">When it opened.</param>
     /// <param name="expiresAt">When it stops answering.</param>
@@ -119,13 +116,14 @@ internal sealed class Challenge
         byte[] fingerprint,
         SubjectId? subject,
         IdentifierId? email,
-        byte[]? identifier,
+        byte[] identifier,
         string webAuthn,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
         IReadOnlyCollection<Factor> presented)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
+        ArgumentNullException.ThrowIfNull(identifier);
         ArgumentNullException.ThrowIfNull(presented);
 
         return new Challenge(

@@ -138,8 +138,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
     {
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO identity.organizations (id, name, created_at)
-            VALUES (@organization, @name, @at);
+            INSERT INTO identity.organizations (id, name, canonical_name, created_at)
+            VALUES (@organization, @name, @canonicalName, @at);
             INSERT INTO identity.roles (name) VALUES ('reader'), ('reviewer');
             INSERT INTO identity.role_permissions (role, permission)
             VALUES ('reader', @read), ('reader', @edit), ('reviewer', @read);
@@ -148,6 +148,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
             {
                 organization = Organization.Value,
                 name = "The organization at production volume",
+                canonicalName = CanonicalForm.Of("The organization at production volume"),
                 at = At,
                 read = HostPermissions.Read.ToString(),
                 edit = HostPermissions.Edit.ToString(),

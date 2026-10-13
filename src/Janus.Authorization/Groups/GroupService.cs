@@ -106,10 +106,33 @@ internal sealed class GroupService(
 
         var group = Group.Create(GroupId.New(time), organization, named);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GroupId>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GroupId>(since);
+        }
+
         await groups.CreateAsync(group, cancellationToken).ConfigureAwait(false);
-        await audit.CreatedAsync(group, stated, acting, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        await audit
+            .CreatedAsync(group, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GroupId>(notCommitted);
+        }
 
         return Result.Success(group.Id);
     }
@@ -133,9 +156,9 @@ internal sealed class GroupService(
             return Result.Failure(denied);
         }
 
-        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
+        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group found)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(await GoneAsync(context, cancellationToken).ConfigureAwait(false));
         }
 
         if (Stated(reason) is not string stated)
@@ -143,19 +166,55 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("reason"));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: what names the group is read with the organization's groups held,
+        // which a change of members and a grant to a group hold too.
+        await groups.HoldAsync(found.Organization, cancellationToken).ConfigureAwait(false);
+
+        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
+        {
+            Error gone = await GoneAsync(context, cancellationToken).ConfigureAwait(false);
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(gone);
+        }
 
         // AUTHZ-GRANT-003 AC3: a grant's history names the group it was given to,
         // revoked or not, and a member or a containing group would lose what it holds
         // without a change of members recording it.
         if (await NamedAsync(held, cancellationToken).ConfigureAwait(false))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(Error.From(ErrorCodes.GroupInUse));
         }
 
         await groups.RemoveAsync(group, cancellationToken).ConfigureAwait(false);
-        await audit.RemovedAsync(held, stated, acting, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        await audit
+            .RemovedAsync(held, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -181,14 +240,16 @@ internal sealed class GroupService(
             return Result.Failure(denied);
         }
 
-        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
+        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group found)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(await GoneAsync(context, cancellationToken).ConfigureAwait(false));
         }
 
-        if (!await JoinableAsync(member, held.Organization, cancellationToken).ConfigureAwait(false))
+        // X5, D-166: a member group that does not exist or belongs to another
+        // organization is a body read and understood that names nothing it can hold.
+        if (!await JoinableAsync(member, found.Organization, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure(Malformed("subjectId"));
+            return Result.Failure(Unjoinable());
         }
 
         // OPS-BOOT-002: a group's grants would be something further granted to the
@@ -204,35 +265,63 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("reason"));
         }
 
-        // AUTHZ-GROUP-001: a group that already reaches this one, or this one itself,
-        // would come to hold itself.
-        if (member.Type == SubjectType.Group
-            && (member.Value == group.Value
-                || await groups.ReachesAsync(new GroupId(member.Value), GrantSubject.Of(group), cancellationToken)
-                    .ConfigureAwait(false)))
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
-            return Result.Failure(Error.From(ErrorCodes.GroupCycle));
+            return Result.Failure(notBegun);
         }
 
-        if (await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false)
-            is Error refused)
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error since)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: the nesting is judged with the organization's groups held, so a
+        // change of members at the same moment cannot close a cycle or confer through a
+        // group that came to administer, and the group and its member still stand.
+        await groups.HoldAsync(found.Organization, cancellationToken).ConfigureAwait(false);
+
+        Group? held = await groups.FindAsync(group, cancellationToken).ConfigureAwait(false);
+
+        Error? refused = held is null
+            ? await GoneAsync(context, cancellationToken).ConfigureAwait(false)
+            : !await JoinableAsync(member, held.Organization, cancellationToken).ConfigureAwait(false)
+                ? Unjoinable()
+                : await CycleAsync(group, member, cancellationToken).ConfigureAwait(false)
+                    ? Error.From(ErrorCodes.GroupCycle)
+                    : await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false);
+
+        if (refused is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
+        // CONV-DESIGN-003: a member already held changes nothing and records nothing, so
+        // the unit of work is rolled back.
         if ((await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Success();
         }
 
         await groups.AddMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
         await audit
-            .MemberAddedAsync(held, member, stated, acting, time.GetUtcNow(), cancellationToken)
+            .MemberAddedAsync(held!, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -258,9 +347,9 @@ internal sealed class GroupService(
             return Result.Failure(denied);
         }
 
-        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
+        if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group found)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(await GoneAsync(context, cancellationToken).ConfigureAwait(false));
         }
 
         if (Stated(reason) is not string stated)
@@ -268,25 +357,57 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("reason"));
         }
 
-        if (await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false)
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // D-166 X3: what the group and the groups above it hold is judged with the
+        // organization's groups held, as for an added member.
+        await groups.HoldAsync(found.Organization, cancellationToken).ConfigureAwait(false);
+
+        Group? held = await groups.FindAsync(group, cancellationToken).ConfigureAwait(false);
+
+        if ((held is null
+                ? await GoneAsync(context, cancellationToken).ConfigureAwait(false)
+                : await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false))
             is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
+        // CONV-DESIGN-003: a member not held changes nothing and records nothing, so the
+        // unit of work is rolled back.
         if (!(await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Success();
         }
 
         await groups.RemoveMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
         await audit
-            .MemberRemovedAsync(held, member, stated, acting, time.GetUtcNow(), cancellationToken)
+            .MemberRemovedAsync(held!, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -297,6 +418,9 @@ internal sealed class GroupService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    private static Error Unjoinable() =>
+        Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement("subjectId"));
 
     // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a change to a group is judged in the
     // organization its row belongs to, and that alone is read of it before the gate. A
@@ -310,6 +434,11 @@ internal sealed class GroupService(
         await groups.ScopeOfAsync(group, cancellationToken).ConfigureAwait(false) is OrganizationId organization
             ? await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
             : await unscoped.RefusedAsync(context, Permissions.GroupManage, cancellationToken).ConfigureAwait(false);
+
+    // 09 section 8: a group that no longer stands belongs to no organization, so it is
+    // refused as one no row names, whoever asks (AUTHZ-SCOPE-001).
+    private ValueTask<Error> GoneAsync(AccessContext context, CancellationToken cancellationToken) =>
+        unscoped.RefusedAsync(context, Permissions.GroupManage, cancellationToken);
 
     private async ValueTask<Error?> ManagingRefusedAsync(
         AccessContext context,
@@ -329,6 +458,17 @@ internal sealed class GroupService(
         member.Type != SubjectType.Group
             || (await groups.FindAsync(new GroupId(member.Value), cancellationToken).ConfigureAwait(false))
                 ?.Organization == organization;
+
+    // AUTHZ-GROUP-001: a group that already reaches this one, or this one itself,
+    // would come to hold itself.
+    private async ValueTask<bool> CycleAsync(
+        GroupId group,
+        GrantSubject member,
+        CancellationToken cancellationToken) =>
+        member.Type == SubjectType.Group
+            && (member.Value == group.Value
+                || await groups.ReachesAsync(new GroupId(member.Value), GrantSubject.Of(group), cancellationToken)
+                    .ConfigureAwait(false));
 
     private async ValueTask<bool> NamedAsync(Group group, CancellationToken cancellationToken) =>
         (await groups.MembersAsync(group.Id, cancellationToken).ConfigureAwait(false)).Count > 0
@@ -360,7 +500,8 @@ internal sealed class GroupService(
     }
 
     // A role nobody can read is taken to carry system administration, so the check
-    // fails closed.
+    // fails closed. D-166 X3: each role is read under its row's lock, in one order, so a
+    // definition at the same moment is judged before or after the change.
     private async ValueTask<bool> AdministersAsync(Group group, CancellationToken cancellationToken)
     {
         IReadOnlyList<GroupId> above = await groups
@@ -375,9 +516,12 @@ internal sealed class GroupService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (RoleName role in held.Select(grant => grant.Role).Distinct())
+        foreach (RoleName role in held
+            .Select(grant => grant.Role)
+            .Distinct()
+            .OrderBy(name => name.ToString(), StringComparer.Ordinal))
         {
-            if (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false) is not Role read
+            if (await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false) is not Role read
                 || read.Allows(Permissions.SystemAdminister))
             {
                 return true;

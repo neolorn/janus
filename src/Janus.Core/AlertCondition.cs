@@ -31,6 +31,13 @@ public enum AlertCondition
     [JsonStringEnumMemberName("breakglass-used")]
     BreakGlassUsed = 4,
 
+    /// <summary>
+    /// The emergency credential was generated, a first issue or a replacement. Declared
+    /// in the table's order, with the next free value, so no member is renumbered.
+    /// </summary>
+    [JsonStringEnumMemberName("breakglass-generated")]
+    BreakGlassGenerated = 31,
+
     /// <summary>A protected setting changed.</summary>
     [JsonStringEnumMemberName("protected-setting-changed")]
     ProtectedSettingChanged = 5,

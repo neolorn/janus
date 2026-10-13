@@ -116,19 +116,25 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     }
 
     /// <summary>
-    /// Declares a field held as ciphertext and the field naming the subject whose key
-    /// encrypts it.
+    /// Declares a field held as ciphertext, the field naming the subject whose key
+    /// encrypts it, and the data category it holds.
     /// </summary>
     /// <param name="field">The encrypted field.</param>
     /// <param name="subject">The field naming the subject.</param>
+    /// <param name="category">The data category it holds, as a purpose on this type names it.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">Either expression is absent.</exception>
-    /// <exception cref="ArgumentException">Either expression names no member.</exception>
+    /// <exception cref="ArgumentException">
+    /// Either expression names no member, or the category is absent or blank.
+    /// </exception>
     public ResourceTypeDeclarationBuilder<TResource> Encrypted(
         Expression<Func<TResource, object?>> field,
-        Expression<Func<TResource, object?>> subject)
+        Expression<Func<TResource, object?>> subject,
+        string category)
     {
-        _encrypted.Add(new EncryptedFieldDeclaration(DeclaredMember.Of(field), DeclaredMember.Of(subject)));
+        ArgumentException.ThrowIfNullOrWhiteSpace(category);
+        _encrypted.Add(
+            new EncryptedFieldDeclaration(DeclaredMember.Of(field), DeclaredMember.Of(subject), category));
 
         return this;
     }

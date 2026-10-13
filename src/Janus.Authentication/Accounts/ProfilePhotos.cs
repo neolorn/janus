@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Policies;
@@ -14,8 +15,8 @@ namespace Janus.Authentication.Accounts;
 /// </summary>
 /// <param name="directory">Where the photo is read and written.</param>
 /// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
-/// <param name="memberships">Which organizations the account belongs to.</param>
-/// <param name="configuration">Where the bounds and the availability are read.</param>
+/// <param name="policies">The policy in force for the account, which says whether it shows a photo.</param>
+/// <param name="configuration">Where the bounds are read.</param>
 /// <param name="audit">Where a change the account made to itself is recorded.</param>
 /// <param name="work">The transaction the whole of one operation runs in.</param>
 /// <param name="codec">
@@ -31,7 +32,7 @@ namespace Janus.Authentication.Accounts;
 internal sealed class ProfilePhotos(
     IAccountDirectory directory,
     ISettingsRestriction restriction,
-    IMembershipLookup memberships,
+    PolicyResolution policies,
     IConfigurationStore configuration,
     IAccountAudit audit,
     IUnitOfWork work,
@@ -41,13 +42,26 @@ internal sealed class ProfilePhotos(
     private static readonly AuditAction ProfileChanged = AuditActions.ProfileChanged;
 
     /// <summary>
+    /// The refusal of a policy change that would show photos where the host declared no
+    /// image codec: the library reads no image itself, so the value is refused at the
+    /// change rather than stored for an upload to meet (OPS-CFG-003, X6).
+    /// </summary>
+    public static Error Undeclared { get; } = new(
+        ErrorCodes.ConfigurationValueNotAllowed,
+        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            ["field"] = JsonSerializer.SerializeToElement("photos"),
+            ["requires"] = JsonSerializer.SerializeToElement("imageCodec"),
+        });
+
+    /// <summary>
     /// The image an account shows for itself.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The stored JPEG, empty where the account shows none and where no organization
-    /// it belongs to shows photos at all.
+    /// The stored JPEG, or the refusal: <c>identity.photo.notfound</c> where the account
+    /// shows none and where the policy in force for it withholds photos, alike.
     /// </returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<ReadOnlyMemory<byte>>> ReadAsync(
@@ -68,8 +82,8 @@ internal sealed class ProfilePhotos(
     /// <param name="subject">Whose.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The stored JPEG, empty where the account shows none and where no organization
-    /// it belongs to shows photos at all.
+    /// The stored JPEG, or the refusal: <c>identity.photo.notfound</c> where the account
+    /// shows none and where the policy in force for it withholds photos, alike.
     /// </returns>
     public async ValueTask<Result<ReadOnlyMemory<byte>>> ReadOfAsync(
         SubjectId subject,
@@ -87,9 +101,13 @@ internal sealed class ProfilePhotos(
 
         // A policy that shows no photo shows nothing of one set while it did, and an
         // account that never set one answers the same way (09 section 6).
-        return shown
-            ? Result.Success(await directory.PhotoAsync(subject, cancellationToken).ConfigureAwait(false))
-            : Result.Success(ReadOnlyMemory<byte>.Empty);
+        ReadOnlyMemory<byte> image = shown
+            ? await directory.PhotoAsync(subject, cancellationToken).ConfigureAwait(false)
+            : ReadOnlyMemory<byte>.Empty;
+
+        return image.IsEmpty
+            ? Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.PhotoNotFound))
+            : Result.Success(image);
     }
 
     /// <summary>
@@ -113,7 +131,7 @@ internal sealed class ProfilePhotos(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -166,16 +184,34 @@ internal sealed class ProfilePhotos(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
 
         await directory.RecordPhotoAsync(subject, image, now, cancellationToken)
             .ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(ProfileChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(ProfileChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -201,7 +237,7 @@ internal sealed class ProfilePhotos(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -209,15 +245,33 @@ internal sealed class ProfilePhotos(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
 
         await directory.RemovePhotoAsync(subject, cancellationToken).ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(ProfileChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(ProfileChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -232,41 +286,12 @@ internal sealed class ProfilePhotos(
         return default!;
     }
 
-    // IDN-ATTR-002: availability is an organization's, so an account that belongs to
-    // no organization shows no photo, and one that belongs to several shows one only
-    // where every one of them shows one, which is how AUTH-PRIN-002 reads several.
+    // IDN-ATTR-002: availability is the policy field photos, resolved as AUTH-PRIN-002
+    // resolves every field, so an account of no organization follows the system policy
+    // and one of several shows a photo only where every one of them shows one.
     private async ValueTask<Result<bool>> ShownAsync(
         SubjectId subject,
-        CancellationToken cancellationToken)
-    {
-        IReadOnlyList<OrganizationId> held =
-            await memberships.OfAsync(subject, cancellationToken).ConfigureAwait(false);
-
-        if (held.Count is 0)
-        {
-            return Result.Success(false);
-        }
-
-        foreach (OrganizationId organization in held)
-        {
-            Error? failure = null;
-
-            bool shows = (await configuration
-                    .ReadAsync(Settings.OrganizationPhoto, organization.ToString(), cancellationToken)
-                    .ConfigureAwait(false))
-                .Match(read => read, error => Withheld<bool>(error, ref failure));
-
-            if (failure is Error refused)
-            {
-                return Result.Failure<bool>(refused);
-            }
-
-            if (!shows)
-            {
-                return Result.Success(false);
-            }
-        }
-
-        return Result.Success(true);
-    }
+        CancellationToken cancellationToken) =>
+        (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+        .Match(policy => Result.Success(policy.Photos), Result.Failure<bool>);
 }

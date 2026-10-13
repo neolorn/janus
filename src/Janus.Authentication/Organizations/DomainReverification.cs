@@ -37,10 +37,14 @@ internal sealed class DomainReverification(
     /// <summary>
     /// Checks every domain that is due.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many domains were checked, or the failure that stopped the pass.</returns>
-    public async ValueTask<Result<int>> SweepAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may sweep what has expired.</exception>
+    public async ValueTask<Result<int>> SweepAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Sweeping(context);
+
         Error? failure = null;
 
         TimeSpan interval = (await configuration
@@ -67,7 +71,12 @@ internal sealed class DomainReverification(
 
             domain.Checked(passed, now);
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(_ => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
+            }
+
             await domains.RecordAsync(domain, cancellationToken).ConfigureAwait(false);
 
             if (!passed
@@ -82,14 +91,29 @@ internal sealed class DomainReverification(
                         .ConfigureAwait(false))
                     .Match(() => (Error?)null, error => error) is Error unalerted)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<int>(unalerted);
             }
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<int>(notCommitted);
+            }
         }
 
         return Result.Success(due.Count);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may sweep what has expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

@@ -61,7 +61,7 @@ internal static class Refusal
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(error);
 
-        int status = ApiStatus.Of(error.Code);
+        int status = ApiStatus.Of(error);
         bool fault = status is StatusCodes.Status500InternalServerError;
 
         Logged(context, error, fault);

@@ -38,6 +38,28 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<IReadOnlyList<Membership>> FindBySubjectForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        await HeldAsync(
+                context.Memberships.FromSql(
+                    $"SELECT * FROM identity.memberships WHERE subject = {subject.Value} ORDER BY id FOR UPDATE"),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<IReadOnlyList<Membership>> FindByOrganizationForUpdateAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        await HeldAsync(
+                context.Memberships.FromSql(
+                    $"SELECT * FROM identity.memberships WHERE organization = {organization.Value} ORDER BY id FOR UPDATE"),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Membership>> FindByOrganizationAsync(
         OrganizationId organization,
         CancellationToken cancellationToken)
@@ -91,6 +113,30 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
             ?? throw new InvalidOperationException("The membership has no row to carry the change.");
 
         record.EndedAt = membership.EndedAt;
+    }
+
+    // The rows are locked in one order, so two transactions locking overlapping sets
+    // wait for each other rather than each holding a part. A row the context already
+    // tracks was read before the lock, so it is read again.
+    private async ValueTask<IReadOnlyList<Membership>> HeldAsync(
+        IQueryable<MembershipRecord> locking,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A membership's row is held only inside the operation's transaction.");
+        }
+
+        HashSet<MembershipId> tracked = [.. context.Memberships.Local.Select(record => record.Id)];
+
+        List<MembershipRecord> held = await locking.ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (MembershipRecord record in held.Where(record => tracked.Contains(record.Id)))
+        {
+            await context.Entry(record).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read([.. held.OrderBy(record => record.CreatedAt)]);
     }
 
     private static List<Membership> Read(List<MembershipRecord> records)

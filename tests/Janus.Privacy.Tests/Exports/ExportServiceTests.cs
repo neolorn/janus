@@ -95,22 +95,23 @@ public sealed class ExportServiceTests : IAsyncDisposable
                 ["value"] = "ahmed@example.test",
             })]));
 
-        await _consents.RecordAsync(
+        _consents.Keep(
             Ahmed,
             new ConsentRecord(
                 "recommendations",
+                "privacy-notice",
                 "2026-09-01",
                 ConsentMechanism.Dashboard,
                 ConsentKind.Ordinary,
                 Noon,
                 WithdrawnAt: null,
-                SupersededAt: null),
-            TestContext.Current.CancellationToken);
+                SupersededAt: null));
 
-        await _consents.RecordAsync(
+        _ = await _consents.AddAsync(
             Ahmed,
             new ObjectionRecord(
                 "marketing",
+                "privacy-notice",
                 "2026-09-01",
                 ConsentMechanism.Dashboard,
                 Noon,
@@ -195,6 +196,33 @@ public sealed class ExportServiceTests : IAsyncDisposable
             refused.Details["retryAt"].Deserialize<DateTimeOffset>());
 
         Assert.Equal(2, _ledger.Taken.Count);
+    }
+
+    /// <summary>
+    /// D-086, CONV-DESIGN-003: an export counted while this one waited for the
+    /// subject's exports is counted, so the export past the limit is refused and tells
+    /// nobody.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AnExportCountedMeanwhileIsCountedAsync()
+    {
+        _configuration.Set(Settings.PrivacyExportRateLimit, 1);
+
+        _ledger.Holding = () =>
+            _ = _ledger.RecordAsync(Ahmed, Noon, TestContext.Current.CancellationToken).AsTask();
+
+        Error refused = Refused(await Exports.AssembleAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, refused.Code);
+        Assert.Single(_ledger.Taken);
+        Assert.Empty(_outbox.Deliveries);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

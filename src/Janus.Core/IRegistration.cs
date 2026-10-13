@@ -33,18 +33,34 @@ public interface IRegistration
     /// The locale of the request, which its messages go out in and which the account
     /// keeps as its language preference (IDN-ATTR-001).
     /// </param>
+    /// <param name="ipAddress">
+    /// The whole address the registration is started from, which the session holds and
+    /// the account's first session records where the terms step is completed in process
+    /// (REG-SESS-001, AUTH-SESS-013), and which the bot defence matches against the
+    /// deployment's datacenter ranges before the session is created (AUTH-ABUSE-008).
+    /// Nothing is counted against it: every count and delay of a registration uses the
+    /// source of the request in hand (AUTH-ABUSE-001).
+    /// </param>
     /// <param name="source">
-    /// The address the registration is started from, which the source restrictions
-    /// count every message of this registration against.
+    /// The source of the request in hand, whose registration sessions in the hour the
+    /// bot defence counts before the session is created and which the session, once
+    /// created, is counted against (AUTH-ABUSE-008, AUTH-ABUSE-001).
     /// </param>
     /// <param name="invitationToken">
     /// The token of the invitation link the person pressed, or nothing for a public
     /// registration. The press is what verifies the email the invitation bound, and
     /// the invitation's organization governs every step from here (REG-INV-001).
     /// </param>
+    /// <param name="challengeToken">
+    /// The token the host's challenge produced, on a repeat after
+    /// <c>auth.challenge.required</c>, or nothing. The host's challenge verifier judges
+    /// it where a bot-defence signal fires (AUTH-ABUSE-008).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The session, whose state is read with <see cref="StateAsync"/>, or the refusal:
+    /// <c>auth.challenge.required</c> where a bot-defence signal fired, the host declared
+    /// a challenge verifier and no passing token was presented, nothing created,
     /// <c>identity.invitation.expired</c> where the token opens no invitation,
     /// <c>identity.invitation.identifiermismatch</c> where the email it binds is an
     /// account's already, <c>identity.registration.signedin</c> where the browser is
@@ -54,8 +70,10 @@ public interface IRegistration
         AccessContext? signedIn,
         string client,
         string language,
+        string ipAddress,
         string source,
         [NeverLogged] string? invitationToken,
+        [NeverLogged] string? challengeToken,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -91,6 +109,10 @@ public interface IRegistration
     /// <param name="session">Which session.</param>
     /// <param name="kind">Which kind the step collects.</param>
     /// <param name="value">The value as the person entered it.</param>
+    /// <param name="source">
+    /// The source of the request in hand, which its delay is asked of and its messages
+    /// and refusals are counted against (AUTH-ABUSE-001), never one stored at begin.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The state, identical whether or not the value belongs to an account already.
@@ -99,6 +121,7 @@ public interface IRegistration
         RegistrationSessionId session,
         IdentifierKind kind,
         string value,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -118,12 +141,17 @@ public interface IRegistration
     /// <param name="session">Which session.</param>
     /// <param name="kind">Which kind to add.</param>
     /// <param name="value">The value as the person entered it.</param>
+    /// <param name="source">
+    /// The source of the request in hand, which its delay is asked of and its messages
+    /// and refusals are counted against (AUTH-ABUSE-001), never one stored at begin.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The state, or the refusal where the maximum is reached.</returns>
     ValueTask<Result<RegistrationState>> AddAsync(
         RegistrationSessionId session,
         IdentifierKind kind,
         string value,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -133,12 +161,17 @@ public interface IRegistration
     /// <param name="session">Which session.</param>
     /// <param name="identifier">Which staged identifier.</param>
     /// <param name="value">The corrected value.</param>
+    /// <param name="source">
+    /// The source of the request in hand, which its delay is asked of and its messages
+    /// and refusals are counted against (AUTH-ABUSE-001), never one stored at begin.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The state, or the refusal where the identifier is locked.</returns>
     ValueTask<Result<RegistrationState>> ChangeAsync(
         RegistrationSessionId session,
         IdentifierId identifier,
         string value,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -162,12 +195,17 @@ public interface IRegistration
     /// <param name="session">Which session.</param>
     /// <param name="identifier">Which staged identifier.</param>
     /// <param name="code">The code typed where the flow is waiting.</param>
+    /// <param name="source">
+    /// The source of the request in hand, which its delay is asked of and its messages
+    /// and refusals are counted against (AUTH-ABUSE-001), never one stored at begin.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The state, or the failure the code produced.</returns>
     ValueTask<Result<RegistrationState>> VerifyAsync(
         RegistrationSessionId session,
         IdentifierId identifier,
         [NeverLogged] string code,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -180,14 +218,21 @@ public interface IRegistration
     /// </param>
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="press">Whether the person pressed the control.</param>
+    /// <param name="source">
+    /// The source of the request in hand. A pressed token that opens nothing is held to
+    /// that source's delay and counted against it alone (REG-SESS-003).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Whether the press verified, and where it did not, what the landing shows.
+    /// Whether the press verified, and where it did not, what the landing shows; a
+    /// pressed token that opens nothing is <c>auth.code.expired</c>, or
+    /// <c>auth.throttled</c> while its source's delay stands.
     /// </returns>
     ValueTask<Result<LinkLanding>> LandAsync(
         RegistrationSessionId? session,
         [NeverLogged] string linkToken,
         bool press,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>

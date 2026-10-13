@@ -28,6 +28,12 @@ internal sealed class RegistrationSessionStoreInMemory : IRegistrationSessionSto
         ValueTask.FromResult(_sessions.GetValueOrDefault(id));
 
     /// <inheritdoc/>
+    public ValueTask<RegistrationSession?> FindForUpdateAsync(
+        RegistrationSessionId id,
+        CancellationToken cancellationToken) =>
+        FindAsync(id, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<RegistrationSession?> FindByLinkAsync(
         byte[] fingerprint,
         CancellationToken cancellationToken) =>

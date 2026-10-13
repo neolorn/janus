@@ -19,9 +19,26 @@ namespace Janus.Authentication.Invitations;
 internal interface IMembershipAttachment
 {
     /// <summary>
+    /// Whether the account may take a membership of the organization, judged as
+    /// <see cref="AttachAsync"/> judges it, writing nothing.
+    /// </summary>
+    /// <param name="subject">Whose membership it would be.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="multiple">What <c>organization.multiplememberships</c> allows.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where it may, or <c>identity.membership.limitreached</c> where it may not.
+    /// </returns>
+    ValueTask<Error?> RefusedAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        bool multiple,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Attaches a membership carrying what the person acknowledged, and grants each
-    /// role across the organization. A grant the account already holds is not written
-    /// again.
+    /// role across the organization. A role the account already holds across the
+    /// organization, live and with no expiry, is not granted again.
     /// </summary>
     /// <param name="subject">Whose membership.</param>
     /// <param name="organization">Of which organization.</param>

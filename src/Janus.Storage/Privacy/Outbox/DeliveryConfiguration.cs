@@ -34,6 +34,10 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryR
                 "ck_outbox_reason",
                 Vocabulary.Admits<ErasureReason>("reason"));
             table.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
+
+            table.HasCheckConstraint(
+                "ck_outbox_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(delivery => delivery.Id).HasName("pk_outbox");
@@ -65,6 +69,8 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryR
         builder.Property(delivery => delivery.Attempts).HasColumnName("attempts");
 
         builder.Property(delivery => delivery.NextAttemptAt).HasColumnName("next_attempt_at");
+
+        builder.Property(delivery => delivery.ClaimedUntil).HasColumnName("claimed_until");
 
         builder.HasOne<AccountRecord>()
             .WithMany()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -9,7 +10,10 @@ using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authorization.Grants;
+using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Audit;
@@ -22,7 +26,10 @@ using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Authorization.Grants;
+using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
@@ -52,8 +59,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private SubjectEraser Eraser(StoreContext context) => new(
         context,
-        new SessionStore(context, _deployment.Keys, _deployment.Randomness),
-        new ConfigurationStore(context));
+        new SessionStore(context, _deployment.Ring, _deployment.Randomness),
+        new ConfigurationStore(context, new DataConnections(context)),
+        new DataConnections(context),
+        new IdentifierStore(context, _deployment.Ring, _deployment.Randomness));
 
     /// <summary>
     /// IDN-LIFE-003b AC4, PRIV-RIGHT-005a: the erasure commits as one thing. Afterwards
@@ -141,7 +150,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(AccountState.Deleting, account.State);
 
         SubjectKeyRecord key = await reading.SubjectKeys
-            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(row => row.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(PersonalDataFormat.Marker, key.FormatMarker);
     }
@@ -204,7 +213,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             profile.SetLegalName(legal);
             profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -214,7 +223,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -235,7 +244,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -271,7 +280,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -284,7 +293,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .AnyAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -302,7 +311,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -315,7 +324,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         Assert.Equal(before, await StoredImageAsync(subject));
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -381,7 +390,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(awaiting, ErasureReason.ErasureRequest);
         await EraseAsync(failed, ErasureReason.MinorTakedown);
-        await EraseAsync(complete, ErasureReason.OrganizationErasure);
+        await EraseAsync(complete, ErasureReason.ErasureRequest);
 
         await using (StoreContext progressing = database.Context())
         {
@@ -478,10 +487,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             profile.SetLegalName(legal);
             profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
 
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -492,11 +501,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -601,7 +610,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -609,6 +618,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     occurred,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null),
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -621,7 +631,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             deactivated.ToString(),
             await connection.ExecuteScalarAsync<string>(
-                "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
+                "SELECT action FROM identity.audit_records WHERE subject = @subject",
                 new { subject = subject.Value }));
     }
 
@@ -693,9 +703,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// IDN-ORG-005 AC1, AC2: an organization's erasure runs over its members, and
-    /// afterwards the audit records naming the organization are still there to be
-    /// queried, with the personal details they carried no longer readable.
+    /// IDN-ORG-005 AC1: the audit records naming an organization are still there to
+    /// be queried once a member is erased, with the personal details they carried no
+    /// longer readable; an organization's own erasure erases no account (IDN-ORG-003).
     /// </summary>
     [Fact]
     public async Task IDN_ORG_005_AC1_TheOrganizationsTrailSurvivesItsErasureAsync()
@@ -706,7 +716,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -714,6 +724,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     Noon.AddHours(-1),
                     member,
                     member,
+                    breakGlassReason: null,
                     organization,
                     personalDetails: new Dictionary<string, JsonElement>(StringComparer.Ordinal)
                     {
@@ -723,7 +734,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await EraseAsync(member, ErasureReason.OrganizationErasure);
+        await EraseAsync(member, ErasureReason.ErasureRequest);
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
@@ -736,12 +747,65 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         AuditRecord read = Assert.Single(
-            await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
 
         Assert.Equal(organization, read.Organization);
         Assert.Equal(suspended, read.Action);
         Assert.Empty(read.PersonalDetails);
+    }
+
+    /// <summary>
+    /// IDN-ORG-005 AC2: a personal detail in a record naming the organization is held
+    /// under its subject's key, so it reads while the subject stands and no longer reads
+    /// once that subject is erased, the record itself standing under the organization.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_005_AC2_APersonalDetailInTheOrganizationsRecordGoesWithItsSubjectAsync()
+    {
+        SubjectId member = await DeletingAccountAsync();
+        var organization = new OrganizationId(Guid.CreateVersion7());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    new AuditRecordId(Guid.CreateVersion7()),
+                    AuditCategory.Security,
+                    AuditAction.Parse("identity.account.suspended"),
+                    Noon.AddHours(-1),
+                    member,
+                    member,
+                    breakGlassReason: null,
+                    organization,
+                    personalDetails: new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                    {
+                        ["reason"] = JsonSerializer.SerializeToElement("ahmed@example.com"),
+                    }),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        AuditRecord before;
+
+        await using (StoreContext standing = database.Context())
+        {
+            before = Assert.Single(
+                await new AuditStore(standing, new DataConnections(standing), _deployment.Ring, _deployment.Randomness)
+                    .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
+        }
+
+        await EraseAsync(member, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuditRecord after = Assert.Single(
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
+                .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
+
+        Assert.Equal("ahmed@example.com", before.PersonalDetails["reason"].GetString());
+        Assert.Equal(organization, after.Organization);
+        Assert.Empty(after.PersonalDetails);
     }
 
     /// <summary>
@@ -762,7 +826,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
 
             IdentifierStore identifiers = Identifiers(writing);
@@ -785,7 +849,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             preferences.SetLanguage("ar-EG");
             preferences.SetTimeZone("Africa/Cairo");
 
-            await new PreferenceStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new PreferenceStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(preferences, TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -796,7 +860,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
@@ -804,7 +868,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 subject,
                 TestContext.Current.CancellationToken));
 
-        PreferenceSet kept = await new PreferenceStore(reading, _deployment.Keys, _deployment.Randomness)
+        PreferenceSet kept = await new PreferenceStore(reading, _deployment.Ring, _deployment.Randomness)
             .FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
 
         Assert.Equal("ar-EG", kept.Language);
@@ -831,10 +895,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
 
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -845,11 +909,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -886,6 +950,106 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             Mailbox.Reserved(Parsed("erased@example.test"), Noon),
             TestContext.Current.CancellationToken);
         await reading.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005 AC8: the mailbox the subject holds and the one it last held, its
+    /// membership having ended, both lose their fingerprint to the neutralised value,
+    /// and both rows stay, still naming who held them. Another account's mailbox is
+    /// untouched.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC8_TheMailboxHeldAndTheOneLastHeldAreNeutralisedAndRemainAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await DeletingAccountAsync();
+        Mailbox held = Reserved("held");
+        Mailbox lastHeld = Reserved("last-held");
+        Mailbox kept = Reserved("kept");
+
+        held.Hold(subject);
+        lastHeld.Hold(subject);
+        lastHeld.Retire(Noon);
+        kept.Hold(other);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Mailboxes(writing).AddAsync(held, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(lastHeld, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(kept, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        List<MailboxRecord> rows = await reading.Mailboxes
+            .AsNoTracking()
+            .Where(row => row.Holder == subject)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        MailboxRecord untouched = await reading.Mailboxes
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == kept.Id.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { held.Id.Value, lastHeld.Id.Value }.Order(),
+            rows.Select(row => row.Id).Order());
+        Assert.All(rows, row => Assert.True(Fingerprint.IsNeutralised(row.Fingerprint)));
+        Assert.False(Fingerprint.IsNeutralised(untouched.Fingerprint));
+
+        // The class shares one database and reads every mailbox still standing for an
+        // address, so the one kept for comparison goes with its holder in turn.
+        await EraseAsync(other, ErasureReason.ErasureRequest);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC17: the secret of an account's TOTP enrolment is held under the
+    /// account's subject key, so the store reads it back while the key stands and, the
+    /// row and its ciphertext being where they were, reads nothing once the erasure has
+    /// destroyed the key. Another account's secret still reads.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC17_ATotpSecretIsUnderTheSubjectKeyAndUnreadableAfterErasureAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        byte[] secret = RandomNumberGenerator.GetBytes(20);
+        byte[] kept = RandomNumberGenerator.GetBytes(20);
+        AuthenticatorId enrolled = await EnrolledAsync(subject, secret);
+        AuthenticatorId standing = await EnrolledAsync(other, kept);
+
+        byte[] stored;
+
+        await using (StoreContext before = database.Context())
+        {
+            stored = (await before.Authenticators
+                .AsNoTracking()
+                .SingleAsync(row => row.Id == enrolled, TestContext.Current.CancellationToken)).TotpSecret!;
+
+            Assert.Equal(PersonalDataFormat.Marker, stored[0]);
+            Assert.Equal(-1, stored.AsSpan().IndexOf(secret));
+            Assert.Equal(
+                secret,
+                (await Authenticators(before).FindAsync(enrolled, TestContext.Current.CancellationToken))!
+                    .Totp!.Secret.ToArray());
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuthenticatorRecord row = await reading.Authenticators
+            .AsNoTracking()
+            .SingleAsync(held => held.Id == enrolled, TestContext.Current.CancellationToken);
+
+        Assert.Equal(stored, row.TotpSecret);
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await Authenticators(reading).FindAsync(enrolled, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            kept,
+            (await Authenticators(reading).FindAsync(standing, TestContext.Current.CancellationToken))!
+                .Totp!.Secret.ToArray());
     }
 
     /// <summary>
@@ -930,12 +1094,13 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005a: what an invitation attached to the subject binds is forgotten
-    /// with the rest of their fields, while the row still names who invited into what;
+    /// PRIV-RIGHT-005a AC14: what an invitation attached to the subject binds is forgotten
+    /// with the rest of their fields, its key overwritten with the 32 zero bytes of an
+    /// erased key, while the row still names who invited into what;
     /// an invitation attached to nobody keeps what it binds until it is used or expires.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync()
+    public async Task PRIV_RIGHT_005a_AC14_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync()
     {
         SubjectId subject = await DeletingAccountAsync();
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
@@ -961,10 +1126,74 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         InvitationRecord kept = await reading.Invitations
             .SingleAsync(row => row.Id == standing.Id, TestContext.Current.CancellationToken);
 
-        Assert.Equal((null, null, null), (forgotten.EncryptedIdentifiers, forgotten.WrappedKey, forgotten.KeyVersion));
+        Assert.Null(forgotten.EncryptedIdentifiers);
+        Assert.Equal(new byte[32], forgotten.WrappedKey);
         Assert.Equal((subject, inviter, organization), (forgotten.Invitee, forgotten.Inviter, forgotten.Organization));
         Assert.NotNull(kept.EncryptedIdentifiers);
     }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC15, PRIV-RIGHT-005, AUTH-ABUSE-004: a message admitted for the
+    /// subject and not yet carried is unreadable once the erasure commits. Its row's key
+    /// is the erased value, 32 zero bytes with no marker, the row reads as erased and
+    /// names only the hash of its reference, and reading its message is refused before
+    /// the unwrap is tried. A message for another subject is untouched.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC15_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        SendDelivery outstanding = Outstanding(subject);
+        SendDelivery kept = Outstanding(other);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Outbox(writing).AddAsync(outstanding, TestContext.Current.CancellationToken);
+            await Outbox(writing).AddAsync(kept, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        SendDeliveryRecord erased = await reading.SendOutbox
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == outstanding.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new byte[32], erased.WrappedKey);
+        Assert.Equal(
+            SendReferences.Of(outstanding.Reference),
+            await Outbox(reading).ErasedAsync(outstanding.Id, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await Outbox(reading).FindAsync(outstanding.Id, TestContext.Current.CancellationToken));
+
+        Assert.Null(await Outbox(reading).ErasedAsync(kept.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            other,
+            (await Outbox(reading).FindAsync(kept.Id, TestContext.Current.CancellationToken))?.Requested.Subject);
+    }
+
+    private SendDeliveryStore Outbox(StoreContext context) =>
+        new(context, _deployment.DataKey(context), _deployment.Randomness);
+
+    private SendDelivery Outstanding(SubjectId subject) =>
+        SendDelivery.Of(
+            new OutboundMessage(
+                SendDestination.Of(EmailAddress.TryParse("outstanding@example.test", out EmailAddress address)
+                    ? address
+                    : throw new Xunit.Sdk.XunitException("The address does not parse.")),
+                MessageKind.SecurityNotice,
+                RestrictionPurpose.Notification,
+                Source: null,
+                "en")
+            {
+                Subject = subject,
+            },
+            SendReference.Draw(_deployment.Randomness),
+            Noon,
+            TimeSpan.FromSeconds(30));
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
@@ -984,7 +1213,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -1010,20 +1239,20 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private AccountDirectory Directory(StoreContext context) => new(
         context,
         new AccountStore(context),
-        new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
-        new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
-        new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
-        new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
+        new ProfileStore(context, _deployment.Ring, _deployment.Randomness),
+        new ProfilePhotoStore(context, _deployment.Ring, _deployment.Randomness),
+        new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+        new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
         PreferenceDeclarations.None,
         new OutboxStore(context, new FixedTime(Noon)));
 
     private static ErasureStore Store(StoreContext context) => new(context);
 
     private AuthenticatorStore Authenticators(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private IdentifierStore Identifiers(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private static Invitation Invited(OrganizationId organization, SubjectId inviter) =>
         Invitation.Issued(
@@ -1039,10 +1268,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             TimeSpan.FromDays(7));
 
     private InvitationStore Invitations(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Randomness);
 
     private MailboxStore Mailboxes(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Ring, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: a
     // record names its subject and outlives the subject's erasure (PRIV-RIGHT-005).
@@ -1072,7 +1301,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
+            await new SessionStore(writing, _deployment.Ring, _deployment.Randomness).AddAsync(
                 Session.Begin(
                     SessionId.New(TimeProvider.System),
                     subject,
@@ -1081,7 +1310,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     Noon,
                     TimeSpan.FromDays(1),
                     TimeSpan.FromDays(30),
-                    satisfiesEveryGate: false),
+                    breakGlassReason: null),
                 OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 TestContext.Current.CancellationToken);
@@ -1154,7 +1383,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         AccountRecord account = await reading.Accounts
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
         SubjectKeyRecord key = await reading.SubjectKeys
-            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(row => row.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         return (
             account.State,
@@ -1173,6 +1402,57 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .SingleAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken);
 
         return record.Image ?? [];
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC18 (D-174): the deployment's data key stands under the max UUID,
+    /// which no subject can be made from, so an erasure naming it is refused before it
+    /// reaches the store, and the row stays as it was.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_AnErasureNamingTheMaxUuidIsRefusedAndLeavesTheRowAsync()
+    {
+        byte[] deploymentKey;
+
+        await using (StoreContext writing = database.Context())
+        {
+            deploymentKey = await _deployment.DataKey(writing).UnwrappedAsync(TestContext.Current.CancellationToken);
+        }
+
+        SubjectKeyRecord before = await HeldKeyAsync(SubjectKeyId.Deployment);
+
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await EraseAsync(new SubjectId(Guid.AllBitsSet), ErasureReason.ErasureRequest));
+
+        SubjectKeyRecord after = await HeldKeyAsync(SubjectKeyId.Deployment);
+
+        Assert.Equal((before.FormatMarker, before.KeyVersion), (after.FormatMarker, after.KeyVersion));
+        Assert.Equal(before.WrappedKey, after.WrappedKey);
+
+        await using (StoreContext reading = database.Context())
+        {
+            Assert.Equal(
+                deploymentKey,
+                await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken));
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            0,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM identity.erasures WHERE subject = @reserved",
+                new { reserved = Guid.AllBitsSet }));
+    }
+
+    private async ValueTask<SubjectKeyRecord> HeldKeyAsync(SubjectKeyId id)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await reading.SubjectKeys
+            .AsNoTracking()
+            .SingleAsync(key => key.Id == id, TestContext.Current.CancellationToken);
     }
 
     private async ValueTask EraseAsync(SubjectId subject, ErasureReason reason)
@@ -1204,7 +1484,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -1212,6 +1492,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     occurred,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null),
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -1222,11 +1503,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         string? action = await connection.ExecuteScalarAsync<string>(
-            "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
+            "SELECT action FROM identity.audit_records WHERE subject = @subject",
             new { subject = subject.Value });
 
         DateTime at = await connection.ExecuteScalarAsync<DateTime>(
-            "SELECT occurred_at FROM identity.audit_records WHERE effective_subject = @subject",
+            "SELECT occurred_at FROM identity.audit_records WHERE subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal(suspended.ToString(), action);
@@ -1234,6 +1515,82 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             occurred.UtcDateTime,
             DateTime.SpecifyKind(at, DateTimeKind.Utc),
             TimeSpan.FromMilliseconds(1));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-003 AC2: an erased subject's identifier still resolves to its account,
+    /// which reads <c>deleted</c>, and no personal field of it reads: the profile under
+    /// its key fails to open rather than returning a value.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_003_AC2_AnErasedSubjectResolvesWithNoReadablePersonalFieldAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await using (StoreContext writing = database.Context())
+        {
+            Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+            profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
+
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        Account resolved = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((subject, AccountState.Deleted), (resolved.Subject, resolved.State));
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-003 AC3: an audit record referring to an erased subject is still read by
+    /// that subject, names it as it did, and the subject it names still resolves to an
+    /// account, so the record points at something.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_003_AC3_AnAuditRecordOfAnErasedSubjectStillResolvesAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        var suspended = AuditAction.Parse("identity.account.suspended");
+        var id = new AuditRecordId(Guid.CreateVersion7());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    id,
+                    AuditCategory.Security,
+                    suspended,
+                    Noon.AddHours(-3),
+                    subject,
+                    subject,
+                    breakGlassReason: null,
+                    organization: null),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuditRecord read = Assert.Single(
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((id, suspended, subject), (read.Id, read.Action, read.Subject));
+        Assert.NotNull(await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -1258,6 +1615,123 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         Assert.Equal("23505", refusal.SqlState);
     }
+
+    /// <summary>
+    /// IDN-LIFE-014, IDN-PRIN-003 (D-166): the erasure revokes every grant the account
+    /// holds, by the nil subject at the erasure's instant and for the requirement, and
+    /// keeps every row; a grant already revoked keeps its own revocation, another
+    /// account's grant is untouched, and the account's counter goes up.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_TheAccountsGrantsReadRevokedAndEveryRowStandsAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        DateTimeOffset earlier = Noon.AddDays(-1);
+
+        GrantId live = await GrantedAsync(subject, organization, revokedAt: null);
+        GrantId revoked = await GrantedAsync(subject, organization, earlier);
+        GrantId others = await GrantedAsync(other, organization, revokedAt: null);
+        long before = await GrantVersionAsync(subject);
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        GrantRecord erased = await reading.Grants
+            .SingleAsync(row => row.Id == live, TestContext.Current.CancellationToken);
+        GrantRecord kept = await reading.Grants
+            .SingleAsync(row => row.Id == revoked, TestContext.Current.CancellationToken);
+        GrantRecord untouched = await reading.Grants
+            .SingleAsync(row => row.Id == others, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            (Noon, new SubjectId(Guid.Empty), "IDN-LIFE-014"),
+            (erased.RevokedAt, erased.RevokedBy, erased.RevocationReason));
+        Assert.Equal(
+            (earlier, subject, "The reason the grant was revoked."),
+            (kept.RevokedAt, kept.RevokedBy, kept.RevocationReason));
+        Assert.Null(untouched.RevokedAt);
+        Assert.True(await GrantVersionAsync(subject) > before);
+    }
+
+    private async ValueTask<GrantId> GrantedAsync(
+        SubjectId holder,
+        OrganizationId organization,
+        DateTimeOffset? revokedAt)
+    {
+        var role = RoleName.Parse("editor");
+        var id = GrantId.New(TimeProvider.System);
+
+        await using StoreContext writing = database.Context();
+
+        if (!await writing.Roles.AnyAsync(row => row.Name == role, TestContext.Current.CancellationToken))
+        {
+            await new RoleStore(writing).CreateAsync(
+                Role.Of(role, [Permissions.GrantRead]),
+                TestContext.Current.CancellationToken);
+        }
+
+        Grant grant = Grant.Create(
+                id,
+                GrantSubject.Of(holder),
+                role,
+                organization,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                holder,
+                Noon.AddDays(-2),
+                "The reason the grant was written.")
+            .Match(
+                written => written,
+                error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        if (revokedAt is DateTimeOffset at)
+        {
+            _ = grant.Revoke(holder, at, "The reason the grant was revoked.");
+        }
+
+        await using var work = new UnitOfWork(writing);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await new GrantStore(writing, new DataConnections(writing))
+            .CreateAsync(grant, TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
+    private async ValueTask<long> GrantVersionAsync(SubjectId subject)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await new GrantStore(reading, new DataConnections(reading))
+            .VersionAsync(subject, TestContext.Current.CancellationToken);
+    }
+
+    // A TOTP enrolment of the account's, written through the store as an enrolment is.
+    private async ValueTask<AuthenticatorId> EnrolledAsync(SubjectId subject, byte[] secret)
+    {
+        Assert.True(CredentialLabel.TryParse("this phone", out CredentialLabel label));
+
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await using StoreContext writing = database.Context();
+
+        await Authenticators(writing).AddAsync(
+            Authenticator.EnrollingTotp(id, subject, label, secret, Noon),
+            TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
+    // A mailbox reserved at an address no other test names.
+    private static Mailbox Reserved(string name) =>
+        Mailbox.Reserved(Parsed(name + "-" + Guid.NewGuid().ToString("N")[..12] + "@example.test"), Noon);
 
     private static EmailAddress Parsed(string value)
     {

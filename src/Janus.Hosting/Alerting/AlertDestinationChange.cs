@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -16,20 +18,24 @@ namespace Janus.Hosting.Alerting;
 /// change alert reaches them and not their replacements, so that redirecting the
 /// alerting cannot be done quietly by whoever holds one stepped-up session.
 /// </summary>
+/// <param name="scope">Whether the caller may still change the configuration.</param>
 /// <param name="configuration">Where the destination lists are read.</param>
 /// <param name="administration">The one operation a runtime setting is written through.</param>
 /// <param name="router">What carries the alert to the previous destinations.</param>
 /// <param name="events">Where the emitted events go.</param>
+/// <param name="work">The transaction the change and its event are written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements OPS-ALERT-004a and OPS-ALERT-004. The notice is not suppressible: no
-/// setting reaches it, which is the hole the requirement closed.
+/// Implements OPS-ALERT-004a, OPS-ALERT-004 and AUTHZ-GATE-006. The notice is not
+/// suppressible: no setting reaches it, which is the hole the requirement closed.
 /// </remarks>
 internal sealed class AlertDestinationChange(
+    AdministrativeScope scope,
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
     AlertRouter router,
     IEvents events,
+    IUnitOfWork work,
     TimeProvider time)
 {
     /// <summary>
@@ -42,20 +48,26 @@ internal sealed class AlertDestinationChange(
     /// and every change to one is classified as a loosening (OPS-CFG-002, D-079b).
     /// </param>
     /// <param name="challenge">What the <c>alerting:destinations</c> gate answered.</param>
-    /// <param name="actor">Who is making the change.</param>
+    /// <param name="context">Who is making the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
     /// <returns>Whether the change was made, or why it was refused.</returns>
-    /// <exception cref="ArgumentNullException">A value or the challenge is absent.</exception>
+    /// <exception cref="ArgumentNullException">A value, the challenge or the context is absent.</exception>
     public async ValueTask<Result> ChangeAsync(
         SendKind channel,
         IReadOnlyList<string> replacement,
         string? reason,
         StepUpChallenge challenge,
-        SubjectId actor,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(replacement);
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId actor)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         if (!StepUpRefusal.Met(challenge))
         {
@@ -93,7 +105,7 @@ internal sealed class AlertDestinationChange(
         // notice goes out, because a notice of a change that was then refused tells
         // the destinations something that did not happen.
         Result allowed = await administration
-            .AllowedAsync(setting, replacement, reason, challenge, AccessContext.Of(actor), cancellationToken)
+            .AllowedAsync(setting, replacement, reason, challenge, context, cancellationToken)
             .ConfigureAwait(false);
 
         if (allowed.Match(() => (Error?)null, error => error) is Error disallowed)
@@ -122,25 +134,83 @@ internal sealed class AlertDestinationChange(
             return Result.Failure(failure);
         }
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-186: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written. The notice given
+        // above stands as the notice of a change requested and not made, as it does for a
+        // change refused as superseded (OPS-ALERT-004a AC8).
+        if (await scope.RefusedAsync(context, Permissions.ConfigurationManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // OPS-ALERT-004a AC7: the destinations told above are those the change replaces
+        // only while that value is still in force, so it is read again under the row's
+        // lock, and a change another one overtook writes nothing.
+        await administration.HoldAsync(setting, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> standing = (await configuration
+                .ReadAsync(setting, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
+        if (!standing.SequenceEqual(previous, StringComparer.Ordinal))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                Error.From(
+                    ErrorCodes.ConfigurationChangeSuperseded,
+                    "key",
+                    JsonSerializer.SerializeToElement(setting.Key.ToString())));
+        }
+
         // OPS-CFG-005: the change is written through the one operation that classifies
         // it, gates it and writes it down, which is what the destination change was
-        // missing.
+        // missing. It joins this transaction, so the change and its event commit
+        // together (CONV-DESIGN-002).
         Result changed = await administration
-            .ChangeAsync(setting, replacement, reason, challenge, AccessContext.Of(actor), cancellationToken)
+            .ChangeAsync(setting, replacement, reason, challenge, context, cancellationToken)
             .ConfigureAwait(false);
 
         if (changed.Match(() => (Error?)null, error => error) is Error unchanged)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unchanged);
         }
 
         Result published = await events
-            .PublishAsync(raised with { Actor = actor }, cancellationToken)
+            .PublishAsync(raised with { Actor = actor, Effective = context.Effective }, cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
         }
 
         return Result.Success();

@@ -28,6 +28,6 @@ internal sealed record AppPasswordView(
     {
         ArgumentNullException.ThrowIfNull(password);
 
-        return new AppPasswordView(password.Id, password.Label, password.CreatedAt, password.ExpiresAt);
+        return new AppPasswordView(password.Id.ToString(), password.Label, password.CreatedAt, password.ExpiresAt);
     }
 }

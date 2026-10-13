@@ -42,6 +42,14 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
         )
         """;
 
+    // D-166 X3: a change of members is judged on the nesting (a cycle, what the group
+    // and the groups above it hold) and rewrites the closure from the edges, so two
+    // changes in one organization at once would each judge and rewrite without the
+    // other. The organization's groups are held for the rest of the transaction, which
+    // is where a nesting begins and ends (AUTHZ-SCOPE-001); no read takes this lock.
+    private const string Hold =
+        "SELECT pg_advisory_xact_lock(hashtextextended('identity.group_members/' || CAST(@organization AS text), 0));";
+
     private const string Clear =
         "DELETE FROM identity.group_closure WHERE group_id = ANY(CAST(@affected AS uuid[]));";
 
@@ -115,6 +123,20 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
             .ConfigureAwait(false);
 
         return scoped is [OrganizationId organization] ? organization : null;
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An organization's groups are held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        await RunAsync(ambient, Hold, new { organization = organization.Value }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -229,6 +251,25 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
             .ConfigureAwait(false);
 
         return groups;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Group>> HoldingAsync(
+        SubjectId member,
+        CancellationToken cancellationToken)
+    {
+        var account = GrantSubject.Of(member);
+
+        List<GroupRecord> records = await context.Groups
+            .Where(group => context.GroupMembers.Any(row => row.Group == group.Id
+                && row.MemberType == account.Type
+                && row.MemberId == account.Value))
+            .OrderBy(group => group.Name)
+            .ThenBy(group => group.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. records.Select(row => Group.Existing(row.Id, row.Organization, row.Name))];
     }
 
     /// <inheritdoc/>

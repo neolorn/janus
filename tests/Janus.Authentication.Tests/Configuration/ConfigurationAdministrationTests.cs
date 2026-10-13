@@ -23,6 +23,8 @@ namespace Janus.Authentication.Tests.Configuration;
 [Trait("kind", "unit")]
 public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 {
+    private const string Corpus = "https://corpus.example.test/range";
+
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
@@ -61,6 +63,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
     private ConfigurationAdministration Administration =>
         new(
+            _configuration,
             _configuration,
             _changes,
             new AdministrativeScope(_gate, _administrative),
@@ -116,6 +119,9 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             Wanting);
 
         Assert.Equal(ErrorCodes.StepUpRequired, refusal.Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_changes.Written);
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
     }
@@ -134,7 +140,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             reason: "   ",
             Satisfied);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, refusal.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refusal.Code);
         Assert.Equal(
             Settings.SessionAal2Inactivity.Key.ToString(),
             refusal.Details["key"].GetString());
@@ -160,7 +166,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
                 Wanting)).Code);
 
         Assert.Equal(
-            ErrorCodes.RestrictionReasonRequired,
+            ErrorCodes.ConfigurationChangeReasonRequired,
             (await RefusedAsync(
                 Settings.AlertingEmailDestinations,
                 ["two@example.test"],
@@ -234,11 +240,52 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Error absent = await RefusedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), reason: null, Wanting);
         Error blank = await RefusedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), "   ", Wanting);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, absent.Code);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, blank.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, absent.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, blank.Code);
         Assert.Equal(Settings.SessionAal2Inactivity.Key.ToString(), absent.Details["key"].GetString());
         Assert.Empty(_changes.Written);
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+    }
+
+    /// <summary>
+    /// OPS-CFG-003: the outbox interval paces the carrying of alerts, so it has a
+    /// ceiling of a minute; a longer one is refused as above it, even stepped up and
+    /// with a reason, and nothing is written.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_003_AnOutboxIntervalAboveItsCeilingIsRefusedAsync()
+    {
+        Error refusal = await RefusedAsync(
+            Settings.OutboxPollInterval,
+            TimeSpan.FromMinutes(2),
+            "a quieter publisher",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueAboveCeiling, refusal.Code);
+        Assert.Equal(Settings.OutboxPollInterval.Key.ToString(), refusal.Details["key"].GetString());
+        Assert.Empty(_changes.Written);
+        Assert.Equal(Settings.OutboxPollInterval.Default, await InForceAsync(Settings.OutboxPollInterval));
+    }
+
+    /// <summary>
+    /// API-CONV-002 and CONV-CODE-006 AC3: a reason is 1 to 1024 characters after
+    /// trimming, and the service refuses one past the bound for an in-process caller
+    /// as the route does, naming the member, and writes nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReasonPastItsBoundIsRefusedAsync()
+    {
+        Error refusal = await RefusedAsync(
+            Settings.SessionAal2Inactivity,
+            TimeSpan.FromMinutes(30),
+            new string('r', 1025),
+            Wanting);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refusal.Code);
+        Assert.Equal("reason", refusal.Details["member"].GetString());
+        Assert.Empty(_changes.Written);
     }
 
     /// <summary>
@@ -264,13 +311,13 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-CFG-002 and chapter 10 section 2.1: a loosening is the administrator's, so a
+    /// OPS-CFG-002 AC5 and chapter 10 section 2.1: a loosening is the administrator's, so a
     /// caller without <c>system:administer</c> is refused it whatever the session
     /// proved, and nothing is written.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task OPS_CFG_002_ALooseningIsRefusedWithoutSystemAdministerAsync()
+    public async Task OPS_CFG_002_AC5_ALooseningIsRefusedWithoutSystemAdministerAsync()
     {
         Result changed = await Administration.ChangeAsync(
             Settings.SessionAal2Inactivity,
@@ -442,18 +489,20 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         var actor = SubjectId.New(_randomness);
         PolicyOverride withdrawn = PolicyOverride.None with { SelfServiceRecovery = false };
 
-        Result<PolicyOverride> before = await Administration.ChangeMemberAsync(
+        Result changed = await Administration.ChangeMemberAsync(
             Settings.OrganizationPolicy,
             organization.ToString(),
             withdrawn,
+            PolicyOverride.None,
             loosening: false,
             "no recovery by mail",
             actor,
+            breakGlassReason: null,
             TestContext.Current.CancellationToken);
 
         ConfigurationChange written = Assert.Single(_changes.Written);
 
-        Assert.Equal(PolicyOverride.None, before.Match<PolicyOverride?>(value => value, _ => null));
+        Assert.True(changed.Match(() => true, _ => false));
         Assert.Equal(Settings.OrganizationPolicy.For(organization.ToString()), written.Key);
         Assert.Equal(Settings.OrganizationPolicy.Write(PolicyOverride.None), written.Before);
         Assert.Equal(Settings.OrganizationPolicy.Write(withdrawn), written.After);
@@ -468,25 +517,28 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-CFG-004: a member of a family the application cannot change is refused
-    /// whatever its route judged, and nothing is written down.
+    /// CONV-DESIGN-003 AC5: a member's value the store refuses, after the unit of work
+    /// began, rolls it back, and nothing is written down.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task OPS_CFG_004_AMemberOfAProtectedFamilyIsRefusedAsync()
+    public async Task CONV_DESIGN_003_AC5_AMemberTheStoreRefusesIsRolledBackAsync()
     {
-        Result<bool> refused = await Administration.ChangeMemberAsync(
-            Settings.OrganizationStepUpEnforcement,
-            OrganizationId.New(_clock).ToString(),
-            false,
-            loosening: true,
-            "an outage",
+        Result changed = await Administration.ChangeMemberAsync(
+            Settings.HostCategoryRetention,
+            "invoices",
+            TimeSpan.FromDays(-1),
+            TimeSpan.FromDays(30),
+            loosening: false,
+            "a shorter retention",
             SubjectId.New(_randomness),
+            breakGlassReason: null,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(
-            ErrorCodes.ConfigurationKeyProtected,
-            refused.Match(_ => throw new Xunit.Sdk.XunitException("The change was not refused."), error => error.Code));
+        Assert.False(changed.Match(() => true, _ => false));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_changes.Written);
     }
 
@@ -525,12 +577,12 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-011 AC2 (entry 269): withdrawing the declaration, or making Continue
+    /// INT-MAIL-011 AC4 (entry 269): withdrawing the declaration, or making Continue
     /// with Apple a way in again over a domain not declared, warns as well.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task INT_MAIL_011_AC2_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync()
+    public async Task INT_MAIL_011_AC4_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync()
     {
         Policy withoutApple = Janus.Core.Policies.SystemDefault with
         {
@@ -552,6 +604,28 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
         Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+    }
+
+    /// <summary>
+    /// INT-MAIL-011 AC4: withdrawing the sending domain from the registered domains
+    /// while Continue with Apple is a way in warns at the change, naming the domain.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC4_WithdrawingTheDeclarationWhileAppleIsAWayInWarnsAsync()
+    {
+        await ChangedAsync<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(StringComparer.Ordinal),
+            "the registration lapsed",
+            Satisfied);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
+        Assert.Equal(AlertSeverity.Normal, raised.Severity);
+        Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+        Assert.Single(_changes.Written);
     }
 
     /// <summary>
@@ -591,7 +665,86 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Denied, refusal.Code);
         Assert.Empty(_changes.Written);
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-006 AC5 and OPS-ALERT-001 (D-166, 329): the export step-up turned off is
+    /// announced in the change's transaction, so a change whose alert cannot be raised
+    /// is refused, unmade and unwritten.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AnExportStepUpTurnedOffWithoutItsAlertIsNotMadeAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.Denied);
+
+        Error refusal = await RefusedAsync(
+            Settings.ExfiltrationExportStepUpRequired,
+            false,
+            "a supervised migration",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.Denied, refusal.Code);
+        Assert.Empty(_changes.Written);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// INT-GEN-001 AC3 and INF-TLS-004 (D-198): the self-hosted corpus's address changed
+    /// to a value that is not an absolute <c>https</c> address is refused with the
+    /// endpoint code naming the key, and changes nothing: no unit of work is begun, no
+    /// row is held or written, no record of a change is made, and no event or alert is
+    /// raised.
+    /// </summary>
+    /// <param name="address">The value that is not an absolute <c>https</c> address.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("http://corpus.example.test/range")]
+    [InlineData("ftp://corpus.example.test/range")]
+    [InlineData("//corpus.example.test/range")]
+    [InlineData("corpus.example.test/range")]
+    [InlineData("/range")]
+    public async Task INT_GEN_001_AC3_ACorpusAddressThatIsNotAbsoluteHttpsIsRefusedAndChangesNothingAsync(
+        string address)
+    {
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+
+        Error refusal = await RefusedAsync(
+            Settings.PasswordBlocklistSelfHostedAddress,
+            address,
+            "the corpus moved",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+        Assert.Equal("password.blocklist.selfhosted.address", refusal.Details["key"].GetString());
+        Assert.Equal(Corpus, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Equal(0, _work.Opened);
+        Assert.Empty(_configuration.Held);
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// INT-GEN-001: an absolute <c>https</c> address is what the key takes, so the
+    /// change is made and written down as any other.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task ChangeAsync_ACorpusAddressThatIsAbsoluteHttps_IsPutInForceAsync()
+    {
+        const string moved = "https://corpus.example.test/v2/range";
+
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, Corpus);
+
+        await ChangedAsync(Settings.PasswordBlocklistSelfHostedAddress, moved, "the corpus moved", Satisfied);
+
+        Assert.Equal(moved, await InForceAsync(Settings.PasswordBlocklistSelfHostedAddress));
+        Assert.Equal(moved, Assert.Single(_changes.Written).After);
     }
 
     // The one change OPS-CFG-005 AC1 and OPS-CFG-008 AC2 read the record of: the

@@ -27,7 +27,7 @@ internal sealed class CredentialAuditInMemory : ICredentialAudit
     /// <summary>
     /// What was recorded of mail app passwords, in the order it was recorded.
     /// </summary>
-    public List<(AuditAction Action, SubjectId Subject, string Credential)> MailCredentials { get; } = [];
+    public List<(AuditAction Action, SubjectId Subject, AppPasswordId Credential)> MailCredentials { get; } = [];
 
     /// <summary>
     /// What was recorded of social providers' security events, in the order it was
@@ -68,7 +68,7 @@ internal sealed class CredentialAuditInMemory : ICredentialAudit
     public ValueTask MailCredentialAsync(
         AuditAction action,
         SubjectId subject,
-        string credential,
+        AppPasswordId credential,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {

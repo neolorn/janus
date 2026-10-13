@@ -44,6 +44,21 @@ internal sealed class RegistrationDirectory(
         identifiers.FindOwnerAsync(kind, canonical, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<bool> IsReservedAsync(
+        IdentifierKind kind,
+        string canonical,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        identifiers.IsReservedAsync(kind, canonical, now, cancellationToken);
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken) =>
+        identifiers.LockValuesAsync(values, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask<string?> LanguageAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

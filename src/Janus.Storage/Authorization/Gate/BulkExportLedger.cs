@@ -13,13 +13,24 @@ namespace Janus.Storage.Authorization.Gate;
 /// When each actor's recent export operations were admitted, over the
 /// <c>bulk_exports</c> table.
 /// </summary>
+/// <param name="context">The context whose transaction the operation holds.</param>
 /// <param name="connections">The connection and transaction the operation holds.</param>
 /// <remarks>
 /// Implements OPS-ALERT-006 and CONV-DESIGN-003. An actor is matched whether it is a
 /// person or a system principal, so neither is ever counted against the other.
 /// </remarks>
-internal sealed class BulkExportLedger(DataConnections connections) : IBulkExportLedger
+internal sealed class BulkExportLedger(StoreContext context, DataConnections connections) : IBulkExportLedger
 {
+    // D-166 X3: an admission counts the actor's hour and then records itself, so two at
+    // once would each count the hour without the other. The actor's exports are held
+    // for the rest of the transaction; no read takes this lock.
+    private const string Hold =
+        """
+        SELECT pg_advisory_xact_lock(hashtextextended(
+            'identity.bulk_exports/' || COALESCE(CAST(@actor AS text), '') || '/' || COALESCE(CAST(@principal AS text), ''),
+            0));
+        """;
+
     private const string Since =
         """
         SELECT admitted_at FROM identity.bulk_exports
@@ -38,6 +49,31 @@ internal sealed class BulkExportLedger(DataConnections connections) : IBulkExpor
         INSERT INTO identity.bulk_exports (id, actor, principal, admitted_at)
         VALUES (@id, @actor::uuid, @principal::text, @at);
         """;
+
+    private const string Sweep =
+        """
+        DELETE FROM identity.bulk_exports WHERE admitted_at <= @since;
+        """;
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId? actor, string? principal, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An actor's exports are held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { actor = actor?.Value, principal },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<DateTimeOffset>> SinceAsync(
@@ -81,6 +117,20 @@ internal sealed class BulkExportLedger(DataConnections connections) : IBulkExpor
                     at = at.ToUniversalTime(),
                     since = since.ToUniversalTime(),
                 },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<int> SweepAsync(DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        return await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Sweep,
+                new { since = since.ToUniversalTime() },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);

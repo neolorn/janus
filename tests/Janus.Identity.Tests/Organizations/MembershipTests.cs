@@ -138,12 +138,32 @@ public sealed class MembershipTests
     }
 
     /// <summary>
-    /// IDN-MEM-002: one membership of an organization is one membership of it, so a
+    /// IDN-MEM-002 AC4: an account whose only membership ended holds none, so on the
+    /// deployment's default it joins another organization, and the ended record stays
+    /// ended.
+    /// </summary>
+    [Fact]
+    public void IDN_MEM_002_AC4_AnAccountWhoseOnlyMembershipEndedJoinsAnotherOrganization()
+    {
+        Membership ended = Made(Id, Acme);
+        ended.End(Noon.AddDays(400));
+
+        Membership joined = Membership
+            .Create(Second, Ahmed, Beta, [ended], multiple: false, Noon.AddDays(401))
+            .Match(made => made, error => throw new XunitException(error.Code.ToString()));
+
+        Assert.Equal(Beta, joined.Organization);
+        Assert.True(joined.IsCurrent);
+        Assert.False(ended.IsCurrent);
+    }
+
+    /// <summary>
+    /// IDN-MEM-002 AC5: one membership of an organization is one membership of it, so a
     /// second of the same organization is refused whatever the setting says, and the
     /// refusal names the organization.
     /// </summary>
     [Fact]
-    public void IDN_MEM_002_ASecondMembershipOfTheSameOrganizationIsRefused()
+    public void IDN_MEM_002_AC5_ASecondMembershipOfTheSameOrganizationIsRefused()
     {
         Membership held = Made(Id, Acme);
 

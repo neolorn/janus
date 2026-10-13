@@ -29,4 +29,22 @@ internal sealed class GateAdministrativeOrganization(StoreContext context) : IAd
 
         return marked is [OrganizationId administrative] ? administrative : null;
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<OrganizationId?> WithoutMembershipAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<OrganizationId> outside = await context.Organizations
+            .Where(organization => organization.IsAdministrative
+                && !context.Memberships.Any(membership =>
+                    membership.Organization == organization.Id
+                    && membership.Subject == subject
+                    && membership.EndedAt == null))
+            .Select(organization => organization.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return outside is [OrganizationId administrative] ? administrative : null;
+    }
 }

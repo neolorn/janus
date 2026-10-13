@@ -1,5 +1,4 @@
 using System;
-using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Diagnostics;
@@ -31,7 +30,7 @@ namespace Janus.Conformance.Tests;
 
 /// <summary>
 /// A deployment of the library as the smallest host stands one up: three kinds of
-/// thing of its own and two facts about them it derives roles from, the values
+/// thing of its own and three facts about them it derives roles from, the values
 /// LIB-HOST-001 requires and no other, mail and SMS taken in memory, and the library
 /// mounted under a path of the host's choosing.
 /// </summary>
@@ -60,6 +59,16 @@ public sealed class SampleHost : IAsyncLifetime
     /// </summary>
     public const string Steward = "steward";
 
+    /// <summary>
+    /// The relationship the borrower role is derived from, the binder's second.
+    /// </summary>
+    public const string Borrower = "borrower";
+
+    /// <summary>
+    /// The step-up gate the host binds amending a sheet to, a gate of its own naming.
+    /// </summary>
+    public const string Amending = "amending";
+
     // The one purpose the host processes its records for, and what it holds of whom.
     private const string Keeping = "keeping records";
 
@@ -67,20 +76,22 @@ public sealed class SampleHost : IAsyncLifetime
 
     private const string Members = "members";
 
-    // The client the provider's refusals are asked of, and this application's own.
-    private const string RelyingParty = "sample-relying-party";
-
+    // Which client of the provider this application is, and where the provider returns
+    // a browser to it (BFF-SESS-006).
     private const string Application = "sample-application";
+
+    private const string SignOnReturn = "/auth/signon/return";
+
+    // The named client the application's back channel is made on (BFF-SESS-006).
+    private const string SignOnChannel = "identity-signon";
 
     private readonly DatabaseFixture _database = new();
     private readonly ServerInMemory _server = new();
 
-    // The deployment's keys and the two secrets it is handed, as a secrets manager
-    // holds them; cleared when the deployment stops.
+    // The deployment's keys, as a secrets manager holds them; cleared when the
+    // deployment stops.
     private readonly byte[] _encryption = RandomNumberGenerator.GetBytes(32);
     private readonly byte[] _fingerprint = RandomNumberGenerator.GetBytes(FingerprintKeys.MinimumLength);
-    private readonly byte[] _signOn = RandomNumberGenerator.GetBytes(32);
-    private readonly byte[] _secret = Encoding.UTF8.GetBytes(Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32)));
 
     private WebApplication? _application;
 
@@ -125,21 +136,15 @@ public sealed class SampleHost : IAsyncLifetime
     public static Permission ReadSheet { get; } = Permission.Parse("sheet:read");
 
     /// <summary>
+    /// Amending a sheet, which the host binds to a step-up gate.
+    /// </summary>
+    public static Permission AmendSheet { get; } = Permission.Parse("sheet:amend");
+
+    /// <summary>
     /// The container the library's services are resolved from.
     /// </summary>
     public IServiceProvider Services => _application?.Services
         ?? throw new InvalidOperationException("The host has not started.");
-
-    /// <summary>
-    /// Where the host's relying party is registered to be returned to.
-    /// </summary>
-    public static Uri Destination { get; } = new("https://relying.example.test/callback");
-
-    /// <summary>
-    /// The client the provider's registry holds for the host's relying party, with the
-    /// secret it presents.
-    /// </summary>
-    public ConformanceClient Registered => new(RelyingParty, _secret, Destination);
 
     /// <summary>
     /// What went out by mail.
@@ -169,6 +174,8 @@ public sealed class SampleHost : IAsyncLifetime
             .Permission(ReadShelf.ToString())
             .Permission(ReadBinder.ToString())
             .Permission(ReadSheet.ToString())
+            .Permission(AmendSheet.ToString())
+            .StepUpGate(AmendSheet.ToString(), Amending)
             .Relationship<ShelfKeeper>(
                 Keeper,
                 ShelfType.ToString(),
@@ -185,6 +192,14 @@ public sealed class SampleHost : IAsyncLifetime
                 "steward",
                 row => row.BinderId,
                 "binder_id")
+            .Relationship<BinderBorrower>(
+                Borrower,
+                BinderType.ToString(),
+                "sample.borrowers",
+                row => row.Borrower,
+                "borrower",
+                row => row.BinderId,
+                "binder_id")
             .Resource<Shelf>(ShelfType.ToString(), type => type
                 .BelongsToOrganization()
                 .Derivation(Keeper, Keeper, materialised: true)
@@ -192,18 +207,13 @@ public sealed class SampleHost : IAsyncLifetime
             .Resource<Binder>(BinderType.ToString(), type => type
                 .ContainedIn(ShelfType.ToString())
                 .Derivation(Steward, Steward)
+                .Derivation(Borrower, Borrower)
                 .Purpose(Keeping, "contractual-obligation", data: [Records], subjects: [Members]))
             .Resource<Sheet>(SheetType.ToString(), type => type
                 .ContainedIn(BinderType.ToString())
                 .Purpose(Keeping, "contractual-obligation", data: [Records], subjects: [Members]))
             .Build();
     }
-
-    /// <summary>
-    /// A client whose requests the host's web server takes.
-    /// </summary>
-    /// <returns>The client.</returns>
-    public HttpClient Client() => _server.Client(Origin);
 
     /// <summary>
     /// Opens a connection to the deployment's database, as the host's own code opens
@@ -218,6 +228,38 @@ public sealed class SampleHost : IAsyncLifetime
         await connection.OpenAsync(cancellationToken);
 
         return connection;
+    }
+
+    /// <summary>
+    /// Builds and starts a further application of the deployment with the assurance
+    /// provider it is given, or with none: the host's deployment factory, which the
+    /// suite asks for each step-up case of a truth table (LIB-TEST-001 AC2).
+    /// </summary>
+    /// <param name="assurance">The provider the application registers, or nothing.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The application's container, which stops the application when disposed.</returns>
+    public async ValueTask<IServiceProvider> DeployAsync(
+        IAssuranceProvider? assurance,
+        CancellationToken cancellationToken)
+    {
+        ServerInMemory? server = new();
+
+        try
+        {
+            WebApplication application = Built(server, Issuer, _server.Channel, assurance);
+
+            await application.StartAsync(cancellationToken);
+
+            var deployment = new SampleDeployment(application, server);
+
+            server = null;
+
+            return deployment;
+        }
+        finally
+        {
+            server?.Dispose();
+        }
     }
 
     /// <summary>
@@ -269,62 +311,43 @@ public sealed class SampleHost : IAsyncLifetime
                     steward uuid NOT NULL,
                     PRIMARY KEY (binder_id, steward));
                 CREATE INDEX ix_stewards_steward ON sample.stewards (steward);
+                CREATE TABLE sample.borrowers (
+                    binder_id text NOT NULL REFERENCES sample.binders (id),
+                    borrower uuid NOT NULL,
+                    PRIMARY KEY (binder_id, borrower));
+                CREATE INDEX ix_borrowers_borrower ON sample.borrowers (borrower);
                 """);
+
+            // Chapter 10 section 4.1a: the operator's policy for people in no
+            // organization asks at every gate what the administrative organization's
+            // asks, a phishing-resistant proof among it, so a report that lacks one is
+            // refused at the host's own gate (LIB-HOST-004 AC4).
+            _ = await connection.ExecuteAsync(
+                "INSERT INTO identity.settings (key, value) VALUES (@key, @value) "
+                    + "ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
+                new
+                {
+                    key = Settings.PolicyDefault.Key.ToString(),
+                    value = Settings.PolicyDefault.Write(
+                        Policies.SystemDefault with { Gates = Policies.AdministrativeOrganization.Gates }),
+                });
         }
 
-        // AUTH-OIDC-001: the relying party's client is registered from the server.
-        JsonObject presenting = Keys();
-
-        presenting["clientSecret"] = Convert.ToBase64String(_secret);
-
+        // AUTH-OIDC-001: this application's own client is registered from the server,
+        // and the library draws its secret; no other client is registered.
         await RunAsync(
             [
                 "register-client",
-                "--client", RelyingParty,
-                "--name", "Sample relying party",
-                "--kind", "protocol",
-                "--redirect", Destination.AbsoluteUri,
+                "--client", Application,
+                "--name", "Sample application",
+                "--kind", "browser-application",
+                "--redirect", new Uri(Origin, Prefix + SignOnReturn).AbsoluteUri,
                 "--scopes", "openid",
             ],
-            presenting,
+            Keys(),
             CancellationToken.None);
 
-        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-
-        builder.Logging.ClearProviders();
-
-        builder.Services.AddSingleton<IServer>(_server);
-        builder.Services.AddSingleton<IMailTransport>(Mail);
-        builder.Services.AddSingleton<ISmsTransport>(Sms);
-
-        // LIB-HOST-001: the frontend's pages, the host's sign-in screen and the
-        // provider, and which client of the provider this application is.
-        builder.Services.AddSingleton(new PasskeyAddresses(
-            new Uri(Origin, "/account/password").AbsoluteUri,
-            new Uri(Origin, "/account/passkeys/new").AbsoluteUri,
-            new Uri(Origin, "/account/passkeys").AbsoluteUri));
-        builder.Services.AddSingleton(new AuthenticationAddresses(
-            new Uri(Origin, "/signin").AbsoluteUri,
-            Issuer.AbsoluteUri));
-        builder.Services.AddSingleton(new SignOnClient(Application));
-
-        builder.Services.AddJanus(
-            _database.ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _encryption }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _fingerprint }),
-            _signOn,
-            Encoding.UTF8.GetBytes(Maintenance()),
-            Declaration(),
-            ApplicationKind.Public);
-
-        _application = builder.Build();
-
-        // LIB-HOST-003: the library under the host's own prefix, the two documents of
-        // REG-PM-001 at the site's root.
-        _ = ((IApplicationBuilder)_application).Map(new PathString(Prefix), Mounted);
-        _ = ((IApplicationBuilder)_application).UseRouting();
-        _ = _application.MapIdentityWellKnown();
-        _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
+        _application = Built(_server, Issuer, _server.Channel, assurance: null);
 
         await _application.StartAsync(CancellationToken.None);
     }
@@ -344,10 +367,115 @@ public sealed class SampleHost : IAsyncLifetime
 
         CryptographicOperations.ZeroMemory(_encryption);
         CryptographicOperations.ZeroMemory(_fingerprint);
-        CryptographicOperations.ZeroMemory(_signOn);
-        CryptographicOperations.ZeroMemory(_secret);
 
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Runs work against a second application of the same deployment, whose provider is
+    /// another one, as a host whose applications reach an outside provider stands one up.
+    /// </summary>
+    /// <typeparam name="TResult">What the work answers.</typeparam>
+    /// <param name="provider">Where the other provider answers.</param>
+    /// <param name="channel">What reaches it, for the application's back channel.</param>
+    /// <param name="work">The work, given the second application's container.</param>
+    /// <returns>What the work answered.</returns>
+    internal async ValueTask<TResult> BesideAsync<TResult>(
+        Uri provider,
+        Func<HttpMessageHandler> channel,
+        Func<IServiceProvider, ValueTask<TResult>> work)
+    {
+        using var server = new ServerInMemory();
+
+        WebApplication beside = Built(server, provider, channel, assurance: null);
+
+        await using (beside)
+        {
+            await beside.StartAsync(CancellationToken.None);
+
+            try
+            {
+                return await work(beside.Services);
+            }
+            finally
+            {
+                await beside.StopAsync(CancellationToken.None);
+            }
+        }
+    }
+
+    // One application of the deployment as a host builds it: the web server it runs
+    // on, the provider it names, what its back channel reaches that provider on, and
+    // the assurance provider it registers where it is given one (LIB-HOST-004).
+    private WebApplication Built(
+        ServerInMemory server,
+        Uri provider,
+        Func<HttpMessageHandler> channel,
+        IAssuranceProvider? assurance)
+    {
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+
+        builder.Logging.ClearProviders();
+
+        if (assurance is not null)
+        {
+            builder.Services.AddSingleton(assurance);
+        }
+
+        builder.Services.AddSingleton<IServer>(server);
+        builder.Services.AddSingleton<IMailTransport>(Mail);
+        builder.Services.AddSingleton<ISmsTransport>(Sms);
+
+        // LIB-HOST-001: the frontend's pages, the host's sign-in screen and the
+        // provider, and which client of the provider this application is.
+        builder.Services.AddSingleton(new PasskeyAddresses(
+            new Uri(Origin, "/account/password").AbsoluteUri,
+            new Uri(Origin, "/account/passkeys/new").AbsoluteUri,
+            new Uri(Origin, "/account/passkeys").AbsoluteUri));
+        builder.Services.AddSingleton(new AuthenticationAddresses(
+            new Uri(Origin, "/signin").AbsoluteUri,
+            provider.AbsoluteUri));
+        builder.Services.AddSingleton(new SignOnClient(Application));
+
+        // API-LAND-001: both applications of the sample are served at its one origin,
+        // where its browser client returns.
+        builder.Services.AddSingleton(new LandingOrigins(
+            Origin.GetLeftPart(UriPartial.Authority),
+            Origin.GetLeftPart(UriPartial.Authority)));
+
+        // LIB-HOST-001, OPS-SEC-001: where the deployment's secrets are read from, which
+        // the entry point is handed none of.
+        builder.Services.AddSingleton<ISecretSource>(new SecretSourceInMemory(
+            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _encryption }),
+            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _fingerprint }),
+            Encoding.UTF8.GetBytes(Maintenance())));
+
+        builder.Services.AddJanus(_database.ConnectionString, Declaration(), ApplicationKind.Public);
+
+        // LIB-HOST-001: the host's own context, given in a scope, and the source of each
+        // relationship its derivations are over, answered from that context.
+        builder.Services.AddScoped(_ => Context());
+        builder.Services.AddSingleton(
+            RelationshipSource.Of<SampleContext, ShelfKeeper>(Keeper, context => context.Keepers));
+        builder.Services.AddSingleton(
+            RelationshipSource.Of<SampleContext, BinderSteward>(Steward, context => context.Stewards));
+        builder.Services.AddSingleton(
+            RelationshipSource.Of<SampleContext, BinderBorrower>(Borrower, context => context.Borrowers));
+
+        // BFF-SESS-006: the back channel is configured as any other client of the
+        // framework's factory is.
+        _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(channel);
+
+        WebApplication application = builder.Build();
+
+        // LIB-HOST-003: the library under the host's own prefix, the two documents of
+        // REG-PM-001 at the site's root.
+        _ = ((IApplicationBuilder)application).Map(new PathString(Prefix), Mounted);
+        _ = ((IApplicationBuilder)application).UseRouting();
+        _ = application.MapIdentityWellKnown();
+        _ = ((IApplicationBuilder)application).UseEndpoints(_ => { });
+
+        return application;
     }
 
     // BFF-ORDER-001: the machine profile, then the browser profile, then the endpoints.

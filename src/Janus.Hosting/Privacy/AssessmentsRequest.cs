@@ -7,10 +7,10 @@ namespace Janus.Hosting.Privacy;
 /// records of processing a person supplies.
 /// </summary>
 /// <param name="DataOwner">Who owns the data inside the organisation.</param>
-/// <param name="OrganisationalSecurityMeasures">The measures that are not the software's.</param>
+/// <param name="OrganizationalSecurityMeasures">The measures that are not the software's.</param>
 /// <param name="AssessmentLinks">The LIA, DPIA and TIA references.</param>
 /// <remarks>Implements PRIV-ROPA-001 and chapter 09 section 8a.</remarks>
 internal sealed record AssessmentsRequest(
     string? DataOwner,
-    string? OrganisationalSecurityMeasures,
+    string? OrganizationalSecurityMeasures,
     IReadOnlyList<string>? AssessmentLinks);

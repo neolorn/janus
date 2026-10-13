@@ -28,6 +28,10 @@ internal sealed class GroupClosureConfiguration : IEntityTypeConfiguration<Group
 
             // A group holds a member at some remove; nothing holds itself.
             table.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
+
+            table.HasCheckConstraint(
+                "ck_group_closure_member_id_not_max_uuid",
+                MaxUuid.Refused("member_id"));
         });
 
         builder.HasKey(entry => new { entry.Group, entry.MemberType, entry.MemberId })

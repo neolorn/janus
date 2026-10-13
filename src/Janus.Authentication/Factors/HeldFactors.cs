@@ -84,4 +84,29 @@ internal sealed record HeldFactors(
             .Standing
             .Any(factor => FactorCatalogue.Of(factor).CanBePrimary);
     }
+
+    /// <summary>
+    /// Whether the account would reach less without one credential than it reaches
+    /// with it, which is the comparison a removal turns on (AUTH-STEP-006).
+    /// </summary>
+    /// <param name="authenticators">Every credential of the account, in any state.</param>
+    /// <param name="going">The credential that would be gone.</param>
+    /// <param name="password">Whether the account holds a password.</param>
+    /// <returns>Whether reachable assurance would drop.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static bool LoweredWithout(
+        IReadOnlyCollection<Authenticator> authenticators,
+        Authenticator going,
+        bool password)
+    {
+        ArgumentNullException.ThrowIfNull(authenticators);
+        ArgumentNullException.ThrowIfNull(going);
+
+        AssuranceLevel standing = StepUp.Reachable(Of(authenticators, password).Standing).Level;
+        AssuranceLevel without = StepUp
+            .Reachable(Of([.. authenticators.Where(credential => credential.Id != going.Id)], password).Standing)
+            .Level;
+
+        return without < standing;
+    }
 }

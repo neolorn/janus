@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -34,12 +35,12 @@ internal sealed class DeadlineSweep(
     IUnitOfWork work,
     TimeProvider time)
 {
-    /// <summary>
-    /// What the send ledger records a lapse message under.
-    /// </summary>
-    internal const string Source = "privacy.request.lapse";
-
     private static readonly AuditAction Lapsed = AuditActions.RequestLapsed;
+
+    // INT-SMS-003, 10 section 5.12c: the alert names the type and the status in the
+    // spelling the chapter gives them, which is the name on the member.
+    private static readonly JsonSerializerOptions Spelled =
+        new() { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>
     /// Runs one pass.
@@ -81,20 +82,32 @@ internal sealed class DeadlineSweep(
         new(capacity: 4, StringComparer.Ordinal)
         {
             ["request"] = JsonSerializer.SerializeToElement(request.Id.ToString()),
-            ["type"] = JsonSerializer.SerializeToElement(request.Type.ToString()),
-            ["status"] = JsonSerializer.SerializeToElement(request.Status.ToString()),
+            ["type"] = JsonSerializer.SerializeToElement(request.Type, Spelled),
+            ["status"] = JsonSerializer.SerializeToElement(request.Status, Spelled),
             ["decisionDue"] = JsonSerializer.SerializeToElement(request.DecisionDue),
         };
 
     private async ValueTask<bool> ReachedAsync(
         SystemPrincipal principal,
-        QueuedRequest request,
+        QueuedRequest reached,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         bool carried = false;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        // D-166 X3: the request is carried under its row's lock, so one fulfilled or
+        // refused while the pass read the queue is left as decided, not lapsed.
+        // CONV-DESIGN-003: nothing was written for it, so nothing is committed.
+        if (await requests.FindForUpdateAsync(reached.Id, cancellationToken).ConfigureAwait(false)
+            is not { Open: true } request)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return false;
+        }
 
         if (request.WarnedAt is null && now >= request.WarnAt)
         {
@@ -121,14 +134,21 @@ internal sealed class DeadlineSweep(
             carried = true;
         }
 
-        if (carried)
+        // CONV-DESIGN-003: a request reached between two of its instants is changed in
+        // nothing, and a pass that wrote nothing commits nothing.
+        if (!carried)
         {
-            await requests.RecordAsync(request, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return false;
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        await requests.RecordAsync(request, cancellationToken).ConfigureAwait(false);
 
-        return carried;
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return true;
     }
 
     private async ValueTask LapsedAsync(
@@ -150,11 +170,12 @@ internal sealed class DeadlineSweep(
         {
             // Erasure cannot run without a human confirming identity, so the system
             // never erases on its own: the record persists and the subject is told
-            // honestly that the deadline passed.
+            // honestly that the deadline passed. No request asked for the message, so
+            // it carries no source (AUTH-ABUSE-004, chapter 10 section 5.14).
             request.DeemRefusedByLapse(now);
 
             _ = await notices
-                .TellAsync(request.Subject, MessageKind.PrivacyRequestLapsed, Source, cancellationToken)
+                .TellAsync(request.Subject, MessageKind.PrivacyRequestLapsed, source: null, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -163,6 +184,7 @@ internal sealed class DeadlineSweep(
                 Lapsed,
                 principal,
                 request.Subject,
+                organization: null,
                 now,
                 Named(request),
                 cancellationToken)
@@ -173,11 +195,12 @@ internal sealed class DeadlineSweep(
         AlertCondition condition,
         QueuedRequest request,
         CancellationToken cancellationToken) =>
-        await alerts
-            .RaiseAsync(
-                condition,
-                request.Id.ToString(),
-                Named(request),
-                cancellationToken)
-            .ConfigureAwait(false);
+        (await alerts
+                .RaiseAsync(
+                    condition,
+                    request.Id.ToString(),
+                    Named(request),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 }

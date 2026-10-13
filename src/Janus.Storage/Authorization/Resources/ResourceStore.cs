@@ -99,6 +99,20 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
         """;
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An organization's tree is held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        await RunAsync(ambient, LockTree, new { organization = organization.Value }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<RegisteredResource?> FindAsync(
         ResourceReference reference,
         CancellationToken cancellationToken)

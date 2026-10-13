@@ -12,7 +12,7 @@ namespace Janus.Hosting.Privacy;
 /// <param name="Detail">What was written.</param>
 /// <param name="ReceivedAt">The calendar date it reached the company.</param>
 /// <param name="CreatedAt">When it entered the queue.</param>
-/// <param name="ReceiptSentAt">When the receipt went out.</param>
+/// <param name="ReceiptSentAt">When the receipt was admitted, where it was.</param>
 /// <param name="DecisionDue">When the decision is due by.</param>
 /// <param name="Status">Where it stands.</param>
 /// <param name="DecidedAt">When it was decided, where it was.</param>
@@ -24,10 +24,10 @@ internal sealed record PrivacyRequestView(
     Guid RequestId,
     Guid Subject,
     PrivacyRequestType Type,
-    string Detail,
+    string? Detail,
     DateOnly ReceivedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset ReceiptSentAt,
+    DateTimeOffset? ReceiptSentAt,
     DateTimeOffset DecisionDue,
     PrivacyRequestStatus Status,
     DateTimeOffset? DecidedAt,

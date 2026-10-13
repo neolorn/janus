@@ -9,12 +9,23 @@ namespace Janus.Authorization.Tests.Gate;
 /// deployment consuming authorization without this library's authentication reports
 /// it.
 /// </summary>
-/// <param name="reached">What every caller has reached.</param>
-internal sealed class AssuranceProviderInMemory(AssuranceLevel reached) : IAssuranceProvider
+/// <param name="attained">What every caller has attained, or nothing where the report cannot be read.</param>
+internal sealed class AssuranceProviderInMemory(AttainedAssurance? attained) : IAssuranceProvider
 {
+    /// <summary>
+    /// How many times a report was asked for.
+    /// </summary>
+    public int Asked { get; private set; }
+
     /// <inheritdoc/>
-    public ValueTask<Result<AssuranceLevel>> LevelAsync(
+    public ValueTask<Result<AttainedAssurance>> AttainedAsync(
         AccessContext context,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Result.Success(reached));
+        CancellationToken cancellationToken)
+    {
+        Asked++;
+
+        return ValueTask.FromResult(attained is null
+            ? Result.Failure<AttainedAssurance>(Error.From(ErrorCodes.SystemFault))
+            : Result.Success(attained));
+    }
 }

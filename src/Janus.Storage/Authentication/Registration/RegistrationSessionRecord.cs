@@ -28,12 +28,9 @@ internal sealed class RegistrationSessionRecord
     public DateTimeOffset ExpiresAt { get; set; }
 
     /// <summary>
-    /// The <c>key_version</c> column: the key-encryption key version the data key is
-    /// wrapped under.
+    /// The <c>wrapped_key</c> column: the row's data key, wrapped under the deployment's
+    /// data key.
     /// </summary>
-    public int KeyVersion { get; set; }
-
-    /// <summary>The <c>wrapped_key</c> column: the row's data key, wrapped.</summary>
     public byte[] WrappedKey { get; set; } = [];
 
     /// <summary>The <c>enc_session</c> column: everything the steps collected.</summary>

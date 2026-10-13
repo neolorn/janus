@@ -119,8 +119,32 @@ public sealed class InvitationAcknowledgementFlowTests : IAsyncDisposable
         Assert.Empty(_deployment.Attachments.Attached);
     }
 
-    // An invitation into a named organization, from an account that shows its name,
-    // attached to the account that opened its link.
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the acknowledgement, and no membership is
+    /// attached.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAnAcknowledgementAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        Invitation invitation = Attached(_deployment.Directory.Created[^1].Subject);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                "/account/invitation/acknowledge",
+                ("invitationId", invitation.Id.Value)));
+
+        Assert.Empty(_deployment.Attachments.Attached);
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/account/invitation")).Status);
+    }
+
+    // An invitation into a named organization, from an account that shows its name and
+    // may still grant what the invitation carries, attached to the account that opened
+    // its link.
     private Invitation Attached(SubjectId holder)
     {
         using var randomness = RandomNumberGenerator.Create();
@@ -130,6 +154,8 @@ public sealed class InvitationAcknowledgementFlowTests : IAsyncDisposable
         DateTimeOffset now = _deployment.Clock.GetUtcNow();
 
         _deployment.Organizations.Seed(organization, name: "Northern branch");
+        _deployment.Gate.Grant(inviter, organization, Permissions.MembershipManage);
+        _deployment.Gate.Grant(inviter, organization, Permissions.GrantManage);
         _deployment.Accounts.Holds(
             inviter,
             new HeldProfile(

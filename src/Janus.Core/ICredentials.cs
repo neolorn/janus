@@ -78,8 +78,10 @@ public interface ICredentials
     /// <param name="credential">The second-factor entry being upgraded.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// What the browser is asked for, or <c>auth.stepup.required</c> or
-    /// <c>auth.factor.rejected</c> where the entry is not a second-factor key.
+    /// What the browser is asked for, or <c>auth.stepup.required</c>,
+    /// <c>auth.factor.rejected</c> where the entry is not a second-factor key, or
+    /// <c>authz.denied</c> for an enrolment session, standing or ended, which reaches
+    /// no upgrade and is refused before anything is read.
     /// </returns>
     ValueTask<Result<CredentialCeremony>> UpgradeKeyAsync(
         CredentialAuthority authority,
@@ -122,6 +124,53 @@ public interface ICredentials
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Begins the enrolment of a text code as a second step: stages a pending
+    /// credential bound to one of the account's verified numbers and texts that number
+    /// a code, replacing any enrolment the account had pending (AUTH-FACT-002).
+    /// </summary>
+    /// <param name="authority">What the request arrived under.</param>
+    /// <param name="identifier">The verified phone identifier of the account it names.</param>
+    /// <param name="label">What the person calls the credential.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="language">The language the request asked for.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where the code is sent; or <c>auth.factor.notpermitted</c> where the
+    /// policy does not permit the factor or the number's signal answers a risk,
+    /// <c>identity.identifier.invalid</c> where the identifier is no verified number
+    /// of the account, <c>auth.credential.labelinvalid</c>,
+    /// <c>auth.factor.passwordrequired</c>, <c>auth.restriction.exceeded</c> or the
+    /// gate's refusal.
+    /// </returns>
+    ValueTask<Result> BeginTextCodeAsync(
+        CredentialAuthority authority,
+        IdentifierId identifier,
+        string label,
+        string source,
+        string language,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Completes the enrolment of a text code with the code texted to its number: the
+    /// credential becomes active, bound to that number, and every other text-code
+    /// credential of the account is retired (AUTH-FACT-002).
+    /// </summary>
+    /// <param name="authority">What the request arrived under.</param>
+    /// <param name="code">What was typed.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The credential as the account lists it and the recovery codes it brought; or
+    /// <c>auth.code.invalid</c> for a wrong code, and <c>auth.code.expired</c> for one
+    /// past its lifetime or its tries, or where no enrolment is pending.
+    /// </returns>
+    ValueTask<Result<TextCodeEnrolment>> ConfirmTextCodeAsync(
+        CredentialAuthority authority,
+        [NeverLogged] string code,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Generates or regenerates the recovery-code set, which is returned once and
     /// never read back (AUTH-FACT-008, AUTH-FACT-009).
     /// </summary>
@@ -130,10 +179,48 @@ public interface ICredentials
     /// <returns>
     /// The codes, or <c>auth.stepup.required</c>, or
     /// <c>auth.factor.notpermitted</c> where the account holds no password
-    /// (AUTH-RECOV-006).
+    /// (AUTH-RECOV-006), or <c>authz.denied</c> for an enrolment session, standing or
+    /// ended, which generates no set and is refused before anything is read.
     /// </returns>
     ValueTask<Result<GeneratedRecoveryCodes>> GenerateRecoveryCodesAsync(
         CredentialAuthority authority,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that the person copied, downloaded or printed the recovery-code set the
+    /// account holds (AUTH-FACT-008, AUTH-RECOV-006). The operation is over the
+    /// caller's own set; it asks no step-up, and the report changes the set's record,
+    /// so a restricted account is refused it (IDN-ACCT-007).
+    /// </summary>
+    /// <param name="context">Who is asking, whose set it is.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing, or <c>authz.restricted</c> for a restricted account,
+    /// <c>auth.factor.notenrolled</c> where the account holds no set, or
+    /// <c>authz.denied</c> where the context names no account.
+    /// </returns>
+    ValueTask<Result> MarkRecoveryCodesExportedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records the same under an enrolment session, for the set a second step it
+    /// enrolled beside a password showed (AUTH-FACT-008, AUTH-RECOV-006). The set is
+    /// that of the account the enrolment session was opened for. Where the session's
+    /// second step showed the codes, the report completes the enrolment and ends the
+    /// session, and is admitted for a restricted account (IDN-ACCT-007). Before the
+    /// session's second step has shown any, the report records nothing and is refused,
+    /// before any other refusal and before the restriction is asked.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session the request arrived under.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing, or <c>authz.denied</c> where the session's second step has shown no
+    /// codes, <c>auth.factor.notenrolled</c> where the account holds no set, or
+    /// <c>auth.session.expired</c> where the enrolment session has ended.
+    /// </returns>
+    ValueTask<Result> MarkRecoveryCodesExportedAsync(
+        EnrolmentSessionId enrolment,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -149,7 +236,9 @@ public interface ICredentials
     /// Nothing where the credential is gone already, or
     /// <c>auth.credential.lastsecondfactor</c> carrying <c>invalidatesAt</c> where the
     /// window was opened instead, or <c>auth.stepup.required</c> or
-    /// <c>auth.credential.notfound</c>.
+    /// <c>auth.credential.notfound</c>, or <c>authz.denied</c> for an enrolment
+    /// session, standing or ended, which removes nothing and is refused before
+    /// anything is read.
     /// </returns>
     ValueTask<Result> RemoveAsync(
         CredentialAuthority authority,

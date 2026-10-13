@@ -1,11 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Privacy.Records;
 using Janus.Storage.Authorization.Roles;
+using Janus.Storage.Migrations;
 using Janus.Storage.Privacy.Records;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -41,7 +47,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
         ComplianceRecord nothing = await HeldAsync();
 
         Assert.Null(nothing.DataOwner);
-        Assert.Null(nothing.OrganisationalSecurityMeasures);
+        Assert.Null(nothing.OrganizationalSecurityMeasures);
         Assert.Empty(nothing.AssessmentLinks);
 
         await RecordedAsync(new ComplianceRecord(
@@ -52,7 +58,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
         ComplianceRecord first = await HeldAsync();
 
         Assert.Equal("the head of customer operations", first.DataOwner);
-        Assert.Equal("annual training and a clear-desk rule", first.OrganisationalSecurityMeasures);
+        Assert.Equal("annual training and a clear-desk rule", first.OrganizationalSecurityMeasures);
         Assert.Equal(Assessments, first.AssessmentLinks);
 
         await RecordedAsync(new ComplianceRecord("the data protection officer", null, []));
@@ -60,7 +66,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
         ComplianceRecord second = await HeldAsync();
 
         Assert.Equal("the data protection officer", second.DataOwner);
-        Assert.Null(second.OrganisationalSecurityMeasures);
+        Assert.Null(second.OrganizationalSecurityMeasures);
         Assert.Empty(second.AssessmentLinks);
     }
 
@@ -83,6 +89,57 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
         Assert.Equal(
             [Permissions.AuditRead, Permissions.GrantManage],
             allowed[name.ToString()]);
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-001 (D-187): the column is renamed, so the measures a deployment stated
+    /// while it was spelled the other way are read back as they were stated.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_AStatementMadeBeforeTheColumnWasRenamedIsReadBackAsync()
+    {
+        string renamed = await database.CreateDatabaseAsync("measures_spelling");
+        string rename;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(renamed))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            rename = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(SpellTheMeasuresOrganizational), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, rename) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using (var connection = new NpgsqlConnection(renamed))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO identity.compliance_records
+                    (id, data_owner, organisational_measures, assessment_links, updated_at)
+                VALUES
+                    (1, 'the head of customer operations', 'annual training', '["wiki/lia-2026"]', @at);
+                """,
+                new { at = Noon });
+        }
+
+        await using (StoreContext migrating = DatabaseFixture.Context(renamed))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(rename, TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = DatabaseFixture.Context(renamed);
+
+        ComplianceRecord held = await new ComplianceStore(reading, new FixedTime(Noon))
+            .ReadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("the head of customer operations", held.DataOwner);
+        Assert.Equal("annual training", held.OrganizationalSecurityMeasures);
+        Assert.Equal(["wiki/lia-2026"], held.AssessmentLinks);
     }
 
     private async Task<RoleName> CreatedAsync(IReadOnlyList<Permission> permissions)

@@ -20,17 +20,23 @@ namespace Janus.Storage.Authentication.Invitations;
 internal sealed class MembershipEnding(IMembershipStore memberships) : IMembershipEnding
 {
     /// <inheritdoc/>
+    public async ValueTask<MembershipId?> FindAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await CurrentAsync(subject, organization, cancellationToken).ConfigureAwait(false))?.Id;
+
+    /// <inheritdoc/>
     public async ValueTask<MembershipId?> EndAsync(
         SubjectId subject,
         OrganizationId organization,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<Membership> held = await memberships
-            .FindBySubjectAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (held.SingleOrDefault(membership => membership.IsCurrent && membership.Organization == organization)
+        // D-166 X3: the membership is read under its row's lock, so a second end, or the
+        // organization's erasure, at the same moment finds it ended and ends nothing.
+        if ((await memberships.FindBySubjectForUpdateAsync(subject, cancellationToken).ConfigureAwait(false))
+            .SingleOrDefault(membership => membership.IsCurrent && membership.Organization == organization)
             is not Membership current)
         {
             return null;
@@ -42,4 +48,11 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
 
         return current.Id;
     }
+
+    private async ValueTask<Membership?> CurrentAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await memberships.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+            .SingleOrDefault(membership => membership.IsCurrent && membership.Organization == organization);
 }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Janus.Core;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
@@ -27,10 +28,10 @@ namespace Janus.Storage.Tests;
 public sealed class NeverLoggedTests
 {
     /// <summary>
-    /// CONV-LOG-003 AC1: the rows' secret columns are marked.
+    /// CONV-LOG-003 AC3: the rows' secret columns are marked.
     /// </summary>
     [Fact]
-    public void CONV_LOG_003_AC1_EveryColumnCarryingAForbiddenValueIsMarked() =>
+    public void CONV_LOG_003_AC3_EveryColumnCarryingAForbiddenValueIsMarked() =>
         Assert.Empty(Unmarked(
         [
             Member<PasswordRecord>(nameof(PasswordRecord.Hash)),
@@ -45,6 +46,9 @@ public sealed class NeverLoggedTests
             Member<PendingVerificationRecord>(nameof(PendingVerificationRecord.OldLink)),
             Member<PendingSignInRecord>(nameof(PendingSignInRecord.Token)),
             Member<PendingSignInRecord>(nameof(PendingSignInRecord.Code)),
+            Member<PendingEnrolmentRecord>(nameof(PendingEnrolmentRecord.Number)),
+            Member<PendingEnrolmentRecord>(nameof(PendingEnrolmentRecord.Send)),
+            Member<PendingEnrolmentRecord>(nameof(PendingEnrolmentRecord.Code)),
             Member<RegistrationSessionRecord>(nameof(RegistrationSessionRecord.Session)),
             Member<SessionRecord>(nameof(SessionRecord.SecretFingerprint)),
             Member<SessionRecord>(nameof(SessionRecord.CsrfFingerprint)),
@@ -54,7 +58,6 @@ public sealed class NeverLoggedTests
             Member<OidcClientRecord>(nameof(OidcClientRecord.Secret)),
             Member<OidcTokenRecord>(nameof(OidcTokenRecord.Payload)),
             Member<SigningKeyRecord>(nameof(SigningKeyRecord.PrivateKey)),
-            Member<StagedIdentityDocument>(nameof(StagedIdentityDocument.Code)),
             Member<StagedIdentityDocument>(nameof(StagedIdentityDocument.Link)),
             Member<StagedSessionDocument>(nameof(StagedSessionDocument.Password)),
         ]));

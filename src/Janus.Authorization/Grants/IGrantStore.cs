@@ -26,6 +26,17 @@ internal interface IGrantStore
     ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one grant, revoked or not, under a lock on its row held until the
+    /// operation's transaction ends, so a revocation decided on it cannot race another
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="id">Which grant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grant as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads which organization one grant is scoped to, and nothing else of it, revoked
     /// or not.
     /// </summary>
@@ -68,15 +79,6 @@ internal interface IGrantStore
     ValueTask<bool> ExistsAsync(Grant grant, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether any grant confers the role, live, expired or revoked, which is what keeps
-    /// the role in place: a grant's history names it.
-    /// </summary>
-    /// <param name="role">Which role.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether one does.</returns>
-    ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken);
-
-    /// <summary>
     /// Whether any grant was given to an account or a group, live, expired or revoked,
     /// which is what keeps a group in place: a grant's history names it.
     /// </summary>
@@ -84,6 +86,15 @@ internal interface IGrantStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Whether one was.</returns>
     ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every grant given to an account itself, in every organization, live, expired
+    /// or revoked, which is what the account's export carries (PRIV-RIGHT-003).
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants, by the instant each was given.</returns>
+    ValueTask<IReadOnlyList<Grant>> NamingAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
     /// The live grants a principal holds, its own and those of every group it belongs
@@ -127,6 +138,22 @@ internal interface IGrantStore
         ResourceType type,
         IReadOnlyList<ResourceId> resources,
         OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The live grants a materialised derivation wrote for one role on records of one
+    /// type, in every organization and whoever holds them, which is what the drift
+    /// check holds against the host's rows (AUTHZ-DERIVE-005).
+    /// </summary>
+    /// <param name="role">The role the derivation confers.</param>
+    /// <param name="type">The type the derivation is declared on.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants, revoked and expired ones left out.</returns>
+    ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

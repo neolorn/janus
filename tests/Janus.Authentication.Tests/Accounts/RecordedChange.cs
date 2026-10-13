@@ -14,4 +14,11 @@ internal sealed record RecordedChange(
     AuditAction Action,
     SubjectId Acting,
     SubjectId Subject,
-    DateTimeOffset At);
+    DateTimeOffset At)
+{
+    /// <summary>
+    /// The reason given at the use of the break-glass credential, where the change was
+    /// made in the session it opened, or nothing.
+    /// </summary>
+    public string? BreakGlassReason { get; init; }
+}

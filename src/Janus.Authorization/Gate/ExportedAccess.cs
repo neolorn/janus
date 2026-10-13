@@ -9,6 +9,10 @@ namespace Janus.Authorization.Gate;
 /// <param name="Id">The row it is recorded as.</param>
 /// <param name="Acting">The person who exported, or nothing where a system principal did.</param>
 /// <param name="Effective">The person on whose behalf, or nothing where a system principal did.</param>
+/// <param name="BreakGlassReason">
+/// The reason given at the use of the break-glass credential, where the export was made
+/// in the session it opened, or nothing.
+/// </param>
 /// <param name="Principal">The system principal that exported, where one did.</param>
 /// <param name="Organization">The organization the export was within, where the call named one.</param>
 /// <param name="Permission">The export operation.</param>
@@ -20,6 +24,7 @@ internal sealed record ExportedAccess(
     AuditRecordId Id,
     SubjectId? Acting,
     SubjectId? Effective,
+    string? BreakGlassReason,
     SystemPrincipal? Principal,
     OrganizationId? Organization,
     Permission Permission,

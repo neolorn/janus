@@ -10,9 +10,10 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004
-/// and chapter 09 section 8a. Suspension and reactivation are the
-/// <c>account:suspend</c> and <c>account:reactivate</c> step-up actions; lifting a
-/// restriction and cancelling a deletion are none. Suspension ends every session of the
+/// and chapter 09 section 8a. Suspension, reactivation, lifting a restriction and
+/// cancelling a deletion are the <c>account:suspend</c>, <c>account:reactivate</c>,
+/// <c>account:restrictionlift</c> and <c>account:deletioncancel</c> step-up actions, each
+/// judged after every other refusal. Suspension ends every session of the
 /// account in the transaction that suspends it, and reactivation restores what the
 /// account held exactly as it held it, a restriction in force included. Every change is
 /// audited as the administrator's, on the account it was made on; reading the photo
@@ -30,8 +31,8 @@ public interface IAccounts
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>subject</c>
-    /// where no account bears it, <c>authz.denied</c> where the account is being
+    /// Success, or the refusal: <c>identity.account.notfound</c> where no account bears
+    /// the subject, <c>identity.account.stateconflict</c> where the account is being
     /// deleted or has been.
     /// </returns>
     ValueTask<Result> SuspendAsync(
@@ -48,8 +49,8 @@ public interface IAccounts
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>subject</c>
-    /// where no account bears it, <c>authz.denied</c> where an administrator has not
+    /// Success, or the refusal: <c>identity.account.notfound</c> where no account bears
+    /// the subject, <c>identity.account.stateconflict</c> where an administrator has not
     /// suspended it.
     /// </returns>
     ValueTask<Result> ReactivateAsync(
@@ -63,15 +64,17 @@ public interface IAccounts
     /// exactly and tells every subject-event handler.
     /// </summary>
     /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>subject</c>
-    /// where no account bears it, <c>authz.denied</c> where the account is not
+    /// Success, or the refusal: <c>identity.account.notfound</c> where no account bears
+    /// the subject, <c>identity.account.stateconflict</c> where the account is not
     /// restricted, including one that holds a restriction while suspended or deleting.
     /// </returns>
     ValueTask<Result> LiftRestrictionAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken);
 
@@ -81,16 +84,18 @@ public interface IAccounts
     /// against that request.
     /// </summary>
     /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>identity.takedown.active</c> where a takedown began
-    /// the window, <c>identity.deletion.windowelapsed</c> where it has closed,
-    /// <c>api.request.malformed</c> naming <c>subject</c> where no account bears it,
-    /// <c>authz.denied</c> where the account is not in a grace window.
+    /// Success, or the refusal: <c>identity.account.notfound</c> where no account bears
+    /// the subject, <c>identity.account.stateconflict</c> where the account is not in a
+    /// grace window, <c>identity.takedown.active</c> where a takedown began the window,
+    /// <c>identity.deletion.windowelapsed</c> where it has closed.
     /// </returns>
     ValueTask<Result> CancelDeletionAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken);
 
@@ -101,9 +106,9 @@ public interface IAccounts
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The stored JPEG, empty where the account shows none or no organization it belongs
-    /// to shows photos; or the refusal: <c>api.request.malformed</c> naming
-    /// <c>subject</c> where no account bears it.
+    /// The stored JPEG, or the refusal: <c>identity.account.notfound</c> where no account
+    /// bears the subject, <c>identity.photo.notfound</c> where the account shows none or
+    /// no organization it belongs to shows photos, alike.
     /// </returns>
     ValueTask<Result<ReadOnlyMemory<byte>>> ReadPhotoAsync(
         AccessContext context,

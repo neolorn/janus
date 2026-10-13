@@ -56,7 +56,7 @@ public sealed class DeclaredProcessingTests
     {
         StartupException refused = Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(article => article.Encrypted(item => item.Body, item => item.Author))));
+                Declaring(article => article.Encrypted(item => item.Body, item => item.Author, "content"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -100,20 +100,45 @@ public sealed class DeclaredProcessingTests
     }
 
     /// <summary>
-    /// PRIV-BASIS-001: the shipped declaration carries the properties the item's table
-    /// gives each basis, which is the whole of what the library reads.
+    /// PRIV-BASIS-001, 10 section 5.7: the shipped declaration carries, in the order the
+    /// section lists them, the label the item's Basis column gives each basis and the
+    /// properties its table gives, which is the whole of what the library reads.
     /// </summary>
     [Fact]
     public void PRIV_BASIS_001_TheShippedDeclarationCarriesTheDeclaredProperties()
     {
         Assert.Equal(
             [
-                new LawfulBasisDeclaration("consent", true, true, false, false),
-                new LawfulBasisDeclaration("contractual-obligation", false, false, false, false),
-                new LawfulBasisDeclaration("legal-obligation", false, false, false, false),
-                new LawfulBasisDeclaration("legitimate-interest", false, false, true, true),
-                new LawfulBasisDeclaration("legal-right-claim-or-defence", false, false, false, false),
-                new LawfulBasisDeclaration("court-judgment-or-order", false, false, false, false),
+                new LawfulBasisDeclaration("consent", "Data Subject's Consent", true, true, false, false),
+                new LawfulBasisDeclaration(
+                    "contractual-obligation",
+                    "Fulfilment of a Contractual Obligation",
+                    false,
+                    false,
+                    false,
+                    false),
+                new LawfulBasisDeclaration(
+                    "legal-obligation",
+                    "Fulfilment of a Legal Obligation",
+                    false,
+                    false,
+                    false,
+                    false),
+                new LawfulBasisDeclaration("legitimate-interest", "Legitimate Interest", false, false, true, true),
+                new LawfulBasisDeclaration(
+                    "legal-right-claim-or-defence",
+                    "Claim or Defence of a Legal Right",
+                    false,
+                    false,
+                    false,
+                    false),
+                new LawfulBasisDeclaration(
+                    "court-judgment-or-order",
+                    "Execution of Court Judgments or Orders from Competent Investigative Authorities",
+                    false,
+                    false,
+                    false,
+                    false),
             ],
             LawfulBases.Default);
     }
@@ -168,8 +193,8 @@ public sealed class DeclaredProcessingTests
         var model = AuthorizationModel.Of(
             new AuthorizationDeclarationBuilder()
                 .RetentionFloor("identity", TimeSpan.FromDays(365))
-                .LawfulBasis(new LawfulBasisDeclaration("vital-interests", false, false, false, false))
-                .LawfulBasis(new LawfulBasisDeclaration("public-task", false, false, true, true))
+                .LawfulBasis(new LawfulBasisDeclaration("vital-interests", "Vital interests", false, false, false, false))
+                .LawfulBasis(new LawfulBasisDeclaration("public-task", "Public task", false, false, true, true))
                 .Resource<HostDomain.Workspace>("workspace", workspace => workspace
                     .BelongsToOrganization()
                     .Purpose("registry", "public-task", "LIA-2", data: ["identity"]))
@@ -189,7 +214,7 @@ public sealed class DeclaredProcessingTests
             () => AuthorizationModel.Of(
                 new AuthorizationDeclarationBuilder()
                     .RetentionFloor("identity", TimeSpan.FromDays(365))
-                    .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
+                    .LawfulBasis(new LawfulBasisDeclaration("interest", "Interest", false, false, true, true))
                     .Resource<HostDomain.Workspace>("workspace", workspace => workspace
                         .BelongsToOrganization()
                         .Purpose("fraud-prevention", "interest", data: ["identity"]))
@@ -260,6 +285,53 @@ public sealed class DeclaredProcessingTests
                     .Purpose("collaboration", "contract", data: ["identity"]))));
     }
 
+    /// <summary>
+    /// PRIV-SENS-001 AC3: the categories in force are the ones the host declared and no
+    /// other. A host that declares none has none, so every category of the shipped
+    /// list is refused on a type; a host that declares a list of its own has that
+    /// list, and the model it builds carries no shipped category it left out.
+    /// </summary>
+    [Fact]
+    public void PRIV_SENS_001_AC3_NoCategoryTheHostDidNotDeclareIsApplied()
+    {
+        Assert.All(
+            SensitiveCategories.Default,
+            shipped => Assert.Throws<StartupException>(
+                () => AuthorizationModel.Of(Listing([], shipped))));
+
+        var model = AuthorizationModel.Of(Listing(["trade-union"], "trade-union"));
+        string serialized = model.Serialize();
+
+        Assert.Equal(
+            ["trade-union"],
+            model.Find(ResourceType.Parse("article"))!.SensitiveCategories);
+        Assert.Contains("\"trade-union\"", serialized, StringComparison.Ordinal);
+        Assert.All(
+            SensitiveCategories.Default,
+            shipped => Assert.DoesNotContain('"' + shipped + '"', serialized, StringComparison.Ordinal));
+    }
+
+    // One type declared sensitive in a category, over the list the host declares and
+    // nothing the library ships.
+    private static AuthorizationDeclaration Listing(IReadOnlyList<string> declared, string carried)
+    {
+        AuthorizationDeclarationBuilder builder = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false));
+
+        foreach (string category in declared)
+        {
+            _ = builder.SensitiveCategory(category);
+        }
+
+        return builder
+            .Resource<HostDomain.Article>("article", article => article
+                .BelongsToOrganization()
+                .Sensitive(carried)
+                .Purpose("collaboration", "contract", data: ["identity"]))
+            .Build();
+    }
+
     // The wire name chapter 10 gives a residual, read from where the library declares
     // it rather than from a second copy of the list.
     private static string Wire(CapabilityResidual residual) =>
@@ -308,7 +380,7 @@ public sealed class DeclaredProcessingTests
     private static AuthorizationDeclaration Consenting(bool sensitive, ConsentKind? consent) =>
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("history", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("agreement", "Agreement", true, true, false, false))
             .SensitiveCategory("financial")
             .Resource<HostDomain.Workspace>("workspace", workspace =>
             {
@@ -316,7 +388,7 @@ public sealed class DeclaredProcessingTests
                 // encrypted fields name the column the data subject is read from.
                 _ = workspace
                     .BelongsToOrganization()
-                    .Encrypted(held => held.Title, held => held.Owner)
+                    .Encrypted(held => held.Title, held => held.Owner, "history")
                     .Purpose("recommendations", "agreement", data: ["history"], consent: consent);
 
                 if (sensitive)
@@ -332,7 +404,7 @@ public sealed class DeclaredProcessingTests
         Action<ResourceTypeDeclarationBuilder<HostDomain.Article>> declared) =>
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
             .SensitiveCategory("financial")
             .Resource<HostDomain.Article>("article", article =>
             {

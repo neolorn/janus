@@ -29,18 +29,20 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         Group group,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        Recorded(AuditActions.GroupCreated, group, member: null, reason, actor, at);
+        Recorded(AuditActions.GroupCreated, group, member: null, reason, actor, breakGlassReason, at);
 
     /// <inheritdoc/>
     public ValueTask RemovedAsync(
         Group group,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        Recorded(AuditActions.GroupRemoved, group, member: null, reason, actor, at);
+        Recorded(AuditActions.GroupRemoved, group, member: null, reason, actor, breakGlassReason, at);
 
     /// <inheritdoc/>
     public ValueTask MemberAddedAsync(
@@ -48,9 +50,10 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         GrantSubject member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        Recorded(AuditActions.GroupMemberAdded, group, member, reason, actor, at);
+        Recorded(AuditActions.GroupMemberAdded, group, member, reason, actor, breakGlassReason, at);
 
     /// <inheritdoc/>
     public ValueTask MemberRemovedAsync(
@@ -58,9 +61,10 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         GrantSubject member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        Recorded(AuditActions.GroupMemberRemoved, group, member, reason, actor, at);
+        Recorded(AuditActions.GroupMemberRemoved, group, member, reason, actor, breakGlassReason, at);
 
     private ValueTask Recorded(
         AuditAction action,
@@ -68,11 +72,15 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         GrantSubject? member,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at)
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        _changes.Add(new GroupChange(action, group.Id, group.Organization, member, reason, actor, at));
+        _changes.Add(new GroupChange(action, group.Id, group.Organization, member, reason, actor, at)
+        {
+            BreakGlassReason = breakGlassReason,
+        });
 
         return ValueTask.CompletedTask;
     }
@@ -94,5 +102,12 @@ internal sealed class GroupAuditInMemory : IGroupAudit
         GrantSubject? Member,
         string Reason,
         SubjectId Actor,
-        DateTimeOffset At);
+        DateTimeOffset At)
+    {
+        /// <summary>
+        /// The reason given at the use of the break-glass credential, where the change
+        /// was made in the session it opened, or nothing.
+        /// </summary>
+        public string? BreakGlassReason { get; init; }
+    }
 }

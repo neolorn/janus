@@ -12,21 +12,21 @@ namespace Janus.Privacy.SubjectKeys;
 internal sealed class SubjectKey
 {
     private SubjectKey(
-        SubjectId subject,
+        SubjectKeyId id,
         byte formatMarker,
         int keyVersion,
         ReadOnlyMemory<byte> wrappedKey)
     {
-        Subject = subject;
+        Id = id;
         FormatMarker = formatMarker;
         KeyVersion = keyVersion;
         WrappedKey = wrappedKey;
     }
 
     /// <summary>
-    /// Whose key this is.
+    /// The row the key stands in: a subject's, or the deployment's.
     /// </summary>
-    public SubjectId Subject { get; }
+    public SubjectKeyId Id { get; }
 
     /// <summary>
     /// The scheme the wrapped key is written under.
@@ -52,7 +52,7 @@ internal sealed class SubjectKey
     /// <summary>
     /// Records a newly wrapped data key.
     /// </summary>
-    /// <param name="subject">Whose key it is.</param>
+    /// <param name="id">The row the key stands in.</param>
     /// <param name="keyVersion">The key-encryption key version it is wrapped under.</param>
     /// <param name="wrappedKey">The wrapped key.</param>
     /// <returns>The key as it is stored.</returns>
@@ -60,7 +60,7 @@ internal sealed class SubjectKey
     /// The version is not a version, or the wrapped key is not the length the scheme
     /// produces.
     /// </exception>
-    public static SubjectKey Wrapped(SubjectId subject, int keyVersion, ReadOnlyMemory<byte> wrappedKey)
+    public static SubjectKey Wrapped(SubjectKeyId id, int keyVersion, ReadOnlyMemory<byte> wrappedKey)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(keyVersion, 1);
         ArgumentOutOfRangeException.ThrowIfNotEqual(
@@ -68,24 +68,24 @@ internal sealed class SubjectKey
             PersonalDataFormat.WrappedKeyLength,
             nameof(wrappedKey));
 
-        return new SubjectKey(subject, PersonalDataFormat.Marker, keyVersion, wrappedKey);
+        return new SubjectKey(id, PersonalDataFormat.Marker, keyVersion, wrappedKey);
     }
 
     /// <summary>
     /// The key as it already stands. This is the store's translation of a stored row
     /// and no operation, so it takes the erased shape as readily as the live one.
     /// </summary>
-    /// <param name="subject">Whose key it is.</param>
+    /// <param name="id">The row the key stands in.</param>
     /// <param name="formatMarker">The scheme the wrapped key is written under.</param>
     /// <param name="keyVersion">The key-encryption key version it is wrapped under.</param>
     /// <param name="wrappedKey">The wrapped key.</param>
     /// <returns>The key.</returns>
     public static SubjectKey Existing(
-        SubjectId subject,
+        SubjectKeyId id,
         byte formatMarker,
         int keyVersion,
         ReadOnlyMemory<byte> wrappedKey) =>
-        new(subject, formatMarker, keyVersion, wrappedKey);
+        new(id, formatMarker, keyVersion, wrappedKey);
 
     /// <summary>
     /// Replaces the wrapping with one under a newer key-encryption key version. No

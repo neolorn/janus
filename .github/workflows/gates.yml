@@ -112,6 +112,8 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
+      # OPS-MIG-002: a test runs the migration tool the pipeline runs.
+      - run: dotnet tool restore
       # A project holding no test of the kind being run is not a failing gate, and
       # exit code 8 is the platform saying the filter matched nothing there.
       - run: >

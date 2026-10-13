@@ -6,7 +6,7 @@ namespace Janus.Core;
 /// <summary>
 /// A social provider the deployment signs people in through and takes security events
 /// from: where the provider publishes what it signs with, the clients the deployment
-/// holds at it, and what this application presents there.
+/// holds at it, and where a person it signs in comes back to.
 /// </summary>
 /// <param name="Provider">
 /// Which provider, as the factor catalogue names it: <see cref="Factor.Google"/> or
@@ -32,23 +32,19 @@ namespace Janus.Core;
 /// at the provider for the first client: the library's
 /// <c>/callbacks/providers/{provider}/return</c> under the mount this application uses.
 /// </param>
-/// <param name="Secret">
-/// What this application presents at the provider's token endpoint for the first
-/// client, as its UTF-8 bytes, read from the secrets manager and never from
-/// configuration: the client secret Google issued, or the signed client secret Apple
-/// requires, which the deployment renews before it lapses.
-/// </param>
 /// <remarks>
 /// Implements IDN-LIFE-012, IDN-LIFE-012a, REG-IDENT-008 and LIB-HOST-001. There is no
 /// default: a deployment that declares nothing for a provider offers no sign-in through
 /// it and refuses its events, because nothing it holds could verify either. Declaring
 /// the same provider twice, naming a factor that is not a social provider, an address
-/// that is not HTTPS, no client or no secret stops the deployment at startup.
+/// that is not HTTPS, a return address that is not the library's, or no client stops the
+/// deployment at startup. What this application presents at the provider is no member
+/// here: the library reads it through <see cref="ISecretSource"/> by the provider's name
+/// (D-166).
 /// </remarks>
 public sealed record SocialProvider(
     Factor Provider,
     Uri Metadata,
     IReadOnlyList<string> ClientIds,
     Uri Configuration,
-    Uri Return,
-    [property: NeverLogged] ReadOnlyMemory<byte> Secret);
+    Uri Return);

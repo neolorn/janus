@@ -61,19 +61,29 @@ internal sealed class Supersession(
         }
 
         IReadOnlyList<HeldConsent> held = await consents
-            .LiveAgainstAnotherAsync(purposes, version, cancellationToken)
+            .LiveAgainstAnotherAsync(purposes, document, version, cancellationToken)
             .ConfigureAwait(false);
+
+        int ended = 0;
 
         foreach (HeldConsent one in held)
         {
-            await consents
-                .RecordAsync(one.Subject, one.Consent with { SupersededAt = at }, cancellationToken)
-                .ConfigureAwait(false);
+            // PRIV-CONS-001: the live record is stamped where it still is live, so one
+            // its subject took back meanwhile is neither ended twice nor announced.
+            if (!await consents
+                    .SupersedeAsync(one.Subject, one.Consent.Purpose, at, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            ended++;
+
             Result published = await events
                 .PublishAsync(
                     new ConsentChanged(
                         at,
-                        Key(one, at),
+                        Key(one.Subject, one.Consent.Purpose, at),
                         one.Consent.Purpose,
                         ConsentChange.Superseded)
                     {
@@ -88,11 +98,19 @@ internal sealed class Supersession(
             }
         }
 
-        return Result.Success(held.Count);
+        return Result.Success(ended);
     }
 
-    private static string Key(HeldConsent one, DateTimeOffset at) =>
-        one.Subject.ToString()
-        + ":" + one.Consent.Purpose
+    /// <summary>
+    /// The key a superseded consent is announced under, one a subject, a purpose and
+    /// an instant, so a delivery made again is the same announcement.
+    /// </summary>
+    /// <param name="subject">Whose consent ended.</param>
+    /// <param name="purpose">The purpose it was given for.</param>
+    /// <param name="at">When it ended.</param>
+    /// <returns>The key.</returns>
+    internal static string Key(SubjectId subject, string purpose, DateTimeOffset at) =>
+        subject.ToString()
+        + ":" + purpose
         + ":Superseded@" + at.ToString("O", CultureInfo.InvariantCulture);
 }

@@ -7,10 +7,12 @@ namespace Janus.Core;
 /// <param name="Purpose">What the send is for.</param>
 /// <param name="Kind">The channel it goes out on.</param>
 /// <param name="Subject">Whose account it belongs to, where it belongs to one.</param>
-/// <param name="Source">The address it was asked for from.</param>
+/// <param name="Source">
+/// The address of the request that asked for it, or nothing where no request did.
+/// </param>
 /// <remarks>Implements LIB-HOST-001, AUTH-ABUSE-004, D-153.</remarks>
 public sealed record SendContext(
     RestrictionPurpose Purpose,
     SendKind Kind,
     SubjectId? Subject,
-    string Source);
+    string? Source);

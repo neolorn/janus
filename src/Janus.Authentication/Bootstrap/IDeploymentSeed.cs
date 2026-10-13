@@ -33,12 +33,17 @@ internal interface IDeploymentSeed
     /// settings table holds them, and records each under the principal that set it.
     /// </summary>
     /// <param name="written">The written form of each value, by its key.</param>
+    /// <param name="defaults">
+    /// The written form of the default of each of those keys that has one, which the
+    /// record carries as what the key was where no row stood; a required key has none.
+    /// </param>
     /// <param name="principal">The principal bootstrap runs as.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of writing them, which later reads in the transaction see.</returns>
     ValueTask ConfigureAsync(
         IReadOnlyDictionary<ConfigurationKey, string> written,
+        IReadOnlyDictionary<ConfigurationKey, string> defaults,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken);

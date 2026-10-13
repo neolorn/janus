@@ -26,12 +26,12 @@ internal sealed class LegalDocumentsInMemory : ILegalDocuments
 
     /// <inheritdoc/>
     public ValueTask<Result<DocumentVersion>> ReadAsync(
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken)
     {
         DocumentVersion? found = _versions
-            .LastOrDefault(held => held.DocumentName == document && (version is null || held.Version == version));
+            .LastOrDefault(held => held.DocumentName == document.ToString() && (version is null || held.Version == version));
 
         return ValueTask.FromResult(
             found is null
@@ -48,8 +48,8 @@ internal sealed class LegalDocumentsInMemory : ILegalDocuments
         ArgumentNullException.ThrowIfNull(publication);
 
         var published = new DocumentVersion(
-            publication.DocumentName,
-            (_versions.Count(held => held.DocumentName == publication.DocumentName) + 1)
+            publication.DocumentName.ToString(),
+            (_versions.Count(held => held.DocumentName == publication.DocumentName.ToString()) + 1)
                 .ToString(System.Globalization.CultureInfo.InvariantCulture),
             publication.GoverningLanguage ?? "en",
             publication.Text,
@@ -64,12 +64,12 @@ internal sealed class LegalDocumentsInMemory : ILegalDocuments
     /// <inheritdoc/>
     public ValueTask<Result> TranslateAsync(
         AccessContext context,
-        string document,
+        DocumentName document,
         string version,
         DocumentTranslation translation,
         CancellationToken cancellationToken)
     {
-        int index = _versions.FindIndex(held => held.DocumentName == document && held.Version == version);
+        int index = _versions.FindIndex(held => held.DocumentName == document.ToString() && held.Version == version);
 
         if (index < 0)
         {

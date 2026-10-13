@@ -23,7 +23,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -35,6 +35,8 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     /// </summary>
     public NonExistenceNoticeTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, ["en", "ar"]);
     }
@@ -54,7 +56,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     {
         Assert.True(await ToldAsync("nobody@example.test"));
 
-        SendRequest sent = Assert.Single(_notifications.Mail);
+        OutboundMessage sent = Assert.Single(_notifications.Mail);
 
         Assert.Equal("nobody@example.test", sent.Destination.Canonical);
         Assert.Equal(MessageKind.NoAccount, sent.Message);
@@ -80,6 +82,25 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
         Assert.True(await ToldAsync("nobody@example.test"));
         Assert.Equal(2, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC4: a notice whose send a restriction refused spends no window,
+    /// and the next ask inside it whose send is admitted tells the address.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_ANoticeARestrictionRefusedSpendsNoWindowAsync()
+    {
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Result refused = await AnswerAsync(Address("nobody@example.test"), unheld: true);
+        _notifications.Refusal = null;
+        _clock.Advance(TimeSpan.FromMinutes(30));
+        bool told = await ToldAsync("nobody@example.test");
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, refused.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.True(told);
+        Assert.Equal(Noon.AddMinutes(30), Assert.Single(_notices.Told).At);
     }
 
     /// <summary>
@@ -117,8 +138,8 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
         Assert.False(await ToldAsync("nobody@example.test"));
 
-        SendRequest drawn = Assert.Single(_restrictions.Drawn);
-        SendRequest told = Assert.Single(_notifications.Mail);
+        OutboundMessage drawn = Assert.Single(_restrictions.Drawn);
+        OutboundMessage told = Assert.Single(_notifications.Mail);
 
         Assert.Equal("nobody@example.test", drawn.Destination.Canonical);
         Assert.Equal(MessageKind.SignInLink, drawn.Message);
@@ -182,6 +203,32 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-006 AC4: a number's ask whose text the gateway floor refuses is
+    /// answered as it would have been, whoever holds the number, and leaves nothing
+    /// behind it, so the floor tells nothing of an account.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC4_AnAskTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
+    {
+        if (!PhoneNumber.TryParse("+441632960011", out PhoneNumber number))
+        {
+            throw new Xunit.Sdk.XunitException("The number does not parse.");
+        }
+
+        _restrictions.Refusal = Error.From(ErrorCodes.SmsBalanceFloor);
+
+        Result nobodys = await AnswerAsync(SendDestination.Of(number), unheld: true);
+        Result unreached = await AnswerAsync(SendDestination.Of(number), unheld: false);
+
+        Assert.True(nobodys.Match(() => true, _ => false));
+        Assert.True(unreached.Match(() => true, _ => false));
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_notices.Told);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 2), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC3: the notice is the message the ask asked for, so it answers
     /// to that message's restrictions and is refused where the message would be.
     /// </summary>
@@ -207,10 +254,30 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
         var refusal = Error.From(ErrorCodes.RestrictionExceeded);
         _notifications.Refusal = refusal;
+        _work.Reset();
 
         Result refused = await AnswerAsync(Address("elsewhere@example.test"), unheld: true);
 
         Assert.Same(refusal, refused.Match(() => (Error?)null, error => error));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a notice whose probe alert could not be raised is refused,
+    /// and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ANoticeWhoseAlertIsNotRaisedIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.AlertingNonexistentThreshold, 0);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result refused = await AnswerAsync(Address("nobody@example.test"), unheld: true);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     private static SendDestination Address(string address) =>

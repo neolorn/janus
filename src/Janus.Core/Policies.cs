@@ -21,7 +21,7 @@ public static class Policies
     /// The system policy, at the safe end of every field: one factor, the catalogue
     /// less the four that are off by default, a gate at the account's reachable
     /// assurance, a second credential offered rather than required, self-service
-    /// recovery available, and no domain lock.
+    /// recovery available, no domain lock, and no profile photo.
     /// </summary>
     public static Policy SystemDefault { get; } = new(
         AssuranceLevel.Aal1,
@@ -38,12 +38,14 @@ public static class Policies
         GatesAt(GateLevel.Reachable, phishingResistant: false),
         CredentialRedundancy.Advisory,
         SelfServiceRecovery: true,
-        []);
+        [],
+        Photos: false);
 
     /// <summary>
     /// The administrative organization's policy at bootstrap: two factors, passkeys
     /// only, every gate at AAL2 and phishing-resistant, a second credential required,
-    /// and no self-service recovery.
+    /// no self-service recovery, and no profile photo: bootstrap cannot see whether the
+    /// host declares an image codec (IDN-ATTR-002).
     /// </summary>
     public static Policy AdministrativeOrganization { get; } = new(
         AssuranceLevel.Aal2,
@@ -51,7 +53,8 @@ public static class Policies
         GatesAt(GateLevel.Aal2, phishingResistant: true),
         CredentialRedundancy.Enforced,
         SelfServiceRecovery: false,
-        []);
+        [],
+        Photos: false);
 
     // Section 4.1a states one gate for every action of section 5a rather than a gate
     // per action.

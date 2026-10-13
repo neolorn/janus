@@ -46,6 +46,12 @@ internal sealed class AuditRowRecord
     public SubjectId EffectiveSubject { get; set; }
 
     /// <summary>
+    /// The <c>subject</c> column: the data subject the record concerns, absent where it
+    /// concerns none or was written before the column existed.
+    /// </summary>
+    public SubjectId? Subject { get; set; }
+
+    /// <summary>
     /// The <c>organization</c> column, absent where the event belongs to no
     /// organization.
     /// </summary>
@@ -72,4 +78,10 @@ internal sealed class AuditRowRecord
     /// The <c>principal_reason</c> column: the reason that principal stated.
     /// </summary>
     public string? PrincipalReason { get; set; }
+
+    /// <summary>
+    /// The <c>breakglass_reason</c> column: the reason given at the use of the
+    /// break-glass credential, where the action was taken in the session it opened.
+    /// </summary>
+    public string? BreakGlassReason { get; set; }
 }

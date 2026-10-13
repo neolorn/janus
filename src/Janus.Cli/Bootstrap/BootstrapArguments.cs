@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using Janus.Authentication.Bootstrap;
+using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -105,6 +106,11 @@ internal static class BootstrapArguments
             return Result.Failure<BootstrapRequest>(unnamed);
         }
 
+        if (Settled(named).Match(() => (Error?)null, failure => failure) is Error unsettled)
+        {
+            return Result.Failure<BootstrapRequest>(unsettled);
+        }
+
         if (!DateOnly.TryParseExact(given[DateOfBirth], DateForm, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly born))
         {
             return Result.Failure<BootstrapRequest>(Malformed(DateOfBirth));
@@ -125,7 +131,9 @@ internal static class BootstrapArguments
     private static Result Complete(Dictionary<ConfigurationKey, string> named)
     {
         HostingLocation? location = named.TryGetValue(Settings.HostingLocation.Key, out string? written)
-            ? Settings.HostingLocation.Read(written).Match(value => (HostingLocation?)value, _ => null)
+            ? Settings.HostingLocation.Read(written).Match(
+                value => (HostingLocation?)value,
+                error => throw new InvalidOperationException(error.Code.ToString()))
             : null;
 
         try
@@ -140,6 +148,31 @@ internal static class BootstrapArguments
         catch (StartupException incomplete)
         {
             return Result.Failure(incomplete.Failure ?? Error.From(ErrorCodes.StartupDeclarationMissing));
+        }
+
+        return Result.Success();
+    }
+
+    // AUTH-FACT-010 AC1 and D-166 (308): the relying party is settled from the named
+    // origins as the start settles it, with the defaults of the keys bootstrap does not
+    // take, so an identifier no origin shares is refused before the database is reached.
+    private static Result Settled(Dictionary<ConfigurationKey, string> named)
+    {
+        IReadOnlyList<string> origins = Settings.WebAuthnOrigins.Read(named[Settings.WebAuthnOrigins.Key]).Match(
+            value => value,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+        try
+        {
+            _ = RelyingParty.Of(
+                Settings.WebAuthnRelyingPartyId.Default,
+                origins,
+                Settings.WebAuthnRelatedOrigins.Default,
+                Settings.WebAuthnAlgorithms.Default);
+        }
+        catch (StartupException unsettled)
+        {
+            return Result.Failure(unsettled.Failure ?? Error.From(ErrorCodes.StartupRelyingPartyId));
         }
 
         return Result.Success();

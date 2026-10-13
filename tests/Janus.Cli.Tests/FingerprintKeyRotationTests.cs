@@ -31,6 +31,8 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
 
     private const string Sealed = "--sealed";
 
+    private const string Kind = "fingerprint-key";
+
     private const string Maintenance = "identity_maintenance";
 
     private static readonly byte[] Previous = RandomNumberGenerator.GetBytes(32);
@@ -58,6 +60,26 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         Assert.Empty(refused.Output);
         Assert.Equal("""{"code":"authz.denied","details":{}}""", refused.Error.Trim());
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
+    }
+
+    /// <summary>
+    /// OPS-SEC-001: <c>rotate-fingerprint-key</c> reports as every command does. A seal
+    /// confirmed before any rotation is refused with exit code 1, one JSON line on
+    /// standard error and nothing on standard output; the rotation exits 0 with nothing
+    /// on standard error.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_RotateFingerprintKeyExitsZeroOrOneWithOneLineOnStandardErrorAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await CountedAsync(connection, 1);
+
+        Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
+        Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
+
+        Assert.Equal("model.rotation.notready", Reported.Refusal(refused));
+        Reported.Success(rotated);
     }
 
     /// <summary>
@@ -89,11 +111,12 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
 
         await CountedAsync(connection, 2);
+        await SweptAsync(connection, 1);
 
         Invocation sealedCopy = await Invocation.PipedAsync([Command, Sealed], Rotating());
 
         Assert.Equal(0, sealedCopy.ExitCode);
-        Assert.Equal("""{"version":2,"processed":0,"retired":[1]}""", sealedCopy.Output.Trim());
+        Assert.Equal(await RetirementAsync(connection, (2, 0, 1)), sealedCopy.Output.Trim());
         Assert.NotNull(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
         Assert.Equal(
             [2],
@@ -114,7 +137,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         Invocation refused = await Invocation.PipedAsync([Command, Sealed], Rotating());
 
         Assert.Equal(1, refused.ExitCode);
-        Assert.Equal("""{"code":"api.request.malformed","details":{"member":"sealed"}}""", refused.Error.Trim());
+        Assert.Equal("""{"code":"model.rotation.notready","details":{}}""", refused.Error.Trim());
         Assert.Equal(1, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.throttle_counters"));
     }
 
@@ -130,6 +153,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         await CountedAsync(connection, 1);
 
         await Invocation.PipedAsync([Command], Rotating());
+        await SweptAsync(connection, 1);
         await Invocation.PipedAsync([Command, Sealed], Rotating());
 
         IReadOnlyList<(string Action, string Principal, string Reason, Guid Acting, string Details)> recorded =
@@ -171,17 +195,37 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
 
         Assert.Equal(1, missing.ExitCode);
         Assert.Equal(
-            """{"code":"model.startup.kekunavailable","details":{"member":"fingerprintKeys"}}""",
+            """{"code":"model.startup.secretunavailable","details":{"key":"fingerprintKeys"}}""",
             missing.Error.Trim());
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+
+        await SweptAsync(connection, 1);
+
         Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
 
         Invocation again = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal(1, again.ExitCode);
         Assert.Equal(missing.Error, again.Error);
+    }
+
+    // OPS-SEC-003, D-166 (317): the report of a retirement, which says until when the
+    // retired version is kept: the rotation's completion and the retention, which is
+    // backup.retention's default of 35 days where the operator names none longer.
+    private static async Task<string> RetirementAsync(
+        NpgsqlConnection connection,
+        (int Version, int Processed, int Retired) rotation,
+        int retentionDays = 35)
+    {
+        DateTime completed = await connection.ExecuteScalarAsync<DateTime>(
+            "SELECT completed_at FROM identity.key_rotations WHERE kind = @kind AND version = @version",
+            new { kind = Kind, version = rotation.Version });
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""{"version":{{rotation.Version}},"processed":{{rotation.Processed}},"retired":[{{rotation.Retired}}],"keepUntil":{{JsonSerializer.Serialize(completed.AddDays(retentionDays))}}}""");
     }
 
     private static string[] Lines(Invocation invocation) =>
@@ -196,6 +240,14 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
             VALUES ('source', @key, @version, 1, now());
             """,
             new { key = RandomNumberGenerator.GetBytes(32), version });
+
+    // D-166 (318): a seal waits while any line under a previous version stands, so the
+    // cases that retire one first remove its lines, as the expiry sweep does once they
+    // no longer count.
+    private static async Task SweptAsync(NpgsqlConnection connection, int version) =>
+        await connection.ExecuteAsync(
+            "DELETE FROM identity.throttle_counters WHERE fingerprint_version = @version",
+            new { version });
 
     private async Task<NpgsqlConnection> ResetAsync()
     {

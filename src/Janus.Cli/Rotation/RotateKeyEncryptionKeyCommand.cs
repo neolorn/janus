@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -14,16 +12,17 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Janus.Cli.Rotation;
 
 /// <summary>
-/// The <c>rotate-kek</c> command: re-wraps every value held under the key-encryption key
-/// under its current version and prints that version's escrow copy, or, given
-/// <c>--sealed</c> once the copy is sealed, retires the versions before it.
+/// The <c>rotate-kek</c> command: re-wraps every row of the subject-key table, the only
+/// values held under the key-encryption key, under its current version and prints that
+/// version's escrow copy, or, given <c>--sealed</c> once the copy is sealed, retires the
+/// versions before it and says until when they are kept.
 /// </summary>
 /// <remarks>
-/// Implements OPS-SEC-003, DR-009, DR-009a and OPS-SEC-001, as entries 316 and 317 of the
-/// decisions pending review settle them. The operator puts the new version in the
-/// secrets manager as current, keeping the previous one, and pipes the document to the
-/// command under the maintenance credential. The command needs nothing of the
-/// application, and a run that stops is resumed by running it again.
+/// Implements OPS-SEC-003, DR-009, DR-009a and OPS-SEC-001 (D-166, 316, 317). The
+/// operator puts the new version in the secrets manager as current, keeping the previous
+/// one, and pipes the document to the command under the maintenance credential. The
+/// command needs nothing of the application, and a run that stops is resumed by running
+/// it again.
 /// </remarks>
 internal static class RotateKeyEncryptionKeyCommand
 {
@@ -31,11 +30,6 @@ internal static class RotateKeyEncryptionKeyCommand
     /// The command's name on the command line.
     /// </summary>
     public const string Name = "rotate-kek";
-
-    /// <summary>
-    /// The argument that confirms the escrow copy sealed.
-    /// </summary>
-    public const string Sealed = "--sealed";
 
     /// <summary>
     /// Runs the command.
@@ -48,8 +42,8 @@ internal static class RotateKeyEncryptionKeyCommand
     /// </param>
     /// <returns>
     /// The rotation's version and the count of subject keys it re-wrapped, with the
-    /// versions retired where the seal was confirmed; or the failure naming what was
-    /// refused.
+    /// versions retired and the date they are kept until where the seal was confirmed;
+    /// or the failure naming what was refused.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static async Task<Result<string>> RunAsync(
@@ -60,14 +54,17 @@ internal static class RotateKeyEncryptionKeyCommand
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(terminal);
 
-        if (arguments.Count > 1 || (arguments.Count == 1 && arguments[0] != Sealed))
+        RotationRequest request = default!;
+        Error? failure = null;
+
+        RotationArguments.Read(arguments).Switch(value => request = value, error => failure = error);
+
+        if (failure is not null)
         {
-            return Result.Failure<string>(
-                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(arguments[^1])));
+            return Result.Failure<string>(failure);
         }
 
         using var held = new HeldKeys();
-        Error? failure = null;
 
         KeyDocument keys = (await KeyDocument.ReadAsync(terminal, held, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<KeyDocument>(error, ref failure));
@@ -82,10 +79,10 @@ internal static class RotateKeyEncryptionKeyCommand
 
         KeyRotation rotation = scope.ServiceProvider.GetRequiredService<KeyRotation>();
 
-        if (arguments.Count == 1)
+        if (request.Sealed)
         {
             return (await rotation.RetireAsync(cancellationToken).ConfigureAwait(false))
-                .Match(retirement => Result.Success(Report(retirement.Rotation, retirement.Retired)), Result.Failure<string>);
+                .Match(retirement => Result.Success(RotationReport.Of(retirement, request.Retention)), Result.Failure<string>);
         }
 
         Result<KeyRotationProgress> outcome = await rotation.ReWrapAsync(cancellationToken).ConfigureAwait(false);
@@ -97,9 +94,9 @@ internal static class RotateKeyEncryptionKeyCommand
 
         // DR-009, OPS-SEC-003 AC4: the escrow copy of the version every value is now
         // under, for the envelope, before the report the seal is confirmed against.
-        await EscrowCopy.WriteAsync(terminal.Output, keys.KeyEncryptionKeys, cancellationToken).ConfigureAwait(false);
+        await EscrowCopy.WriteKeyEncryptionKeyAsync(terminal.Output, keys.Ring, cancellationToken).ConfigureAwait(false);
 
-        return outcome.Match(progress => Result.Success(Report(progress, retired: null)), Result.Failure<string>);
+        return outcome.Match(progress => Result.Success(RotationReport.Of(progress)), Result.Failure<string>);
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
@@ -109,24 +106,6 @@ internal static class RotateKeyEncryptionKeyCommand
         return default!;
     }
 
-    // The version and the count, and the versions retired where there are any; nothing
-    // of a key.
-    private static string Report(KeyRotationProgress progress, IReadOnlyList<int>? retired)
-    {
-        var report = new Dictionary<string, object>(StringComparer.Ordinal)
-        {
-            ["version"] = progress.Version,
-            ["processed"] = progress.Processed,
-        };
-
-        if (retired is not null)
-        {
-            report["retired"] = retired;
-        }
-
-        return Encoding.UTF8.GetString(JsonSerializer.SerializeToUtf8Bytes(report));
-    }
-
     // What the command runs over: the storage area under the connection and the keys
     // the document carried, and the rotation itself.
     private static ServiceProvider Composed(KeyDocument keys)
@@ -134,17 +113,23 @@ internal static class RotateKeyEncryptionKeyCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
+
+        // CONV-DESIGN-007, CONV-CODE-007: the ring the document was read into stands in
+        // the place of the one the core registers, so every service of the command
+        // borrows from the ring the command filled.
+        services.AddCoreArea();
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<IKeyRotationStore>(provider => new KeyRotationStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
-            keys.KeyEncryptionKeys));
+            keys.Ring));
         services.AddScoped(provider => new KeyRotation(
             provider.GetRequiredService<IKeyRotationStore>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<TimeProvider>(),
-            keys.KeyEncryptionKeys));
+            keys.Ring));
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

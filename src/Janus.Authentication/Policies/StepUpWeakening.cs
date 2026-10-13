@@ -44,4 +44,22 @@ internal static class StepUpWeakening
 
         return Alerts.Of(AlertCondition.StepUpPolicyWeakened, scope?.ToString(), at, details);
     }
+
+    /// <summary>
+    /// The alert for a change that turned off a step-up a key requires on its own, with
+    /// no gate of a policy to name.
+    /// </summary>
+    /// <param name="key">The key the change was written to.</param>
+    /// <param name="at">When the change was made.</param>
+    /// <returns>The alert to raise.</returns>
+    /// <remarks>Implements OPS-ALERT-006 AC5 (D-166, 329).</remarks>
+    public static AlertRaised Of(ConfigurationKey key, DateTimeOffset at) =>
+        Alerts.Of(
+            AlertCondition.StepUpPolicyWeakened,
+            null,
+            at,
+            new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                ["key"] = JsonSerializer.SerializeToElement(key.ToString()),
+            });
 }

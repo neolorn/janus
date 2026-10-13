@@ -18,11 +18,11 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <param name="organizations">Where the organization is read and written.</param>
 /// <param name="memberships">Where the memberships of it are read and written.</param>
 /// <remarks>
-/// Implements IDN-ORG-003, IDN-ORG-005 and IDN-PRIN-003. Every write here is made on
-/// one context and committed by the caller's unit of work, so the memberships and the
-/// organization reach the database together or not at all. No row is removed: what the
-/// organization was called becomes its own identifier and the trail that references it
-/// goes on resolving.
+/// Implements IDN-ORG-003, IDN-ORG-005 and IDN-PRIN-003. Every write here is made in
+/// the caller's unit of work, so the memberships, the domains and the organization reach
+/// the database together or not at all. No row is removed: what the organization was
+/// called, and every domain it listed, becomes its own identifier and the trail that
+/// references it goes on resolving.
 /// </remarks>
 internal sealed class OrganizationStates(
     StoreContext context,
@@ -58,16 +58,23 @@ internal sealed class OrganizationStates(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
+    public async ValueTask<IReadOnlyList<EndedMembership>?> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at,
         TimeSpan window,
         CancellationToken cancellationToken)
     {
         Organization erasing = await organizations
-                .FindAsync(organization, cancellationToken)
+                .FindForUpdateAsync(organization, cancellationToken)
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("No such organization.");
+
+        if (erasing.ErasedAt is not null
+            || erasing.DeletionRequestedAt is not DateTimeOffset requestedAt
+            || at < requestedAt + window)
+        {
+            return null;
+        }
 
         IReadOnlyList<EndedMembership> ended = await EndedAsync(organization, at, cancellationToken)
             .ConfigureAwait(false);
@@ -75,6 +82,20 @@ internal sealed class OrganizationStates(
         erasing.RecordErasure(at, window);
 
         await organizations.RecordAsync(erasing, cancellationToken).ConfigureAwait(false);
+
+        // IDN-ORG-003, D-166 (155): no domain of the organization stays readable. Each
+        // becomes the identifier, as the name does, and one still listed is removed at
+        // the erasure; one removed before keeps the instant it was.
+        string replaced = erasing.Name;
+
+        _ = await context.OrganizationDomains
+            .Where(domain => domain.Organization == organization)
+            .ExecuteUpdateAsync(
+                erased => erased
+                    .SetProperty(domain => domain.Domain, replaced)
+                    .SetProperty(domain => domain.RemovedAt, domain => domain.RemovedAt ?? at),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         return ended;
     }
@@ -84,8 +105,10 @@ internal sealed class OrganizationStates(
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: each membership is read under its row's lock, so one an
+        // administrator ends at the same moment is ended once.
         IReadOnlyList<Membership> held = await memberships
-            .FindByOrganizationAsync(organization, cancellationToken)
+            .FindByOrganizationForUpdateAsync(organization, cancellationToken)
             .ConfigureAwait(false);
 
         List<EndedMembership> ended = [];

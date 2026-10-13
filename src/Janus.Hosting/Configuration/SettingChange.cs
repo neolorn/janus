@@ -28,7 +28,10 @@ internal sealed class SettingChange(
     CancellationToken cancellationToken) : ISettingOperation<ValueTask<Result>>
 {
     /// <inheritdoc/>
-    public async ValueTask<Result> On<TValue>(Setting<TValue> setting)
+    public ValueTask<Result> On<TValue>(Setting<TValue> setting) =>
+        ChangedAsync(setting, cancellationToken);
+
+    private async ValueTask<Result> ChangedAsync<TValue>(Setting<TValue> setting, CancellationToken cancellationToken)
     {
         Error? failure = null;
 

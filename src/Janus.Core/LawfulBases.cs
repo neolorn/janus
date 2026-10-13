@@ -21,36 +21,42 @@ public static class LawfulBases
     [
         new(
             "consent",
+            "Data Subject's Consent",
             IsConsent: true,
             RequiresWrittenConsentForSensitive: true,
             RequiresAssessment: false,
             IsObjectable: false),
         new(
             "contractual-obligation",
+            "Fulfilment of a Contractual Obligation",
             IsConsent: false,
             RequiresWrittenConsentForSensitive: false,
             RequiresAssessment: false,
             IsObjectable: false),
         new(
             "legal-obligation",
+            "Fulfilment of a Legal Obligation",
             IsConsent: false,
             RequiresWrittenConsentForSensitive: false,
             RequiresAssessment: false,
             IsObjectable: false),
         new(
             "legitimate-interest",
+            "Legitimate Interest",
             IsConsent: false,
             RequiresWrittenConsentForSensitive: false,
             RequiresAssessment: true,
             IsObjectable: true),
         new(
             "legal-right-claim-or-defence",
+            "Claim or Defence of a Legal Right",
             IsConsent: false,
             RequiresWrittenConsentForSensitive: false,
             RequiresAssessment: false,
             IsObjectable: false),
         new(
             "court-judgment-or-order",
+            "Execution of Court Judgments or Orders from Competent Investigative Authorities",
             IsConsent: false,
             RequiresWrittenConsentForSensitive: false,
             RequiresAssessment: false,

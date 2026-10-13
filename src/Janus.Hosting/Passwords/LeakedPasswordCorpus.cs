@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Passwords;
@@ -38,6 +39,13 @@ internal sealed class LeakedPasswordCorpus(
     /// </summary>
     public static readonly Uri Provider = new("https://api.pwnedpasswords.com/range/");
 
+    /// <summary>
+    /// What every range request names itself as: the library's package and its version,
+    /// since the provider's acceptable use asks its callers to identify themselves. Both
+    /// are the constants the build writes (D-168), so the version carries no commit.
+    /// </summary>
+    public static readonly ProductInfoHeaderValue Agent = new(LibraryPackage.Identifier, LibraryPackage.Version);
+
     private const char Separator = ':';
 
     /// <inheritdoc/>
@@ -70,7 +78,8 @@ internal sealed class LeakedPasswordCorpus(
 
             // INF-TLS-004: the address can be written after startup has checked it, so
             // it is held to TLS again where it is asked.
-            return Uri.TryCreate(Range(address, prefix), UriKind.Absolute, out Uri? asked)
+            return Uri.TryCreate(address, UriKind.Absolute, out Uri? located)
+                && Uri.TryCreate(Range(located, prefix), UriKind.Absolute, out Uri? asked)
                 && asked.Scheme == Uri.UriSchemeHttps
                 ? await AskedAsync(asked, cancellationToken).ConfigureAwait(false)
                 : Unavailable();
@@ -100,8 +109,8 @@ internal sealed class LeakedPasswordCorpus(
 
     // The deployment names where its own corpus answers; the prefix is a segment
     // under it, whatever else the address carries.
-    private static string Range(string address, [NeverLogged] string prefix) =>
-        address.TrimEnd('/') + "/" + prefix.ToUpperInvariant();
+    private static string Range(Uri address, [NeverLogged] string prefix) =>
+        address.OriginalString.TrimEnd('/') + "/" + prefix.ToUpperInvariant();
 
     private static Result<IReadOnlySet<string>> Unavailable() =>
         Result.Failure<IReadOnlySet<string>>(Error.From(ErrorCodes.ScreeningUnavailable));

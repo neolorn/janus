@@ -66,6 +66,13 @@ internal sealed class RecoveryLink
     public DateTimeOffset? SpentAt { get; private set; }
 
     /// <summary>
+    /// When a second step enrolled in the session it opened showed recovery codes, and
+    /// nothing where none did: the report of their export is then what completes the
+    /// enrolment and ends the session (AUTH-RECOV-006, D-189).
+    /// </summary>
+    public DateTimeOffset? CodesShownAt { get; private set; }
+
+    /// <summary>
     /// Issues one.
     /// </summary>
     /// <param name="token">The secret the message carries.</param>
@@ -98,6 +105,7 @@ internal sealed class RecoveryLink
     /// <param name="mailboxLost">Whether the approver recorded the mailbox as lost.</param>
     /// <param name="session">The session it opened, or nothing.</param>
     /// <param name="spentAt">When it was spent, or nothing.</param>
+    /// <param name="codesShownAt">When its session showed recovery codes, or nothing.</param>
     /// <returns>The link.</returns>
     /// <exception cref="ArgumentNullException">The fingerprint is absent.</exception>
     public static RecoveryLink Existing(
@@ -109,7 +117,8 @@ internal sealed class RecoveryLink
         SubjectId? approver,
         bool mailboxLost,
         EnrolmentSessionId? session,
-        DateTimeOffset? spentAt)
+        DateTimeOffset? spentAt,
+        DateTimeOffset? codesShownAt)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
 
@@ -124,6 +133,7 @@ internal sealed class RecoveryLink
         {
             Session = session,
             SpentAt = spentAt,
+            CodesShownAt = codesShownAt,
         };
     }
 
@@ -153,5 +163,20 @@ internal sealed class RecoveryLink
     {
         Session = session;
         SpentAt = at;
+    }
+
+    /// <summary>
+    /// A second step enrolled in the session it opened showed recovery codes.
+    /// </summary>
+    /// <param name="at">When.</param>
+    /// <exception cref="InvalidOperationException">It opened no session.</exception>
+    public void ShowCodes(DateTimeOffset at)
+    {
+        if (Session is null)
+        {
+            throw new InvalidOperationException("The link opened no enrolment session.");
+        }
+
+        CodesShownAt = at;
     }
 }

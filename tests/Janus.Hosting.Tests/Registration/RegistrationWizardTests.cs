@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Registration;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
@@ -24,6 +26,11 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
     private const string Second = "other@example.test";
     private const string Terms = "terms-3";
     private const string Notice = "notice-2";
+    private const string Client = "web";
+    private const string Solved = "solved";
+
+    // An address the deployment's range file names.
+    private static readonly IPAddress Datacenter = IPAddress.Parse("203.0.113.9");
 
     // The names a destination travels under where an API takes one.
     private static readonly string[] Destinations =
@@ -64,6 +71,128 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.Null(completed.Location);
+    }
+
+    /// <summary>
+    /// FE-REG-001 AC3: where a signal fires and the host declared a verifier, the begin
+    /// answers 403 <c>auth.challenge.required</c>, a repeat whose token the verifier
+    /// fails is refused alike, and no registration session exists before the repeat
+    /// whose token passes (AUTH-ABUSE-008 AC4).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_REG_001_AC3_NoRegistrationSessionExistsBeforeThePassingRepeatAsync()
+    {
+        await using Deployment deployment = Challenging();
+        deployment.Ranges.Inside.Add(Datacenter.ToString());
+
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/register", source: Datacenter);
+
+        Answer challenged = await browser.SendAsync(
+            Datacenter, "begin-1", "POST", "/register", ("clientId", Client));
+        Answer failed = await browser.SendAsync(
+            Datacenter, "begin-2", "POST", "/register", ("clientId", Client), ("challengeToken", "guessed"));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, challenged.Status);
+        Assert.Equal(ErrorCodes.ChallengeRequired.ToString(), challenged.Text("code"));
+        Assert.Equal(StatusCodes.Status403Forbidden, failed.Status);
+        Assert.Equal(ErrorCodes.ChallengeRequired.ToString(), failed.Text("code"));
+        Assert.Empty(deployment.Registrations.All);
+        Assert.Equal(
+            StatusCodes.Status401Unauthorized,
+            (await browser.SendAsync("GET", "/register", source: Datacenter)).Status);
+
+        Answer begun = await browser.SendAsync(
+            Datacenter, "begin-3", "POST", "/register", ("clientId", Client), ("challengeToken", Solved));
+
+        Assert.Equal(StatusCodes.Status201Created, begun.Status);
+        _ = Assert.Single(deployment.Registrations.All);
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("GET", "/register", source: Datacenter)).Status);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC4: with no verifier declared a signalled begin is recorded and
+    /// answered 201 with its session, and no challenge is shown.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC4_WithNoVerifierASignalledBeginIsRecordedAndCreatesTheSessionAsync()
+    {
+        _deployment.Ranges.Inside.Add(Datacenter.ToString());
+
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/register", source: Datacenter);
+
+        Answer begun = await browser.SendAsync(
+            Datacenter, "begin-1", "POST", "/register", ("clientId", Client));
+
+        Assert.Equal(StatusCodes.Status201Created, begun.Status);
+        Assert.Equal(
+            (BotDefenceSignal.DatacenterRange, Datacenter.ToString(), false),
+            Assert.Single(_deployment.Signalled.Records));
+        _ = Assert.Single(_deployment.Registrations.All);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008: the datacenter ranges are asked about the whole address the
+    /// request arrived on, never the /64 its sessions are counted under
+    /// (AUTH-ABUSE-001), and the signal is recorded under the counting source.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_TheRangesAreAskedAboutTheWholeAddressOfTheRequestAsync()
+    {
+        var whole = IPAddress.Parse("2001:db8:9:9::7");
+
+        _deployment.Ranges.Inside.Add(whole.ToString());
+
+        Answer begun = await BeginFromAsync(_deployment, whole);
+
+        Assert.Equal(StatusCodes.Status201Created, begun.Status);
+        Assert.Equal([whole.ToString()], _deployment.Ranges.Asked);
+        Assert.Equal(
+            (BotDefenceSignal.DatacenterRange, "2001:db8:9:9::/64", false),
+            Assert.Single(_deployment.Signalled.Records));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC3: the sessions are counted by the source of the request, so
+    /// addresses of one IPv6 /64 are one source (AUTH-ABUSE-001), the session a request
+    /// would create is counted with those the source already has in the hour, and each
+    /// session holds the whole address it was started from.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC3_SessionsAreCountedByTheSourceOfTheRequestAsync()
+    {
+        await using Deployment deployment = Challenging();
+        deployment.Configuration.Set(Settings.AbuseBotDefenceRepeatedAttempts, 2);
+
+        var first = IPAddress.Parse("2001:db8:1:2::1");
+        var second = IPAddress.Parse("2001:db8:1:2::2");
+        var third = IPAddress.Parse("2001:db8:1:2::3");
+
+        Assert.Equal(StatusCodes.Status201Created, (await BeginFromAsync(deployment, first)).Status);
+        Assert.Equal(StatusCodes.Status201Created, (await BeginFromAsync(deployment, second)).Status);
+
+        Answer challenged = await BeginFromAsync(deployment, third);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, challenged.Status);
+        Assert.Equal(ErrorCodes.ChallengeRequired.ToString(), challenged.Text("code"));
+        Assert.Equal(
+            (BotDefenceSignal.RepeatedAttempts, "2001:db8:1:2::/64", true),
+            Assert.Single(deployment.Signalled.Records));
+        Assert.Equal(
+            [first.ToString(), second.ToString()],
+            deployment.Registrations.All.Select(session => session.Source).Order(StringComparer.Ordinal));
+        Assert.Equal(
+            StatusCodes.Status201Created,
+            (await BeginFromAsync(deployment, IPAddress.Parse("2001:db8:1:3::1"))).Status);
     }
 
     /// <summary>
@@ -185,7 +314,8 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         Answer early = await browser.SendAsync("PUT", "/register/email", ("value", Flow.Address));
 
-        Assert.Equal(ErrorCodes.AffirmationRequired.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status409Conflict, early.Status);
+        Assert.Equal(ErrorCodes.RegistrationIncomplete.ToString(), early.Text("code"));
 
         _ = await browser.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
         _ = await browser.SendAsync("PUT", "/register/email", ("value", Flow.Address));
@@ -200,6 +330,26 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
             ("password", Flow.Password));
 
         Assert.Equal(ErrorCodes.RegistrationIncomplete.ToString(), unsecured.Text("code"));
+    }
+
+    /// <summary>
+    /// REG-SESS-003, REG-SESS-002 AC1: a confirmation while the staged address is not
+    /// yet verified is a step whose predecessor is incomplete, answered 409 over the
+    /// wire, and the session stays at the step it was at.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_003_AConfirmationBeforeTheAddressIsVerifiedIsAConflictAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        Answer before = await browser.SendAsync("GET", "/register");
+
+        Answer early = await browser.SendAsync("POST", "/register/confirm");
+
+        Assert.Equal(StatusCodes.Status409Conflict, early.Status);
+        Assert.Equal(ErrorCodes.RegistrationIncomplete.ToString(), early.Text("code"));
+        Assert.Equal(before.Body, (await browser.SendAsync("GET", "/register")).Body);
     }
 
     /// <summary>
@@ -390,6 +540,27 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
         Assert.Equal(
             StatusCodes.Status401Unauthorized,
             (await browser.SendAsync("GET", "/register")).Status);
+    }
+
+    // A deployment whose host declared a challenge verifier that passes one token.
+    private static Deployment Challenging()
+    {
+        var deployment = new Deployment(verifier: new ChallengeVerifier((token, _) =>
+            ValueTask.FromResult(string.Equals(token, Solved, StringComparison.Ordinal))));
+
+        Flow.Prepare(deployment);
+
+        return deployment;
+    }
+
+    // A fresh browser's first contact and its begin, from one address.
+    private static async Task<Answer> BeginFromAsync(Deployment deployment, IPAddress source)
+    {
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/register", source: source);
+
+        return await browser.SendAsync(source, "begin", "POST", "/register", ("clientId", Client));
     }
 
     // Every field of every request the registration endpoints read a body into.

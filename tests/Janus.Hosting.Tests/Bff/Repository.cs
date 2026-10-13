@@ -53,7 +53,11 @@ internal static class Repository
             .Where(path => !path.Split(Path.DirectorySeparatorChar).Any(folder => folder is "bin" or "obj")),
     ];
 
-    private static string Root()
+    /// <summary>
+    /// The folder the repository is checked out in.
+    /// </summary>
+    /// <returns>The path.</returns>
+    public static string Root()
     {
         var at = new DirectoryInfo(System.AppContext.BaseDirectory);
 

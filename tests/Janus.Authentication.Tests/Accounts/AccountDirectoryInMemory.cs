@@ -82,11 +82,35 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <param name="image">The stored image.</param>
     public void Shows(SubjectId subject, ReadOnlyMemory<byte> image) => _photos[subject] = image;
 
+    /// <summary>
+    /// What another transaction committed on an account's row while this one waited for
+    /// its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<SubjectId>? Holding { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask<AccountState?> StateAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_states.TryGetValue(subject, out AccountState state)
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(subject);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// How many times an account's state was read, which is what every judgement of an
+    /// account begins with.
+    /// </summary>
+    public int StateReads { get; private set; }
+
+    /// <inheritdoc/>
+    public ValueTask<AccountState?> StateAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        StateReads++;
+
+        return ValueTask.FromResult(_states.TryGetValue(subject, out AccountState state)
             ? state
             : (AccountState?)null);
+    }
 
     /// <inheritdoc/>
     public ValueTask<SuspensionOrigin?> SuspendedByAsync(

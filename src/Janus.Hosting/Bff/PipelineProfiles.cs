@@ -42,12 +42,16 @@ public static class PipelineProfiles
     /// capabilities and not for a check whose refusal it goes on past.
     /// </para>
     /// <para>
-    /// The flood limit of <c>abuse.source.ratelimit</c> is counted by each instance of
-    /// the deployment in its own memory, by the address the connection arrived on. A
-    /// deployment that runs several instances behind one balancer admits a source up to
-    /// the limit at each of them, and sets the key to its share of the limit it wants;
-    /// one behind a proxy names the proxies it trusts to the framework, or every
-    /// request arrives from the proxy's address and counts as one source.
+    /// The flood limit of <c>abuse.source.ratelimit</c> is counted per source: the
+    /// address the connection arrived on, an IPv4-mapped address read as its IPv4
+    /// address and an IPv6 address counted by its /64, since one host holds every
+    /// address of its subnet. Each IPv6 source's enclosing /48 is counted too, under
+    /// <c>abuse.source.sitelimit</c>, since one site holds many subnets. Both counts are
+    /// kept by each instance of the deployment in its own memory: a deployment that runs
+    /// several instances behind one balancer admits a source, and a /48, up to the limit
+    /// at each of them, and sets each key to its share of the limit it wants. One behind
+    /// a proxy names the proxies it trusts to the framework, or every request arrives
+    /// from the proxy's address and counts as one source.
     /// </para>
     /// </remarks>
     /// <param name="application">The host's pipeline.</param>
@@ -79,14 +83,20 @@ public static class PipelineProfiles
         // mounts the profile and chooses nothing about what it covers. Chapter 09
         // section 8: the emergency credential is presented from a browser that may
         // still hold a stale session for the domain, so there the cookie is ignored
-        // rather than refused.
+        // rather than refused. A callback carrying the cookie is refused by the profile
+        // as a rejected callback is; a protocol endpoint of the provider carrying it is
+        // refused by the provider, in its protocol's shape.
         return application
             .UseWhen(
                 context => MachineRoutes.Governs(context.Request.Path)
-                    && !MachineRoutes.IgnoresCookie(context.Request.Path),
+                    && !MachineRoutes.IgnoresCookie(context.Request.Path)
+                    && !MachineRoutes.AnswersByProtocol(context.Request.Path),
+                Machine)
+            .UseWhen(
+                context => MachineRoutes.AnswersByProtocol(context.Request.Path),
                 branch =>
                 {
-                    Machine(branch);
+                    Marked(branch);
                     _ = branch.UseAuthentication();
                 })
             .UseWhen(
@@ -213,7 +223,7 @@ public static class PipelineProfiles
         });
     }
 
-    // The stages every route on the machine profile passes.
+    // The stages every callback on the machine profile passes.
     private static void Machine(IApplicationBuilder branch)
     {
         Marked(branch);

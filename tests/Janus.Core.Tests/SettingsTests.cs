@@ -63,6 +63,29 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// Chapter 10 section 4 and OPS-CFG-003: the cadence of the signing keys and of the
+    /// client secrets has a floor of a day, so a shorter one is refused by name rather
+    /// than raised to it, and a day is taken.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_003_ASigningRotationUnderADayIsRejected()
+    {
+        Result<TimeSpan> outcome = Settings.TokenSigningRotation.Accept(TimeSpan.FromHours(23));
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            outcome.Match(_ => default, failure => failure.Code));
+        Assert.Equal(
+            "P1D",
+            outcome.Match(
+                _ => throw new InvalidOperationException(),
+                failure => failure.Details)["floor"].GetString());
+        Assert.Equal(
+            TimeSpan.FromDays(1),
+            Settings.TokenSigningRotation.Accept(TimeSpan.FromDays(1)).Match(taken => taken, _ => default));
+    }
+
+    /// <summary>
     /// PRIV-RET-001 AC1, AC2: each category the library keeps has a declared period,
     /// and a deployment that names a shorter one than the floor is refused rather
     /// than quietly held to the floor.
@@ -301,8 +324,8 @@ public sealed class SettingsTests
     [Fact]
     public void For_OrganizationIdentifier_NamesTheMembersKey() =>
         Assert.Equal(
-            "stepup.enforcement.acme",
-            Settings.OrganizationStepUpEnforcement.For("acme").ToString());
+            "policy.acme",
+            Settings.OrganizationPolicy.For("acme").ToString());
 
     /// <summary>
     /// Chapter 10 section 4 and the <c>policy.&lt;organization&gt;</c> row: the
@@ -320,17 +343,18 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC1: the four restrictions the library ships are the ones
-    /// chapter 10 section 4.5 names, with the buckets it gives them, because every
-    /// send is decided against these until a deployment edits them.
+    /// AUTH-ABUSE-004 AC1, AC20: the five restrictions the library ships are the ones
+    /// chapter 10 section 4.5 names, in its order, with the buckets it gives them and
+    /// the mark <c>resend</c> on <c>sms.resend</c> alone, because every send is decided
+    /// against these until a deployment edits them.
     /// </summary>
     [Fact]
-    public void AUTH_ABUSE_004_AC1_TheShippedRestrictionsAreTheNamedFour()
+    public void AUTH_ABUSE_004_AC1_TheShippedRestrictionsAreTheNamedFive()
     {
         IReadOnlyList<Restriction> shipped = Settings.Restrictions.Default;
 
         Assert.Equal(
-            ["sms.destination", "sms.source", "email.destination", "notification.destination"],
+            ["sms.destination", "sms.source", "sms.resend", "email.destination", "notification.destination"],
             shipped.Select(restriction => restriction.Name));
 
         Assert.All(shipped, restriction => Assert.Null(restriction.HostKeyName));
@@ -341,6 +365,7 @@ public sealed class SettingsTests
                 RestrictionKeyKind.Source,
                 RestrictionKeyKind.Destination,
                 RestrictionKeyKind.Destination,
+                RestrictionKeyKind.Destination,
             ],
             shipped.Select(restriction => restriction.Key));
 
@@ -349,9 +374,18 @@ public sealed class SettingsTests
                 RestrictionPurpose.Any,
                 RestrictionPurpose.Any,
                 RestrictionPurpose.Any,
+                RestrictionPurpose.Any,
                 RestrictionPurpose.Notification,
             ],
             shipped.Select(restriction => restriction.Purpose));
+
+        Assert.Equal(
+            ["sms.resend"],
+            shipped.Where(restriction => restriction.Resend).Select(restriction => restriction.Name));
+
+        Assert.Equal(
+            [new Bucket(1, TimeSpan.FromMinutes(3), BucketWindow.Sliding)],
+            Named(shipped, "sms.resend").Buckets);
 
         Assert.Equal(
             [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)],

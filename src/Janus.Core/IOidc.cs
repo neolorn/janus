@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 namespace Janus.Core;
 
 /// <summary>
-/// The two operations of the OpenID Connect provider a host calls in process and the
-/// library answers over HTTP: the claims a token covers, and the keys the tokens are
-/// validated against.
+/// What a host calls of the OpenID Connect provider in process and the library answers
+/// over HTTP: the claims a token covers, which is an operation, and the keys the tokens
+/// are validated against, whose read is none.
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, AUTH-OIDC-001 and AUTH-KEY-001. The protocol itself is not
@@ -18,22 +18,29 @@ namespace Janus.Core;
 public interface IOidc
 {
     /// <summary>
-    /// What a token covering these scopes says about the person.
+    /// What a token covering these scopes says about the person whose identity the
+    /// context carries, and about nobody else (LIB-API-005).
     /// </summary>
-    /// <param name="subject">Whose account.</param>
+    /// <param name="context">Who is asking: the effective identity is whose claims are answered.</param>
     /// <param name="scope">What the token covers, space separated.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The claims, or the refusal where the account no longer answers.</returns>
+    /// <returns>
+    /// The claims, or <c>authz.denied</c> where the context names no effective identity
+    /// or the account no longer answers.
+    /// </returns>
     ValueTask<Result<OidcClaims>> ClaimsAsync(
-        SubjectId subject,
+        AccessContext context,
         string scope,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The keys a relying party validates against: the one signing now and, through
-    /// the overlap, the one before it.
+    /// The keys a relying party validates against: the next key, the one signing now
+    /// and each one it replaced, through its overlap. The read is no operation
+    /// (LIB-API-005): it answers the public keys the key set's endpoint publishes and
+    /// nothing else, reads no record of a person, takes no access context and meets no
+    /// gate (CONV-DESIGN-002).
     /// </summary>
-    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
     /// The published set, or the refusal where the deployment's own signing settings
     /// cannot be read: a set that is empty because something failed would validate

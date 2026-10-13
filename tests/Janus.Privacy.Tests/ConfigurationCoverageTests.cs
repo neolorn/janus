@@ -100,7 +100,7 @@ public sealed class ConfigurationCoverageTests
         AuthorizationDeclaration adults = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("statement", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
             .Permission("statement:read")
             .Resource<Declaration.Statement>("statement", statement => statement
                 .BelongsToOrganization()
@@ -136,7 +136,7 @@ public sealed class ConfigurationCoverageTests
         AuthorizationDeclaration adults = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("statement", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
             .Permission("statement:read")
             .Resource<Declaration.Statement>("statement", statement => statement
                 .BelongsToOrganization()

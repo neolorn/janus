@@ -69,7 +69,7 @@ internal sealed class OrganizationDomainService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure<IReadOnlyList<OrganizationDomain>>(Malformed("id"));
+            return Result.Failure<IReadOnlyList<OrganizationDomain>>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         IReadOnlyList<LockedDomain> held = await domains.OfAsync(organization, cancellationToken)
@@ -91,7 +91,8 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, holding: true, cancellationToken)
+                .ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.Denied));
@@ -104,7 +105,23 @@ internal sealed class OrganizationDomainService(
 
         if (read.Listed is LockedDomain listed)
         {
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<OrganizationDomain>(notCommittedAgain);
+            }
+
             return Result.Success(listed.Answered());
+        }
+
+        // REG-DOM-001, X6 of D-166: a listed domain is verified and re-verified by its
+        // TXT record, which the library reads through the resolver the deployment
+        // declares, so without one no domain is listed.
+        if (dns is null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationDomain>(Unresolvable);
         }
 
         // 10 section 4.1a: adding a domain is a loosening, which also asks the
@@ -113,6 +130,8 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false)
             is Error withheld)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<OrganizationDomain>(withheld);
         }
 
@@ -120,13 +139,14 @@ internal sealed class OrganizationDomainService(
         var added = LockedDomain.Listed(organization, read.Domain, randomness, now);
         IReadOnlyList<string> before = read.Stated.EmailDomains ?? [];
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await domains.AddAsync(added, cancellationToken).ConfigureAwait(false);
 
-        if (await WrittenAsync(read, [.. before, read.Domain], loosening: true, cancellationToken)
+        if (await WrittenAsync(read, [.. before, read.Domain], loosening: true, context.BreakGlassReason, cancellationToken)
                 .ConfigureAwait(false)
             is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<OrganizationDomain>(unwritten);
         }
 
@@ -137,10 +157,16 @@ internal sealed class OrganizationDomainService(
                 read.Domain,
                 read.Reason,
                 read.Acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<OrganizationDomain>(notCommitted);
+        }
 
         return Result.Success(added.Answered());
     }
@@ -157,7 +183,8 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, holding: false, cancellationToken)
+                .ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.Denied));
@@ -168,9 +195,11 @@ internal sealed class OrganizationDomainService(
             return Result.Failure<OrganizationDomain>(refused);
         }
 
+        // API-CONV-003: a domain never listed, or removed, is a record the organization
+        // does not hold.
         if (read.Listed is not LockedDomain listed)
         {
-            return Result.Failure<OrganizationDomain>(Malformed("domain"));
+            return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.DomainNotFound));
         }
 
         if (listed.VerifiedAt is not null)
@@ -201,7 +230,23 @@ internal sealed class OrganizationDomainService(
 
         listed.Checked(passed: true, now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<OrganizationDomain>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.DomainManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationDomain>(since);
+        }
+
         await domains.RecordAsync(listed, cancellationToken).ConfigureAwait(false);
         await audit
             .DomainChangedAsync(
@@ -210,10 +255,16 @@ internal sealed class OrganizationDomainService(
                 read.Domain,
                 read.Reason,
                 read.Acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<OrganizationDomain>(notCommitted);
+        }
 
         return Result.Success(listed.Answered());
     }
@@ -230,7 +281,8 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, holding: true, cancellationToken)
+                .ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
@@ -243,6 +295,12 @@ internal sealed class OrganizationDomainService(
 
         if (read.Listed is not LockedDomain listed)
         {
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
+
             return Result.Success();
         }
 
@@ -256,6 +314,8 @@ internal sealed class OrganizationDomainService(
         if (await RefusedAsync(context, session, read.Acting, loosening, cancellationToken).ConfigureAwait(false)
             is Error withheld)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(withheld);
         }
 
@@ -263,12 +323,13 @@ internal sealed class OrganizationDomainService(
 
         listed.Remove(now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await domains.RecordAsync(listed, cancellationToken).ConfigureAwait(false);
 
-        if (await WrittenAsync(read, after, loosening, cancellationToken).ConfigureAwait(false)
+        if (await WrittenAsync(read, after, loosening, context.BreakGlassReason, cancellationToken).ConfigureAwait(false)
             is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unwritten);
         }
 
@@ -279,6 +340,7 @@ internal sealed class OrganizationDomainService(
                 read.Domain,
                 read.Reason,
                 read.Acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -296,10 +358,16 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -317,12 +385,16 @@ internal sealed class OrganizationDomainService(
             ["domain"] = JsonSerializer.SerializeToElement(domain),
         };
 
+    private static Error Unresolvable { get; } = new(
+        ErrorCodes.ConfigurationValueNotAllowed,
+        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            ["field"] = JsonSerializer.SerializeToElement("emailDomains"),
+            ["requires"] = JsonSerializer.SerializeToElement("dnsResolver"),
+        });
+
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
-
-    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
-    private static string? Stated(string text) =>
-        text?.Trim() is { Length: > 0 and <= 1024 } stated ? stated : null;
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
@@ -332,12 +404,17 @@ internal sealed class OrganizationDomainService(
     }
 
     // The part every change shares: the gate, the reason, the domain, the organization,
-    // its list and the domain's row, in that order.
+    // its list and the domain's row, in that order. A change that writes the list
+    // begins its unit of work and takes the list's row under a lock before it reads the
+    // list, so what it decides is decided on the list in force (X3, OPS-CFG-002 AC6),
+    // and ends that unit of work on every return from then on, a refusal by rolling it
+    // back (CONV-DESIGN-003).
     private async ValueTask<Change?> ReadAsync(
         AccessContext context,
         OrganizationId organization,
         string domain,
         string reason,
+        bool holding,
         CancellationToken cancellationToken)
     {
         // A change is made by a person, whose identity the record carries.
@@ -357,14 +434,41 @@ internal sealed class OrganizationDomainService(
             return Change.Refused(acting, Malformed("domain"));
         }
 
-        if (Stated(reason) is not string stated)
+        // 09 section 8a: every change to the list is a configuration change of the
+        // organization's policy key, so a blank reason is refused as a change without
+        // one is.
+        if (ConfigurationAdministration.Unexplained(Settings.OrganizationPolicy.For(organization.ToString()), reason)
+            is Error unexplained)
         {
-            return Change.Refused(acting, Malformed("reason"));
+            return Change.Refused(acting, unexplained);
         }
+
+        string stated = reason.Trim();
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Change.Refused(acting, Malformed("id"));
+            return Change.Refused(acting, Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        if (holding)
+        {
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with
+            // the acting account's row held before any other lock, so a restriction
+            // committed since the gate step refuses the change before anything is written.
+            if (await scope.RefusedAsync(context, Permissions.DomainManage, cancellationToken).ConfigureAwait(false)
+                is Error since)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Change.Refused(acting, since);
+            }
+
+            await administration
+                .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         Error? failure = null;
@@ -376,6 +480,11 @@ internal sealed class OrganizationDomainService(
 
         if (failure is not null)
         {
+            if (holding)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+            }
+
             return Change.Refused(acting, failure);
         }
 
@@ -419,18 +528,21 @@ internal sealed class OrganizationDomainService(
         Change read,
         List<string> after,
         bool loosening,
+        string? breakGlassReason,
         CancellationToken cancellationToken) =>
         (await administration
             .ChangeMemberAsync(
                 Settings.OrganizationPolicy,
                 read.Organization.ToString(),
                 read.Stated with { EmailDomains = after.Count is 0 ? null : after },
+                read.Stated,
                 loosening,
                 read.Reason,
                 read.Acting,
+                breakGlassReason,
                 cancellationToken)
             .ConfigureAwait(false))
-        .Match<Error?>(_ => null, error => error);
+        .Match<Error?>(() => null, error => error);
 
     private sealed record Change(
         SubjectId Acting,

@@ -17,6 +17,9 @@ namespace Janus.Authentication.Tests.BreakGlass;
 [Trait("kind", "unit")]
 public sealed class EmergencyCredentialWatchTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("emergency-credential", "OPS-BOOT-001", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     private readonly BreakGlassStoreInMemory _store = new();
@@ -83,6 +86,6 @@ public sealed class EmergencyCredentialWatchTests
             Noon.AddDays(-1));
 
     private async Task WatchedAsync() =>
-        Assert.Null((await Watch.WatchAsync(TestContext.Current.CancellationToken))
+        Assert.Null((await Watch.WatchAsync(Watcher, TestContext.Current.CancellationToken))
             .Match(() => (Error?)null, error => error));
 }

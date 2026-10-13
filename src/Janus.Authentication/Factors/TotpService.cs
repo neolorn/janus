@@ -57,12 +57,22 @@ internal sealed class TotpService(
             && !await SecondStep.AvailableAsync(passwords, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return Result.Failure<TotpEnrolment>(Error.From(ErrorCodes.FactorNotPermitted));
+            return Result.Failure<TotpEnrolment>(Error.From(ErrorCodes.FactorPasswordRequired));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<TotpEnrolment>(notBegun);
+        }
+
         await authenticators.AddAsync(enrolling, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<TotpEnrolment>(notCommitted);
+        }
 
         return Result.Success(new TotpEnrolment(enrolling.Id, secret));
     }
@@ -105,14 +115,77 @@ internal sealed class TotpService(
             return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         enrolling.Consumed(step.Value);
         enrolling.Confirm(now);
         await authenticators.RecordAsync(enrolling, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// The time step a code of a secret is accepted for now, within the drift the
+    /// deployment tolerates, writing nothing: a registration session confirms the
+    /// generator it staged by it (REG-SESS-006).
+    /// </summary>
+    /// <param name="material">The secret, and the last step a code of it was accepted for.</param>
+    /// <param name="code">What was typed.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The step, or nothing where the code is not one of the secret.</returns>
+    public async ValueTask<long?> AcceptsAsync(
+        TotpMaterial material,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken) =>
+        TotpCodes.Accepts(
+            material,
+            code,
+            time.GetUtcNow(),
+            await DriftAsync(cancellationToken).ConfigureAwait(false));
+
+    /// <summary>
+    /// What the authenticator app is given for an enrolment just begun: the secret as
+    /// text to type and as the address a QR code carries.
+    /// </summary>
+    /// <param name="credential">Which enrolment.</param>
+    /// <param name="secret">The shared secret.</param>
+    /// <param name="account">What the app shows beside the code.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The enrolment as it is shown once.</returns>
+    public async ValueTask<GeneratorEnrolment> ShownAsync(
+        AuthenticatorId credential,
+        ReadOnlyMemory<byte> secret,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        byte[] shown = secret.ToArray();
+
+        try
+        {
+            string text = TotpCodes.Text(shown);
+
+            return new GeneratorEnrolment(
+                credential,
+                text,
+                TotpCodes.Address(
+                    await IssuerAsync(cancellationToken).ConfigureAwait(false),
+                    account,
+                    text));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(shown);
+        }
     }
 
     /// <summary>
@@ -138,9 +211,19 @@ internal sealed class TotpService(
             return Result.Failure(Error.From(ErrorCodes.FactorRejected));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await authenticators.RemoveAsync(id, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -155,7 +238,8 @@ internal sealed class TotpService(
     /// The credential the code belonged to, or the failure where no usable generator
     /// of the account accepts it. A code whose step has been spent is refused as
     /// replayed, so the person is told to wait for the next one rather than that
-    /// their code is wrong.
+    /// their code is wrong. A code a suspended generator of the account gives is
+    /// refused <c>auth.credential.suspended</c> and spends no step (AUTH-RECOV-007).
     /// </returns>
     public async ValueTask<Result<AuthenticatorId>> PresentAsync(
         SubjectId subject,
@@ -166,28 +250,63 @@ internal sealed class TotpService(
             await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false);
         List<Authenticator> generators =
             [.. held.Where(credential => credential.IsUsable && credential.Totp is not null)];
+        List<Authenticator> suspended =
+            [.. held.Where(credential => credential.IsAwaitingInvalidation && credential.Totp is not null)];
 
         DateTimeOffset now = time.GetUtcNow();
         int drift = await DriftAsync(cancellationToken).ConfigureAwait(false);
 
         foreach (Authenticator generator in generators)
         {
-            if (TotpCodes.Accepts(generator.Totp!, code, now, drift) is not long step)
+            if (TotpCodes.Accepts(generator.Totp!, code, now, drift) is null)
             {
                 continue;
             }
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(_ => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<AuthenticatorId>(notBegun);
+            }
 
-            generator.Consumed(step);
-            generator.Used(now);
-            await authenticators.RecordAsync(generator, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // D-166 X3: the step is judged again on the row under its lock, so the same
+            // code presented twice at once is accepted once and replayed once, and a
+            // generator suspended since the read spends no step (AUTH-RECOV-007).
+            Authenticator? locked = await authenticators.FindForUpdateAsync(generator.Id, cancellationToken)
+                .ConfigureAwait(false);
+            long? consumed = locked is { Totp: not null } && (locked.IsUsable || locked.IsAwaitingInvalidation)
+                ? TotpCodes.Accepts(locked.Totp, code, now, drift)
+                : null;
+
+            if (consumed is not long accepted || !locked!.IsUsable)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<AuthenticatorId>(Error.From(consumed is null
+                    ? Refusal(generators, code, now, drift)
+                    : ErrorCodes.CredentialSuspended));
+            }
+
+            locked.Consumed(accepted);
+            locked.Used(now);
+            await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<AuthenticatorId>(notCommitted);
+            }
 
             return Result.Success(generator.Id);
         }
 
-        return Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)));
+        // AUTH-RECOV-007: a suspended generator is judged as an active one is, so the
+        // code it gives is told apart from a wrong one, and from one whose step is
+        // spent, only to whoever holds the generator. It spends no step.
+        return Result.Failure<AuthenticatorId>(Error.From(
+            suspended.Any(generator => TotpCodes.Accepts(generator.Totp!, code, now, drift) is not null)
+                ? ErrorCodes.CredentialSuspended
+                : Refusal([.. generators, .. suspended], code, now, drift)));
     }
 
     // A code that would be valid but for its step having been spent is a replay, and
@@ -202,8 +321,18 @@ internal sealed class TotpService(
             ? ErrorCodes.CodeReplayed
             : ErrorCodes.CodeInvalid;
 
+    // The service name is a key the deployment names only where the context source is
+    // on, so one never named is no name for the authenticator app to show.
+    private async ValueTask<string> IssuerAsync(CancellationToken cancellationToken) =>
+        (await configuration.ReadAsync(Settings.ServiceName, cancellationToken).ConfigureAwait(false))
+            .Match(
+                value => value,
+                error => error.Code == ErrorCodes.StartupDeclarationMissing
+                    ? string.Empty
+                    : throw new InvalidOperationException(error.Code.ToString()));
+
     private async ValueTask<int> DriftAsync(CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(Settings.FactorTotpDrift, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.FactorTotpDrift.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 }

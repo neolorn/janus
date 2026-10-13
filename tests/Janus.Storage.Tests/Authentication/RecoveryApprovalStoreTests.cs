@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Recovery;
 using Janus.Core;
@@ -64,9 +65,107 @@ public sealed class RecoveryApprovalStoreTests(DatabaseFixture database)
             await read.ByAsync(approver, Noon, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// AUTH-RECOV-002, CONV-DESIGN-003 AC6: two approvals for one account at once, with
+    /// room for one more under the account's day limit, are counted under the hold, so
+    /// the second waits for the first, finds the limit reached, and one is given.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_002_ApprovalsAtOnceAreCountedOneAfterAnotherAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+
+        bool[] given = await Task.WhenAll(GivenAsync(subject, first), GivenAsync(subject, second));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, given.Count(answer => answer));
+        Assert.Single(await Store(reading).ForAsync(subject, Noon, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002: the approval that completes the count is written in the unit of
+    /// work that sends the link. An approval added there is no row yet, so the standing
+    /// approvals read before it are those given earlier; the link spends them, the
+    /// completing approval is written spent, and after the commit none stands while both
+    /// still count against the day.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheCompletingApprovalIsSpentInTheUnitOfWorkThatWritesItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext earlier = database.Context())
+        {
+            await Store(earlier).AddAsync(
+                new RecoveryApproval(subject, first, Channel, Noon.AddHours(1)),
+                TestContext.Current.CancellationToken);
+            await earlier.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext context = database.Context())
+        {
+            await using var work = new UnitOfWork(context);
+            RecoveryApprovalStore store = Store(context);
+
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+            await store.HoldAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                first,
+                Assert.Single(await store.StandingForAsync(subject, Noon, TestContext.Current.CancellationToken)).Approver);
+
+            await store.SpendAsync(subject, Noon.AddHours(2), TestContext.Current.CancellationToken);
+            await store.AddAsync(
+                new RecoveryApproval(subject, second, Channel, Noon.AddHours(2), Noon.AddHours(2)),
+                TestContext.Current.CancellationToken);
+
+            Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        }
+
+        await using StoreContext reading = database.Context();
+        RecoveryApprovalStore read = Store(reading);
+
+        Assert.Empty(await read.StandingForAsync(subject, Noon, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [Noon.AddHours(1), Noon.AddHours(2)],
+            await read.ForAsync(subject, Noon, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
+    // Each approval is its own request, counting the account's approvals against a
+    // limit of one under the hold as the recovery service does.
+    private async Task<bool> GivenAsync(SubjectId subject, SubjectId approver)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        RecoveryApprovalStore store = Store(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        await store.HoldAsync(TestContext.Current.CancellationToken);
+
+        bool admitted = (await store.ForAsync(subject, Noon, TestContext.Current.CancellationToken)).Count < 1;
+
+        if (admitted)
+        {
+            await store.AddAsync(
+                new RecoveryApproval(subject, approver, Channel, Noon.AddHours(1)),
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return admitted;
+    }
+
     private RecoveryApprovalStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness, new DataConnections(context));
 }

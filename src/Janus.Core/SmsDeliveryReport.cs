@@ -11,4 +11,4 @@ namespace Janus.Core;
 /// Implements INT-SMS-005 and INT-SMS-006. Neither value is trusted: the reference is
 /// looked up by its hash, and a report of delivery changes nothing.
 /// </remarks>
-public sealed record SmsDeliveryReport(string Reference, bool Delivered);
+public sealed record SmsDeliveryReport([property: NeverLogged] string Reference, bool Delivered);

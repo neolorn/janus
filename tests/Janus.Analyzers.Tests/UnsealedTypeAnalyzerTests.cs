@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace Janus.Analyzers.Tests;
@@ -49,5 +50,29 @@ public sealed class UnsealedTypeAnalyzerTests
             """);
 
         Assert.Empty(reported);
+    }
+
+    /// <summary>
+    /// CONV-CODE-001 AC1: an unsealed class that is not abstract is reported as an
+    /// error, and the repository's .editorconfig does not lower it in any file the build
+    /// analyses.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [Fact]
+    public async Task CONV_CODE_001_AC1_AnUnsealedClassIsAnErrorInTheBuildAsync()
+    {
+        (string, ReportDiagnostic)[] reported = await Analysis.AsBuiltAsync<UnsealedTypeAnalyzer>("""
+            namespace Cases;
+
+            internal abstract class Principal
+            {
+            }
+
+            internal class Account : Principal
+            {
+            }
+            """);
+
+        Assert.Equal([("JAN0003", ReportDiagnostic.Error)], reported);
     }
 }

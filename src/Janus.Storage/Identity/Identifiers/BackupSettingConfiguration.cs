@@ -37,6 +37,10 @@ internal sealed class BackupSettingConfiguration : IEntityTypeConfiguration<Back
             table.HasCheckConstraint(
                 "ck_identifier_backup_settings_setting",
                 "(rule IS NULL) <> (named IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_identifier_backup_settings_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(setting => new { setting.Subject, setting.Kind })

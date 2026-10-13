@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Core;
-using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Invitations;
@@ -17,17 +17,17 @@ namespace Janus.Storage.Authentication.Invitations;
 /// Invitations, over the <c>invitations</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which the row's own key is wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements IDN-LIFE-009a, REG-INV-001, REG-MAIL-001, PRIV-RIGHT-005a and
 /// CONV-DESIGN-003. What the invitation binds belongs to nobody who holds an account,
-/// so it is under a key of the row's own, and forgetting it clears the document and
-/// the key together.
+/// so it is under a key of the row's own, wrapped under the deployment's data key, and
+/// forgetting it clears the document and erases the key together.
 /// </remarks>
 internal sealed class InvitationStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    DeploymentDataKeyStore deployment,
     RandomNumberGenerator randomness) : IInvitationStore
 {
     /// <inheritdoc/>
@@ -37,7 +37,34 @@ internal sealed class InvitationStore(
             .FindAsync([id], cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null ? null : Read(record);
+        return await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Invitation?> FindForUpdateAsync(InvitationId id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An invitation's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Invitations.Local.Any(record => record.Id == id);
+
+        InvitationRecord? held = (await context.Invitations
+                .FromSql($"SELECT * FROM identity.invitations WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await ReadAsync(held, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -51,7 +78,7 @@ internal sealed class InvitationStore(
             .FirstOrDefaultAsync(invitation => invitation.Token == token, cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null ? null : Read(record);
+        return await ReadAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -65,7 +92,7 @@ internal sealed class InvitationStore(
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null ? null : Read(record);
+        return await ReadAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -81,7 +108,7 @@ internal sealed class InvitationStore(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. records.Select(Read)];
+        return await ReadAsync(records, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -108,7 +135,7 @@ internal sealed class InvitationStore(
             ExpiresAt = invitation.ExpiresAt,
         };
 
-        Carry(invitation, record);
+        await CarryAsync(invitation, record, cancellationToken).ConfigureAwait(false);
 
         await context.Invitations.AddAsync(record, cancellationToken).ConfigureAwait(false);
     }
@@ -123,7 +150,7 @@ internal sealed class InvitationStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The invitation has no row to carry the change.");
 
-        Carry(invitation, record);
+        await CarryAsync(invitation, record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -132,36 +159,42 @@ internal sealed class InvitationStore(
             .Where(invitation => invitation.ExpiresAt <= now && invitation.EncryptedIdentifiers != null)
             .ExecuteUpdateAsync(
                 forgotten => forgotten
-                    .SetProperty(invitation => invitation.KeyVersion, (int?)null)
-                    .SetProperty(invitation => invitation.WrappedKey, (byte[]?)null)
+                    .SetProperty(invitation => invitation.WrappedKey, PersonalFieldCipher.ErasedKey())
                     .SetProperty(invitation => invitation.EncryptedIdentifiers, (byte[]?)null),
                 cancellationToken)
             .ConfigureAwait(false);
 
-    private static PersonalFieldLocation Located() =>
-        new(default, InvitationConfiguration.Table, InvitationConfiguration.IdentifiersColumn);
+    // PRIV-RIGHT-005a, D-166 (234): what an invitation binds is bound to the invitation
+    // itself, so one invitation's value does not open on another row.
+    private static PersonalFieldLocation Located(InvitationId invitation) =>
+        new(
+            new SubjectId(invitation.Value),
+            InvitationConfiguration.Table,
+            InvitationConfiguration.IdentifiersColumn);
 
     // The identifiers are written once, when the invitation is issued, and only ever
     // forgotten after that.
-    private void Carry(Invitation invitation, InvitationRecord record)
+    private async ValueTask CarryAsync(
+        Invitation invitation,
+        InvitationRecord record,
+        CancellationToken cancellationToken)
     {
         if (invitation.Identifiers is null)
         {
-            record.KeyVersion = null;
-            record.WrappedKey = null;
+            record.WrappedKey = PersonalFieldCipher.ErasedKey();
             record.EncryptedIdentifiers = null;
         }
         else if (record.EncryptedIdentifiers is null)
         {
             byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+            byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
 
             try
             {
-                record.KeyVersion = keyEncryptionKeys.CurrentVersion;
-                record.WrappedKey = PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span);
+                record.WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey);
                 record.EncryptedIdentifiers = PersonalFieldCipher.Encrypt(
                     dataKey,
-                    Located(),
+                    Located(invitation.Id),
                     JsonSerializer.SerializeToUtf8Bytes(
                         new InvitedIdentifiersDocument(
                             invitation.Identifiers.Email,
@@ -173,6 +206,7 @@ internal sealed class InvitationStore(
             finally
             {
                 CryptographicOperations.ZeroMemory(dataKey);
+                CryptographicOperations.ZeroMemory(deploymentKey);
             }
         }
 
@@ -183,7 +217,33 @@ internal sealed class InvitationStore(
         record.RevokedAt = invitation.RevokedAt;
     }
 
-    private Invitation Read(InvitationRecord record)
+    private async ValueTask<Invitation?> ReadAsync(InvitationRecord? record, CancellationToken cancellationToken) =>
+        record is null ? null : (await ReadAsync([record], cancellationToken).ConfigureAwait(false))[0];
+
+    // PRIV-RIGHT-005a: the deployment's data key is unwrapped once for every row the
+    // read returns, and only where one of them still holds its identifiers.
+    private async ValueTask<IReadOnlyList<Invitation>> ReadAsync(
+        IReadOnlyList<InvitationRecord> records,
+        CancellationToken cancellationToken)
+    {
+        if (records.All(record => record.EncryptedIdentifiers is null))
+        {
+            return [.. records.Select(record => Read(record, []))];
+        }
+
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return [.. records.Select(record => Read(record, deploymentKey))];
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
+    }
+
+    private static Invitation Read(InvitationRecord record, byte[] deploymentKey)
     {
         IReadOnlyList<InvitedDocument> documents =
             JsonSerializer.Deserialize(record.Documents, InvitationJson.Default.IReadOnlyListInvitedDocument)
@@ -194,7 +254,7 @@ internal sealed class InvitationStore(
             record.Organization,
             record.Inviter,
             record.Token,
-            Identifiers(record),
+            Identifiers(record, deploymentKey),
             [.. record.Roles.Select(RoleName.Parse)],
             [.. documents.Select(document => new InvitationDocument(document.Document, document.Version))],
             record.Mailbox is Guid mailbox ? new MailboxId(mailbox) : null,
@@ -207,23 +267,19 @@ internal sealed class InvitationStore(
             record.RevokedAt);
     }
 
-    private InvitedIdentifiers? Identifiers(InvitationRecord record)
+    private static InvitedIdentifiers? Identifiers(InvitationRecord record, byte[] deploymentKey)
     {
         if (record.EncryptedIdentifiers is null)
         {
             return null;
         }
 
-        byte[] dataKey = PersonalFieldCipher.Unwrap(
-            PersonalDataFormat.Marker,
-            record.KeyVersion ?? throw new InvalidOperationException("The invitation has no key."),
-            record.WrappedKey ?? throw new InvalidOperationException("The invitation has no key."),
-            keyEncryptionKeys);
+        byte[] dataKey = PersonalFieldCipher.Unwrap(record.WrappedKey, deploymentKey);
 
         try
         {
             InvitedIdentifiersDocument document = JsonSerializer.Deserialize(
-                    PersonalFieldCipher.Decrypt(dataKey, Located(), record.EncryptedIdentifiers),
+                    PersonalFieldCipher.Decrypt(dataKey, Located(record.Id), record.EncryptedIdentifiers),
                     InvitationJson.Default.InvitedIdentifiersDocument)
                 ?? throw new InvalidOperationException("The invitation's identifiers are not a document.");
 

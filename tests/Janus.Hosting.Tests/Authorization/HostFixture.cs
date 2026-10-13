@@ -1,16 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Storage.Tests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Xunit;
 
@@ -147,22 +151,33 @@ public sealed class HostFixture : IAsyncLifetime
         // The cases state when they are evaluated, so the clock does not move under them.
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
 
-        services.AddJanus(
-            ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
-            new FingerprintKeys(
+        // LIB-HOST-001, OPS-SEC-001: the keys and the maintenance credential come
+        // through the host's secret source.
+        services.AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+        {
+            KeyEncryptionKeys = new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
+            FingerprintKeys = new(
                 1,
                 new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of this deployment") }),
-            Encoding.UTF8.GetBytes("the secret this application presents"),
-            Encoding.UTF8.GetBytes(MaintenanceConnectionString),
-            Declaration(),
-            ApplicationKind.Public);
+            MaintenanceCredential = Encoding.UTF8.GetBytes(MaintenanceConnectionString),
+        });
+
+        // An operation that tells somebody, the end of a membership among them, sends
+        // through the transports a host registers.
+        services.AddSingleton<IMailTransport>(new MailTransportInMemory());
+        services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+
+        // LIB-HOST-001, API-LAND-001: and a link it sends lands where the deployment
+        // declares its applications are.
+        services.AddSingleton(new LandingOrigins("https://identity.example.test", "https://accounts.example.test"));
+        Sourced(services, ConnectionString);
+        services.AddJanus(ConnectionString, Declaration(), ApplicationKind.Public);
 
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
         // registers what does the host-side work for them.
         services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
 
-        _services = services.BuildServiceProvider();
+        _services = Started(services.BuildServiceProvider());
     }
 
     /// <inheritdoc/>
@@ -179,6 +194,50 @@ public sealed class HostFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// A deployment's container with its key ring filled and the mail server in use
+    /// chosen, which is what the ring's hosted service does at the start of a deployment
+    /// that a web server starts (CONV-DESIGN-007).
+    /// </summary>
+    /// <param name="deployed">The container.</param>
+    /// <returns>The same container, started.</returns>
+    internal static ServiceProvider Started(ServiceProvider deployed)
+    {
+        KeyRingService ring = deployed.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+        ring.StartingAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        return deployed;
+    }
+
+    /// <summary>
+    /// Registers what LIB-HOST-001 asks of a host whose model declares a derivation: its
+    /// own context, given in a scope, and the source of the one relationship its
+    /// derivation is over, answering that relationship's rows from the context.
+    /// </summary>
+    /// <param name="services">The host's collection.</param>
+    /// <param name="connection">How the host's context reaches its database.</param>
+    /// <returns>The collection, for chaining.</returns>
+    internal static IServiceCollection Sourced(IServiceCollection services, string connection)
+    {
+        services.AddDbContext<HostContext>(options => options.UseNpgsql(connection));
+
+        return services.AddSingleton(
+            RelationshipSource.Of<HostContext, HostReviewer>("reviewer", context => context.Reviewers));
+    }
+
+    /// <summary>
+    /// The secret source a deployment over this fixture reads its secrets from: the
+    /// keys the source fake holds, and the maintenance credential given.
+    /// </summary>
+    /// <param name="maintenance">The maintenance credential it answers.</param>
+    /// <returns>The source.</returns>
+    internal static SecretSourceInMemory Secrets(string maintenance) =>
+        new(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+        {
+            MaintenanceCredential = Encoding.UTF8.GetBytes(maintenance),
+        };
+
+    /// <summary>
     /// What this deployment declares about its own domain, which a test registering a
     /// second collection over the same deployment declares in turn.
     /// </summary>
@@ -186,25 +245,32 @@ public sealed class HostFixture : IAsyncLifetime
     /// Whether the derivation is precomputed into grant rows rather than evaluated per
     /// request, which is the same deployment after materialisation (AUTHZ-TEST-001 AC3).
     /// </param>
+    /// <param name="document">
+    /// The governing document the recommendations purpose names, or nothing where the
+    /// privacy notice governs it.
+    /// </param>
     /// <returns>The declaration.</returns>
-    internal static AuthorizationDeclaration Declaration(bool materialised = false) =>
+    internal static AuthorizationDeclaration Declaration(bool materialised = false, string? document = null) =>
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("history", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "contract",
+                "Contract",
                 IsConsent: false,
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
                 IsObjectable: false))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "agreement",
+                "Agreement",
                 IsConsent: true,
                 RequiresWrittenConsentForSensitive: true,
                 RequiresAssessment: false,
                 IsObjectable: false))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "legal-obligation",
+                "Legal obligation",
                 IsConsent: false,
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
@@ -235,14 +301,15 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
-                .Encrypted(held => held.Notes, held => held.Owner)
+                .Encrypted(held => held.Notes, held => held.Owner, "history")
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
                 .Purpose("keeping the books", "legal-obligation", data: ["history"], subjects: ["members"])
                 .Purpose(
                     "recommendations",
                     "agreement",
                     data: ["history"],
-                    subjects: ["members"]))
+                    subjects: ["members"],
+                    document: document))
             .Resource<HostNote>("note", type => type
                 .ContainedIn("workspace")
                 .Discloses()

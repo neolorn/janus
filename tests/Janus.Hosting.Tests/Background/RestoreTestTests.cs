@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Bootstrap;
@@ -42,6 +43,9 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
 
     private static readonly FingerprintKeys Fingerprinted = FingerprintKeysOf(0x02);
 
+    // How long a case waits on the run it started before it fails rather than hangs.
+    private static readonly TimeSpan Bound = TimeSpan.FromMinutes(1);
+
     /// <summary>
     /// DR-007 AC1: the test is one of the worker's jobs, run as a principal that may
     /// monitor with DR-007 as its reason, at <c>backup.restoretest.interval</c>, so no
@@ -61,7 +65,26 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
             TestContext.Current.CancellationToken);
 
         Assert.Equal(("DR-007", true), (job.Principal.Reason, job.Principal.MayRun(SystemOperation.Monitoring)));
-        Assert.Equal(TimeSpan.FromDays(93), interval.Match(value => value, _ => TimeSpan.Zero));
+        Assert.Equal(TimeSpan.FromDays(90), interval.Match(value => value, _ => TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// DR-007 AC1: the test runs at least once a quarter, so its interval is a count of
+    /// days no longer than the shortest calendar quarter: the default and the ceiling
+    /// are 90 days, and a day more is refused as above the ceiling.
+    /// </summary>
+    [Fact]
+    public void DR_007_AC1_NoIntervalExceedsTheShortestQuarter()
+    {
+        Error refusal = Settings.BackupRestoreTestInterval.Accept(TimeSpan.FromDays(91)).Match(
+            _ => throw new Xunit.Sdk.XunitException("A day past the quarter was accepted."),
+            error => error);
+
+        Assert.Equal(
+            (TimeSpan.FromDays(90), TimeSpan.FromDays(90)),
+            (Settings.BackupRestoreTestInterval.Default, Settings.BackupRestoreTestInterval.Ceiling));
+        Assert.Equal(ErrorCodes.ConfigurationValueAboveCeiling, refusal.Code);
+        Assert.Equal("P90D", refusal.Details["ceiling"].GetString());
     }
 
     /// <summary>
@@ -96,13 +119,17 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
     /// <summary>
     /// DR-007 AC2, AC3: the time a run takes is recorded against the objective, and a
     /// restore still running when the objective passes is abandoned, recorded as an
-    /// overrun with the time it had taken, and raised with the same.
+    /// overrun with the time it had taken, and raised with the same. The clock is moved
+    /// by the test to the objective and no further, so the run is abandoned at the very
+    /// instant the objective passes, whatever the machine's own timing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task DR_007_AC2_TheMeasuredTimeIsRecordedAgainstTheObjectiveAsync()
     {
         DateTimeOffset at = Noon.AddDays(2);
+        var objective = TimeSpan.FromSeconds(1);
+        var time = new ManualTime(at);
         var stalled = new StalledRestore();
 
         _ = await CanaryAsync(at);
@@ -114,7 +141,12 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
 
         try
         {
-            Assert.Equal(Result.Success(), await RunAsync(at, stalled, Live, Fingerprinted));
+            Task<Result> run = RunAsync(at, stalled, Live, Fingerprinted, time);
+
+            await stalled.Started.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            time.Advance(objective);
+
+            Assert.Equal(Result.Success(), await run.WaitAsync(Bound, TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -125,16 +157,16 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
                 new { Key = Settings.BackupRestoreTestObjective.Key.ToString() });
         }
 
-        JsonElement recorded = await RecordedAsync(at);
+        JsonElement recorded = await RecordedAsync(at + objective);
 
         Assert.Equal(
-            ("overrun", 1d, false, 1),
+            ("overrun", 1d, 1d, false, 1),
             (recorded.GetProperty("outcome").GetString(),
+                recorded.GetProperty("elapsedSeconds").GetDouble(),
                 recorded.GetProperty("objectiveSeconds").GetDouble(),
                 recorded.GetProperty("outlived").GetBoolean(),
                 stalled.TornDown));
-        Assert.True(recorded.GetProperty("elapsedSeconds").GetDouble() >= 1d);
-        Assert.Equal([recorded.GetRawText()], (await RaisedAsync(at)).Select(raised => raised.GetRawText()));
+        Assert.Equal([recorded.GetRawText()], (await RaisedAsync(at + objective)).Select(raised => raised.GetRawText()));
     }
 
     /// <summary>
@@ -277,6 +309,30 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         }
     }
 
+    /// <summary>
+    /// DR-008 AC3: a worker that stops while a restore is under way abandons the test,
+    /// and the teardown of the instance it began is still asked, once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_008_AC3_AStoppingWorkerStillAsksForTheTeardownAsync()
+    {
+        DateTimeOffset at = Noon.AddDays(11);
+        var stalled = new StalledRestore();
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        _ = await CanaryAsync(at);
+
+        Task<Result> run = RunAsync(at, stalled, Live, Fingerprinted, stopping: stopping.Token);
+
+        await stalled.Started.WaitAsync(Bound, TestContext.Current.CancellationToken);
+        await stopping.CancelAsync();
+
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await run.WaitAsync(Bound, TestContext.Current.CancellationToken));
+        Assert.Equal(1, stalled.TornDown);
+    }
+
     private static KeyEncryptionKeys KeyEncryptionKeysOf(byte fill) =>
         new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Enumerable.Repeat(fill, 32).ToArray() });
 
@@ -341,38 +397,39 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
     private string Database() => new NpgsqlConnectionStringBuilder(host.ConnectionString).Database
         ?? throw new InvalidOperationException("The fixture names no database.");
 
-    // A deployment over the fixture's database at the case's own instant, with what a
-    // host declares for itself and, where the case has one, what restores its backups.
+    // A deployment over the fixture's database at the case's own instant, or on the clock
+    // the case moves, with what a host declares for itself and, where the case has one,
+    // what restores its backups.
     private ServiceProvider Deployed(
         DateTimeOffset at,
         IRestoreTestInstance? instance,
         KeyEncryptionKeys keys,
-        FingerprintKeys fingerprints)
+        FingerprintKeys fingerprints,
+        TimeProvider? time = null)
     {
         IServiceCollection services = new ServiceCollection()
-            .AddSingleton<TimeProvider>(new FixedTime(at))
-            .AddSingleton<IEvents>(new EventsInMemory())
+            .AddSingleton(time ?? new FixedTime(at))
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
-            .AddJanus(
-                host.ConnectionString,
-                keys,
-                fingerprints,
-                Encoding.UTF8.GetBytes("the secret this application presents"),
-                Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-                HostFixture.Declaration(),
-                ApplicationKind.Public);
+            .AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+            {
+                KeyEncryptionKeys = keys,
+                FingerprintKeys = fingerprints,
+                MaintenanceCredential = Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
+            })
+            .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
 
         if (instance is not null)
         {
             services.AddSingleton(instance);
         }
 
-        return services.BuildServiceProvider();
+        return HostFixture.Started(services.BuildServiceProvider());
     }
 
     // What the run's record carries.
@@ -410,13 +467,18 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         DateTimeOffset at,
         IRestoreTestInstance? instance,
         KeyEncryptionKeys keys,
-        FingerprintKeys fingerprints)
+        FingerprintKeys fingerprints,
+        TimeProvider? time = null,
+        CancellationToken? stopping = null)
     {
-        await using ServiceProvider services = Deployed(at, instance, keys, fingerprints);
+        await using ServiceProvider services = Deployed(at, instance, keys, fingerprints, time);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
-        return await BackgroundJobs.All
-            .Single(job => job.Name == Job)
-            .RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        BackgroundJob test = BackgroundJobs.All.Single(job => job.Name == Job);
+
+        return await test.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(test.Principal),
+            stopping ?? TestContext.Current.CancellationToken);
     }
 }

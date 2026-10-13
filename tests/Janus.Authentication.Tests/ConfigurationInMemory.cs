@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -13,7 +14,7 @@ namespace Janus.Authentication.Tests;
 /// The configuration store, holding what a test wrote and answering everything else
 /// with the key's default.
 /// </summary>
-internal sealed class ConfigurationInMemory : IConfigurationStore
+internal sealed class ConfigurationInMemory : IConfigurationStore, IConfigurationWrites
 {
     private static readonly Dictionary<string, JsonElement> Nothing = [];
 
@@ -26,21 +27,52 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     public ConfigurationKey? Unreachable { get; set; }
 
     /// <summary>
+    /// The key whose every read answers a failure, as a setting that does not read
+    /// does; nothing while every key reads.
+    /// </summary>
+    public ConfigurationKey? Unread { get; set; }
+
+    /// <summary>
+    /// The keys whose rows an operation held, in the order it took them.
+    /// </summary>
+    public List<ConfigurationKey> Held { get; } = [];
+
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a key's
+    /// row, so a test may change a value under a decision about to be made.
+    /// </summary>
+    public Action<ConfigurationKey>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(ConfigurationKey key, CancellationToken cancellationToken)
+    {
+        Held.Add(key);
+        Holding?.Invoke(key);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
     /// Names a value for a key, as a deployment does.
     /// </summary>
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
     /// <param name="setting">The setting.</param>
     /// <param name="value">The value.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The setting does not take the value, which no deployment could then hold.
+    /// </exception>
     public void Set<TValue>(Setting<TValue> setting, TValue value)
         where TValue : notnull =>
-        _values[setting.Key] = value;
+        _values[setting.Key] = setting.Accept(value).Match(
+            admitted => (object)admitted,
+            refused => throw new InvalidOperationException(refused.Code.ToString()));
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
         Setting<TValue> setting,
         CancellationToken cancellationToken) =>
         setting.Key.Equals(Unreachable)
-            ? throw new InvalidOperationException("The settings table at db.internal:5432 could not be reached.")
+            ? throw Unreached()
             : ValueTask.FromResult(Read(setting));
 
     /// <inheritdoc/>
@@ -49,9 +81,15 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
         string parameter,
         CancellationToken cancellationToken)
     {
-        if (_values.TryGetValue(
-            ConfigurationKey.Parse(family.Prefix + "." + parameter),
-            out object? written))
+        var key = ConfigurationKey.Parse(family.Prefix + "." + parameter);
+
+        if (key.Equals(Unread))
+        {
+            return ValueTask.FromResult(
+                Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing)));
+        }
+
+        if (_values.TryGetValue(key, out object? written))
         {
             return ValueTask.FromResult(Result.Success((TValue)written));
         }
@@ -114,7 +152,7 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
+    public ValueTask<Result> WriteAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
         TValue value,
@@ -122,24 +160,43 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     {
         if (family.Scope is SettingScope.Protected)
         {
-            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing));
+            return ValueTask.FromResult(Result.Failure(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing)));
         }
 
-        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken);
-
-        return family.Read(parameter, family.Write(value)).Match(
+        return ValueTask.FromResult(family.Read(parameter, family.Write(value)).Match(
             admitted =>
             {
                 _values[family.For(parameter)] = admitted!;
-                return before;
+                return Result.Success();
             },
-            Result.Failure<TValue>);
+            Result.Failure));
+    }
+
+    // A store that has gone away throws its own fault over the one its connection
+    // threw, each carrying a message that names where the store lives.
+    private static InvalidOperationException Unreached()
+    {
+        try
+        {
+            throw new TimeoutException("The connection to db.internal:5432 timed out.");
+        }
+        catch (TimeoutException beneath)
+        {
+            return new InvalidOperationException(
+                "The settings table at db.internal:5432 could not be reached.",
+                beneath);
+        }
     }
 
     // A required key the deployment never named is undeclared, not a value nobody
     // wrote down; the store answers it the same way (LIB-HOST-001).
     private Result<TValue> Read<TValue>(Setting<TValue> setting)
     {
+        if (setting.Key.Equals(Unread))
+        {
+            return Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing));
+        }
+
         if (_values.TryGetValue(setting.Key, out object? written))
         {
             return Result.Success((TValue)written);

@@ -31,6 +31,20 @@ internal sealed class GroupsInMemory : IGroupStore
     /// </summary>
     public int Found { get; private set; }
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for the
+    /// organization's groups, so a test may change them under a decision already made.
+    /// </summary>
+    public Action<OrganizationId>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(OrganizationId organization, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(organization);
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<Group?> FindAsync(GroupId id, CancellationToken cancellationToken)
     {
@@ -101,15 +115,25 @@ internal sealed class GroupsInMemory : IGroupStore
     {
         Reads++;
 
-        return ValueTask.FromResult<IReadOnlyList<GroupId>>([.. Holding(subject)]);
+        return ValueTask.FromResult<IReadOnlyList<GroupId>>([.. Above(subject)]);
     }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Group>> HoldingAsync(SubjectId member, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Group>>(
+        [
+            .. _members
+                .Where(entry => entry.Value.Contains(GrantSubject.Of(member)))
+                .Select(entry => _groups[entry.Key])
+                .OrderBy(group => group.Name, StringComparer.Ordinal),
+        ]);
 
     /// <inheritdoc/>
     public ValueTask<bool> ReachesAsync(
         GroupId group,
         GrantSubject member,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Holding(member).Contains(group));
+        ValueTask.FromResult(Above(member).Contains(group));
 
     private List<GrantSubject> Edges(GroupId group)
     {
@@ -124,7 +148,7 @@ internal sealed class GroupsInMemory : IGroupStore
 
     // The groups holding the subject, followed upward until nothing new is reached,
     // which is what nesting to any depth means (AUTHZ-GROUP-001).
-    private HashSet<GroupId> Holding(GrantSubject subject)
+    private HashSet<GroupId> Above(GrantSubject subject)
     {
         HashSet<GroupId> reached = [];
         var pending = new Queue<GrantSubject>();

@@ -45,6 +45,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             null,
             SelfServiceRecovery: false,
+            null,
             null));
 
         Policy resolved = await ResolvedAsync(SubjectId.New(_randomness));
@@ -88,6 +89,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
+            null,
             null));
         Override(ordinary, PolicyOverride.None);
 
@@ -99,6 +101,75 @@ public sealed class PolicyResolutionTests : IDisposable
         Assert.False(theirs.SelfServiceRecovery);
         Assert.Equal(AssuranceLevel.Aal1, others.RequiredAssurance);
         Assert.True(others.SelfServiceRecovery);
+    }
+
+    /// <summary>
+    /// IDN-ORG-002 AC2: the factor policy is a value held for the organization and read
+    /// at each resolution, so changing it changes what its member resolves to at the
+    /// next one, with the same running service and nothing deployed in between.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_002_AC2_AChangedFactorPolicyReachesItsMembersWithoutADeployAsync()
+    {
+        var member = SubjectId.New(_randomness);
+        OrganizationId organization = Organization();
+        PolicyResolution running = Resolution;
+
+        _memberships.Place(member, organization);
+        Override(organization, PolicyOverride.None with { LoginFactors = new[] { Factor.Password }.ToFrozenSet() });
+
+        Policy before = (await running.ForAsync(member, TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Override(organization, PolicyOverride.None with { LoginFactors = new[] { Factor.Passkey }.ToFrozenSet() });
+
+        Policy after = (await running.ForAsync(member, TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal([Factor.Password], before.LoginFactors);
+        Assert.Equal([Factor.Passkey], after.LoginFactors);
+    }
+
+    /// <summary>
+    /// IDN-ORG-002 AC3: two organizations holding different factor policies stand side
+    /// by side, each member resolving to their own organization's, and a change to one
+    /// leaves the other's member where they were.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_002_AC3_TwoOrganizationsWithDifferentPoliciesAreEnforcedIndependentlyAsync()
+    {
+        var first = SubjectId.New(_randomness);
+        var second = SubjectId.New(_randomness);
+        OrganizationId strict = Organization();
+        OrganizationId plain = Organization();
+
+        _memberships.Place(first, strict);
+        _memberships.Place(second, plain);
+        Override(strict, PolicyOverride.None with
+        {
+            RequiredAssurance = AssuranceLevel.Aal2,
+            LoginFactors = new[] { Factor.Passkey }.ToFrozenSet(),
+        });
+        Override(plain, PolicyOverride.None with { LoginFactors = new[] { Factor.Password }.ToFrozenSet() });
+
+        Policy strictly = await ResolvedAsync(first);
+        Policy plainly = await ResolvedAsync(second);
+
+        Override(strict, PolicyOverride.None with
+        {
+            RequiredAssurance = AssuranceLevel.Aal2,
+            LoginFactors = new[] { Factor.SecurityKey }.ToFrozenSet(),
+        });
+
+        Policy changed = await ResolvedAsync(first);
+        Policy untouched = await ResolvedAsync(second);
+
+        Assert.Equal(AssuranceLevel.Aal2, strictly.RequiredAssurance);
+        Assert.Equal([Factor.Passkey], strictly.LoginFactors);
+        Assert.Equal(AssuranceLevel.Aal1, plainly.RequiredAssurance);
+        Assert.Equal([Factor.Password], plainly.LoginFactors);
+        Assert.Equal([Factor.SecurityKey], changed.LoginFactors);
+        Assert.Equal([Factor.Password], untouched.LoginFactors);
     }
 
     /// <summary>
@@ -121,6 +192,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             null,
             SelfServiceRecovery: true,
+            null,
             null));
 
         Assert.False((await ResolvedAsync(subject)).SelfServiceRecovery);
@@ -170,6 +242,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             null,
             null,
+            null,
             null));
         Override(strict, new PolicyOverride(
             AssuranceLevel.Aal2,
@@ -177,6 +250,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
+            null,
             null));
 
         Policy resolved = await ResolvedAsync(subject);
@@ -274,6 +348,7 @@ public sealed class PolicyResolutionTests : IDisposable
                 _ => new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5))),
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
+            null,
             null));
 
         AssertTheSame(before, await ResolvedAsync(customer));

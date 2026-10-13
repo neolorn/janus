@@ -19,26 +19,9 @@ namespace Janus.Core;
 public interface IAuthentication
 {
     /// <summary>
-    /// Opens a sign-in for one identifier of any kind, detected and canonicalised.
-    /// </summary>
-    /// <param name="identifier">The email, phone or username as it was entered.</param>
-    /// <param name="source">
-    /// The address the attempt came from, which the progressive delay counts it
-    /// against.
-    /// </param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>
-    /// The challenge, the policy's enabled primary factors and a WebAuthn challenge,
-    /// identical whether or not the identifier resolves to an account.
-    /// </returns>
-    ValueTask<Result<SignInChallenge>> BeginAsync(
-        string identifier,
-        string source,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Opens a sign-in for one identifier, from a browser that carries the tokens a
-    /// remembered or trusted browser holds (AUTH-ABUSE-001 AC5).
+    /// Opens a sign-in for one identifier of any kind, detected and canonicalised, from
+    /// a browser that may carry the tokens a remembered or trusted browser holds
+    /// (AUTH-ABUSE-001 AC5). An in-process caller carries no browser and passes neither.
     /// </summary>
     /// <param name="identifier">The email, phone or username as it was entered.</param>
     /// <param name="source">
@@ -49,8 +32,10 @@ public interface IAuthentication
     /// <param name="trusted">The trusted device's token, where one was carried.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The challenge, as the overload without the tokens answers it; a token that
-    /// resolves to the account exempts the browser from the account's delays.
+    /// The challenge, the policy's enabled primary factors and a WebAuthn challenge,
+    /// identical whether or not the identifier resolves to an account; a token that
+    /// resolves to the account exempts the browser from being held by the account's
+    /// delays.
     /// </returns>
     ValueTask<Result<SignInChallenge>> BeginAsync(
         string identifier,
@@ -63,7 +48,7 @@ public interface IAuthentication
     /// Presents one factor against a challenge, until what is presented reaches the
     /// assurance the policy requires.
     /// </summary>
-    /// <param name="challenge">The handle <see cref="BeginAsync(string, string, CancellationToken)"/> returned.</param>
+    /// <param name="challenge">The handle <see cref="BeginAsync(string, string, string, string, CancellationToken)"/> returned.</param>
     /// <param name="presented">The factor and what proves it.</param>
     /// <param name="device">What the browser says it is.</param>
     /// <param name="source">The address the attempt came from.</param>
@@ -103,7 +88,7 @@ public interface IAuthentication
     /// <param name="context">Who is asking.</param>
     /// <param name="session">The session the request arrived on.</param>
     /// <param name="challenge">
-    /// The handle <see cref="BeginAsync(string, string, CancellationToken)"/> returned, which a ceremony signs over and
+    /// The handle <see cref="BeginAsync(string, string, string, string, CancellationToken)"/> returned, which a ceremony signs over and
     /// which belongs to the asking principal or to nobody.
     /// </param>
     /// <param name="presented">The factor and what proves it.</param>
@@ -181,6 +166,11 @@ public interface IAuthentication
     /// What the requesting browser carries, or nothing where it carries none.
     /// </param>
     /// <param name="linkToken">The token the message carried.</param>
+    /// <param name="factor">
+    /// The link factor the request named, <see cref="Factor.EmailLink"/> or
+    /// <see cref="Factor.PhoneLink"/>, which a pressed token that opens nothing is
+    /// recorded under.
+    /// </param>
     /// <param name="press">Whether the person pressed the control.</param>
     /// <param name="device">What the browser says it is.</param>
     /// <param name="source">The address the attempt came from.</param>
@@ -190,6 +180,7 @@ public interface IAuthentication
         string challenge,
         string? browser,
         [NeverLogged] string linkToken,
+        Factor factor,
         bool press,
         DeviceDescription device,
         string source,

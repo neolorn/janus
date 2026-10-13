@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Conformance.Tests;
 
 /// <summary>
-/// The sample host's own context: its three kinds of thing, the two facts it derives
-/// roles from, and the library's two contract tables mapped beside them.
+/// The sample host's own context: its three kinds of thing, the three facts it derives
+/// roles from, and the library's three contract tables mapped beside them.
 /// </summary>
 /// <param name="options">How the context reaches the database.</param>
 internal class SampleContext(DbContextOptions options) : DbContext(options)
@@ -38,6 +38,11 @@ internal class SampleContext(DbContextOptions options) : DbContext(options)
     public DbSet<BinderSteward> Stewards => Set<BinderSteward>();
 
     /// <summary>
+    /// Who has borrowed which binder.
+    /// </summary>
+    public DbSet<BinderBorrower> Borrowers => Set<BinderBorrower>();
+
+    /// <summary>
     /// The ancestry the library keeps.
     /// </summary>
     public DbSet<AncestryEntry> Ancestry => Set<AncestryEntry>();
@@ -46,6 +51,11 @@ internal class SampleContext(DbContextOptions options) : DbContext(options)
     /// The grants in effect.
     /// </summary>
     public DbSet<EffectiveGrant> Grants => Set<EffectiveGrant>();
+
+    /// <summary>
+    /// The records whose data subject holds a live consent, read from the library's schema.
+    /// </summary>
+    public DbSet<ConsentedResource> Consented => Set<ConsentedResource>();
 
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -93,6 +103,16 @@ internal class SampleContext(DbContextOptions options) : DbContext(options)
             steward.Property(row => row.BinderId).HasColumnName("binder_id");
             steward.Property(row => row.Steward)
                 .HasColumnName("steward")
+                .HasConversion(subject => subject.Value, value => new SubjectId(value));
+        });
+
+        modelBuilder.Entity<BinderBorrower>(borrower =>
+        {
+            borrower.ToTable("borrowers", "sample");
+            borrower.HasKey(row => new { row.BinderId, row.Borrower });
+            borrower.Property(row => row.BinderId).HasColumnName("binder_id");
+            borrower.Property(row => row.Borrower)
+                .HasColumnName("borrower")
                 .HasConversion(subject => subject.Value, value => new SubjectId(value));
         });
 

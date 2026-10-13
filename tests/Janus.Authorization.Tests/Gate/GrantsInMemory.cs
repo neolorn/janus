@@ -38,6 +38,23 @@ internal sealed class GrantsInMemory : IGrantStore
     public void Bump(SubjectId subject) =>
         _versions[subject] = _versions.GetValueOrDefault(subject) + 1;
 
+    /// <summary>
+    /// What another transaction does to a grant while a revocation waits for its row, so
+    /// a test may move the grant under a decision about to be taken.
+    /// </summary>
+    public Action<Grant>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        if (_grants.GetValueOrDefault(id) is Grant held)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return FindAsync(id, cancellationToken);
+    }
+
     /// <inheritdoc/>
     public ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken)
     {
@@ -85,13 +102,25 @@ internal sealed class GrantsInMemory : IGrantStore
             && held.IsLive(at)));
     }
 
-    /// <inheritdoc/>
-    public ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_grants.Values.Any(grant => grant.Role == role));
+    /// <summary>
+    /// Whether any grant confers the role, live, expired or revoked, as the rows name it.
+    /// </summary>
+    /// <param name="role">Which role.</param>
+    /// <returns>Whether one does.</returns>
+    public bool Names(RoleName role) => _grants.Values.Any(grant => grant.Role == role);
 
     /// <inheritdoc/>
     public ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_grants.Values.Any(grant => grant.Subject == holder));
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Grant>> NamingAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Grant>>(
+        [
+            .. _grants.Values
+                .Where(grant => grant.Subject == GrantSubject.Of(subject))
+                .OrderBy(grant => grant.GrantedAt),
+        ]);
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Grant>> HeldByAsync(
@@ -142,6 +171,21 @@ internal sealed class GrantsInMemory : IGrantStore
                 && resources.Contains(record)),
         ]);
     }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Grant>>(
+        [
+            .. _grants.Values.Where(grant =>
+                grant.Kind == GrantKind.Materialised
+                && grant.Role == role
+                && grant.IsLive(at)
+                && grant.ResourceType == type),
+        ]);
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Grant>> OnAsync(

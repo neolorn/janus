@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -21,6 +22,25 @@ public sealed partial class RegistrationServiceTests
     private const string Workspace = "person@company.test";
     private const string GoogleSubject = "110169484474386276334";
     private const string AppleSubject = "001234.5a6b7c8d9e0f.1234";
+
+    /// <summary>
+    /// REG-SESS-002 AC1: Continue with a provider before the age step is done is a
+    /// request for a step whose predecessor is incomplete, and is refused as one.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_002_AC1_AProviderBeforeTheAgeStepIsRefusedIncompleteAsync()
+    {
+        RegistrationSessionId session = await StartedAsync();
+
+        Result<ProvidedRegistration> provided = await ProvidedAsync(
+            session,
+            Factor.Google,
+            GoogleSubject,
+            Gmail,
+            verified: true);
+
+        Assert.Equal(ErrorCodes.RegistrationIncomplete, Refused(provided));
+    }
 
     /// <summary>
     /// REG-IDENT-008 AC1: Continue with Google on a gmail.com address reaches the
@@ -70,7 +90,7 @@ public sealed partial class RegistrationServiceTests
 
         Assert.True(Identity(asserted, IdentifierKind.Email).IsVerified);
         Assert.False(Identity(unasserted, IdentifierKind.Email).IsVerified);
-        Assert.NotNull(Identity(unasserted, IdentifierKind.Email).Code);
+        Assert.True(Outstanding(unasserted, IdentifierKind.Email).IsAnswerable());
     }
 
     /// <summary>
@@ -102,7 +122,7 @@ public sealed partial class RegistrationServiceTests
 
         Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
         Assert.Equal(
-            MessageKind.VerificationCode,
+            MessageKind.VerificationLink,
             Assert.Single(_notifications.Mail).Message);
 
         await VerifiedAsync(session, IdentifierKind.Email);
@@ -189,8 +209,8 @@ public sealed partial class RegistrationServiceTests
         Assert.Equal(
             Assert.Single(first.Identifiers) with { Id = Assert.Single(second.Identifiers).Id },
             Assert.Single(second.Identifiers));
-        Assert.Null(Identity(duplicate, IdentifierKind.Email).Code);
-        Assert.Null(Identity(again, IdentifierKind.Email).Code);
+        Assert.False(Outstanding(duplicate, IdentifierKind.Email).IsAnswerable());
+        Assert.False(Outstanding(again, IdentifierKind.Email).IsAnswerable());
         Assert.Equal(1, _notifications.Mail.Count(sent => sent.Message is MessageKind.AccountExists));
     }
 
@@ -209,8 +229,26 @@ public sealed partial class RegistrationServiceTests
         _ = Ok(await ProvidedAsync(session, Factor.Google, GoogleSubject, Gmail, verified: true));
 
         Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
-        Assert.Null(Identity(session, IdentifierKind.Email).Code);
+        Assert.False(Outstanding(session, IdentifierKind.Email).IsAnswerable());
         Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Mail).Message);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC2, REG-IDENT-008: a provider does not vouch for an address held
+    /// out of reach for its owner's undo; nothing is sent and nobody is told.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_AReservedAddressIsNotVouchedForByAProviderAsync()
+    {
+        _directory.Reserved(IdentifierKind.Email, Gmail, Noon + TimeSpan.FromDays(7));
+
+        RegistrationSessionId session = await AgedAsync();
+
+        _ = Ok(await ProvidedAsync(session, Factor.Google, GoogleSubject, Gmail, verified: true));
+
+        Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
+        Assert.False(Outstanding(session, IdentifierKind.Email).IsAnswerable());
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -256,5 +294,6 @@ public sealed partial class RegistrationServiceTests
             subject,
             ProvidedAddress.Of(provider, email, verified, hostedDomain),
             CredentialLabel.Of(Browser),
+            Source,
             TestContext.Current.CancellationToken);
 }

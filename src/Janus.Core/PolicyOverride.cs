@@ -13,18 +13,22 @@ namespace Janus.Core;
 /// <param name="CredentialRedundancy">The redundancy rule, where the organization enforces it.</param>
 /// <param name="SelfServiceRecovery">The recovery rule, where the organization withdraws it.</param>
 /// <param name="EmailDomains">The domain lock, written only through the domain operations.</param>
-/// <remarks>Implements chapter 10 sections 4.1 and 4.1a, AUTH-PRIN-002, AUTH-STEP-002a.</remarks>
+/// <param name="Photos">Whether the accounts show a profile photo, where the organization states it.</param>
+/// <remarks>
+/// Implements chapter 10 sections 4.1 and 4.1a, AUTH-PRIN-002, AUTH-STEP-002a, IDN-ATTR-002.
+/// </remarks>
 public sealed record PolicyOverride(
     AssuranceLevel? RequiredAssurance,
     IReadOnlySet<Factor>? LoginFactors,
     IReadOnlyDictionary<StepUpAction, Gate>? Gates,
     CredentialRedundancy? CredentialRedundancy,
     bool? SelfServiceRecovery,
-    IReadOnlyList<string>? EmailDomains)
+    IReadOnlyList<string>? EmailDomains,
+    bool? Photos)
 {
     /// <summary>
     /// The override an organization is created with: none, so every field inherits
     /// the system policy.
     /// </summary>
-    public static PolicyOverride None { get; } = new(null, null, null, null, null, null);
+    public static PolicyOverride None { get; } = new(null, null, null, null, null, null, null);
 }

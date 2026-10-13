@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -37,8 +38,8 @@ internal static class Flow
     private const string Language = "en";
 
     /// <summary>
-    /// Makes a deployment able to send: the templates carry the code and the link
-    /// token, and the balance floor is out of the way.
+    /// Makes a deployment able to send: the templates carry the code and the link,
+    /// and the balance floor is out of the way.
     /// </summary>
     /// <param name="deployment">What to prepare.</param>
     public static void Prepare(Deployment deployment)
@@ -48,15 +49,19 @@ internal static class Flow
         deployment.Configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         deployment.Configuration.Set(Settings.NotificationLanguages, [Language]);
 
-        foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.AccountExists })
+        foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.VerificationLink, MessageKind.AccountExists })
         {
+            // The new-device check sends a code alone, and a template names only what
+            // its message carries.
+            string text = message is MessageKind.VerificationCode ? "{code}" : "{code} {link}";
+
             foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
             {
                 deployment.Templates.Set(
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "code" : null, "{code} {token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "code" : null, text));
             }
         }
     }
@@ -100,6 +105,23 @@ internal static class Flow
     /// <returns>The browser.</returns>
     public static async Task<Browser> SecuredAsync(Deployment deployment)
     {
+        Browser browser = await ConfirmedAsync(deployment);
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("PUT", "/register/security", ("password", Password))).Status);
+
+        return browser;
+    }
+
+    /// <summary>
+    /// A browser that has reached the security step: both identifiers verified and
+    /// the confirm step passed, with nothing to sign in by yet.
+    /// </summary>
+    /// <param name="deployment">What it talks to.</param>
+    /// <returns>The browser.</returns>
+    public static async Task<Browser> ConfirmedAsync(Deployment deployment)
+    {
         Browser browser = await AwaitingAsync(deployment);
 
         await VerifiedAsync(deployment, browser, IdentifierKind.Email);
@@ -111,10 +133,6 @@ internal static class Flow
         Assert.Equal(
             StatusCodes.Status200OK,
             (await browser.SendAsync("POST", "/register/confirm")).Status);
-
-        Assert.Equal(
-            StatusCodes.Status200OK,
-            (await browser.SendAsync("PUT", "/register/security", ("password", Password))).Status);
 
         return browser;
     }
@@ -196,7 +214,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Sent(deployment, kind).Split(' ')[0];
+        return Sent(deployment, kind, linked: false).Split(' ')[0];
     }
 
     /// <summary>
@@ -210,7 +228,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Sent(deployment, kind).Split(' ')[1];
+        return Landing.Token(Sent(deployment, kind, linked: true).Split(' ')[1]);
     }
 
     /// <summary>
@@ -237,9 +255,10 @@ internal static class Flow
 
     private static string Named(IdentifierKind kind) => kind is IdentifierKind.Email ? "email" : "phone";
 
-    // The last message written from the verification template, which is the one
-    // carrying a code and a token; the notices that follow a change carry neither.
-    private static string Sent(Deployment deployment, IdentifierKind kind)
+    // The last message written from a verification template, which is the one
+    // carrying a code, and a token where it is linked; the notices that follow a change
+    // carry neither.
+    private static string Sent(Deployment deployment, IdentifierKind kind, bool linked)
     {
         IEnumerable<string> written = kind is IdentifierKind.Email
             ? deployment.Mail.Taken.Select(sent => sent.Body)
@@ -247,7 +266,10 @@ internal static class Flow
 
         foreach (string body in written.Reverse())
         {
-            if (body.Split(' ') is [{ Length: 6 } code, { Length: > 0 }] && code.All(char.IsAsciiDigit))
+            string[] parts = body.Split(' ');
+
+            if (parts is [{ Length: 6 } code, ..] && code.All(char.IsAsciiDigit)
+                && (parts is [_, { Length: > 0 }] || (!linked && parts is [_])))
             {
                 return body;
             }

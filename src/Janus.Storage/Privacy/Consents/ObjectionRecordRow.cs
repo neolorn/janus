@@ -14,6 +14,11 @@ namespace Janus.Storage.Privacy.Consents;
 internal sealed class ObjectionRecordRow
 {
     /// <summary>
+    /// The <c>id</c> column: the row's own identifier, which no contract carries.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
     /// The <c>subject</c> column.
     /// </summary>
     public SubjectId Subject { get; set; }
@@ -22,6 +27,11 @@ internal sealed class ObjectionRecordRow
     /// The <c>purpose</c> column, as the host declared the purpose.
     /// </summary>
     public string Purpose { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The <c>document</c> column: the legal document it was recorded against.
+    /// </summary>
+    public string Document { get; set; } = string.Empty;
 
     /// <summary>
     /// The <c>notice_version</c> column: the version displayed when it was recorded.

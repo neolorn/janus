@@ -25,6 +25,16 @@ internal interface IPendingSignInStore
     ValueTask<PendingSignIn?> FindAsync(byte[] fingerprint, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The pending sign-in a token answers to, its row held until the operation's
+    /// transaction ends, so a code presented against it is decided alone
+    /// (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="fingerprint">What the token hashes to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The pending sign-in as it stands once the lock is taken, or nothing.</returns>
+    ValueTask<PendingSignIn?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The account's outstanding sign-in of one kind.
     /// </summary>
     /// <param name="subject">Whose.</param>

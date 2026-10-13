@@ -18,7 +18,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// Sessions, over the <c>sessions</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-SESS-001, AUTH-SESS-003, AUTH-SESS-013 and CONV-DESIGN-003. Where a
@@ -27,7 +27,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// </remarks>
 internal sealed class SessionStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : ISessionStore
 {
     /// <inheritdoc/>
@@ -79,10 +79,12 @@ internal sealed class SessionStore(
                 CsrfFingerprint = csrfFingerprint,
                 CreatedAt = session.CreatedAt,
                 LastSeenAt = session.LastSeenAt,
-                Attained = session.Attained,
-                AttainedAt = session.AttainedAt,
-                PhishingResistant = session.PhishingResistant,
+                DelegatedAt = session.DelegatedAt,
+                Aal1At = session.Aal1At,
+                Aal2At = session.Aal2At,
+                Aal3At = session.Aal3At,
                 PhishingResistantAt = session.PhishingResistantAt,
+                DowngradedAt = session.DowngradedAt,
                 OriginBrowser = session.Origin.Device.Browser,
                 OriginOs = session.Origin.Device.Os,
                 OriginPlace = Written(
@@ -101,6 +103,8 @@ internal sealed class SessionStore(
                 AbsoluteExpiry = session.AbsoluteExpiry,
                 EndedAt = session.EndedAt,
                 SatisfiesEveryGate = session.SatisfiesEveryGate,
+                BreakGlassReason = session.BreakGlassReason,
+                Client = session.Client,
             });
         }
         finally
@@ -124,9 +128,10 @@ internal sealed class SessionStore(
         try
         {
             record.LastSeenAt = session.LastSeenAt;
-            record.Attained = session.Attained;
-            record.AttainedAt = session.AttainedAt;
-            record.PhishingResistant = session.PhishingResistant;
+            record.DelegatedAt = session.DelegatedAt;
+            record.Aal1At = session.Aal1At;
+            record.Aal2At = session.Aal2At;
+            record.Aal3At = session.Aal3At;
             record.PhishingResistantAt = session.PhishingResistantAt;
             record.LastSeenBrowser = session.LastSeen.Device.Browser;
             record.LastSeenOs = session.LastSeen.Device.Os;
@@ -208,6 +213,18 @@ internal sealed class SessionStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<int> DowngradeAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await context.Sessions
+            .Where(session => session.Subject == subject && session.EndedAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(session => session.DowngradedAt, at),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask EndSpineAsync(
         SessionId spine,
         DateTimeOffset at,
@@ -272,9 +289,10 @@ internal sealed class SessionStore(
         record.Subject,
         record.CreatedAt,
         record.LastSeenAt,
-        record.Attained,
-        record.AttainedAt,
-        record.PhishingResistant,
+        record.DelegatedAt,
+        record.Aal1At,
+        record.Aal2At,
+        record.Aal3At,
         record.PhishingResistantAt,
         Origin(
             dataKey,
@@ -293,7 +311,10 @@ internal sealed class SessionStore(
         record.IdleExpiry,
         record.AbsoluteExpiry,
         record.EndedAt,
-        record.SatisfiesEveryGate);
+        record.DowngradedAt,
+        record.SatisfiesEveryGate,
+        record.BreakGlassReason,
+        record.Client);
 
     private static SessionOrigin Origin(
         ReadOnlySpan<byte> dataKey,
@@ -341,10 +362,10 @@ internal sealed class SessionStore(
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its sessions under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

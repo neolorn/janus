@@ -52,6 +52,8 @@ internal sealed class PendingEventConfiguration : IEntityTypeConfiguration<Pendi
 
         builder.Property(pending => pending.FailedAt).HasColumnName("failed_at");
 
+        builder.Property(pending => pending.ClaimedUntil).HasColumnName("claimed_until");
+
         builder.HasIndex(pending => pending.NextAttemptAt)
             .HasDatabaseName("ix_events_due")
             .HasFilter("published_at IS NULL AND failed_at IS NULL");

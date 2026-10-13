@@ -31,4 +31,34 @@
     <PackageReference Include="MinVer" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- CONV-CODE-004, INT-PWD-001 (D-168): a project that names the library's package at
+       run time sets LibraryPackageConstants. Once MinVer has set the version, the
+       package's identifier and its version, without build metadata, are written as
+       constants into the project's intermediate output, never into a committed file. -->
+  <Target Name="LibraryPackageConstants"
+          AfterTargets="MinVer"
+          BeforeTargets="CoreCompile"
+          Condition="'$(LibraryPackageConstants)' == 'true'">
+    <PropertyGroup>
+      <LibraryPackageConstantsFile>$(IntermediateOutputPath)LibraryPackage.g.cs</LibraryPackageConstantsFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <LibraryPackageConstantsLine Include="// &lt;auto-generated/&gt;" />
+      <LibraryPackageConstantsLine Include="namespace $(RootNamespace)%3B" />
+      <LibraryPackageConstantsLine Include="internal static class LibraryPackage" />
+      <LibraryPackageConstantsLine Include="{" />
+      <LibraryPackageConstantsLine Include="    internal const string Identifier = &quot;$(PackageId)&quot;%3B" />
+      <LibraryPackageConstantsLine Include="    internal const string Version = &quot;$(PackageVersion)&quot;%3B" />
+      <LibraryPackageConstantsLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(LibraryPackageConstantsFile)"
+                      Lines="@(LibraryPackageConstantsLine)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(LibraryPackageConstantsFile)" />
+      <FileWrites Include="$(LibraryPackageConstantsFile)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

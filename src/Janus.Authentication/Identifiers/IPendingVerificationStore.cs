@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -26,6 +27,19 @@ internal interface IPendingVerificationStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The verification outstanding against an identifier, read under a lock on its row
+    /// held until the operation's transaction ends, so a code, a link or a confirmation
+    /// judged on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="identifier">Which identifier.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The verification as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<PendingVerification?> FindForUpdateAsync(
+        IdentifierId identifier,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The verification a link answers to, whichever of its two links it is.
     /// </summary>
     /// <param name="fingerprint">The fingerprint of the token the link carried.</param>
@@ -33,6 +47,17 @@ internal interface IPendingVerificationStore
     /// <returns>The verification, or nothing where none answers to it.</returns>
     ValueTask<PendingVerification?> FindByLinkAsync(
         byte[] fingerprint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The adds an account has pending, which it lists as unverified identifiers and
+    /// counts toward each kind's maximum until they verify (REG-IDENT-004).
+    /// </summary>
+    /// <param name="subject">Whose adds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The pending adds, the earliest staged first; no replace is among them.</returns>
+    ValueTask<IReadOnlyList<PendingVerification>> AddsOfAsync(
+        SubjectId subject,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -60,11 +85,16 @@ internal interface IPendingVerificationStore
     ValueTask RemoveAsync(IdentifierId identifier, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ends every verification staged before an instant, which is what the sweep of an
-    /// abandoned add or replace leaves nothing behind by.
+    /// Ends every verification that no verification-code record holds any longer: one
+    /// whose code and, for a replace, whose confirmation are each spent or past their
+    /// lifetime. An add goes with nothing else to remove, and a replace leaves the
+    /// identifier as it stood (REG-IDENT-004, REG-IDENT-007, OPS-OBS-003). The caller
+    /// holds the transaction it runs in: the candidates are locked, one a resend holds
+    /// is passed over, and each is judged again before it is deleted, so a resend in
+    /// flight keeps its record (D-188).
     /// </summary>
-    /// <param name="before">The instant a staged verification is too old at.</param>
+    /// <param name="now">The instant a record's lifetime is judged at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many were ended.</returns>
-    ValueTask<int> SweepAsync(DateTimeOffset before, CancellationToken cancellationToken);
+    ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }

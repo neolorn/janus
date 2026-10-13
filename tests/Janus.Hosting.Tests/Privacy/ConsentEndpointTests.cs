@@ -23,6 +23,8 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
     private const string Performance = "performance";
 
+    private const string Recommendations = "recommendations";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private readonly Deployment _deployment = new();
@@ -56,6 +58,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, granted.Status);
         Assert.Equal(Marketing, held.GetProperty("purpose").GetString());
+        Assert.Equal("privacy-notice", held.GetProperty("document").GetString());
         Assert.Equal("1", held.GetProperty("noticeVersion").GetString());
         Assert.Equal("dashboard", held.GetProperty("mechanism").GetString());
         Assert.NotEqual(default, held.GetProperty("grantedAt").GetDateTimeOffset());
@@ -84,6 +87,35 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
         Assert.Equal(granted.Status, withdrawn.Status);
         Assert.Equal(StatusCodes.Status204NoContent, withdrawn.Status);
         Assert.NotEqual(default, held.GetProperty("withdrawnAt").GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-008 AC2: the endpoint puts nothing between the subject and the
+    /// withdrawal. The first request, carrying no body and no confirmation, is answered
+    /// with no content, no redirect and nothing to answer in turn, and the consent is
+    /// withdrawn by the time it returns.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC2_TheFirstWithdrawalRequestWithdrawsAndAsksNothingFurtherAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _ = await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant");
+
+        Answer withdrawn = await browser.SendAsync(
+            "POST",
+            "/privacy/consents/" + Marketing + "/withdraw");
+
+        ConsentRecord held = Assert.Single(
+            await _deployment.Consents.ConsentsAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal(StatusCodes.Status204NoContent, withdrawn.Status);
+        Assert.Empty(withdrawn.Body);
+        Assert.Null(withdrawn.Location);
+        Assert.False(held.Live);
+        Assert.NotNull(held.WithdrawnAt);
     }
 
     /// <summary>
@@ -148,6 +180,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, objected.Status);
         Assert.Equal(Security, standing.GetProperty("purpose").GetString());
+        Assert.Equal("privacy-notice", standing.GetProperty("document").GetString());
         Assert.Equal("1", standing.GetProperty("noticeVersion").GetString());
         Assert.Equal(JsonValueKind.Null, standing.GetProperty("withdrawnAt").ValueKind);
 
@@ -172,13 +205,13 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-CONS-001 AC1, PRIV-CONS-007 AC4: the one dashboard endpoint serves the
+    /// PRIV-CONS-001 AC5, PRIV-CONS-007 AC4: the one dashboard endpoint serves the
     /// first grant and the prompt a material revision raised, and the record says
     /// which it answered.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_CONS_001_AC1_AGrantOverASupersededConsentIsRecordedAsReconsentAsync()
+    public async Task PRIV_CONS_001_AC5_AGrantOverASupersededConsentIsRecordedAsReconsentAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
@@ -195,7 +228,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(
             "reconsent",
-            Single(await browser.SendAsync("GET", "/privacy/consents"))
+            Latest(await browser.SendAsync("GET", "/privacy/consents"))
                 .GetProperty("mechanism").GetString());
     }
 
@@ -218,7 +251,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(
             "dashboard",
-            Single(await browser.SendAsync("GET", "/privacy/consents"))
+            Latest(await browser.SendAsync("GET", "/privacy/consents"))
                 .GetProperty("mechanism").GetString());
     }
 
@@ -235,24 +268,110 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status401Unauthorized, answered.Status);
     }
 
+    /// <summary>
+    /// PRIV-CONS-011 AC2: every consent the dashboard shows is withdrawn from it, the
+    /// one given there, the one given against another document and the written one an
+    /// administrator recorded alike, each by the one request of its own purpose.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_011_AC2_EachConsentHeldIsWithdrawnFromTheDashboardAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _deployment.Documents.Hold(
+            new DocumentVersion(Janus.Privacy.Tests.Declaration.Newsletter, "1", "ar", "النص", [], Noon));
+        _deployment.Consents.Keep(
+            subject,
+            new ConsentRecord(
+                Recommendations,
+                "privacy-notice",
+                "1",
+                ConsentMechanism.Administrator,
+                ConsentKind.Written,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null));
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/newsletter/grant")).Status);
+
+        JsonElement[] shown = [.. (await browser.SendAsync("GET", "/privacy/consents")).Json().EnumerateArray()];
+
+        Assert.Equal(3, shown.Length);
+
+        foreach (JsonElement consent in shown)
+        {
+            Assert.Equal(JsonValueKind.Null, consent.GetProperty("withdrawnAt").ValueKind);
+            Assert.Equal(
+                StatusCodes.Status204NoContent,
+                (await browser.SendAsync(
+                    "POST",
+                    "/privacy/consents/" + consent.GetProperty("purpose").GetString() + "/withdraw")).Status);
+        }
+
+        JsonElement[] left = [.. (await browser.SendAsync("GET", "/privacy/consents")).Json().EnumerateArray()];
+
+        Assert.Equal(3, left.Length);
+        Assert.All(
+            left,
+            consent => Assert.NotEqual(default, consent.GetProperty("withdrawnAt").GetDateTimeOffset()));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-011 AC3: the dashboard is the subject's own. An account fresh from
+    /// registration, holding no role and no permission and with nobody having acted on
+    /// it, reads its consents and its objections and changes one of each itself.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_011_AC3_AnAccountHoldingNothingReachesItsDashboardUnaidedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/privacy/consents")).Status);
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/privacy/objections")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/withdraw")).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", "/privacy/objections/" + Security)).Status);
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("DELETE", "/privacy/objections/" + Security)).Status);
+        Assert.Empty(_deployment.Gate.Refusals);
+    }
+
     // PRIV-CONS-007: a material revision of the notice would end the consent where
     // the subject had not already taken it back, which is the state the prompt is
     // raised over.
     private async Task EndedAsync(string purpose, bool withdrawn)
     {
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
-        ConsentRecord held = (await _deployment.Consents
-                .ConsentsAsync(subject, TestContext.Current.CancellationToken))
-            .Single(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
 
-        await _deployment.Consents.RecordAsync(
+        Assert.True(await _deployment.Consents.SupersedeAsync(
             subject,
-            held with
-            {
-                SupersededAt = Noon.AddDays(1),
-                WithdrawnAt = withdrawn ? Noon.AddHours(1) : null,
-            },
-            TestContext.Current.CancellationToken);
+            purpose,
+            Noon.AddDays(1),
+            TestContext.Current.CancellationToken));
+
+        if (withdrawn)
+        {
+            Assert.True(await _deployment.Consents.WithdrawConsentAsync(
+                subject,
+                purpose,
+                Noon.AddHours(1),
+                TestContext.Current.CancellationToken));
+        }
     }
 
     private static JsonElement Single(Answer answered)
@@ -260,5 +379,18 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, answered.Status);
 
         return answered.Json().EnumerateArray().Single();
+    }
+
+    // PRIV-CONS-001: every record is answered, the earlier ones as they were, so the
+    // grant just made is the last of them.
+    private static JsonElement Latest(Answer answered)
+    {
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+
+        JsonElement[] records = [.. answered.Json().EnumerateArray()];
+
+        Assert.Equal(2, records.Length);
+
+        return records[^1];
     }
 }

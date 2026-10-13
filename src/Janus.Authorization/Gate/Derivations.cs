@@ -85,6 +85,18 @@ internal sealed class Derivations(
         model.Derivations(type).Any(each => !each.Derivation.Materialised);
 
     /// <summary>
+    /// The relationships the derivations reaching records of the type follow from, those
+    /// the host's own rows decide.
+    /// </summary>
+    /// <param name="type">The kind of thing the records are.</param>
+    /// <returns>
+    /// The relationships, which is nothing where none reaches it. A materialised
+    /// derivation's is left out: its grants are rows and are read as rows.
+    /// </returns>
+    public IReadOnlyList<RelationshipDeclaration> Following(ResourceType type) =>
+        [.. model.Derivations(type).Where(each => !each.Derivation.Materialised).Select(each => each.Relationship)];
+
+    /// <summary>
     /// The relationships whose derivations confer one of the permissions on records of
     /// the type in the organization, those declared on a type containing it included.
     /// </summary>

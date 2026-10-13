@@ -78,6 +78,33 @@ internal sealed record HeldIdentifiers(
     }
 
     /// <summary>
+    /// The number a factor that rides a text goes to: the account's primary number, or
+    /// the first verified one where none is primary (AUTH-FACT-002b).
+    /// </summary>
+    /// <returns>The number, or nothing where the account holds no verified number.</returns>
+    public HeldIdentifier? Texted()
+    {
+        HeldIdentifier? first = null;
+
+        foreach (HeldIdentifier identifier in All)
+        {
+            if (identifier.Kind is not IdentifierKind.Phone || !identifier.IsVerified)
+            {
+                continue;
+            }
+
+            if (identifier.IsPrimary)
+            {
+                return identifier;
+            }
+
+            first ??= identifier;
+        }
+
+        return first;
+    }
+
+    /// <summary>
     /// The setting one kind stands at, which is the default where the account has
     /// never changed it.
     /// </summary>

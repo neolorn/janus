@@ -39,6 +39,36 @@ public sealed class ErrorTests
     }
 
     /// <summary>
+    /// AUTH-ABUSE-002 AC2: the throttled refusal says when the next attempt is looked
+    /// at, as the one <c>retryAt</c> every throttle of the library answers with, and
+    /// nothing else.
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_002_AC2_TheThrottledRefusalCarriesTheInstantAndNothingElse()
+    {
+        var lifts = new DateTimeOffset(2026, 3, 1, 12, 0, 4, 200, TimeSpan.Zero);
+
+        var refusal = Error.Throttled(lifts);
+
+        Assert.Equal(ErrorCodes.Throttled, refusal.Code);
+        Assert.Equal("retryAt", Assert.Single(refusal.Details).Key);
+        Assert.Equal(lifts, Assert.Single(refusal.Details).Value.GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC2: the instant is written in UTC whatever offset it was given in.
+    /// </summary>
+    [Fact]
+    public void Throttled_AnInstantWithAnOffset_IsWrittenInUtc()
+    {
+        var lifts = new DateTimeOffset(2026, 3, 1, 15, 0, 0, TimeSpan.FromHours(3));
+
+        var refusal = Error.Throttled(lifts);
+
+        Assert.Equal("2026-03-01T12:00:00+00:00", refusal.Details["retryAt"].GetString());
+    }
+
+    /// <summary>
     /// A failure without a code is a fault, not a failure: the catalogue is the only
     /// source of a code.
     /// </summary>

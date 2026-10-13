@@ -29,7 +29,9 @@ internal sealed class PreferenceConfiguration : IEntityTypeConfiguration<Prefere
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_account_preferences_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(preferences => preferences.Subject).HasName("pk_account_preferences");
 

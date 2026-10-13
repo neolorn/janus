@@ -15,6 +15,7 @@ namespace Janus.Hosting.Organizations;
 /// <param name="Gates">What each step-up action costs, by the action's name.</param>
 /// <param name="CredentialRedundancy">Whether a second credential is required.</param>
 /// <param name="SelfServiceRecovery">Whether recovery is self-service.</param>
+/// <param name="Photos">Whether a member's account shows a profile photo.</param>
 /// <param name="EmailDomains">The domain lock; empty is off.</param>
 /// <remarks>Implements chapter 09 section 8a, D-143 and chapter 10 section 4.1a.</remarks>
 internal sealed record OrganizationPolicyView(
@@ -23,6 +24,7 @@ internal sealed record OrganizationPolicyView(
     IReadOnlyDictionary<string, PolicyFieldView> Gates,
     PolicyFieldView CredentialRedundancy,
     PolicyFieldView SelfServiceRecovery,
+    PolicyFieldView Photos,
     PolicyFieldView EmailDomains)
 {
     /// <summary>
@@ -57,6 +59,7 @@ internal sealed record OrganizationPolicyView(
             gates,
             Field(root, "credentialRedundancy", own.CredentialRedundancy is not null),
             Field(root, "selfServiceRecovery", own.SelfServiceRecovery is not null),
+            Field(root, "photos", own.Photos is not null),
             Field(root, "emailDomains", own.EmailDomains is not null));
     }
 

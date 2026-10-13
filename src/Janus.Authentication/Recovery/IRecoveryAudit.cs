@@ -17,6 +17,10 @@ internal interface IRecoveryAudit
     /// and the channel they confirmed the person on.
     /// </summary>
     /// <param name="approver">Who approved.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="subject">Whose account.</param>
     /// <param name="reason">The written reason.</param>
     /// <param name="channel">Which kind of channel carried the confirmation.</param>
@@ -25,6 +29,7 @@ internal interface IRecoveryAudit
     /// <returns>The work of recording it.</returns>
     ValueTask ApprovedAsync(
         SubjectId approver,
+        string? breakGlassReason,
         SubjectId subject,
         string reason,
         IdentifierKind channel,

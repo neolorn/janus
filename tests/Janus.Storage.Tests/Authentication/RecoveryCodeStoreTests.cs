@@ -12,6 +12,7 @@ using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Settings;
 using Npgsql;
 using Xunit;
 
@@ -100,7 +101,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         await WrittenAsync(RecoveryCodeSet.Of(subject, Hashes(second), Noon + TimeSpan.FromDays(1)));
 
         await using StoreContext reading = database.Context();
-        RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading)
+        RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading, new DataConnections(reading))
             .FindAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(2, read.Codes.Count);
@@ -123,22 +124,40 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
 
         await using (StoreContext spending = database.Context())
         {
-            RecoveryCodeSet held = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(spending)
+            RecoveryCodeSet held = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(spending, new DataConnections(spending))
                 .FindAsync(subject, TestContext.Current.CancellationToken));
 
             Assert.True(held.Spend(drawn[1], Noon + TimeSpan.FromHours(1)));
 
-            await new RecoveryCodeStore(spending).RecordAsync(held, TestContext.Current.CancellationToken);
+            await new RecoveryCodeStore(spending, new DataConnections(spending)).RecordAsync(held, TestContext.Current.CancellationToken);
             await spending.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using StoreContext reading = database.Context();
-        RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading)
+        RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading, new DataConnections(reading))
             .FindAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(2, read.Remaining);
         Assert.Equal(Noon + TimeSpan.FromHours(1), read.Codes[1].UsedAt);
         Assert.False(read.Spend(drawn[1], Noon + TimeSpan.FromHours(2)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC1, CONV-DESIGN-003 AC6: one code presented twice at once is spent
+    /// once; the second presentation waits for the first and finds it spent.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_008_AC1_TwoConcurrentSpendsOfOneCodeSucceedOnceAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IReadOnlyList<string> drawn = Drawn(3);
+
+        await WrittenAsync(RecoveryCodeSet.Of(subject, Hashes(drawn), Noon));
+
+        ErrorCode?[] answers = await Task.WhenAll(SpentAsync(subject, drawn[0]), SpentAsync(subject, drawn[0]));
+
+        Assert.Equal(1, answers.Count(answer => answer is null));
+        Assert.Equal(1, answers.Count(answer => answer == ErrorCodes.CodeInvalid));
     }
 
     /// <summary>
@@ -154,18 +173,18 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
 
         await using (StoreContext marking = database.Context())
         {
-            RecoveryCodeSet held = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(marking)
+            RecoveryCodeSet held = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(marking, new DataConnections(marking))
                 .FindAsync(subject, TestContext.Current.CancellationToken));
 
             held.Viewed(Noon + TimeSpan.FromMinutes(1));
             held.Exported(Noon + TimeSpan.FromMinutes(2));
 
-            await new RecoveryCodeStore(marking).RecordAsync(held, TestContext.Current.CancellationToken);
+            await new RecoveryCodeStore(marking, new DataConnections(marking)).RecordAsync(held, TestContext.Current.CancellationToken);
             await marking.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using StoreContext reading = database.Context();
-        RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading)
+        RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading, new DataConnections(reading))
             .FindAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(Noon + TimeSpan.FromMinutes(1), read.ViewedAt);
@@ -207,7 +226,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         }
 
         await using StoreContext reading = database.Context();
-        var store = new RecoveryCodeStore(reading);
+        var store = new RecoveryCodeStore(reading, new DataConnections(reading));
 
         Assert.Equal(
             [oldest, older],
@@ -234,7 +253,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        Assert.Null(await new RecoveryCodeStore(reading)
+        Assert.Null(await new RecoveryCodeStore(reading, new DataConnections(reading))
             .FindAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -261,11 +280,30 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         ];
     }
 
+    // Each presentation is its own request: its own context, connection and transaction.
+    private async Task<ErrorCode?> SpentAsync(SubjectId subject, string code)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        var connections = new DataConnections(context);
+
+        var codes = new RecoveryCodeService(
+            new RecoveryCodeStore(context, connections),
+            new Argon2idHasher(_randomness),
+            new ConfigurationStore(context, connections),
+            work,
+            TimeProvider.System,
+            _randomness);
+
+        return (await codes.SpendAsync(subject, code, TestContext.Current.CancellationToken))
+            .Match<ErrorCode?>(() => null, error => error.Code);
+    }
+
     private async Task WrittenAsync(RecoveryCodeSet set)
     {
         await using StoreContext writing = database.Context();
 
-        await new RecoveryCodeStore(writing).ReplaceAsync(set, TestContext.Current.CancellationToken);
+        await new RecoveryCodeStore(writing, new DataConnections(writing)).ReplaceAsync(set, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

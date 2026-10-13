@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Core;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Catalogue = Janus.Core.Configuration.Settings;
 
 namespace Janus.Storage.Tests.Authentication;
 
@@ -52,6 +57,33 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
         Assert.Equal(device.Id, found.Id);
         Assert.Equal(DeviceKind.Trusted, found.Kind);
         Assert.Equal("this laptop", found.Label.Value);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-015 AC6, CONV-DESIGN-003 AC6: failed sign-ins on one trusted browser made at
+    /// once are counted as failures made one after another on its row, so as many as
+    /// <c>factor.trusteddevice.failurelimit</c> revoke its trust.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_015_AC6_FailuresAtOnceAreAllCountedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var token = OpaqueToken.Draw(_deployment.Randomness);
+        Device device = Known(
+            subject,
+            DeviceKind.Trusted,
+            lifetime: DateTimeOffset.UtcNow - Noon + TimeSpan.FromDays(30));
+        int limit = Catalogue.FactorTrustedDeviceFailureLimit.Default;
+
+        await WrittenAsync(device, token);
+        await Task.WhenAll(Enumerable.Range(0, limit).Select(_ => FailedAsync(subject, token)));
+
+        await using StoreContext reading = database.Context();
+        Device read = Assert.IsType<Device>(
+            await Store(reading).FindAsync(device.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(limit, read.ConsecutiveFailures);
+        Assert.True(read.Revoked);
     }
 
     /// <summary>
@@ -147,6 +179,24 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
         {
             yield return device.Id;
         }
+    }
+
+    // Each failure is its own request: its own context, connection and transaction.
+    private async Task FailedAsync(SubjectId subject, OpaqueToken token)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        var browsers = new DeviceService(
+            Store(context),
+            new ConfigurationStore(context, new DataConnections(context)),
+            work,
+            new EventOutbox(new PendingEvents(context), work),
+            TimeProvider.System,
+            _deployment.Randomness);
+
+        Assert.True((await browsers.FailedAsync(subject, token.Value, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
     }
 
     private static Device Known(

@@ -14,10 +14,23 @@ namespace Janus.Core;
 /// </param>
 /// <param name="Purpose">Which sends it applies to.</param>
 /// <param name="Buckets">The allowances, all of which a send has to satisfy.</param>
-/// <remarks>Implements chapter 10 sections 5.14 to 5.16, AUTH-ABUSE-004.</remarks>
+/// <remarks>Implements chapter 10 sections 5.14 to 5.16, 5.15a and 5.16a, AUTH-ABUSE-004.</remarks>
 public sealed record Restriction(
     string Name,
     RestrictionKeyKind Key,
     string? HostKeyName,
     RestrictionPurpose Purpose,
-    IReadOnlyList<Bucket> Buckets);
+    IReadOnlyList<Bucket> Buckets)
+{
+    /// <summary>
+    /// Which channel's sends it governs; <see cref="RestrictionChannel.Any"/>, either,
+    /// where it names none.
+    /// </summary>
+    public RestrictionChannel Channel { get; init; } = RestrictionChannel.Any;
+
+    /// <summary>
+    /// Whether it is marked <c>resend</c>: it then judges and counts a send once,
+    /// whatever the number of languages the send goes out in (chapter 10 section 5.16a).
+    /// </summary>
+    public bool Resend { get; init; }
+}

@@ -20,8 +20,9 @@ namespace Janus.Storage.Tests;
 /// </summary>
 /// <param name="database">The database the subjects are written to.</param>
 /// <remarks>
-/// One of these belongs to one test, which is one class instance, so what a test writes
-/// is unreadable to every other test.
+/// One of these belongs to one test, which is one class instance. The tests of a class
+/// share the database and so its key-encryption key, since the deployment's data key is
+/// one row of it; each test reads only the rows it wrote.
 /// </remarks>
 internal sealed class Deployment(DatabaseFixture database) : IDisposable
 {
@@ -36,6 +37,12 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     /// </summary>
     public static readonly FingerprintKeys FingerprintKeys =
         new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = FingerprintKey });
+
+    /// <summary>
+    /// A key ring holding the fingerprint key alone, for a store that computes
+    /// fingerprints and wraps nothing.
+    /// </summary>
+    public static readonly IKeyRing Fingerprints = new KeyRingInMemory(keyEncryptionKeys: null, FingerprintKeys);
 
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly Dictionary<int, ReadOnlyMemory<byte>> _versions = [];
@@ -54,9 +61,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
         {
             if (_versions.Count == 0)
             {
-                byte[] material = new byte[PersonalDataFormat.DataKeyLength];
-                _randomness.GetBytes(material);
-                _versions[1] = material;
+                _versions[1] = database.KeyEncryptionKey;
             }
 
             return _versions;
@@ -67,6 +72,12 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     /// The key-encryption key of the deployment, at its one version.
     /// </summary>
     public KeyEncryptionKeys Keys => new(1, Versions);
+
+    /// <summary>
+    /// The key ring the deployment's stores borrow from: the key-encryption key and the
+    /// fingerprint key above.
+    /// </summary>
+    public IKeyRing Ring => new KeyRingInMemory(Keys, FingerprintKeys);
 
     /// <summary>
     /// Writes an account and the wrapped data key its personal fields are held under.
@@ -91,7 +102,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
 
             context.SubjectKeys.Add(new SubjectKeyRecord
             {
-                Subject = subject,
+                Id = SubjectKeyId.Of(subject),
                 FormatMarker = PersonalDataFormat.Marker,
                 KeyVersion = Keys.CurrentVersion,
                 WrappedKey = PersonalFieldCipher.Wrap(dataKey, Keys.Current.Span),
@@ -131,6 +142,14 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     }
 
     /// <summary>
+    /// The deployment's data key, over the context's connection and transaction.
+    /// </summary>
+    /// <param name="context">The context the operation runs in.</param>
+    /// <returns>The key.</returns>
+    public DeploymentDataKeyStore DataKey(StoreContext context) =>
+        new(new DataConnections(context), Ring, _randomness);
+
+    /// <summary>
     /// Destroys a subject's data key, as the erasure transaction does.
     /// </summary>
     /// <param name="subject">Whose key to destroy.</param>
@@ -140,7 +159,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
         await using StoreContext context = database.Context();
 
         SubjectKeyRecord key = await context.SubjectKeys
-            .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(held => held.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         key.FormatMarker = PersonalDataFormat.ErasedMarker;
         key.WrappedKey = new byte[PersonalDataFormat.DataKeyLength];

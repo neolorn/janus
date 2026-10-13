@@ -8,22 +8,22 @@ namespace Janus.Core;
 /// authorization is consumed without this library's authentication.
 /// </summary>
 /// <remarks>
-/// Implements LIB-HOST-004 and AUTH-STEP-003. A deployment that supplies none is a
-/// deployment where every step-up gate is unmet: the gate fails closed rather than
-/// assuming the session reached a level nothing reported.
+/// Implements LIB-HOST-004, AUTH-STEP-002 and AUTH-STEP-003. A deployment that supplies
+/// none is a deployment where every step-up gate is unmet: the gate fails closed rather
+/// than assuming the session reached a level nothing reported.
 /// </remarks>
 public interface IAssuranceProvider
 {
     /// <summary>
-    /// What the caller's session has reached.
+    /// What the caller's session has attained, and what the caller's account can reach.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The level, or a failure where the session cannot be read, which leaves every
+    /// The report, or a failure where the session cannot be read, which leaves every
     /// step-up gate unmet.
     /// </returns>
-    ValueTask<Result<AssuranceLevel>> LevelAsync(
+    ValueTask<Result<AttainedAssurance>> AttainedAsync(
         AccessContext context,
         CancellationToken cancellationToken);
 }

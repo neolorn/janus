@@ -16,7 +16,9 @@ internal sealed class ReadVolumeConfiguration : IEntityTypeConfiguration<ReadVol
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("read_volume");
+        builder.ToTable("read_volume", table => table.HasCheckConstraint(
+            "ck_read_volume_actor_not_max_uuid",
+            MaxUuid.Refused("actor")));
 
         builder.HasKey(read => new { read.Actor, read.Day }).HasName("pk_read_volume");
 

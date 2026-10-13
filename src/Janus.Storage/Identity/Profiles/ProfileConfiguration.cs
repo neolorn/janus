@@ -41,7 +41,9 @@ internal sealed class ProfileConfiguration : IEntityTypeConfiguration<ProfileRec
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_profiles_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(profile => profile.Subject).HasName("pk_profiles");
 

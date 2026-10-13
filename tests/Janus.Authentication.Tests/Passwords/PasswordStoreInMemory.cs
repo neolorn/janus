@@ -34,9 +34,18 @@ internal sealed class PasswordStoreInMemory : IPasswordStore
             meetsSingleFactorFloor: true,
             at);
 
+    /// <summary>
+    /// How many times an account's password was read.
+    /// </summary>
+    public int Reads { get; private set; }
+
     /// <inheritdoc/>
-    public ValueTask<Password?> FindAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_passwords.GetValueOrDefault(subject));
+    public ValueTask<Password?> FindAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Reads++;
+
+        return ValueTask.FromResult(_passwords.GetValueOrDefault(subject));
+    }
 
     /// <inheritdoc/>
     public ValueTask SetAsync(Password password, CancellationToken cancellationToken)
@@ -47,8 +56,15 @@ internal sealed class PasswordStoreInMemory : IPasswordStore
     }
 
     /// <inheritdoc/>
-    public ValueTask RehashAsync(Password password, CancellationToken cancellationToken)
+    public ValueTask RehashAsync(Password password, PasswordHash read, CancellationToken cancellationToken)
     {
+        // A password set since the read replaced the one held, so the rehash finds the
+        // row no longer holding what it verified against and changes nothing.
+        if (!ReferenceEquals(_passwords.GetValueOrDefault(password.Subject), password))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         _passwords[password.Subject] = password;
         Rehashed++;
 

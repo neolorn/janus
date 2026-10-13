@@ -113,7 +113,7 @@ public sealed class MaintenanceRecordsTests : IAsyncDisposable
         Licence once = Licence(Noon.AddYears(3));
 
         Assert.Equal(
-            ErrorCodes.RequestMalformed,
+            ErrorCodes.RequestInvalid,
             Refusal(await Records.ReplaceLicencesAsync(
                 AccessContext.Of(_compliance),
                 [once, once with { Name = "Restated" }],
@@ -156,7 +156,7 @@ public sealed class MaintenanceRecordsTests : IAsyncDisposable
     public async Task OPS_MAINT_001_AC3_ATaskDatedAfterNowIsRefusedAsync()
     {
         Assert.Equal(
-            ErrorCodes.RequestMalformed,
+            ErrorCodes.RequestInvalid,
             Refusal(await Records.RecordAsync(
                 AccessContext.Of(_compliance),
                 MaintenanceTask.RiskTriggerReview,
@@ -165,6 +165,39 @@ public sealed class MaintenanceRecordsTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Empty(_store.Log);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a note given in process is held to the
+    /// bound the endpoint holds it to, and one within it is kept trimmed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_ANoteIsHeldToItsBoundAsync()
+    {
+        foreach (string note in new[] { "   ", new string('n', 1025) })
+        {
+            Assert.Equal(
+                ErrorCodes.RequestMalformed,
+                Refusal(await Records.RecordAsync(
+                    AccessContext.Of(_compliance),
+                    MaintenanceTask.RiskTriggerReview,
+                    Noon,
+                    note,
+                    TestContext.Current.CancellationToken)));
+        }
+
+        Assert.Empty(_store.Log);
+
+        MaintenanceEntry recorded = (await Records.RecordAsync(
+                AccessContext.Of(_compliance),
+                MaintenanceTask.RiskTriggerReview,
+                Noon,
+                " Reviewed. ",
+                TestContext.Current.CancellationToken))
+            .Match(entry => entry, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal("Reviewed.", recorded.Note);
     }
 
     /// <inheritdoc/>

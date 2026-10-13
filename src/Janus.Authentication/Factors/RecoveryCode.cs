@@ -39,6 +39,9 @@ internal static class RecoveryCode
         ArgumentNullException.ThrowIfNull(randomness);
 
         var drawn = new StringBuilder(Symbols + 1);
+        Span<byte> bytes = stackalloc byte[Symbols];
+
+        randomness.GetBytes(bytes);
 
         for (int symbol = 0; symbol < Symbols; symbol++)
         {
@@ -47,8 +50,12 @@ internal static class RecoveryCode
                 drawn.Append('-');
             }
 
-            drawn.Append(Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)]);
+            // The alphabet is 32 symbols, so the five low bits of a byte choose one
+            // uniformly.
+            drawn.Append(Alphabet[bytes[symbol] & (Alphabet.Length - 1)]);
         }
+
+        CryptographicOperations.ZeroMemory(bytes);
 
         return drawn.ToString();
     }

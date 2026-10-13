@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Identity.Audit;
@@ -31,6 +33,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         OrganizationId organization,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -42,6 +45,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
@@ -65,7 +69,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     action,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -77,6 +81,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         string domain,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -88,6 +93,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -102,9 +108,25 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         AuditAction action,
         OrganizationId organization,
         InvitationId invitation,
+        MailboxTakeover? takeover,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+        {
+            ["invitation"] = JsonSerializer.SerializeToElement(invitation.Value),
+        };
+
+        // Chapter 10 section 5.24: the former mailbox's choice and its reason, where the
+        // invitation names one (REG-MAIL-003).
+        if (takeover is not null)
+        {
+            details["formerMailbox"] = JsonSerializer.SerializeToElement(WrittenName.Of(takeover.Choice));
+            details["reason"] = JsonSerializer.SerializeToElement(takeover.Reason);
+        }
+
         await records
             .AppendAsync(
                 AuditRecord.Of(
@@ -114,13 +136,12 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization,
-                    new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
-                    {
-                        ["invitation"] = JsonSerializer.SerializeToElement(invitation.Value),
-                    }),
+                    details),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask MembershipEndedAsync(
@@ -128,6 +149,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         MembershipId membership,
         SubjectId member,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -139,6 +161,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     member,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {

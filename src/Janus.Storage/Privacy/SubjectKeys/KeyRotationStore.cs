@@ -12,24 +12,24 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Privacy.SubjectKeys;
 
 /// <summary>
-/// The key-encryption key's rotation over the <c>key_rotations</c> table and every
-/// column that holds a value wrapped under the key.
+/// The key-encryption key's rotation over the <c>key_rotations</c> table and the subject
+/// keys, the only values wrapped under the key.
 /// </summary>
 /// <param name="context">The context the progress is tracked on.</param>
 /// <param name="connections">Where the re-wraps take their connection from.</param>
-/// <param name="keyEncryptionKeys">The versions the command was handed, the new one current.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
-/// Implements OPS-SEC-003, OPS-MIG-003a and PRIV-RIGHT-005a. Each value is written back
-/// only where it still stands as it was read, so an erasure or a newer wrapping made
-/// meanwhile is never overwritten, and a value is never re-wrapped twice. Of the tables
-/// beside the subject keys, the maintenance credential reaches the row's key, the
-/// version and the wrapped value and nothing else (entry 316 of the decisions pending
-/// review).
+/// Implements OPS-SEC-003, OPS-MIG-003a and PRIV-RIGHT-005a. Each key is written back
+/// only where it still stands as it was read, version and wrapped value both, so an
+/// erasure or a wrapping made meanwhile is never overwritten, and a key is never
+/// re-wrapped twice. A value no subject owns is wrapped under the deployment's data key,
+/// itself a subject key, so the rotation reaches it through that key and touches no
+/// other table.
 /// </remarks>
 internal sealed class KeyRotationStore(
     StoreContext context,
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys) : IKeyRotationStore
+    IKeyRing ring) : IKeyRotationStore
 {
     // OPS-MIG-003a: the rights of the maintenance role, and no path to the application's,
     // which a superuser holds as it holds every role's.
@@ -39,17 +39,15 @@ internal sealed class KeyRotationStore(
             AND NOT pg_has_role(current_user, 'identity_app', 'MEMBER');
         """;
 
+    // D-166 X3: a run decides on the progress it reads, and a first start has no row to
+    // lock, so the kind's progress is held as one for the rest of the transaction; no
+    // read takes this lock.
+    private const string Hold =
+        "SELECT pg_advisory_xact_lock(hashtextextended('identity.key_rotations/' || CAST(@kind AS text), 0));";
+
     private const string Wrapping =
         """
-        SELECT key_version FROM identity.subject_keys WHERE format_marker = @marker
-        UNION SELECT key_version FROM identity.invitations WHERE key_version IS NOT NULL
-        UNION SELECT key_version FROM identity.mailboxes WHERE key_version IS NOT NULL
-        UNION SELECT key_version FROM identity.registration_sessions
-        UNION SELECT key_version FROM identity.send_outbox
-        UNION SELECT key_version FROM identity.signing_keys
-        UNION SELECT signon_key_version FROM identity.preauthentication_sessions
-            WHERE signon_key_version IS NOT NULL
-        UNION SELECT key_version FROM identity.provider_attempts WHERE key_version IS NOT NULL;
+        SELECT DISTINCT key_version FROM identity.subject_keys WHERE format_marker = @marker;
         """;
 
     private const string First =
@@ -82,21 +80,11 @@ internal sealed class KeyRotationStore(
         """
         UPDATE identity.subject_keys
         SET key_version = @current, wrapped_key = @wrapped
-        WHERE subject = @subject AND format_marker = @marker AND key_version = @previous;
+        WHERE subject = @subject
+            AND format_marker = @marker
+            AND key_version = @previous
+            AND wrapped_key = @read;
         """;
-
-    // The values wrapped under the key beside the subject keys, each by the column that
-    // keys its row, the one that holds the version and the one that holds the value.
-    private static readonly HeldColumn[] Held =
-    [
-        new("invitations", "id", "key_version", "wrapped_key"),
-        new("mailboxes", "id", "key_version", "wrapped_key"),
-        new("registration_sessions", "id", "key_version", "wrapped_key"),
-        new("send_outbox", "id", "key_version", "wrapped_key"),
-        new("signing_keys", "key_id", "key_version", "private_key"),
-        new("preauthentication_sessions", "fingerprint", "signon_key_version", "signon_verifier"),
-        new("provider_attempts", "id", "key_version", "verifier"),
-    ];
 
     /// <inheritdoc/>
     public async ValueTask<bool> UnderMaintenanceCredentialAsync(CancellationToken cancellationToken)
@@ -109,6 +97,33 @@ internal sealed class KeyRotationStore(
                 transaction: ambient.Transaction,
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(KeyRotationKind kind, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A rotation's progress is held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { kind = kind.ToString() },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the run decides on is the progress as committed.
+        foreach (KeyRotationRecord row in context.KeyRotations.Local.Where(row => row.Kind == kind).ToList())
+        {
+            await context.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -125,7 +140,7 @@ internal sealed class KeyRotationStore(
         return record is null ? null : KeyRotationProgress.Existing(
             record.Kind,
             record.Version,
-            record.LastSubject,
+            record.LastKey,
             record.Processed,
             record.StartedAt,
             record.CompletedAt,
@@ -143,7 +158,7 @@ internal sealed class KeyRotationStore(
                 {
                     Kind = progress.Kind,
                     Version = progress.Version,
-                    LastSubject = progress.LastSubject,
+                    LastKey = progress.LastKey,
                     Processed = progress.Processed,
                     StartedAt = progress.StartedAt,
                     CompletedAt = progress.CompletedAt,
@@ -163,7 +178,7 @@ internal sealed class KeyRotationStore(
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The rotation has no row to carry its progress.");
 
-        record.LastSubject = progress.LastSubject;
+        record.LastKey = progress.LastKey;
         record.Processed = progress.Processed;
         record.CompletedAt = progress.CompletedAt;
         record.RetiredAt = progress.RetiredAt;
@@ -187,11 +202,11 @@ internal sealed class KeyRotationStore(
 
     /// <inheritdoc/>
     public async ValueTask<KeyRotationBatch> ReWrapSubjectKeysAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<SubjectKey> keys = after is SubjectId last
+        IReadOnlyList<SubjectKey> keys = after is SubjectKeyId last
             ? await SubjectKeysAsync(After, new { after = last.Value, count }, cancellationToken).ConfigureAwait(false)
             : await SubjectKeysAsync(First, new { count }, cancellationToken).ConfigureAwait(false);
 
@@ -201,18 +216,19 @@ internal sealed class KeyRotationStore(
         }
 
         int reWrapped = 0;
+        int current = PersonalFieldCipher.CurrentVersion(ring);
 
         foreach (SubjectKey key in keys)
         {
             if (!key.IsErased
-                && key.KeyVersion != keyEncryptionKeys.CurrentVersion
+                && key.KeyVersion != current
                 && await ReWrappedAsync(key, cancellationToken).ConfigureAwait(false))
             {
                 reWrapped++;
             }
         }
 
-        return new KeyRotationBatch(keys[^1].Subject, reWrapped);
+        return new KeyRotationBatch(keys[^1].Id, reWrapped);
     }
 
     /// <inheritdoc/>
@@ -220,7 +236,7 @@ internal sealed class KeyRotationStore(
     {
         IReadOnlyList<SubjectKey> keys = await SubjectKeysAsync(
                 Remaining,
-                new { marker = (short)PersonalDataFormat.Marker, current = keyEncryptionKeys.CurrentVersion, count },
+                new { marker = (short)PersonalDataFormat.Marker, current = PersonalFieldCipher.CurrentVersion(ring), count },
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -231,57 +247,6 @@ internal sealed class KeyRotationStore(
             if (await ReWrappedAsync(key, cancellationToken).ConfigureAwait(false))
             {
                 reWrapped++;
-            }
-        }
-
-        return reWrapped;
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask<int> ReWrapHeldValuesAsync(int count, CancellationToken cancellationToken)
-    {
-        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
-        int reWrapped = 0;
-
-        foreach (HeldColumn held in Held)
-        {
-            if (reWrapped == count)
-            {
-                break;
-            }
-
-            IEnumerable<(object Key, int Version, byte[] Wrapped)> values = await ambient.Connection
-                .QueryAsync<(object, int, byte[])>(new CommandDefinition(
-                    held.Stale,
-                    new { current = keyEncryptionKeys.CurrentVersion, count = count - reWrapped },
-                    ambient.Transaction,
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-
-            foreach ((object key, int version, byte[] wrapped) in values)
-            {
-                byte[] value = PersonalFieldCipher.Unwrap(PersonalDataFormat.Marker, version, wrapped, keyEncryptionKeys);
-
-                try
-                {
-                    reWrapped += await ambient.Connection
-                        .ExecuteAsync(new CommandDefinition(
-                            held.ReWrap,
-                            new
-                            {
-                                key,
-                                previous = version,
-                                current = keyEncryptionKeys.CurrentVersion,
-                                wrapped = PersonalFieldCipher.Wrap(value, keyEncryptionKeys.Current.Span),
-                            },
-                            ambient.Transaction,
-                            cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
-                }
-                finally
-                {
-                    CryptographicOperations.ZeroMemory(value);
-                }
             }
         }
 
@@ -305,20 +270,24 @@ internal sealed class KeyRotationStore(
 
         return
         [
-            .. rows.Select(row => SubjectKey.Existing(new SubjectId(row.Subject), (byte)row.Marker, row.Version, row.Wrapped)),
+            .. rows.Select(row => SubjectKey.Existing(new SubjectKeyId(row.Subject), (byte)row.Marker, row.Version, row.Wrapped)),
         ];
     }
 
     // One subject key unwrapped under the version it stands under and wrapped under the
-    // current one, written back only where it still stands as it was read.
+    // current one, written back only where it still stands as it was read: a key rewritten
+    // at the same version meanwhile no longer holds the bytes read, and is left alone.
     private async ValueTask<bool> ReWrappedAsync(SubjectKey key, CancellationToken cancellationToken)
     {
         int previous = key.KeyVersion;
-        byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, previous, key.WrappedKey.Span, keyEncryptionKeys);
+        byte[] read = key.WrappedKey.ToArray();
+        byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, previous, key.WrappedKey, ring);
 
         try
         {
-            key.ReWrap(keyEncryptionKeys.CurrentVersion, PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span));
+            (int version, byte[] wrapped) = PersonalFieldCipher.WrapUnderCurrent(dataKey, ring);
+
+            key.ReWrap(version, wrapped);
         }
         finally
         {
@@ -332,27 +301,15 @@ internal sealed class KeyRotationStore(
                 ReWrap,
                 new
                 {
-                    subject = key.Subject.Value,
+                    subject = key.Id.Value,
                     marker = (short)key.FormatMarker,
                     previous,
+                    read,
                     current = key.KeyVersion,
                     wrapped = key.WrappedKey.ToArray(),
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false) == 1;
-    }
-
-    // A column holding a value wrapped under the key, with the two statements the
-    // rotation runs over it. The names are this class's own constants.
-    private sealed record HeldColumn(string Table, string Key, string Version, string Wrapped)
-    {
-        public string Stale { get; } =
-            $"SELECT {Key}, {Version}, {Wrapped} FROM identity.{Table} "
-            + $"WHERE {Version} IS NOT NULL AND {Version} <> @current ORDER BY {Key} LIMIT @count;";
-
-        public string ReWrap { get; } =
-            $"UPDATE identity.{Table} SET {Version} = @current, {Wrapped} = @wrapped "
-            + $"WHERE {Key} = @key AND {Version} = @previous;";
     }
 }

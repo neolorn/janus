@@ -22,7 +22,7 @@ namespace Janus.Hosting.Privacy;
 internal sealed class PrivacyAlerts(IAlertChannels alerts, TimeProvider time) : IPrivacyAlerts
 {
     /// <inheritdoc/>
-    public async ValueTask RaiseAsync(
+    public async ValueTask<Result> RaiseAsync(
         AlertCondition condition,
         string? scope,
         IReadOnlyDictionary<string, JsonElement> details,

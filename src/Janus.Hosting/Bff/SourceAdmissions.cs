@@ -5,18 +5,25 @@ using System.Threading;
 namespace Janus.Hosting.Bff;
 
 /// <summary>
-/// The requests this instance admitted from each source address in the minute ending
-/// now.
+/// The requests this instance admitted from each source, and from the /48 that encloses
+/// each IPv6 source, in the minute ending now.
 /// </summary>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements BFF-ORDER-001 stage 4. The counts are held in this instance's memory, so
-/// a source already over its limit is refused without a read of any store, and each
-/// instance of a deployment admits the limit on its own. The window slides: a request
-/// is counted for the minute after it and no longer, and a source over its limit is
-/// admitted again at the instant enough of its requests have left the window. A source
-/// that sent nothing for a whole window is forgotten when the next one begins, so what
-/// is held is what the last two windows brought and nothing older.
+/// Implements BFF-ORDER-001 stage 4. A source is the address the connection arrived on
+/// after the proxies the host names to the framework as trusted, in the form
+/// AUTH-ABUSE-001 counts by: an IPv4 address, or the /64 of an IPv6 address, since one
+/// host holds every address of its subnet. A site holds a /48 or a /56 (RFC 6177), so
+/// each IPv6 source's enclosing /48 is counted too, under its own limit, and walking a
+/// site's subnets is bounded. A deployment that names no trusted proxy to the framework
+/// is one source. The counts are held in this instance's memory, so a source or a /48
+/// already over its limit is refused without a read of any store, and each instance of
+/// a deployment admits both limits on its own: a deployment of several instances sets
+/// each key to its share. The window slides: a request is counted for the minute after
+/// it and no longer, and a key over its limit is admitted again at the instant enough
+/// of its requests have left the window. A key that saw nothing for a whole window is
+/// forgotten when the next one begins, so what is held is what the last two windows
+/// brought and nothing older.
 /// </remarks>
 internal sealed class SourceAdmissions(TimeProvider time)
 {
@@ -31,11 +38,11 @@ internal sealed class SourceAdmissions(TimeProvider time)
     private DateTimeOffset _began = time.GetUtcNow();
 
     /// <summary>
-    /// The instant a source that went over its limit is admitted again, while that
-    /// instant has not come.
+    /// The instant a source, or a /48, that went over its limit is admitted again, while
+    /// that instant has not come.
     /// </summary>
-    /// <param name="source">Where the request came from.</param>
-    /// <returns>The instant, or nothing where the source is not held.</returns>
+    /// <param name="source">Where the request came from, or the /48 that encloses it.</param>
+    /// <returns>The instant, or nothing where it is not held.</returns>
     /// <exception cref="ArgumentNullException">The source is absent.</exception>
     public DateTimeOffset? HeldUntil(string source)
     {
@@ -51,16 +58,19 @@ internal sealed class SourceAdmissions(TimeProvider time)
 
     /// <summary>
     /// Admits one request from a source that is within its limit for the minute ending
-    /// now, and counts it.
+    /// now, and whose enclosing /48 is within its own, and counts it against both.
     /// </summary>
     /// <param name="source">Where the request came from.</param>
     /// <param name="limit">How many requests a source is admitted with a minute.</param>
+    /// <param name="site">The /48 that encloses an IPv6 source, or nothing for any other.</param>
+    /// <param name="siteLimit">How many requests a /48 is admitted with a minute.</param>
     /// <returns>
-    /// Nothing where the request is admitted, or the instant the source is admitted
-    /// again where it is not.
+    /// Nothing where the request is admitted, or the instant the source or its /48 is
+    /// admitted again where it is not. A request refused at the /48 leaves no entry for
+    /// its source.
     /// </returns>
     /// <exception cref="ArgumentNullException">The source is absent.</exception>
-    public DateTimeOffset? Admit(string source, int limit)
+    public DateTimeOffset? Admit(string source, int limit, string? site, int siteLimit)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -68,29 +78,48 @@ internal sealed class SourceAdmissions(TimeProvider time)
 
         lock (_gate)
         {
-            Admitted admitted = Found(source, now) ?? Added(source);
-            List<DateTimeOffset> counted = admitted.Counted;
+            Admitted? enclosing = site is null ? null : Found(site, now) ?? Added(site);
 
-            int left = counted.FindIndex(at => at + Window > now);
-            counted.RemoveRange(0, left < 0 ? counted.Count : left);
-
-            if (counted.Count < limit)
+            if (enclosing is not null && Over(enclosing, siteLimit, now) is DateTimeOffset held)
             {
-                counted.Add(now);
-
-                return null;
+                return held;
             }
 
-            // The source is admitted again when enough of its requests have left the
-            // window to bring it under the limit. A limit below one admits nothing, and
-            // the source is asked about again once a whole window has passed.
-            admitted.Lifts = limit > 0 ? counted[counted.Count - limit] + Window : now + Window;
+            Admitted admitted = Found(source, now) ?? Added(source);
 
-            return admitted.Lifts;
+            if (Over(admitted, limit, now) is DateTimeOffset lifts)
+            {
+                return lifts;
+            }
+
+            admitted.Counted.Add(now);
+            enclosing?.Counted.Add(now);
+
+            return null;
         }
     }
 
-    // Finds a source in this window or the last one, bringing it into this one. A new
+    // Forgets what has left the window, and where what is left reaches the limit, holds
+    // the key until enough of it has left to bring it under. A limit below one admits
+    // nothing, and the key is asked about again once a whole window has passed.
+    private static DateTimeOffset? Over(Admitted admitted, int limit, DateTimeOffset now)
+    {
+        List<DateTimeOffset> counted = admitted.Counted;
+
+        int left = counted.FindIndex(at => at + Window > now);
+        counted.RemoveRange(0, left < 0 ? counted.Count : left);
+
+        if (counted.Count < limit)
+        {
+            return null;
+        }
+
+        admitted.Lifts = limit > 0 ? counted[counted.Count - limit] + Window : now + Window;
+
+        return admitted.Lifts;
+    }
+
+    // Finds a key in this window or the last one, bringing it into this one. A new
     // window forgets the one before the last, whose every request has left the window
     // and whose every hold has lifted.
     private Admitted? Found(string source, DateTimeOffset now)
@@ -124,7 +153,7 @@ internal sealed class SourceAdmissions(TimeProvider time)
         return admitted;
     }
 
-    // What one source was admitted with, oldest first, and when its hold lifts.
+    // What one key was admitted with, oldest first, and when its hold lifts.
     private sealed class Admitted
     {
         public List<DateTimeOffset> Counted { get; } = [];

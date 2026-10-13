@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -56,6 +57,13 @@ public sealed class DatabaseFixture : IAsyncLifetime
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
     /// <summary>
+    /// The key-encryption key the class's tests run under. The deployment's data key is
+    /// one row of the database, wrapped under it, so the tests that share the database
+    /// share the key (PRIV-RIGHT-005a, D-166).
+    /// </summary>
+    internal ReadOnlyMemory<byte> KeyEncryptionKey { get; } = RandomNumberGenerator.GetBytes(32);
+
+    /// <summary>
     /// How to reach the library's database.
     /// </summary>
     public string ConnectionString { get; private set; } = string.Empty;
@@ -64,12 +72,43 @@ public sealed class DatabaseFixture : IAsyncLifetime
     /// Opens a context over the library's database.
     /// </summary>
     /// <returns>The context.</returns>
-    internal StoreContext Context() =>
+    internal StoreContext Context() => Context(ConnectionString);
+
+    /// <summary>
+    /// Opens a context over a database of the instance.
+    /// </summary>
+    /// <param name="connectionString">How to reach the database.</param>
+    /// <returns>The context.</returns>
+    internal static StoreContext Context(string connectionString) =>
         new(new DbContextOptionsBuilder<StoreContext>()
-            .UseNpgsql(ConnectionString, npgsql => npgsql.MigrationsHistoryTable(
+            .UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(
                 StoreContext.MigrationsHistoryTable,
                 StoreContext.Schema))
             .Options);
+
+    /// <summary>
+    /// Creates another database on the instance, under the ICU locale as the library's is
+    /// created, with no migration applied, for a test of a migration itself.
+    /// </summary>
+    /// <param name="name">The database's name.</param>
+    /// <returns>How to reach it.</returns>
+    public async ValueTask<string> CreateDatabaseAsync(string name)
+    {
+        // OPS-DB-001 AC3: the locale belongs to the database, so it is set when the
+        // database is created and before the first migration runs.
+        await using (var maintenance = new NpgsqlConnection(_container.GetConnectionString()))
+        {
+            await maintenance.OpenAsync(CancellationToken.None);
+            await maintenance.ExecuteAsync(
+                "CREATE DATABASE " + name + " TEMPLATE template0 "
+                    + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'");
+        }
+
+        return new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
+        {
+            Database = name,
+        }.ConnectionString;
+    }
 
     /// <summary>
     /// Applies the migrations to the library's database.
@@ -118,20 +157,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
     {
         await _container.StartAsync(CancellationToken.None);
 
-        // OPS-DB-001 AC3: the locale belongs to the database, so it is set when the
-        // database is created and before the first migration runs.
-        await using (var maintenance = new NpgsqlConnection(_container.GetConnectionString()))
-        {
-            await maintenance.OpenAsync(CancellationToken.None);
-            await maintenance.ExecuteAsync(
-                "CREATE DATABASE " + Database + " TEMPLATE template0 "
-                    + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'");
-        }
-
-        ConnectionString = new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
-        {
-            Database = Database,
-        }.ConnectionString;
+        ConnectionString = await CreateDatabaseAsync(Database);
 
         await MigrateAsync();
 

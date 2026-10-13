@@ -69,7 +69,7 @@ internal sealed class Concealment(ConcealedRefusals refusals, ILogger<Concealmen
     {
         if (passed || context.Response.HasStarted)
         {
-            BrowserProfileLog.ConcealedTooLate(log, context.TraceIdentifier, correlation.Value);
+            BrowserProfileLog.ConcealedTooLate(log, context.TraceIdentifier, correlation);
             context.Abort();
 
             return;
@@ -78,7 +78,7 @@ internal sealed class Concealment(ConcealedRefusals refusals, ILogger<Concealmen
         context.Response.Clear();
         refusals.Restore(context.Response.Headers);
 
-        BrowserProfileLog.Concealed(log, context.TraceIdentifier, correlation.Value);
+        BrowserProfileLog.Concealed(log, context.TraceIdentifier, correlation);
         await Refusal
             .WriteAsync(
                 context,

@@ -35,7 +35,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ADefinitionRecordsWhatTheRoleWasAndBecameAsync()
+    public async Task AUTHZ_GRANT_004_AC4_ADefinitionRecordsWhatTheRoleWasAndBecameAsync()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         SubjectId actor = await _deployment.AccountAsync(now);
@@ -48,6 +48,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
                 [Permission.Parse("document:edit"), Permission.Parse("document:read")],
                 "Editors now edit.",
                 actor,
+                breakGlassReason: null,
                 now,
                 TestContext.Current.CancellationToken);
 
@@ -72,7 +73,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_GRANT_004_ARemovalRecordsWhatTheRolePermittedAsync()
+    public async Task AUTHZ_GRANT_004_AC4_ARemovalRecordsWhatTheRolePermittedAsync()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         SubjectId actor = await _deployment.AccountAsync(now);
@@ -84,6 +85,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
                 [Permission.Parse("document:read")],
                 "No longer used.",
                 actor,
+                breakGlassReason: null,
                 now,
                 TestContext.Current.CancellationToken);
 
@@ -98,13 +100,13 @@ public sealed class RoleAuditTests(DatabaseFixture database)
     }
 
     private RoleAudit Audit(StoreContext context) =>
-        new(new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);
+        new(new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness), TimeProvider.System);
 
     private async Task<IReadOnlyList<AuditRecord>> RecordsAsync(SubjectId actor)
     {
         await using StoreContext reading = database.Context();
 
-        return await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
+        return await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
             .FindBySubjectAsync(actor, TestContext.Current.CancellationToken);
     }
 }

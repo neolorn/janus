@@ -6,7 +6,11 @@ namespace Janus.Core;
 /// One consent as it stands: never a boolean, and never deleted.
 /// </summary>
 /// <param name="Purpose">Which purpose it was given for, and only one.</param>
-/// <param name="NoticeVersion">The version of the privacy notice displayed when it was given.</param>
+/// <param name="Document">
+/// The legal document it was given against: the one its purpose names, or the privacy
+/// notice where the purpose names none.
+/// </param>
+/// <param name="NoticeVersion">The version of that document displayed when it was given.</param>
 /// <param name="Mechanism">Where it was given.</param>
 /// <param name="Kind">Whether the ordinary or the written path captured it.</param>
 /// <param name="GrantedAt">When it was given.</param>
@@ -22,6 +26,7 @@ namespace Janus.Core;
 /// </remarks>
 public sealed record ConsentRecord(
     string Purpose,
+    string Document,
     string NoticeVersion,
     ConsentMechanism Mechanism,
     ConsentKind Kind,

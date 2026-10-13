@@ -49,6 +49,18 @@ internal sealed class GrantConfiguration : IEntityTypeConfiguration<GrantRecord>
                 OR (revoked_at IS NOT NULL AND revoked_by IS NOT NULL
                     AND length(btrim(revocation_reason)) BETWEEN 1 AND 1024)
                 """);
+
+            table.HasCheckConstraint(
+                "ck_grants_subject_id_not_max_uuid",
+                MaxUuid.Refused("subject_id"));
+
+            table.HasCheckConstraint(
+                "ck_grants_granted_by_not_max_uuid",
+                MaxUuid.Refused("granted_by"));
+
+            table.HasCheckConstraint(
+                "ck_grants_revoked_by_not_max_uuid",
+                MaxUuid.Refused("revoked_by"));
         });
 
         builder.HasKey(grant => grant.Id).HasName("pk_grants");

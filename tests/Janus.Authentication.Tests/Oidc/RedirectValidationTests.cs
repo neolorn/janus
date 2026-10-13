@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
@@ -52,6 +53,40 @@ public sealed class RedirectValidationTests
 
         Assert.Equal(ErrorCodes.StartupRedirectClient, refused.Code);
         Assert.Equal(Application, refused.Details["client"].GetString());
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006, API-REDIR-001 AC3 (D-166, 145): a return address a code would cross
+    /// a network to in plain text stops the deployment, naming the client; one on a
+    /// loopback IP literal crosses none, and starts.
+    /// </summary>
+    /// <param name="redirect">The return address registered.</param>
+    /// <param name="starts">Whether the deployment starts with it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("http://app.example.test/signin/callback", false)]
+    [InlineData("http://localhost:8080/signin/callback", false)]
+    [InlineData("http://127.0.0.2:8080/signin/callback", false)]
+    [InlineData("ftp://app.example.test/signin/callback", false)]
+    [InlineData("http://127.0.0.1:8080/signin/callback", true)]
+    [InlineData("http://[::1]:8080/signin/callback", true)]
+    public async Task AUTH_OIDC_006_APlaintextReturnAddressStopsStartupAsync(string redirect, bool starts)
+    {
+        await RegisterAsync(Application, redirect);
+
+        Error? refused = await RefusalAsync();
+
+        if (starts)
+        {
+            Assert.Null(refused);
+
+            return;
+        }
+
+        Assert.NotNull(refused);
+        Assert.Equal(
+            (ErrorCodes.StartupRedirectClient, Application),
+            (refused.Code, refused.Details["client"].GetString()));
     }
 
     /// <summary>
@@ -130,9 +165,9 @@ public sealed class RedirectValidationTests
         string redirect,
         OidcClientKind kind = OidcClientKind.BrowserApplication) =>
         _clients
-            .RecordAsync(
+            .AddAsync(
                 new OidcClient(clientId, clientId, kind, redirect, ["openid"]),
-                [1, 2, 3],
+                Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
                 DateTimeOffset.MinValue,
                 TestContext.Current.CancellationToken)
             .AsTask();

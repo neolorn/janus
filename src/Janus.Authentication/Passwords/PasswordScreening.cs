@@ -191,7 +191,7 @@ internal sealed class PasswordScreening(
 
             Result raised = await alerts
                 .RaiseAsync(
-                    Alerts.Of(AlertCondition.Degradation, Fallback, time.GetUtcNow(), FellBack(asked)),
+                    Alerts.Scoped(AlertCondition.Degradation, Fallback, time.GetUtcNow(), FellBack(asked)),
                     cancellationToken)
                 .ConfigureAwait(false);
 

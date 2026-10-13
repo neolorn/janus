@@ -30,5 +30,6 @@ internal sealed class CallbackEventConfiguration : IEntityTypeConfiguration<Call
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(claimed => claimed.ClaimedAt).HasColumnName("claimed_at");
+        builder.Property(claimed => claimed.SettledAt).HasColumnName("settled_at");
     }
 }

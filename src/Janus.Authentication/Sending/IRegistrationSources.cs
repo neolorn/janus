@@ -28,4 +28,13 @@ internal interface IRegistrationSources
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The count.</returns>
     ValueTask<int> SinceAsync(string source, DateTimeOffset from, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forgets, under every version of the fingerprint key, each start older than the
+    /// hour the signal counts over (D-166, 318).
+    /// </summary>
+    /// <param name="now">The clock.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of forgetting them.</returns>
+    ValueTask SweepAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }

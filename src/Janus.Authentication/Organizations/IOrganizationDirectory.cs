@@ -25,6 +25,16 @@ internal interface IOrganizationDirectory
     ValueTask<OrganizationStanding?> FindAsync(OrganizationId organization, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Where one organization stands, read under a lock on its row held until the
+    /// operation's transaction ends (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Its standing as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<OrganizationStanding?> HoldAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new organization.
     /// </summary>
     /// <param name="organization">The identifier issued for it.</param>

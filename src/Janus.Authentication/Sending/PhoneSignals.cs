@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Core;
 
 namespace Janus.Authentication.Sending;
@@ -18,7 +21,10 @@ namespace Janus.Authentication.Sending;
 /// carrier reports about the number is considered before the entry that rides it is
 /// used; where nothing can be asked, the absence is the record. A reported change of
 /// SIM or of network withholds the entry from that sign-in, because the message would
-/// reach whoever holds the number now.
+/// reach whoever holds the number now. The provider is the host's callback and may call
+/// across the network, so it is asked before an operation's unit of work begins and
+/// never inside one (CONV-DESIGN-002, D-186): what it answered is kept here, for the
+/// scope of the request, until the send that follows records it in its unit of work.
 /// </remarks>
 internal sealed class PhoneSignals(
     PhoneSignalProvider? provider,
@@ -26,6 +32,10 @@ internal sealed class PhoneSignals(
     IUnitOfWork work,
     TimeProvider time)
 {
+    // What the provider answered for a number, asked before the unit of work began and
+    // not yet recorded by the send it was asked for.
+    private readonly Dictionary<string, PhoneSignal> _answered = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Considers the number a sign-in is about to lean on, and answers whether the
     /// factor may still be used with it.
@@ -36,10 +46,11 @@ internal sealed class PhoneSignals(
     /// <param name="cancellationToken">Abandons the consideration.</param>
     /// <returns>Whether the factor may be used.</returns>
     /// <remarks>
-    /// A refusal is recorded here, because nothing is sent after it and the send is
-    /// where a consideration is otherwise written down (AUTH-FACT-002b AC6). Any
-    /// other answer leaves the record to the send that follows, so one use of a
-    /// restricted entry writes one row.
+    /// Called before the operation's unit of work begins, since it asks the host. A
+    /// refusal is recorded here, in a unit of work of its own, because nothing is sent
+    /// after it and the send is where a consideration is otherwise written down
+    /// (AUTH-FACT-002b AC6). Any other answer is kept for the send that follows, which
+    /// records it, so one use of a restricted entry writes one row.
     /// </remarks>
     public async ValueTask<bool> AllowsAsync(
         Factor factor,
@@ -57,27 +68,69 @@ internal sealed class PhoneSignals(
 
         if (answered is not PhoneSignal.Risk)
         {
+            _answered[number] = answered;
+
             return true;
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        _ = _answered.Remove(number);
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return false;
     }
 
     /// <summary>
-    /// Considers the number one message is about to go to, where the message is a
-    /// restricted factor, and records what was known.
+    /// Considers the number an entry would be texted at, and answers whether the factor
+    /// may still be used with it: the number its credential is bound to where the entry
+    /// is bound to one (AUTH-FACT-002), and otherwise the number the account is texted
+    /// at. An account with no such number is refused nothing here, since nothing can be
+    /// texted to it.
+    /// </summary>
+    /// <param name="factor">The entry the number would carry.</param>
+    /// <param name="held">The account's identifiers.</param>
+    /// <param name="enrolled">The account's credentials.</param>
+    /// <param name="subject">Whose account it is.</param>
+    /// <param name="cancellationToken">Abandons the consideration.</param>
+    /// <returns>Whether the factor may be used.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public async ValueTask<bool> AllowsAsync(
+        Factor factor,
+        HeldIdentifiers held,
+        IReadOnlyList<Authenticator> enrolled,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(enrolled);
+
+        string? number = Authenticator.IsBoundToNumber(factor)
+            ? SecondStep.Preferred(enrolled.Where(credential => credential.IsUsable && credential.Factor == factor))?.Number
+            : held.Texted()?.Canonical;
+
+        return number is null
+            || await AllowsAsync(factor, number, subject, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Records what was known about the number one message is about to go to, where the
+    /// message is a restricted factor, in the unit of work that undertakes it.
     /// </summary>
     /// <param name="request">What is about to be sent.</param>
     /// <param name="cancellationToken">Abandons the consideration.</param>
     /// <returns>The work of considering it.</returns>
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
-    public async ValueTask ConsiderAsync(SendRequest request, CancellationToken cancellationToken)
+    /// <exception cref="InvalidOperationException">
+    /// A provider is declared and nothing was asked about the number before the unit of
+    /// work began: the provider is never asked inside one.
+    /// </exception>
+    public async ValueTask ConsiderAsync(OutboundMessage request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -86,21 +139,67 @@ internal sealed class PhoneSignals(
             return;
         }
 
-        PhoneSignal? answered = provider is null
-            ? null
-            : await provider.Signal(request.Destination.Canonical, cancellationToken)
-                .ConfigureAwait(false);
+        PhoneSignal? answered = null;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if (provider is not null)
+        {
+            answered = _answered.Remove(request.Destination.Canonical, out PhoneSignal asked)
+                ? asked
+                : throw new InvalidOperationException(
+                    "The signal for a number is asked before the unit of work that sends to it begins.");
+        }
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, request.Subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// Records what was known about a number an entry was about to be texted at, where
+    /// nothing is then sent to it: what the signal answered before the unit of work
+    /// began, or nothing where no provider is declared. A kept write of the unit of work
+    /// the caller has open (AUTH-FACT-002 AC11, CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="factor">The entry the number would have carried.</param>
+    /// <param name="number">The number, canonically.</param>
+    /// <param name="subject">Whose account it is.</param>
+    /// <param name="cancellationToken">Abandons the consideration.</param>
+    /// <returns>The work of recording it.</returns>
+    /// <exception cref="ArgumentNullException">The number is absent.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A provider is declared and nothing was asked about the number before the unit of
+    /// work began: the provider is never asked inside one.
+    /// </exception>
+    public async ValueTask UnsentAsync(
+        Factor factor,
+        string number,
+        SubjectId? subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(number);
+
+        PhoneSignal? answered = null;
+
+        if (provider is not null)
+        {
+            answered = _answered.Remove(number, out PhoneSignal asked)
+                ? asked
+                : throw new InvalidOperationException(
+                    "The signal for a number is asked before the unit of work that would send to it begins.");
+        }
+
+        await audit
+            .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // Which entry a message amounts to follows from the channel it goes out on and
     // whether it carries a link; whether that entry is restricted is the catalogue's.
-    private static Factor? Restricted(SendRequest request) =>
+    private static Factor? Restricted(OutboundMessage request) =>
         request.Kind is SendKind.Sms
         && MessageChannels.Factors.TryGetValue(request.Message, out bool link)
         && FactorCatalogue.Sent.TryGetValue((IdentifierKind.Phone, link), out Factor factor)

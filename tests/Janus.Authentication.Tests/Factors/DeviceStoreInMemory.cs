@@ -27,12 +27,40 @@ internal sealed class DeviceStoreInMemory : IDeviceStore
     /// </summary>
     public int Found { get; private set; }
 
+    /// <summary>
+    /// How many times a browser has been looked up by the fingerprint of a token.
+    /// </summary>
+    public int LookedUp { get; private set; }
+
     /// <inheritdoc/>
     public ValueTask<Device?> FindByFingerprintAsync(
         byte[] fingerprint,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(
+        CancellationToken cancellationToken)
+    {
+        LookedUp++;
+
+        return ValueTask.FromResult(
             _tokens.TryGetValue(Key(fingerprint), out DeviceId id) ? _devices[id] : null);
+    }
+
+    /// <summary>
+    /// What another transaction committed on a browser's row while this one waited for
+    /// its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<Device>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<Device?> FindForUpdateAsync(DeviceId id, CancellationToken cancellationToken)
+    {
+        Device? held = _devices.GetValueOrDefault(id);
+
+        if (held is not null)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return ValueTask.FromResult(held);
+    }
 
     /// <inheritdoc/>
     public ValueTask<Device?> FindAsync(DeviceId id, CancellationToken cancellationToken)

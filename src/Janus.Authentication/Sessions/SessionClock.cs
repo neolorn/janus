@@ -43,7 +43,10 @@ internal static class SessionClock
         // Inside the absolute window, a policy that requires AAL2 takes one factor
         // bound to the session secret the browser still holds. The allowance is
         // written for a short gap, which is why it does not reach a ninety-day one.
-        return required >= AssuranceLevel.Aal2
+        // A session that satisfies every gate, the break-glass session, was opened by
+        // the sealed credential alone, which no factor stands in for (OPS-BOOT-002,
+        // D-166).
+        return required >= AssuranceLevel.Aal2 && !session.SatisfiesEveryGate
             ? ReauthenticationKind.SingleFactor
             : ReauthenticationKind.Full;
     }

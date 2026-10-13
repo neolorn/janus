@@ -16,13 +16,12 @@ namespace Janus.Cli.Clients;
 /// or carries a change to one, from the server.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-OIDC-001, OPS-SEC-001 and OPS-SEC-002, as entry 340 of the decisions
-/// pending review settles them. The registry has no endpoint, so the access a
-/// registration needs is the server's: the document piped to the command, which
-/// carries the client's secret beside the keys, so the secret is never an argument.
-/// Registering a client again with a new secret leaves the one it replaced accepted
-/// for the overlap, which is how a secret is rotated. Everything a refusal can be told
-/// from is checked before the database is reached.
+/// Implements AUTH-OIDC-001, OPS-SEC-001 and OPS-SEC-002, as D-166 (340) settles them.
+/// The registry has no endpoint, so the access a registration needs is the server's:
+/// the document piped to the command carries the keys, and no person supplies a secret.
+/// A first registration draws the client's secret and registering it again changes what
+/// it is and leaves its secret, which rotates without a person. Everything a refusal
+/// can be told from is checked before the database is reached.
 /// </remarks>
 internal static class RegisterClientCommand
 {
@@ -35,7 +34,7 @@ internal static class RegisterClientCommand
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name.</param>
-    /// <param name="terminal">Where the keys and the secret are read from.</param>
+    /// <param name="terminal">Where the keys are read from.</param>
     /// <param name="cancellationToken">Abandons the command, which then leaves nothing behind.</param>
     /// <returns>The client registered, or the failure naming what was refused.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
@@ -67,14 +66,6 @@ internal static class RegisterClientCommand
             return Result.Failure<string>(failure);
         }
 
-        if (keys.ClientSecret is not ReadOnlyMemory<byte> secret)
-        {
-            return Result.Failure<string>(Error.From(
-                ErrorCodes.RequestMalformed,
-                "member",
-                JsonSerializer.SerializeToElement(KeyDocument.ClientSecretMember)));
-        }
-
         await using ServiceProvider services = Composed(keys);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
@@ -89,7 +80,7 @@ internal static class RegisterClientCommand
         }
 
         return (await scope.ServiceProvider.GetRequiredService<ClientRegistry>()
-                .RegisterAsync(client, secret, cancellationToken)
+                .RegisterAsync(client, cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => Result.Success(Report(client)), Result.Failure<string>);
     }
@@ -116,8 +107,13 @@ internal static class RegisterClientCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
-        services.AddScoped<SchemaValidation>();
+
+        // CONV-DESIGN-007, CONV-CODE-007: the ring the document was read into stands in
+        // the place of the one the core registers, so every service of the command
+        // borrows from the ring the command filled.
+        services.AddCoreArea();
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<ClientRegistry>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

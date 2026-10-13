@@ -19,15 +19,26 @@ namespace Janus.Conformance;
 /// </summary>
 /// <typeparam name="TResource">The host's type of the records asked about.</typeparam>
 /// <param name="services">The host's deployment, as it registered the library.</param>
+/// <param name="deployment">
+/// Builds the host's composition with the suite's assurance provider, or with none; or
+/// nothing, for a table with no step-up case.
+/// </param>
 /// <param name="library">Where the library's own rows of a case are written.</param>
 /// <param name="rows">The host's own rows of the type.</param>
 /// <remarks>
 /// Implements LIB-TEST-001 AC2, AUTHZ-TEST-001 and AUTHZ-PRIN-001. A case that decides
 /// otherwise than the table says, through either path, is a finding: a list screen
-/// showing what a check would refuse is a silent leak rather than a crash.
+/// showing what a check would refuse is a silent leak rather than a crash. A derived
+/// case runs once for each derivation declared at the level it uses, each in an
+/// organization of its own, so a derivation the first one hides is still asked about;
+/// its finding names the derivation's relationship. A step-up case is asked of a
+/// composition the host's factory builds for it alone, with the suite's own assurance
+/// provider or with none, and its finding names the action's gate; every other case is
+/// asked of the deployment the host passed.
 /// </remarks>
 internal sealed class TruthTable<TResource>(
     IServiceProvider services,
+    DeploymentFactory? deployment,
     CaseRows library,
     IConformanceRows<TResource> rows)
     where TResource : class
@@ -41,8 +52,9 @@ internal sealed class TruthTable<TResource>(
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>A finding for each case that decided otherwise than it states.</returns>
     /// <exception cref="ArgumentException">
-    /// The deployment declares no such type, or a case names a scenario the type's
-    /// declaration does not place it in.
+    /// The deployment declares no such type, a case names a scenario the type's
+    /// declaration does not place it in, the table holds a step-up case and no factory
+    /// was given, or a step-up case names a permission the declaration binds to no gate.
     /// </exception>
     public async ValueTask<ConformanceReport> RunAsync(
         IReadOnlyList<TruthTableCase> cases,
@@ -50,8 +62,8 @@ internal sealed class TruthTable<TResource>(
     {
         ArgumentNullException.ThrowIfNull(cases);
 
-        IReadOnlyList<ResourceTypeDeclaration> chain =
-            Chain(services.GetRequiredService<AuthorizationDeclaration>(), rows.Type);
+        AuthorizationDeclaration declaration = services.GetRequiredService<AuthorizationDeclaration>();
+        IReadOnlyList<ResourceTypeDeclaration> chain = Chain(declaration, rows.Type);
 
         foreach (TruthTableCase row in cases)
         {
@@ -65,19 +77,60 @@ internal sealed class TruthTable<TResource>(
                         $"The scenario {row.Scenario} cannot be written for the type {rows.Type}, whose declaration does not place it so."),
                     nameof(cases));
             }
+
+            if (row.StepUp && deployment is null)
+            {
+                throw new ArgumentException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The scenario {row.Scenario} cannot be judged without a deployment factory, which builds the composition a step-up case is asked of."),
+                    nameof(cases));
+            }
+
+            if (row.StepUp && !declaration.StepUpGates.ContainsKey(row.Permission))
+            {
+                throw new ArgumentException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The scenario {row.Scenario} cannot be judged for the permission {row.Permission}, which the declaration binds to no step-up gate."),
+                    nameof(cases));
+            }
         }
 
         var findings = new List<ConformanceFinding>();
 
         foreach (TruthTableCase row in cases)
         {
-            Written written = await WriteAsync(row, chain, cancellationToken).ConfigureAwait(false);
-            bool checks = await ChecksAsync(written, row.Permission, cancellationToken).ConfigureAwait(false);
-            bool admits = await AdmitsAsync(written, row.Permission, cancellationToken).ConfigureAwait(false);
-
-            if (checks != row.Allowed || admits != row.Allowed)
+            if (row.StepUp)
             {
-                findings.Add(new ConformanceFinding(ConformanceCheck.TruthTable, Disagreement(row, checks, admits)));
+                ConformanceFinding? found = await SteppedAsync(
+                    row,
+                    chain,
+                    declaration.StepUpGates[row.Permission],
+                    cancellationToken).ConfigureAwait(false);
+
+                if (found is not null)
+                {
+                    findings.Add(found);
+                }
+
+                continue;
+            }
+
+            foreach (Derived? derived in Derivations(row.Scenario, chain))
+            {
+                Written written = await WriteAsync(row, chain, derived, cancellationToken).ConfigureAwait(false);
+                bool checks = await ChecksAsync(services, written, row.Permission, cancellationToken)
+                    .ConfigureAwait(false) is null;
+                bool admits = (await AdmitsAsync(services, written, row.Permission, cancellationToken)
+                    .ConfigureAwait(false)).Listed;
+
+                if (checks != row.Allowed || admits != row.Allowed)
+                {
+                    findings.Add(new ConformanceFinding(
+                        ConformanceCheck.TruthTable,
+                        Disagreement(row, derived, gate: null, checks, admits)));
+                }
             }
         }
 
@@ -116,6 +169,26 @@ internal sealed class TruthTable<TResource>(
             _ => true,
         };
 
+    // LIB-TEST-001 AC2, entry 355: a derived scenario is written once for each
+    // derivation declared at the level it uses; any other scenario once, deriving
+    // nothing.
+    private static IReadOnlyList<Derived?> Derivations(
+        TruthTableScenario scenario,
+        IReadOnlyList<ResourceTypeDeclaration> chain)
+    {
+        int? level = scenario switch
+        {
+            TruthTableScenario.DerivedGrant => 0,
+            TruthTableScenario.DerivedGrantOnContainer => Deriving(chain, 1),
+            TruthTableScenario.DenyOverDerivedGrant => Deriving(chain, 0),
+            _ => null,
+        };
+
+        return level is int at
+            ? [.. chain[at].Derivations.Select(declared => (Derived?)new Derived(at, declared))]
+            : [null];
+    }
+
     // The nearest level of the chain, from the one given outward, whose type declares
     // a derivation; the scenario was checked writable before anything was written.
     private static int Deriving(IReadOnlyList<ResourceTypeDeclaration> chain, int from)
@@ -131,12 +204,86 @@ internal sealed class TruthTable<TResource>(
         throw new InvalidOperationException("No type of the chain declares a derivation.");
     }
 
-    private static ResourceReference Reference(ResourceType type) =>
-        new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
+    // LIB-HOST-004, chapter 10 section 5.30: what the gate answers in each step-up
+    // scenario, or nothing where it is met.
+    private static ErrorCode? Unmet(TruthTableScenario scenario) =>
+        scenario switch
+        {
+            TruthTableScenario.StepUpMet => null,
+            TruthTableScenario.StepUpProviderAbsent => ErrorCodes.StepUpUnavailable,
+            _ => ErrorCodes.StepUpRequired,
+        };
+
+    // LIB-TEST-001 AC2, AUTHZ-TEST-001 AC2: the case's grant admits the record, so what
+    // decides it is the gate alone, judged from the suite's own provider in a
+    // composition built for the case. It agrees where the check answers the gate's
+    // outcome and the filter answers the same: the record listed where the gate is
+    // met, the filter refused with the check's code where it is not.
+    private async ValueTask<ConformanceFinding?> SteppedAsync(
+        TruthTableCase row,
+        IReadOnlyList<ResourceTypeDeclaration> chain,
+        string gate,
+        CancellationToken cancellationToken)
+    {
+        // The table was refused before anything was written where it holds a step-up
+        // case and no factory, so one reaching here without it is a fault.
+        DeploymentFactory factory = deployment
+            ?? throw new InvalidOperationException("A step-up case is run with no deployment factory.");
+
+        Written written = await WriteAsync(row, chain, derived: null, cancellationToken).ConfigureAwait(false);
+
+        ScenarioAssurance? assurance = row.Scenario == TruthTableScenario.StepUpProviderAbsent
+            ? null
+            : new ScenarioAssurance(row.Scenario, services.GetRequiredService<TimeProvider>().GetUtcNow());
+
+        IServiceProvider built = await factory(assurance, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The deployment factory built no composition.");
+
+        ErrorCode? checks;
+        (bool Listed, ErrorCode? Refused) admits;
+
+        try
+        {
+            checks = await ChecksAsync(built, written, row.Permission, cancellationToken).ConfigureAwait(false);
+            admits = await AdmitsAsync(built, written, row.Permission, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The composition was built for this case alone, so it ends with it.
+            if (built is IAsyncDisposable released)
+            {
+                await released.DisposeAsync().ConfigureAwait(false);
+            }
+            else if (built is IDisposable disposed)
+            {
+                disposed.Dispose();
+            }
+        }
+
+        ErrorCode? unmet = Unmet(row.Scenario);
+
+        bool agrees = unmet is null
+            ? checks is null && admits.Listed
+            : checks == unmet && admits.Refused == unmet;
+
+        return agrees
+            ? null
+            : new ConformanceFinding(
+                ConformanceCheck.TruthTable,
+                Disagreement(row, derived: null, gate, checks is null, admits.Listed));
+    }
+
+    private ResourceReference Reference(ResourceType type) =>
+        new(
+            type,
+            ResourceId.Parse(Guid
+                .CreateVersion7(services.GetRequiredService<TimeProvider>().GetUtcNow())
+                .ToString("D", CultureInfo.InvariantCulture)));
 
     private async ValueTask<Written> WriteAsync(
         TruthTableCase row,
         IReadOnlyList<ResourceTypeDeclaration> chain,
+        Derived? derived,
         CancellationToken cancellationToken)
     {
         OrganizationId organization = await library.OrganizationAsync(cancellationToken).ConfigureAwait(false);
@@ -191,7 +338,7 @@ internal sealed class TruthTable<TResource>(
 
         var standing = new Standing(organization, granter, account, role, placed, sibling);
 
-        await StandAsync(row, chain, standing, cancellationToken).ConfigureAwait(false);
+        await StandAsync(row, derived, standing, cancellationToken).ConfigureAwait(false);
 
         return new Written(organization, account, placed[0]);
     }
@@ -200,7 +347,7 @@ internal sealed class TruthTable<TResource>(
     // after every record it names is registered.
     private async ValueTask StandAsync(
         TruthTableCase row,
-        IReadOnlyList<ResourceTypeDeclaration> chain,
+        Derived? derived,
         Standing standing,
         CancellationToken cancellationToken)
     {
@@ -211,6 +358,13 @@ internal sealed class TruthTable<TResource>(
         {
             case TruthTableScenario.GrantOnRecord:
             case TruthTableScenario.RoleWithoutPermission:
+            case TruthTableScenario.StepUpMet:
+            case TruthTableScenario.StepUpLevelUnmet:
+            case TruthTableScenario.StepUpPhishingResistanceUnmet:
+            case TruthTableScenario.StepUpAgeUnmet:
+            case TruthTableScenario.StepUpInstantFuture:
+            case TruthTableScenario.StepUpProviderFailed:
+            case TruthTableScenario.StepUpProviderAbsent:
                 await GrantAsync(standing.Grant(holder, record), cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -282,17 +436,12 @@ internal sealed class TruthTable<TResource>(
                 break;
 
             case TruthTableScenario.DerivedGrant:
-                await RelateAsync(chain, 0, standing, row.Permission, cancellationToken).ConfigureAwait(false);
-                break;
-
             case TruthTableScenario.DerivedGrantOnContainer:
-                await RelateAsync(chain, Deriving(chain, 1), standing, row.Permission, cancellationToken)
-                    .ConfigureAwait(false);
+                await RelateAsync(Of(derived), standing, row.Permission, cancellationToken).ConfigureAwait(false);
                 break;
 
             case TruthTableScenario.DenyOverDerivedGrant:
-                await RelateAsync(chain, Deriving(chain, 0), standing, row.Permission, cancellationToken)
-                    .ConfigureAwait(false);
+                await RelateAsync(Of(derived), standing, row.Permission, cancellationToken).ConfigureAwait(false);
                 await GrantAsync(standing.Grant(holder, record) with { Deny = true }, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -301,6 +450,10 @@ internal sealed class TruthTable<TResource>(
         }
     }
 
+    // A derived scenario is always written with the derivation it runs for.
+    private static Derived Of(Derived? derived) =>
+        derived ?? throw new InvalidOperationException("A derived scenario was written without its derivation.");
+
     private async ValueTask GrantAsync(CaseGrant grant, CancellationToken cancellationToken) =>
         await library.GrantAsync(grant, cancellationToken).ConfigureAwait(false);
 
@@ -308,14 +461,13 @@ internal sealed class TruthTable<TResource>(
     // derivation is materialised, the host's write refreshes it in the same unit of
     // work, which is what the suite does in its place.
     private async ValueTask RelateAsync(
-        IReadOnlyList<ResourceTypeDeclaration> chain,
-        int level,
+        Derived derived,
         Standing standing,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        DerivationDeclaration derivation = chain[level].Derivations[0];
-        ResourceReference on = standing.Placed[level];
+        DerivationDeclaration derivation = derived.Declaration;
+        ResourceReference on = standing.Placed[derived.Level];
 
         await library.AllowAsync(derivation.Role, permission, cancellationToken).ConfigureAwait(false);
         await rows.RelateAsync(derivation.Relationship, on, standing.Account, cancellationToken).ConfigureAwait(false);
@@ -331,7 +483,8 @@ internal sealed class TruthTable<TResource>(
         {
             IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             (await scope.ServiceProvider.GetRequiredService<IDerivationMaterialiser>()
                     .RefreshAsync(
@@ -345,16 +498,20 @@ internal sealed class TruthTable<TResource>(
                     _ => { },
                     error => throw new InvalidOperationException(error.Code.ToString()));
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
 
-    private async ValueTask<bool> ChecksAsync(
+    // The single check asked of a composition: the code it refuses with, or nothing
+    // where it allows.
+    private async ValueTask<ErrorCode?> ChecksAsync(
+        IServiceProvider asked,
         Written written,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        AsyncServiceScope scope = services.CreateAsyncScope();
+        AsyncServiceScope scope = asked.CreateAsyncScope();
 
         await using (scope.ConfigureAwait(false))
         {
@@ -367,19 +524,22 @@ internal sealed class TruthTable<TResource>(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            return outcome.Match(() => true, _ => false);
+            return outcome.Match<ErrorCode?>(() => null, error => error.Code);
         }
     }
 
-    // The filter applied to the host's own rows in the host's own query, and asked
-    // whether the record is among what it admits. A filter refused admits nothing.
-    private async ValueTask<bool> AdmitsAsync(
+    // The filter of a composition applied to the host's own rows in the host's own
+    // query, and asked whether the record is among what it admits. A filter refused
+    // admits nothing, and answers the code it was refused with.
+    private async ValueTask<(bool Listed, ErrorCode? Refused)> AdmitsAsync(
+        IServiceProvider asked,
         Written written,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        Expression<Func<TResource, bool>>? admitting;
-        AsyncServiceScope scope = services.CreateAsyncScope();
+        Expression<Func<TResource, bool>>? admitting = null;
+        ErrorCode? refused = null;
+        AsyncServiceScope scope = asked.CreateAsyncScope();
 
         await using (scope.ConfigureAwait(false))
         {
@@ -394,19 +554,21 @@ internal sealed class TruthTable<TResource>(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            admitting = filter.Match<Expression<Func<TResource, bool>>?>(admitted => admitted, _ => null);
+            filter.Switch(admitted => admitting = admitted, error => refused = error.Code);
         }
 
         if (admitting is null)
         {
-            return false;
+            return (false, refused);
         }
 
-        return await rows.Rows
+        bool listed = await rows.Rows
             .Where(admitting)
             .Where(Identified(written.Record))
             .AnyAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        return (listed, null);
     }
 
     private Expression<Func<TResource, bool>> Identified(ResourceReference record)
@@ -418,18 +580,34 @@ internal sealed class TruthTable<TResource>(
             identifier.Parameters);
     }
 
-    private Error Disagreement(TruthTableCase row, bool checks, bool admits) =>
-        new(
-            ErrorCodes.TruthTableDisagreement,
-            new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-            {
-                ["type"] = JsonSerializer.SerializeToElement(rows.Type.ToString()),
-                ["scenario"] = JsonSerializer.SerializeToElement(row.Scenario, Named),
-                ["permission"] = JsonSerializer.SerializeToElement(row.Permission.ToString()),
-                ["expected"] = JsonSerializer.SerializeToElement(row.Allowed),
-                ["check"] = JsonSerializer.SerializeToElement(checks),
-                ["filter"] = JsonSerializer.SerializeToElement(admits),
-            });
+    private Error Disagreement(TruthTableCase row, Derived? derived, string? gate, bool checks, bool admits)
+    {
+        var details = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            ["type"] = JsonSerializer.SerializeToElement(rows.Type.ToString()),
+            ["scenario"] = JsonSerializer.SerializeToElement(row.Scenario, Named),
+            ["permission"] = JsonSerializer.SerializeToElement(row.Permission.ToString()),
+            ["expected"] = JsonSerializer.SerializeToElement(row.Allowed),
+            ["check"] = JsonSerializer.SerializeToElement(checks),
+            ["filter"] = JsonSerializer.SerializeToElement(admits),
+        };
+
+        if (derived is not null)
+        {
+            details["derivation"] = JsonSerializer.SerializeToElement(derived.Declaration.Relationship);
+        }
+
+        if (gate is not null)
+        {
+            details["gate"] = JsonSerializer.SerializeToElement(gate);
+        }
+
+        return new Error(ErrorCodes.TruthTableDisagreement, details);
+    }
+
+    // The derivation a derived case is written for, and the level of the chain it is
+    // declared at.
+    private sealed record Derived(int Level, DerivationDeclaration Declaration);
 
     // What a case wrote that its question is asked of.
     private sealed record Written(OrganizationId Organization, SubjectId Account, ResourceReference Record);

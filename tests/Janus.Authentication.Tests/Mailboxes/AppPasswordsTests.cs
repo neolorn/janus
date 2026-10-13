@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
@@ -47,9 +48,11 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly CredentialAuditInMemory _audit = new();
+    private readonly SettingsRestrictionInMemory _restriction = new();
+    private readonly AppPasswordLogInMemory _log = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -63,7 +66,9 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     /// </summary>
     public AppPasswordsTests()
     {
+        _notifications.Work = _work;
         _tokens = new MailServerTokensInMemory(_sessions, _clock);
+        _configuration.Set(Settings.NotificationLanguages, ["en"]);
         _person = SubjectId.New(_randomness);
         _accounts.Stands(_person, AccountState.Active);
         _passwords.Hold(_person, Noon);
@@ -108,7 +113,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             (AuditActions.MailCredentialCreated, _person, issued.Id),
             Assert.Single(_audit.MailCredentials));
 
-        SendRequest notice = Assert.Single(_notifications.Sent);
+        OutboundMessage notice = Assert.Single(_notifications.Sent);
 
         Assert.Equal(MessageKind.SecurityNotice, notice.Message);
         Assert.Empty(notice.Values);
@@ -126,7 +131,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         SessionId stale = Opened(_person, Stale);
 
         Assert.Equal(ErrorCodes.StepUpRequired, Refused(await CreateAsync("Phone", stale)));
-        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await RevokeAsync("app-password-1", stale)));
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), stale)));
         Assert.Empty(_server.Tokens);
         Assert.Empty(_notifications.Sent);
         Assert.Empty(_audit.MailCredentials);
@@ -150,8 +155,88 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             _audit.MailCredentials[^1]);
         Assert.Equal(2, _notifications.Sent.Count);
         Assert.Equal(ErrorCodes.CredentialNotFound, Refused(await RevokeAsync(issued.Id, _session)));
-        Assert.Equal(ErrorCodes.CredentialNotFound, Refused(await RevokeAsync(" ", _session)));
         Assert.Equal(2, _audit.MailCredentials.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18, REG-MAIL-002: the notice of a creation or a revocation that a
+    /// restriction refuses fails nothing. Each is answered as it would have been and its
+    /// audit record is committed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnAppPasswordWhoseNoticeIsRefusedIsAuditedAndCommittedAsync()
+    {
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        IssuedAppPassword issued = Issued(await CreateAsync("Phone", _session));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(
+            (AuditActions.MailCredentialCreated, _person, issued.Id),
+            Assert.Single(_audit.MailCredentials));
+
+        Accepted(await RevokeAsync(issued.Id, _session));
+
+        Assert.False(_work.Open);
+        Assert.Equal(2, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(
+            (AuditActions.MailCredentialRevoked, _person, issued.Id),
+            _audit.MailCredentials[^1]);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4, INT-MAIL-010 and REG-MAIL-002: a restriction of the account
+    /// committed after the gate step and after the server created the password refuses
+    /// the creation at the second ask, inside the unit of work that would have recorded
+    /// it. The unit of work rolls back, the password is revoked at the server, its
+    /// secret is not answered, and nothing notifies or audits it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_ACreationRefusedAtTheSecondAskIsRevokedAtTheServerAsync()
+    {
+        _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+
+        Result<IssuedAppPassword> refused = await CreateAsync("Phone", _session);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(refused));
+        Assert.Single(_server.Secrets);
+        Assert.Empty(_server.AppPasswordsOf(_person));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_audit.MailCredentials);
+        Assert.Empty(_log.Unrevoked);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4 and INT-MAIL-010: where the server does not take the
+    /// revocation, the refusal is answered all the same and returns no secret, the
+    /// failure is logged, and the password stays listed for its holder to revoke,
+    /// neither notified nor audited.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_ARevocationTheServerDoesNotTakeLeavesThePasswordListedAsync()
+    {
+        _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+        _server.Created = () => _server.Unreachable = true;
+
+        Result<IssuedAppPassword> refused = await CreateAsync("Phone", _session);
+
+        _server.Unreachable = false;
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(refused));
+        Assert.Equal("Phone", Assert.Single(Listed(await ListAsync(_session))).Label);
+        Assert.Equal((_person, ErrorCodes.SystemFault), Assert.Single(_log.Unrevoked));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_audit.MailCredentials);
     }
 
     /// <summary>
@@ -181,9 +266,11 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-006: the operations are present only where the account holds a mailbox
-    /// the server enables, so an account without one, one whose mailbox was retired, an
-    /// account that is not active and a deployment with no mail server are all refused.
+    /// INT-MAIL-006 and REG-MAIL-002 AC3 and AC4: the operations are present only where
+    /// the account holds a mailbox the server enables, so an account without one, one
+    /// whose mailbox was retired, an account neither active nor restricted and a
+    /// deployment with no mail server are each answered that there is no mailbox; a
+    /// restricted account keeps its mailbox and is refused creation.
     /// </summary>
     [Fact]
     public async Task INT_MAIL_006_WithoutAnEnabledMailboxThereAreNoAppPasswordsAsync()
@@ -192,24 +279,58 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         _accounts.Stands(bare, AccountState.Active);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await Built(_server).ListAsync(
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await Built(_server).ListAsync(
             AccessContext.Of(bare),
             Opened(bare, Noon),
             TestContext.Current.CancellationToken)));
-        Assert.Equal(ErrorCodes.Denied, Refused(await Built(server: null).ListAsync(
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await Built(server: null).ListAsync(
             Asking,
             _session,
             TestContext.Current.CancellationToken)));
 
         _accounts.Stands(_person, AccountState.Restricted);
+        _restriction.Restrict(_person);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await CreateAsync("Phone", _session)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await CreateAsync("Phone", _session)));
+
+        _accounts.Stands(_person, AccountState.Suspended);
+
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await ListAsync(_session)));
 
         _accounts.Stands(_person, AccountState.Active);
         Assert.Single(_mailboxes.Held).Retire(Noon);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await RevokeAsync("app-password-1", _session)));
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), _session)));
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await CreateAsync("Phone", _session)));
         Assert.Empty(_server.Tokens);
+    }
+
+    /// <summary>
+    /// REG-MAIL-002 AC4 and IDN-ACCT-007: a restricted account's mailbox stays owed
+    /// enabled and its app passwords keep working; it lists and revokes them, and its
+    /// creation is refused before anything reaches the server.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_002_AC4_ARestrictedAccountListsAndRevokesAndCreatesNoneAsync()
+    {
+        IssuedAppPassword kept = Issued(await CreateAsync("Phone", _session));
+        IssuedAppPassword revoked = Issued(await CreateAsync("Laptop", _session));
+        int tokens = _server.Tokens.Count;
+
+        _accounts.Stands(_person, AccountState.Restricted);
+        _restriction.Restrict(_person);
+
+        Assert.Equal(MailboxState.Enabled, Assert.Single(_mailboxes.Held).Owed(stands: true));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await CreateAsync("Tablet", _session)));
+        Assert.Equal(tokens, _server.Tokens.Count);
+        Assert.Equal(["Phone", "Laptop"], Listed(await ListAsync(_session)).Select(password => password.Label));
+
+        Accepted(await RevokeAsync(revoked.Id, _session));
+
+        Assert.Equal(kept.Id, Assert.Single(_server.AppPasswordsOf(_person)).Id);
+        Assert.Equal(
+            (AuditActions.MailCredentialRevoked, _person, revoked.Id),
+            _audit.MailCredentials[^1]);
     }
 
     /// <summary>
@@ -263,27 +384,31 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
     private AppPasswords Built(IMailServer? server) =>
         new(
-            server,
+            new MailServerInUseInMemory(server),
             _tokens,
             _mailboxes,
             _accounts,
+            _restriction,
             new StepUpGuard(
                 _sessions,
                 _authenticators,
                 _passwords,
                 new PolicyResolution(_memberships, _configuration, _raises),
+                _identifiers,
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             _identifiers,
             _notifications,
             _configuration,
             _audit,
+            _log,
             _work,
             _clock);
 
     private async Task<Result<IssuedAppPassword>> CreateAsync(string label, SessionId session) =>
         await Passwords.CreateAsync(Asking, session, label, expiresAt: null, Source, TestContext.Current.CancellationToken);
 
-    private async Task<Result> RevokeAsync(string id, SessionId session) =>
+    private async Task<Result> RevokeAsync(AppPasswordId id, SessionId session) =>
         await Passwords.RevokeAsync(Asking, session, id, Source, TestContext.Current.CancellationToken);
 
     private async Task<Result<IReadOnlyList<AppPassword>>> ListAsync(SessionId session) =>
@@ -299,7 +424,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             at,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
         byte[] fingerprint = new byte[32];
         byte[] synchronizer = new byte[32];
 

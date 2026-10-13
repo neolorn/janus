@@ -15,8 +15,12 @@ namespace Janus.Hosting.Credentials;
 [JsonSerializable(typeof(CompleteKeyRequest))]
 [JsonSerializable(typeof(GeneratorRequest))]
 [JsonSerializable(typeof(ConfirmGeneratorRequest))]
+[JsonSerializable(typeof(TextCodeRequest))]
+[JsonSerializable(typeof(ConfirmTextCodeRequest))]
 [JsonSerializable(typeof(CredentialCeremonyView))]
 [JsonSerializable(typeof(EnrolledCredentialView))]
 [JsonSerializable(typeof(GeneratorEnrolmentView))]
 [JsonSerializable(typeof(RecoveryCodesView))]
+[JsonSerializable(typeof(TextCodeEnrolmentView))]
+[JsonSerializable(typeof(SecurityEventError))]
 internal sealed partial class CredentialsJson : JsonSerializerContext;

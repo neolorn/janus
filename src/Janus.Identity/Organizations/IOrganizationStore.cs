@@ -23,6 +23,17 @@ internal interface IOrganizationStore
     ValueTask<Organization?> FindAsync(OrganizationId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one organization under a lock on its row held until the operation's
+    /// transaction ends, so a deletion, its cancellation, its erasure and a new member
+    /// decided on it cannot race one another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="id">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The organization as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Organization?> FindForUpdateAsync(OrganizationId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new organization.
     /// </summary>
     /// <param name="organization">The organization to create.</param>

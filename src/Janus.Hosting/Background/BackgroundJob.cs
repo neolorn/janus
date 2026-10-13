@@ -128,16 +128,22 @@ internal sealed class BackgroundJob
     }
 
     /// <summary>
-    /// Runs the job once as its principal.
+    /// Runs the job once as the context given, which the worker makes of the job's own
+    /// principal and the method the work runs judges (IDN-PRIN-001 AC3).
     /// </summary>
     /// <param name="services">The scope the run resolves what it uses from.</param>
+    /// <param name="context">Who the run is made as.</param>
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>Nothing, or the failure the work reported.</returns>
-    /// <exception cref="ArgumentNullException">The scope is absent.</exception>
-    public ValueTask<Result> RunAsync(IServiceProvider services, CancellationToken cancellationToken)
+    /// <exception cref="ArgumentNullException">The scope or the context is absent.</exception>
+    public ValueTask<Result> RunAsync(
+        IServiceProvider services,
+        AccessContext context,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(context);
 
-        return _work(services, AccessContext.Of(Principal), cancellationToken);
+        return _work(services, context, cancellationToken);
     }
 }

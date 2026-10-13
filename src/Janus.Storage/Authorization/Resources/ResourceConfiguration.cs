@@ -23,11 +23,17 @@ internal sealed class ResourceConfiguration : IEntityTypeConfiguration<ResourceR
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.ToTable("resources", table =>
+        {
             // A record is contained in something or in nothing; half a reference is
             // neither.
             table.HasCheckConstraint(
                 "ck_resources_contained_in",
-                "(contained_in_type IS NULL) = (contained_in_id IS NULL)"));
+                "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_resources_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
+        });
 
         builder.HasKey(resource => new { resource.Type, resource.Id }).HasName("pk_resources");
 

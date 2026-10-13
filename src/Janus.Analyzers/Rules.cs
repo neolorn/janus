@@ -56,7 +56,7 @@ internal static class Rules
         category: "Reliability",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "CONV-CODE-002 requires every asynchronous method to take a cancellation token as its last parameter and to pass it through, and forbids blocking on a task.");
+        description: "CONV-CODE-002 requires every asynchronous method to take a cancellation token as its last parameter and to pass it through, and forbids blocking on a task. The rollback of the unit of work takes none, and neither does a member implementing an interface of the framework or of a package that declares none.");
 
     /// <summary>
     /// JAN0005, serving CONV-DESIGN-005: the outcome carried by a result is never

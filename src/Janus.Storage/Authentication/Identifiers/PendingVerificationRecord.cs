@@ -28,6 +28,13 @@ internal sealed class PendingVerificationRecord
     /// </summary>
     public SessionId? Browser { get; set; }
 
+    /// <summary>
+    /// The <c>enrolment</c> column: the enrolment session a replace was staged from,
+    /// which is the only enrolment session its code is taken from, and nothing where a
+    /// session staged it.
+    /// </summary>
+    public EnrolmentSessionId? Enrolment { get; set; }
+
     /// <summary>The <c>is_replacement</c> column.</summary>
     public bool IsReplacement { get; set; }
 
