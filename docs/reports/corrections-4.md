@@ -6001,6 +6001,37 @@ its commits can be read.
 - Resolved by rule: nothing in this round.
 - Open: no question. Known issues 1 to 49 (section 6).
 
+**`corrections-4`, after D-201, the close of Milestone 1.** Full gate at `09734968`, run locally once, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`).
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 4327 |
+| Contract tests | passed, 155 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1140 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 118 |
+| Double migration run | passed |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 23, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). No migration since the last gate |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- The fast checks ran before the docs commit `c8125dad` and before the report's commit `09734968`. The commit that carries this table changes this report alone and follows the gate's run on the same source tree.
+- This round changed no source, test or migration. No git configuration was changed. No commit was rewritten. Nothing was pushed.
+- Resolved by rule: nothing in this round.
+- Open: no question. Known issues 1 to 50 (section 6) are carried into Milestone 2.
+- The owner's review of the last run is done and the Milestone 1 exit gate is met (`implementation-plan.md` section 3, D-201).
+
 ## 6. Known issues
 
 Tier 2 questions of the last corrections run (D-197). Each parks its item where it says "parked"; none is answered before the exit gate, and `implementation-plan.md` section 4 carries them into Milestone 2. Each gives the readings we see and the one we would take.
