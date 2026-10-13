@@ -754,13 +754,17 @@ the server enforces (AUTH-PASS-001, AUTH-PASS-004).
 request with **conditional mediation** and **no `allowCredentials`**, so a manager
 can offer a passkey inside the field.
 
-*Source: D-146; AUTH-FACT-002 (conditional UI)*
+*Source: D-146; AUTH-FACT-002 (conditional UI), D-201*
 
 **Acceptance criteria**
 1. The identifier field carries both tokens.
 2. The conditional request is issued on page load without a prompt of its own and
    carries an empty or absent `allowCredentials`.
 3. Selecting the offered passkey signs in without the identifier being typed.
+
+A known issue is carried into Milestone 2 by `implementation-plan.md` section 4: no
+route opens a passkey sign-in without an identifier (`09` `POST /auth/begin` always
+takes one), so criteria 2 and 3 do not hold until Milestone 2 answers it (D-201).
 
 ---
 

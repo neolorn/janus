@@ -138,7 +138,8 @@ autonomous end to end.
 | 12 | Release 1.0.0 | implementer, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag, publish (CONV-VCS-005) | Version 1.0.0 on the feed; changelog and migration note published; every known issue carried into Milestone 2 answered by a decision and built or deferred (D-197) |
 
 The frontend applications (`18`) are built in step 10 against the deployed BFF;
-Milestone 1 phases 5 and 8 deliver the server side they need.
+Milestone 1 phases 5 and 8 deliver the server side they need, save what a known issue
+below leaves open (D-201).
 
 **Known issues carried into Milestone 2.**
 
@@ -146,6 +147,12 @@ Milestone 1 phases 5 and 8 deliver the server side they need.
   meet a `delegated` gate by a step-up, and AUTH-STEP-002 step 3 answers it
   `report-loss`; the way out, a new sign-in with the provider, is stated in no chapter
   (D-197).
+- A passkey sign-in opened without an identifier has no route: FE-PM-004 criteria 2 and
+  3 need one for the browser's passkey autofill, and `09` `POST /auth/factor` (passkey
+  assertions), AUTH-FACT-002b, AUTH-FACT-014 and REG-PM-001 state how it judges a user
+  handle, but `POST /auth/begin` always takes an identifier (REG-IDENT-003). A decision
+  before step 10 settles the route, what its challenge offers and how AUTH-ABUSE-001
+  counts a sign-in that names no identifier (D-201).
 
 Section 4 also carries every further known issue the reports of the last corrections run
 of Milestone 1 and of each run that builds Tier 3 answers or a defect the owner's review

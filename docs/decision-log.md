@@ -15946,6 +15946,8 @@ before a first factor, the 422s), API-REDIR-001 (body, criterion 4); `10`
 
 ## D-200 — The exit gate review: a credential the account does not hold is judged first
 
+> **Amended.** The exit gate it left open is met: the run that built it was reviewed, and Milestone 1 is closed with one more known issue carried into Milestone 2: no route opens a passkey sign-in without an identifier (D-201).
+
 **Date:** 2026-10-12 · **Status:** accepted · **Amends:** D-199 (answer 253, which took the build as meeting it), D-197 (the steps of section 7.2 the package leaves to its caller)
 
 **TL;DR.** The run that built D-199 raised no question. Its report and code were reviewed,
@@ -16034,6 +16036,65 @@ factor, the 422s, passkey assertions); `10` `auth.credential.suspended`,
 `auth.webauthn.rpidchanged`, `auth.webauthn.userverificationrequired`, section 5.24
 (`auth.credential.countermismatch`); `20` REG-PM-001 (body, criterion 4);
 `implementation-plan.md` (section 3, section 4).
+
+---
+
+## D-201 — Milestone 1 closes: the review of the run that built D-200
+
+**Date:** 2026-10-13 · **Status:** accepted · **Amends:** D-200 (the exit gate it left open)
+
+**TL;DR.** The run that built D-200 raised no question, and its code and tests do what
+D-200 asks: whether the account holds the credential is judged in
+`WebAuthnService.AssertAsync` directly after the credential is found, before the package
+verifies anything, and the account's own credential answers as before. With it the
+Milestone 1 exit gate is met. One more known issue was found at this review and is carried
+into Milestone 2 with the others: the frontend's passkey autofill needs a sign-in opened
+without an identifier, and no route opens one. Merging the working branch's pull request
+and beginning Milestone 2 are the owner's to decide.
+
+**The review.**
+
+- **The rule of D-200** (`8dd28573`). The account the ceremony is for (the sign-in's or
+  the step-up's, or, where none is named, the one the user handle names) is compared with
+  the credential's holder before the relying party is read or the package called; no unit
+  of work is begun for a credential the account does not hold. The tests hold a passkey
+  and a second-factor security key of another account in every case AUTH-FACT-014
+  criterion 9 names, at the ceremony and at the sign-in (fourteen rows each), four over
+  `POST /auth/factor`, one at a step-up and four of a ceremony opened without an
+  identifier, at the ceremony's own service; 26 rows failed first, answered with their own
+  `auth.webauthn.*` code or accepted. The tests of the account's own credential are
+  unchanged and pass. The algorithm case is built from a record whose stored algorithm is
+  not its key's, as the existing tests build it, which decides the order the criterion
+  asks.
+- **The exit gate** (`implementation-plan.md` section 3), at `f9ffaff6`. Every acceptance
+  criterion of chapters 01 to 10, 17 and 20 and of the items of 06, 12 and 19, 1666 in
+  all, has a passing test carrying its identifier (1464), a row of the corrections-4
+  report's coverage accounting (200, as D-200 counts them), or a phase report's row saying
+  how it was verified (2). The full gate is green at `e398dc5d`, its public-surface job
+  included, and the full-history scan clean over 1433 commits. The known issues carried
+  into Milestone 2 are those of `implementation-plan.md` section 4, the one below
+  included. Milestone 1 is closed.
+
+**The known issue found at the review.** FE-PM-004 criteria 2 and 3 have the sign-in page
+issue, on load, a request with conditional mediation and no `allowCredentials`, and a
+person pick a passkey the browser offers in the identifier field and sign in without
+typing the identifier; AUTH-FACT-002's catalogue names this a presentation mode of passkey
+sign-in, and `09` `POST /auth/factor` (passkey assertions), AUTH-FACT-002b, AUTH-FACT-014
+and REG-PM-001 state how such a sign-in judges a user handle. No route opens it:
+`POST /auth/begin` always takes an identifier (REG-IDENT-003), so the frontend has no
+challenge to ask the browser with before one is typed, and the sign-in service opens no
+ceremony without one. The frontends are built at Milestone 2 step 10, so the issue is
+carried there: a decision before that step settles the route, what its challenge offers
+and how AUTH-ABUSE-001 counts a sign-in that names no identifier. The plan gave the
+frontends' server side to Milestone 1, so its sentence saying so now names the known issue
+as the exception. *Rejected:* deciding it now (it is a question with several readings,
+which D-197 carries into Milestone 2 as a known issue, and no criterion the exit gate
+counts waits on it, `18` being outside that gate).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `18` FE-PM-004 (the known issue); `implementation-plan.md` (section 4,
+the frontends' server side, the known issues carried).
 
 ---
 
@@ -16247,6 +16308,7 @@ factor, the 422s, passkey assertions); `10` `auth.credential.suspended`,
 | The Tier 3 questions of the last corrections run: 248 to 251 | D-198 |
 | The Tier 3 questions of the run that built D-198: 252 and 253 | D-199 |
 | The exit gate review: a credential the account does not hold is judged first | D-200 |
+| Milestone 1 closes: the review of the run that built D-200 | D-201 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
