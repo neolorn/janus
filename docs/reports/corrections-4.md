@@ -17,7 +17,10 @@ actions of known issue 1 and what questions 248 to 251 park (section 1, "D-197")
 Tier 2 questions are under Known issues (section 6) and the coverage accounting is section 7.
 D-198 answers questions 248 to 251 and D-199 questions 252 and 253; their answers are
 built (section 1, "D-198" and "D-199"). D-200, the defect the owner's review of the exit
-gate found, is built (section 1, "D-200"). No question is open; known issues 1 to 49 stand.
+gate found, is built (section 1, "D-200"). D-201 records the owner's review of that run
+and known issue 50. No question is open; known issues 1 to 50 are carried into Milestone 2.
+The owner's review of the last run is done and the Milestone 1 exit gate is met
+(`implementation-plan.md` section 3, D-201).
 
 ## 1. Items implemented
 
@@ -2195,6 +2198,13 @@ D-200 and the six files it changed are committed as `9695e5e4`, each of the twen
 - The algorithm row is built as the existing tests build it, a record whose stored algorithm is not its key's; no test builds a signature under an algorithm outside the allow-list.
 - The tests of the account's own credential are unchanged and green: AUTH-FACT-014 criteria 1 and 3, AUTH-FACT-002b criteria 9 and 10, AUTH-RECOV-007 criterion 9, REG-PM-001 criterion 4.
 - No public member, no declared code (`POST /auth/factor` declares each code already), no truth-table row, no migration. One changelog line is added.
+
+### D-201: Milestone 1 closes
+
+D-201 and the three files it changed are committed as `c8125dad`, each of the twenty-five files given checked against its hash. It records the owner's review of the run that built D-200, the close of Milestone 1 and one known issue the review found, and changes `18` FE-PM-004 (the known issue named), `implementation-plan.md` section 4 (the frontends' server side, the known issues carried) and the decision log. This round builds nothing: no source, test or migration changed.
+
+- Known issue 50 (section 6) is the one D-201 records. It was found at the owner's review and raised by no run.
+- The owner's review of the last run's report is done and the Milestone 1 exit gate is met (`implementation-plan.md` section 3, D-201). Merging the working branch's pull request and beginning Milestone 2 are the owner's to decide.
 
 ## 2. Items not implemented
 
@@ -6049,6 +6059,7 @@ Tier 2 questions of the last corrections run (D-197). Each parks its item where 
 47. **PRIV-BREACH-001 criterion 1: "Notification templates exist for both audiences".** `11` section 8.3 carries the procedure only, `10` declares no message kind for it, and the plan names no step. Readings: (a) operator documents written in Milestone 2, the plan naming the step; (b) the owner adds the two templates to `11`; (c) a message kind of the library for the subject's notice. We would take (b): the library decides no wording.
 48. **AUTH-STEP-002 step 3 and AUTH-STEP-006, after the fix for criterion 9.** A factor the policy's `loginFactors` does not permit is no longer offered at a gate. Reachable assurance is still read from the credentials alone, as AUTH-STEP-006 states it, so an account whose only way to a gate is such a factor is answered `report-loss` at step 3: the level "meets the gate" and nothing can be presented. The same answer was given before the fix once the factor was refused. Readings: (a) as built; (b) `enrol`, reachable assurance counting only what the policy permits. We would take (b); it is a change to AUTH-STEP-006 and not to criterion 9. Not built.
 49. **INT-GEN-001 criterion 3: a blank value** (D-198, answer 251). A `value` that is empty or white space for `password.blocklist.selfhosted.address` is refused 422 `config.value.notallowed`, as for every text key, before the endpoint rule is reached; nothing is written. The criterion and the `09` row refuse "a value that is not an absolute `https` address" with `integration.endpoint.insecure`, and `10` gives `config.value.notallowed` to a value outside the key's set. Readings: (a) a blank is no value for a text key and keeps `config.value.notallowed`; (b) a blank is not an absolute `https` address and takes `integration.endpoint.insecure`, the rule then judged before the value's own refusals and refusing an empty address at a change though it passes one at the start. We would take (a). Left as built; no test asserts either code.
+50. **FE-PM-004 criteria 2 and 3: a passkey sign-in opened without an identifier has no route** (recorded by D-201 at the owner's review; raised by no run). The sign-in page's passkey autofill issues, on load, a request with conditional mediation and no `allowCredentials`, and a person signs in without typing the identifier. `POST /auth/begin` always takes an identifier (REG-IDENT-003) and the sign-in service opens no ceremony without one, so the frontend has no challenge to ask the browser with; `09` `POST /auth/factor` (passkey assertions), AUTH-FACT-002b, AUTH-FACT-014 and REG-PM-001 state how such a sign-in judges a user handle. A decision before Milestone 2 step 10 settles the route, what its challenge offers and how AUTH-ABUSE-001 counts a sign-in that names no identifier. Nothing built.
 
 ## 7. The coverage accounting (D-197, step 2)
 
