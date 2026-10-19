@@ -218,7 +218,7 @@ The business processes his data for named purposes, each on a legal footing the 
 
 Six working days is counted on the business's own calendar (Sunday to Thursday plus a holiday list the business maintains). The system sends a receipt, warns staff two working days before the deadline and again on the day, and records what the law makes of a missed deadline.
 
-There is no cookie banner: the only cookies are the ones the service cannot work without, and the privacy notice lists each of them.
+There is no cookie banner while the only cookies are the ones the service cannot work without. If the business adds a cookie that needs his consent, it declares that cookie, and only then is he asked, and only once he is signed in. Each version of the privacy notice lists every cookie set when it was published.
 
 ---
 

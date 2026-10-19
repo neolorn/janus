@@ -878,6 +878,8 @@ the user's existing situation would make the choice unnecessary. Ask that first.
 
 ## D-018 — Migrations run in CI, never at application startup
 
+> **Amended.** Migrations are applied by `migrate`, a command of the `Janus.Cli` tool package built from the same commit, in the library's pipeline and in a host's alike; no EF Core migration bundle is built (D-204).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Follows from:** D-017
 
 **Decision.** A dedicated CI step applies migrations before the new version rolls
@@ -1310,6 +1312,8 @@ function requires.
 ---
 
 ## D-028 — Bootstrap via CLI
+
+> **Amended.** The command is `bootstrap` of the `Janus.Cli` tool package, whose command is `identity`, and it prints two lines: the enrolment link, then the administrative organization's identifier, which the host keeps in its own configuration (D-204).
 
 **Date:** 2026-08-25 · **Status:** accepted · **Follows from:** D-010
 
@@ -2268,6 +2272,8 @@ goal is that it is neither casual nor invisible.
 ## D-046 — Dependency supply chain
 
 > **Amended.** Applying updates: the EF Core packages and the `dotnet-ef` tool move together in one change, and the analyser-authoring packages move only by a decision-log entry (D-184).
+
+> **Amended.** The lockfile rule holds for the library's solution; the sample host keeps no lockfile and restores unlocked (D-204).
 
 **Date:** 2026-08-25 · **Status:** accepted · **Closes:** threat model §6.3
 
@@ -3481,6 +3487,8 @@ people least able to work around it.
 
 > **Amended.** The application's step on `ErasureRequested` is clearing the copies the destroyed key does not reach, not redacting its fields (D-168).
 
+> **Amended.** A host encrypts its own declared fields through `IPersonalFields`, and its part of an export is answered by its export contributors when the export is assembled; `ExportRequested` is retired (D-203).
+
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-026.1, D-037 · **Resolves:** F-04
 
 **TL;DR.** Erasure, restriction and export were routed "through the access gate,"
@@ -4144,6 +4152,8 @@ requires a change at next sign-in.
 ## D-079b — Consistency sweep: F-23 (fourteen items), F-24, F-25, F-26
 
 > **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
+> **Amended.** `Janus.Hosting` is public for more than the mounting API: a host's own endpoints use `AllowNoSession`, `Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` from it, and read the request's access through `IRequestAccess` (`Janus.Core`); an organization-scoped system principal is also how a host's declared job runs, admitted for the host permissions it declares and refused every library operation that meets a gate (D-202, D-203).
 
 **Date:** 2026-08-27 · **Status:** accepted
 
@@ -5425,6 +5435,9 @@ complaint, not detection.
 
 
 > **Superseded in part.** Key version stored with each ciphertext is replaced by the format marker of D-100.
+
+> **Amended.** A host's own declared fields are encrypted under the subject's data key through `IPersonalFields`; their authenticated data carries the fixed mark `host` and the type's and the field's declared names where a library value's carries its table and column, so a renamed member keeps its values readable by being given its old name (D-203).
+
 **Date:** 2026-08-29 · **Status:** accepted · **Supersedes:** D-082 · **Amends:** D-093, D-094, D-095
 
 **TL;DR.** Standard envelope encryption: a per-subject data key, stored **wrapped** in the
@@ -5595,6 +5608,8 @@ on an erasure and never addressed whose data a field is.
 ---
 
 ## D-100 — Ciphertext carries a format marker and an initialisation vector
+
+> **Amended.** The authenticated data is laid out as the format marker, the subject identifier's 16 bytes, then the table and the column, each length-prefixed; a host's own field carries the fixed mark `host`, the type's declared name and the field's declared name in their place, laid out the same way (D-203).
 
 **Date:** 2026-08-31 · **Status:** accepted · **Extends:** D-097, D-099
 
@@ -7194,6 +7209,8 @@ takedown from their inbox.
 
 ## D-138 — The break-glass session belongs to a reserved `emergency` account
 
+> **Amended.** The reserved account's membership of the administrative organization cannot be ended either, by anyone; the refusal is 403 `authz.denied` (D-202).
+
 **Date:** 2026-09-05 · **Status:** accepted · **Extends:** D-065, D-129, D-133 · **Resolves:** review-3, M-7
 
 **TL;DR.** The break-glass session was "a session holding the system-administrator
@@ -7913,6 +7930,8 @@ dashes) · `10` (sections 1, 3, 4.1a, 4.3, 5.15, 5a) · `11` (sections 3, 4, 7) 
 
 > **Amended.** Item 9: the framework OIDC client left the list (D-166 item 351); the analyser-authoring packages and `Microsoft.Testing.Platform` joined it; `StackExchange.Redis` and `Testcontainers.Redis` leave it; CONV-DESIGN-008's table is the list of record (D-197).
 
+> **Amended.** Item 4: migrations are applied by the `migrate` command of the `Janus.Cli` tool package; no EF Core migration bundle is built. Item 9: `Janus.Testing` is a further public project, shipped as a package with `Janus.Cli` as a tool package beside it. Item 1: the sample host's solution keeps no lockfile and restores unlocked (D-204).
+
 **Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-135 (`InternalsVisibleTo` grants), CONV-LAYOUT-001 (Storage dependencies) · **Extends:** D-017, D-026.4, D-046, D-106
 
 **TL;DR.** The chapters fixed the boundaries of the code (projects, dependency
@@ -8160,6 +8179,8 @@ REG-IDENT-002, REG-PREF-001.
 
 > **Amended.** AUTH-ABUSE-008 criterion 3: the datacenter range file is the host's, supplied through the optional range source and refreshed like the location file; with none fresh, `datacenterRange` does not fire and `degradation` is raised; `repeatedAttempts` counts the session the request would create (D-189).
 
+> **Amended.** The command-line verbs gain `migrate` (with `--report`), and the tool installs under the command `identity` (D-204).
+
 **Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-083 (destination list refusal code), D-045 (read-volume rule), D-051 (distance rule), D-008 (recovery limits), D-013 (challenge, drain rule), D-024 (materiality), D-030 (sensitive retention), D-036 (register inputs), D-060 (photo formats), D-097 (primitives) · **Extends:** D-151, D-152
 
 **TL;DR.** Three phase-0 stops in a row were the same defect: a chapter written for a
@@ -8311,6 +8332,8 @@ CONV-SETUP-004, CONV-GATE-001 · D-115 (rejected item annotated).
 
 ## D-155 — Phase 1 questions, second stop: EF Core maps records, the port encrypts
 
+> **Amended.** Item 1: a host's own declared fields are encrypted by `IPersonalFields`, for the subject the host passes from the field's declared subject column, and bind the type's and the field's declared names where a table and a column stand (D-203).
+
 **Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-DESIGN-003), D-153 (OPS-DB-001 value) · **Extends:** D-154
 
 **TL;DR.** Per-subject encryption needs the row's subject identifier, and EF Core's value
@@ -8457,6 +8480,8 @@ tools for a reason.
 
 ## D-160 — Phase 2 questions, second stop: derivations are host-supplied relations; reading and modifying; the gate binding; database-backed validation
 
+> **Amended.** Item 4: `Janus.Cli` reads no host declaration and runs none of the model's checks; `migrate`, which creates the schema, runs no schema check either (D-204).
+
 **Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-043, D-037, D-078, D-015 (startup) · **Extends:** D-159
 
 **TL;DR.** Four gaps in the authorization chapter, one of them a real contradiction.
@@ -8531,6 +8556,8 @@ the working guide sections 3 and 6.
 > **Amended.** 58 and 59: no job updates the credential source; the first read of the signing keys five minutes before the cadence makes the next key, the first read once the cadence has passed and that key has been published for five minutes makes it current, and the first read after an overlap ends retires the replaced key (D-181).
 
 > **Amended.** 60: API-REDIR-001 keeps no list of origins: a return destination is followed only as one path of the application that received it, anything else becoming `/`, and `redirect.defaultclient` is the registration's fallback alone (API-REDIR-002) (D-198).
+
+> **Amended.** Section B item 4: AUTHZ-GATE-005 criterion 1 reads "without a query per record"; a host's page takes its capabilities in its own query or in one statement beside it (D-202).
 
 **Date:** 2026-09-22 · **Status:** accepted · **Amends:** D-149, D-153, D-155, D-160, D-161 and the items named below · **Extends:** D-161
 
@@ -8840,6 +8867,8 @@ section 10 (`/callbacks/providers/{provider}`) · `10` (rows in the reconciliati
 
 > **Amended.** The developer recipient row is a row a host declares, shown as an example; the provider callback row of `09` section 10 and INT-GEN-003's sentence are restored (D-166).
 
+> **Amended.** `ExportRequested` is no longer among the host's hooks: a host answers its part of an export through an export contributor (D-203).
+
 **Date:** 2026-09-24 · **Status:** accepted · **Amends:** D-027, D-030, D-036, D-039, D-041, D-044, D-045, D-049, D-056, D-061, D-066, D-068, D-070, D-073, D-079b, D-080, D-086, D-088, D-089, D-090, D-091, D-092, D-093, D-094, D-111, D-117, D-125, D-127, D-131, D-148, D-164 · **Extends:** D-162 C.103, D-163
 
 **TL;DR.** The chapters were written with the first host in view and carried its
@@ -9035,6 +9064,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 > **Amended.** Item 114: the list is drawn by the script under `tools/leaked-passwords/`, run at each release by a manually dispatched workflow that Milestone 2 step 1 builds; item 235: a restriction marked `resend` judges and counts a send once, whatever the number of its languages (D-197).
 
 > **Amended.** 319: the endpoint rule `configure` runs (fix 1) also holds a runtime change of `password.blocklist.selfhosted.address` through `PUT /admin/config/{key}`, refused `integration.endpoint.insecure`; a screening that meets such a value anyway falls back to the package's list and raises the degradation (D-198).
+
+> **Amended.** Item 264: every delivery of host-side work is listed and completed by hand, its kind one of `erasure`, `takedown`, `restriction`, `consent` and `objection`, and the reads list every kind; item 320: a purpose handler receives `ConsentChanged` and `ObjectionChanged` through the outbox as a subscriber receives the subject events; item 352: `IResources` writes in the unit of work the host's context joins through `UseUnitOfWorkAsync`, gains `RemoveAsync`, and a removal of a record that holds others is 409 `authz.resource.inuse` (D-203).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -11677,6 +11708,8 @@ already pushed.
 
 ## D-168 — Corrections-4 questions: the library's version without reflection; what the host does on erasure
 
+> **Amended.** Item 2: a host encrypts its declared fields through `IPersonalFields`, the public field cipher D-203 adds, and erasure reaches them through it.
+
 **Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-068 (the application's step on erasure) · **Extends:** D-082, D-163, D-166 (item 114)
 
 **TL;DR.** Two questions stopped the corrections-4 run. The user agent D-166 item 114 and
@@ -13271,6 +13304,8 @@ REG-SESS-001, REG-SESS-003, REG-SESS-005, REG-SESS-007, REG-IDENT-007, REG-DOM-0
 ## D-184 — Corrections-4 question 67: the EF Core relational layer at EF Core's version, and the toolchain at its current releases
 
 > **Amended.** The analyser-authoring packages: `Microsoft.CodeAnalysis.CSharp` at 5.0.0, the compiler of SDK 10.0.100, and `Microsoft.CodeAnalysis.Analyzers` at 5.6.0 (D-197).
+
+> **Amended.** The sample host keeps its own package versions and tool manifest: the `Janus.*` packages and the `identity` tool at the version the gate passes it, restored unlocked from the gate's folder feed (D-204).
 
 **Date:** 2026-10-03 · **Status:** accepted · **Amends:** D-149 (item 9, the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`), D-046 and D-110 (two kinds of update are not taken one by one as they arrive) · **Extends:** D-149 (item 1, the SDK in `global.json` and the tool manifest)
 
@@ -16098,6 +16133,565 @@ the frontends' server side, the known issues carried).
 
 ---
 
+## D-202 — A host builds on the public surface: who is asking, its own endpoints, its own jobs
+
+**Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-201 (Milestone 1 closed), a host's review of the public surface · **Extends:** D-106 (the operations contract) · **Amends:** D-079b (system principals; `Janus.Hosting` beyond mounting), D-138 (what the reserved account refuses), D-162 (section B item 4, the capability query)
+
+**TL;DR.** Milestone 1 was built and tested from the inside. The library's own endpoints
+read the session the pipeline resolved from an object no host can reach, and the sample
+host exercised the conformance suite and nothing else. A host writing its own features
+on top of the library (the first host to try asked for this review) cannot learn who is
+signed in or on which session, cannot have the pipeline refuse a request with no session,
+has to translate the library's codes itself, cannot attach capabilities, has no source to
+pass, and has no stated way to run a job. This decision gives a host each of these through
+the public surface, makes a host endpoint need a session unless it says otherwise, keeps a
+person's context with the session it came from, and states what a host's job may do and
+why it runs none of the library's operations on people. The review that found these, run
+over the chapters and the public surface at `c7e6c36a` and checked against the code, is
+recorded with D-203 and D-204, which are built with this one in the first host round (H1,
+`implementation-plan.md` section 3a).
+
+**What was found.**
+
+- No item says how a host endpoint obtains the access context or the session of the
+  request it serves, although every operation takes an access context (LIB-API-005), the
+  host's endpoint sits at stage 9, after session resolution (BFF-ORDER-001), and `09`
+  section 14 says the host's endpoints consume the gate directly. In the code the stage 5
+  result (`RequestSession`) is internal, and `Janus.Hosting` exposes nothing of it. 116
+  methods over 31 interfaces take a context, and 44 operations, `IStepUpGate.RequireAsync`
+  and the twelve `ICredentials` methods take a `SessionId` a host cannot get.
+- `AccessContext.Of(SubjectId, SubjectId)` is public and lets acting and effective
+  identity differ, against AUTHZ-IMP-001, and a context a host builds for a person never
+  carries the break-glass reason, which only the library sets (D-170).
+- No public way exists to have stage 8 refuse a host endpoint's request that carries no
+  session, or to answer a library code as the library's endpoints do (the status map is
+  internal), which BFF-OWN-001 forbids the host to do itself; no declaration names a
+  type's capabilities (BFF-CAP-002); no helper gives the source AUTH-ABUSE-001 keys; and
+  what an organization-scoped system principal is admitted for is stated nowhere.
+- Nothing refuses ending the reserved account's membership of the administrative
+  organization, after which its grant confers nothing (IDN-MEM-001) and the break-glass
+  session gives nothing (OPS-BOOT-002).
+
+**The rules.**
+
+1. **Who is asking.** `IRequestAccess` (`Janus.Core`), registered by `AddJanus` in each
+   request scope, answers `Current()`: a `Result<RequestAccess>` holding the access of the
+   request being served, or the failure `auth.session.expired` where there is none
+   (CONV-DESIGN-005). A `RequestAccess` carries `Context`, the `AccessContext` the
+   library's own endpoints pass for the same request, its break-glass reason included
+   where the session is a break-glass session or one another application opened from it;
+   `Session`, the `SessionId` the library's own endpoints pass to an operation for it; and
+   `Assurance`, an `AttainedAssurance` read from the session record (AUTH-SESS-001) as the
+   gate counts it: the instant each assurance level and phishing resistance were last
+   reached since the session's last downgrade (AUTH-SESS-009), and the account's
+   reachable level (AUTH-STEP-006). There is none where stage 5 left the request without a
+   live sign-in session (none presented, one that has ended, or only a pre-authentication,
+   registration or enrolment session), and none outside the browser profile or outside a
+   request (the machine profile, a job). It is what stage 5 established, read and never
+   looked up again (BFF-ORDER-001). A host endpoint passes `Context` and `Session` to every
+   operation and gate it asks for the person, and keeps neither past the request it read
+   them for, so a break-glass session's reason never reaches later work (D-170).
+2. **A person's context comes with their session.** `AccessContext.Of(SubjectId,
+   SubjectId)` leaves the public surface: the two identities never differ (AUTHZ-IMP-001).
+   `AccessContext.Of(SubjectId)` stays public for a host that consumes authorization
+   without the library's authentication (LIB-HOST-004), for the conformance suite and for
+   tests. A host whose requests carry the library's sessions takes a person's context from
+   `IRequestAccess` and never builds one, so the step-up the session proved and the
+   break-glass reason come with it. The gate judges a step-up against the request's
+   session only where the context's acting subject is that session's (AUTHZ-GATE-005), as
+   before. *Rejected:* removing `Of(SubjectId)` from the public surface (it would end
+   LIB-HOST-004's mode and leave the conformance suite no context for a case's subject;
+   in-process code is the host's own and could act through its own database anyway, and
+   the protection that matters holds without it: a step-up is judged only against the
+   request's own session).
+3. **A host endpoint needs a session unless it says otherwise.** Every endpoint the host
+   maps after the browser profile requires a live sign-in session: stage 8 refuses a
+   request that reaches it without one with 401 `auth.session.expired`, carrying
+   `details.reauthenticate` where a sign-in session ended (BFF-STEP-001) and the code alone
+   where none was held, before the endpoint runs. `AllowNoSession()` (`Janus.Hosting`), on
+   an endpoint's convention builder, marks one that answers anyone (a catalogue page, a
+   checkout open to everyone). A marked endpoint still passes stages 2 to 6: it is a
+   pre-session endpoint, issued the pre-authentication session where a request carries
+   none (BFF-CSRF-005a), and a state-changing request to it carries that session's
+   synchronizer token. The library's own endpoints keep their own marks.
+   *Rejected:* a mark that asks for a session (a forgotten mark would serve anyone, against
+   fail-closed defaults, P-003, and against protection that comes from where an endpoint is
+   mounted, D-070). **Step-up stays on the action, never on the endpoint:** a host binds a
+   gate to its permission (`StepUpGate`, AUTHZ-GATE-005), and `IAccessGate` answers
+   `auth.stepup.required` with its `details` when the endpoint asks for that permission
+   (`RequireAsync`, `FilterAsync`, `FragmentAsync`) on a record its grants admit and the
+   request's session does not meet the gate. *Rejected:* a step-up mark on the endpoint (a
+   second statement of a rule the permission's binding already states, which could
+   disagree with it and which an endpoint asking two permissions could not express).
+   `IStepUpGate` stays the gate one library area asks of another (LIB-API-001) and names
+   only the library's actions.
+4. **Answering the library's codes.** `Answers` (`Janus.Hosting`) answers a `Result` or a
+   `Result<T>` as the library's own endpoints do: the success the endpoint gives, or the
+   failure in the API-CONV-002 body, with the status `10` section 1 gives its code, its
+   `details` and the request's correlation identifier (BFF-ERR-001); `Answers.Refused`
+   answers an `Error` alone. A refusal of a record of a concealing type is still answered
+   by stage 11 whatever the endpoint writes (BFF-ERR-003). A code `10` section 1 does not
+   list is a fault of the calling code (CONV-ERR-001), answered as every fault is
+   (BFF-ERR-002). A host's own codes, for its own business, are the host's to answer.
+5. **Capabilities on a host's records.** The host declares which of its permissions are
+   capabilities of each of its types: `ResourceTypeDeclarationBuilder<T>.Capabilities`,
+   each a declared permission (BFF-CAP-002); one not declared fails startup with
+   `model.startup.declarationinvalid`, `details.declaration` naming the type and
+   `details.field` `capabilities`. `IAccessGate.CapabilitiesAsync` on a host type answers
+   only the permissions declared for it, and a permission not declared is a fault of the
+   calling code. Capabilities are computed for a whole page at once, in the resource's own
+   query or in one statement beside it, whatever the page's size, never a query per record
+   (BFF-CAP-003, AUTHZ-GATE-005, API-CAP-001). `CapabilityFields.Of(Capability)`
+   (`Janus.Hosting`) answers the `can` list and the `requires` map API-CAP-001 writes, each
+   residual by its `10` section 5.20 name, for the host to place on its record; stage 10
+   adds nothing to a host endpoint's answer. A type that declares none answers none.
+6. **The request's source.** `RequestSource.Of(HttpRequest)` (`Janus.Hosting`) answers
+   the source an operation takes for the request, keyed exactly as AUTH-ABUSE-001 keys it:
+   the address the connection arrived on as the framework's trusted proxies resolve it, an
+   IPv4-mapped address as its IPv4 address, an IPv6 address as its /64 save one whose first
+   three bits are `000`, which is keyed whole, and `unknown` where there is none.
+7. **A host's jobs.** The host declares each of its background jobs:
+   `AuthorizationDeclarationBuilder.Job(name, permissions)`, with a name under
+   INT-SMS-003's rule, distinct from every other job and from every name of `10` section
+   5.29, and the host permissions it exercises. Its principal is
+   `SystemPrincipal.ForOrganization(name, reason, organization)` naming a declared job. The
+   gate admits it for the host permissions its declaration names, on the records of its
+   organization, with the consent the permission's purpose asks of the record's data
+   subject (AUTHZ-GATE-005) and the subject's restriction (PRIV-RIGHT-004) applied as for
+   anyone; the operations called in process only (`IReadVolume`,
+   `IDerivationMaterialiser`, LIB-API-005) take its context. It is refused `authz.denied`
+   for anything else: every library operation that meets a gate; any permission while a
+   request is being served, since a job is background work (IDN-PRIN-001); and any
+   permission in an organization whose deletion is requested or which has been erased,
+   whose grants confer nothing either (IDN-ORG-003). A principal naming no declared job is
+   refused for every host permission. A job is never declared with a permission not
+   declared, a library-owned one, one bound to a step-up gate (no session proves a person)
+   or one whose action is `export` (OPS-ALERT-006): startup fails with
+   `model.startup.declarationinvalid`, `details.declaration` `job.<name>` and
+   `details.field` `permissions`. *Rejected:* letting a job run the library's operations
+   that take access away (ending a membership, revoking a grant, revoking an account's
+   sessions). Each changes another person's account and is a person's step-up action
+   (D-166 X8 and 250: ending a membership retires a corporate address, makes the personal
+   email primary and disables a mailbox); and where the one organization is the
+   administrative organization, as in a single-business deployment, a job could end every
+   administrator's membership and the reserved account's with no person present.
+   *Rejected also:* a deployment-scoped host job (`10` section 5.28 is the library's own
+   work, and a host's job acts for an organization).
+8. **The reserved account's membership is kept.** Ending the reserved account's
+   membership of the administrative organization is refused with 403 `authz.denied`, for
+   anyone, as revoking its grant is (OPS-BOOT-002, D-138).
+9. **What the host's list of needs changes nothing of.** Each was asked and is answered
+   from the chapters:
+   - A field application on a phone that is offline for hours keeps the staff lifetimes.
+     After an idle expiry inside the absolute window one factor bound to the session
+     restores it, and the frontend retries the interrupted request with its data
+     (AUTH-SESS-005, FE-API-004); a deployment may lengthen `session.aal2.inactivity` for
+     every staff session up to its ceiling. Lifetimes stay per policy, never per
+     application. The owner's decision.
+   - A host's own messages (an order dispatched, a payment due) do not go through the
+     library: `IGovernedSend` stays the library's own send path. They go through the
+     shared messaging library the owner decided on (2026-09-25), and the library answers
+     what such a send needs to know about a person (round H2). The owner's decision.
+   - Ending a member's access from background work is not offered: an administrator ends
+     the membership with its step-up (IDN-MEM-001). Ending a membership leaves the
+     account's sessions as they are; no grant it holds in the administrative organization
+     confers from the next request, and the offboarding procedure revokes the sessions as
+     its own step (`16` section 3).
+   - A role a grant has ever named cannot be removed (AUTHZ-GRANT-004); a host that
+     retires a role keeps it and records the retirement on its own side.
+   - The capabilities an organization grants are read with the organization as the
+     resource.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `17` BFF-OWN-001 (body), BFF-OWN-002 (table), new section 2a
+(BFF-HOST-001 to BFF-HOST-004), BFF-CAP-001 (criterion 1), BFF-CAP-002 (values, criteria 3
+and 4), BFF-CAP-003 (statement, body), BFF-ORDER-001 (stages 8 and 10), BFF-CSRF-005a
+(criterion 1); `07` LIB-API-001 (the operations contract, the model builder, the pipeline
+row), LIB-API-005 (every operation takes an access context), LIB-HOST-001 (the resource
+types and jobs rows), LIB-HOST-004 (the context where the library's authentication is not
+used); `03` AUTHZ-IMP-001 (body, criterion 6), AUTHZ-GATE-005 (statement, criterion 1);
+`01` IDN-PRIN-001 (body, criteria 6 and 7), IDN-MEM-001 (the reserved account, criterion
+6); `05` INT-SMS-003 (a job's name); `06` OPS-BOOT-002 (body, criterion 7), OPS-ALERT-006
+(jobs); `08` CONV-LAYOUT-002 (the public types of `Janus.Hosting`); `09` section 14,
+API-CAP-001 (body, criterion 1), `DELETE /admin/organizations/{id}/memberships/{subject}`;
+`10` section 1 (`model.startup.declarationinvalid`, `authz.denied`), section 5.24 (the
+preamble), section 5.29 (preamble); `implementation-plan.md` (sections 3a and 4); the
+working guide (section 6).
+
+---
+
+## D-203 — The host's privacy duties: its own fields, its transaction, its part of an export
+
+**Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Extends:** D-068 (erasure reaches host data), D-099 (the subject of an encrypted field is declared), D-145 (cookies, objection), D-148 (the takedown's delivery) · **Amends:** D-068 (`ExportRequested` retired), D-079b (`Janus.Hosting` beyond mounting), D-097 and D-100 (a host field's authenticated data), D-155 item 1, D-165 (the host's hooks), D-166 items 264, 320 and 352, D-168 item 2
+
+**TL;DR.** The specification gives a host privacy duties the public surface never let it
+carry out. A host can declare which of its fields are personal, but nothing lets it
+encrypt or read one under the subject's key, so erasure by key destruction reaches no
+host table today, against PRIV-RIGHT-005a criterion 9. Its record's registration commits
+in the library's own transaction, so a rollback can leave one without the other, against
+AUTHZ-INHERIT-002 criterion 1. A record it deletes leaves its ancestry behind. An export
+cannot carry what the host holds. A failed restriction delivery cannot be completed by
+hand. A host cookie cannot be declared. A purpose handler names purposes and does nothing.
+This decision closes each, built in round H1 with D-202 and D-204.
+
+**The rules.**
+
+1. **A host encrypts its own declared fields.** `IPersonalFields` (`Janus.Core`) is a
+   seam, as `IResources` is: it joins the host's work, has no endpoint and takes no access
+   context, since whether a person may see a record is the host's own question to the
+   gate. A host calls `WithSubjectAsync(subject, use)` for one subject and
+   `WithSubjectsAsync(subjects, use)` for a page of them, each answering the `Result` of
+   `use`: the library reads the subjects' wrapped keys in one statement, unwraps each once,
+   hands `use` a `SubjectFields` for each, and clears every data key when `use` returns, as
+   the key ring lends a key (CONV-CODE-007); `use` is synchronous, so no key outlives the
+   call, and a `SubjectFields` used after it returned is a fault. The subject is the value
+   of the field's declared subject column (PRIV-RIGHT-005a), which the host passes;
+   `SubjectId` cannot name the deployment's reserved identifier. `SubjectFields.Encrypt(type,
+   field, value)` answers the stored value for a string, and its byte overload for a binary
+   field; `Decrypt` and `DecryptBytes` answer the value. Each answers a `Result`
+   (CONV-DESIGN-005): where the subject's key is erased (`SubjectFields.Erased`), the
+   failure `privacy.subject.erased` (409, new), since no value can be read for a person who
+   has been erased and none is written. A subject the deployment holds no key for is
+   refused 422 `api.request.invalid` naming `subject`, the batch judged whole. A field its
+   type does not declare encrypted, and a stored value that does not authenticate
+   (altered, or moved to another subject, type or field), are faults: the first the
+   calling code's, the second a broken invariant, never a refusal. The value is written as
+   the library's own are (AES-256-GCM, `[format marker][initialisation vector][ciphertext +
+   tag]`, marker `0x01`). Its additional authenticated data is laid out as the library's
+   own: the format marker, the subject identifier's 16 bytes in network order, then the
+   fixed mark `host`, the type's declared name and the field's declared name, each as its
+   length in two bytes, big-endian, followed by its UTF-8 bytes, where a library value's
+   carries its table and its column the same way. The mark keeps a host's value from ever authenticating as a library value or
+   the reverse, whatever names the host chooses: a host's value carries three named parts
+   and a library's two, and a sequence of length-prefixed parts reads one way only. The field's declared name is its member's
+   name, or the name `Encrypted` is given, so a member the host renames keeps its values
+   readable by being given its old name. The library reads nothing of the host's
+   (LIB-HOST-002), the declared names bind a value as tightly as a table and a column
+   would, and the host may rename its table or column freely. *Rejected:* an EF Core value
+   converter (it sees one value, never the row's subject column, and cannot read a key
+   asynchronously); an interceptor that encrypts on save (it would read the host's
+   entities, and hide from the code that writes a value that the value is personal).
+2. **The host's writes and the library's commit together.** `UseUnitOfWorkAsync`
+   (`Janus.Hosting`), on the host's `DatabaseFacade` inside an open unit of work, gives
+   the host's context over the deployment's database the unit of work's connection and
+   transaction, and releases them at the outermost commit or rollback, so its
+   `SaveChangesAsync` and the library's writes (`IResources`, `ICallbackReferences`, an
+   operation the host calls) commit together at the outermost `CommitAsync` and roll back
+   together (AUTHZ-INHERIT-002, CONV-DESIGN-003). The connection runs under the
+   deployment's one application credential, `identity_app`, to which the host's own
+   migrations grant the host's tables (OPS-MIG-003). Called outside an open unit of work, or
+   on a context that holds a connection of its own, it is a fault. An operation whose
+   refusal keeps a write (CONV-DESIGN-003) begins the outermost unit of work and is never
+   called inside the host's; called inside one, it is a fault. The host saves before the
+   outermost commit; the library commits nothing the host has not saved and clears nothing
+   the host's context tracks. *Rejected:* the library joining the host's transaction
+   (every library operation runs in the library's unit of work, and one direction is
+   enough).
+3. **A registration the host removes.** `IResources.RemoveAsync(resource)` removes a
+   record's registration and its ancestry rows, in the unit of work, for a record the host
+   removes from its own table (an address the person deleted, a draft), and revokes every
+   live grant that names the record, each recorded `authz.grant.revoked` with the nil
+   subject as revoker and the reason `AUTHZ-INHERIT-002`, so a later registration of the
+   same identifier inherits none of them. It is refused 422 `api.request.invalid` naming
+   `resource` where the record is not registered, and 409 `authz.resource.inuse` (new)
+   where a record is registered inside it (its contents are removed first). A record's
+   data subject is fixed at registration: a host that must change it removes the
+   registration and registers the record again, encrypting its fields again under the new
+   subject, in one unit of work, and records the change in its own history (IDN-PRIN-003).
+   *Rejected:* a call that reassigns the subject (the record's encrypted fields would no
+   longer decrypt, and who holds the rights over it would change in the library's records
+   without the host's own record of why).
+4. **The host's part of an export.** `IExportContributor` (`Janus.Core`) names itself
+   (`Name`, under INT-SMS-003's rule, distinct among contributors), the types whose records
+   it holds (`Covers`), and answers its sections for a subject (`SectionsAsync`, a
+   `Result` holding a list of `ExportSection`). An `ExportSection` has a `Name` (under
+   INT-SMS-003's rule, distinct from every library section and every other contributor's)
+   and its `Records`; an `ExportRecord` holds `Values`, each a value the host writes as
+   text (an instant in ISO 8601, a number in invariant form) under a stable name (under
+   INT-SMS-003's rule), and no prose; a section or value named outside the rule, or a
+   section named as a library section or another contributor's, is a fault and fails the
+   export as below. `IExports.AssembleAsync` assembles the library's
+   sections (PRIV-RIGHT-003), then asks every registered contributor, outside any unit of
+   work, in contributor name order, and appends what each answers. The export is counted
+   against `privacy.export.ratelimit` once all have answered, in one transaction that
+   takes a lock on the subject and then counts the window again, so exports asked at once
+   are each counted against the ones before them (D-166 X3). A contributor that fails or
+   faults fails the export: nothing is returned (500 `system.fault`, the contributor named
+   in the log), the export is not counted, and the person may ask again, since an export
+   that left out what a host holds would mislead. Both formats of `GET /privacy/export`
+   carry a host section as the library's: `machine` as the section's records, each an
+   object of its named values; `human` grouped by section in the same order, its labels
+   read from the deployment's frontend message catalogue under the key
+   `export/<section>` for a section and `export/<section>/<value>` for a value, which the
+   host adds for its own (`18` FE-LOC-001); `/` is outside the names' rule, so no two keys
+   coincide. Every type that
+   declares an encrypted field or a sensitive category is covered by at least one
+   contributor; startup fails otherwise with `model.startup.declarationmissing`,
+   `details.handler` naming the type, as PRIV-RIGHT-005b's check of the subscribers does.
+   `ExportRequested` is retired: the export carries the host's part when it is assembled,
+   so nothing is owed after it, and `ISubjectEventSubscriber` handles erasure, restriction
+   and takedown.
+5. **Every failed delivery can be completed by hand.** `GET /admin/erasures` and
+   `IErasures.ListAsync` list every incomplete delivery of host-side work, each with its
+   `kind` (`10` section 5.50: `erasure` · `takedown` · `restriction` · `consent` ·
+   `objection`), named by the identifier of the outbox record it travels on (`ErasureId`,
+   whatever its kind), with its subject, the purpose a consent or objection delivery
+   concerns, the change its event announces (`10` section 5.50), its status
+   (`awaiting-subscribers` · `complete` · `failed`), its attempts and its subscribers or
+   handlers, every purpose handler being required; `GET /admin/erasures/{id}`
+   reads one of any kind; a takedown's read (`ITakedowns.ReadAsync`, `GET
+   /admin/accounts/{subject}/takedown`) carries its delivery's identifier as
+   `takedownId`; and `POST /admin/erasures/{id}/complete` (`IErasures.CompleteAsync`)
+   closes any of them by it (IDN-LIFE-003a criterion 9). The list is read under
+   `privacyrequest:manage`, whose manual completion path already closes every kind (`10`
+   section 2.1), takedowns included. `privacy.erasure.completed` names the kind as section
+   5.50 spells it.
+6. **The cookies a deployment sets.** `AuthorizationDeclarationBuilder.Cookie(name,
+   lifetime, thirdPartyReadable, purpose)` declares every cookie the host sets: its
+   lifetime, none for one that ends with the browser's session; no purpose for one
+   strictly necessary, and for one that is not, the consent-based purpose it serves
+   (PRIV-CONS-006a); one naming a purpose not declared or not resting on consent, one named
+   as a cookie the library sets, and one declared twice fail startup with
+   `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>`. A cookie that
+   rests on consent is set only for a person whose session carries the request and who
+   holds that consent; the library records no consent for a visitor it knows nothing of.
+   The list belongs to the privacy notice's version: when a version is published, the
+   cookies the deployment then sets are kept with it (the library's own, `17` BFF-SESS-002,
+   each with the lifetime its configuration then gives, and the host's declared ones), and
+   `GET /privacy/notice` answers the version's own list in `cookies`, each with `name`,
+   `purpose` (none for a strictly necessary one), `lifetime` (none for one that ends with
+   the browser's session) and `thirdParty`, so the notice enumerates them and a reader of
+   an old version sees what it listed (D-024, D-056). Where the cookies the deployment
+   sets differ from the current version's list in a cookie's name, purpose, lifetime or
+   readability by a third party, `degradation` is raised under the scope `notice.cookies`,
+   at each start and at each change of a key that gives a library cookie's lifetime, until
+   a version listing them is published; a deployment with no version published yet raises
+   nothing under it. A consent prompt
+   is shown only where a cookie names a purpose (FE-COMP-006 criterion 1b). Stating the
+   library's lifetimes showed that a customer's session cookie ended with the browser's
+   session, as built, against AUTH-SESS-005's session that persists while used: under a
+   policy requiring `aal1` the session cookie, and the CSRF cookie beside it, now last
+   until the session's absolute expiry, and under one requiring `aal2` they still end with
+   the browser's session, as the pre-authentication cookie does (`17` BFF-SESS-002).
+7. **A purpose handler does the work.** `IPurposeHandler` gains `Name`, held to the rule
+   of INT-SMS-003 and distinct among the purpose handlers and the subject-event
+   subscribers together (refused at startup as a subscriber's is, IDN-LIFE-003a), since a
+   delivery is confirmed and listed by it, and
+   `ConsentChangedAsync(ConsentChanged)` and `ObjectionChangedAsync(ObjectionChanged)`,
+   each answering a `Result`. Each `ConsentChanged` and `ObjectionChanged` is delivered to
+   every handler naming its purpose through the transactional outbox, as the subject events
+   are (IDN-LIFE-003a): written in the emitting transaction, confirmed by each handler's
+   success, retried under `outbox.retry.*`, failed with `erasure-delivery-exhausted` once
+   its attempts are spent, listed with its kind and completed by hand (rule 5). A success
+   confirms the handler's work: on a withdrawal it erased what was held solely for that
+   purpose (PRIV-CONS-008), on an objection it stopped processing that subject for it
+   (PRIV-RIGHT-001a). Every purpose resting on consent or on an objectable basis is named
+   by at least one registered handler; startup fails otherwise
+   (`model.startup.declarationmissing`, `details.handler` naming the purpose), the check
+   PRIV-RIGHT-001a criterion 3 states for objectable purposes now holding for
+   consent-based ones as D-145 asked. A plain consumer of either event still receives it
+   as an event.
+8. **Not here.** Reading a person's standing restriction, objections and consents from a
+   host's job is one of the reads of round H2, with a person's contact details and
+   language.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `04` PRIV-RIGHT-005a (the location binding and its layout, a host's own
+fields, criteria 20 and 21), PRIV-RIGHT-005b (table, body), PRIV-RIGHT-003 (the host's
+sections, criteria 5 and 6), PRIV-CONS-006a (statement, values, criteria 1, 3 and 4),
+PRIV-RIGHT-001a (body, criterion 3), PRIV-CONS-008 (body); `03` AUTHZ-INHERIT-002 (values,
+criteria 1 and 5), AUTHZ-INHERIT-003 (criterion 3), AUTHZ-GRANT-003 (the revocation by a
+removal); `01` IDN-LIFE-003a (statement, the subscriber names, the manual completion path,
+criterion 9); `05` INT-SMS-003 (the names of purpose handlers, contributors, sections and
+values; the `outstanding` width); `06` OPS-ALERT-001 (the delivery row); `07` LIB-API-001
+(the seams, the export contributors, the emitted events, the model builder, the pipeline
+row), LIB-API-005 (the seams), LIB-HOST-001 (the subject-event handlers, purpose handlers,
+export contributors, cookies); `08` CONV-LAYOUT-002, CONV-DESIGN-003 (the encryption of a
+host's fields, the seam's direction), CONV-DESIGN-007 (the seams); `09` `GET
+/privacy/notice`, `GET /privacy/export`, `/admin/erasures` (the shape), `POST
+/admin/erasures/{id}/complete`; `10` section 1 (`privacy.subject.erased`,
+`authz.resource.inuse`, `api.request.invalid`, `privacy.erasure.notfound`,
+`privacy.erasure.notfailed`, `model.startup.declarationmissing`,
+`model.startup.declarationinvalid`, `model.startup.subscribername`), section 2.1
+(`privacyrequest:manage`), section 4 (`outbox.retry.maxattempts`,
+`privacy.export.ratelimit`), section 5a (`erasure:complete`), section 5b
+(`ExportRequested` retired), section 5.23 (the `notice.cookies` scope), section 5.24
+(`privacy.erasure.completed`, `authz.grant.revoked`), section 5.26 (`delivery`,
+`outstanding`), section 5.46, new section 5.50 (the kinds, the change); `11` section 5;
+`17` BFF-SESS-002 (the lifetimes, criterion 3), BFF-CSRF-005a (the cookie's lifetime);
+`18` FE-COMP-006 (criteria 1b and 3); `janus-explained.md` (the cookies).
+
+---
+
+## D-204 — A host is set up, migrated and tested from the packages, and a sample host proves it
+
+**Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Amends:** D-018 (migrations are applied by `migrate`, not by an EF Core bundle), D-149 items 4 and 9, D-153 (the command list), D-160 item 4 (what `Janus.Cli` validates), D-184 (the repository's tools), D-028 (what bootstrap prints), D-046 and D-149 item 1 (the sample host keeps no lockfile)
+
+**TL;DR.** A host cannot stand a deployment up from the package alone. Its roles cannot
+be declared or seeded, so a derivation confers nothing on a fresh database until a
+stepped-up administrator defines them by hand. The library's migrations and its commands
+reach no host: the migrator is internal and the command-line tool ships nowhere. It has
+no stand-in transports or secret source for development and no way for its tests to sign
+someone in. And the one sample host raised its schema through a library test project,
+wrote a setting straight into a table, and signed nobody in, so the gaps of D-202 and
+D-203 went unseen. This decision ships what a host needs to set up, migrate and test, and
+puts a sample host built only from the packages into the gate. Built in round H1 with
+D-202 and D-203.
+
+**The rules.**
+
+1. **A host's roles from its declaration.** `AuthorizationDeclarationBuilder.Role(name,
+   permissions)` declares a role the deployment starts with, its name under the role name
+   rule (`09` `POST /admin/roles`) and never a role of `10` section 3, each permission a
+   declared host permission or a library-owned one other than `system:administer`
+   (OPS-CFG-007); any other fails startup with `model.startup.declarationinvalid`,
+   `details.declaration` `role.<name>`. At each start, before the application serves a
+   request, every declared role the deployment has not yet seeded is seeded, under the
+   lock of its name, by the start principal `role-declaration` (`10` section 5.29, its own
+   operation `role-seeding`, section 5.28), inside the start step and through no public
+   operation. The role definition admits it there without `role:manage`, a step-up or a
+   person's reason, its reason being `AUTHZ-GRANT-004`, and `IRoles` admits no system
+   principal (`authz.denied`), so no code outside the start step defines a role as it
+   does, whatever principal it builds: the
+   role is defined where no role of that name exists, recorded `authz.role.defined`, and
+   left as it stands where one does; either way the name is kept as seeded, a row of a
+   library table. A role once seeded is never seeded again, so a later change or removal
+   by an administrator stands (AUTHZ-GRANT-004). *Rejected:* defining declared roles at
+   every start (it would undo an administrator's change); seeding through `bootstrap` (it
+   reads no host declaration); the `configuration` operation (a change from the server,
+   never through the application, D-176).
+2. **The library's migrations and commands reach a host.** `Janus.Cli` ships as a .NET
+   tool package on the feed at the library's version (LIB-PKG-001), its command `identity`
+   (CONV-NAME-001's neutral word); a deployment that runs a command where no SDK is
+   installed takes the tool's files into its image. Its new command `migrate` applies the
+   library's migrations to the database of the connection its JSON document on standard
+   input carries, under the `identity_migrate` credential (OPS-MIG-003), as the command
+   principal `migrate` (`10` section 5.29, operation `migration`). Its document carries
+   the connection and nothing else: `migrate` reads no key and fills no key ring; it is
+   refused with `model.startup.secretunavailable`, `details.key` `input`, where standard
+   input is a terminal or the document carries no connection, and, first, with
+   `api.request.malformed` naming `input` where the document carries any member but the
+   connection, whether or not it carries the connection, so the migration step never
+   holds the key-encryption key (D-173); the pipeline reads the
+   migration credential from the secrets manager under a credential of its own that reads
+   nothing else (`19` INF-HOST-003). It runs no schema check
+   (OPS-MIG-002), which needs the schema it creates, and, as no command of the tool does,
+   none of the model's checks, which need the host's declaration (AUTHZ-MODEL-004).
+   `migrate --report` writes to standard output the destructive-operation report
+   (OPS-DEP-002) of the migrations pending on its target and applies nothing, so a host's
+   pipeline reports what a library upgrade would do before it does it. A migration the
+   database refuses exits 1 with one JSON line `system.fault` on standard error, nothing
+   applied beyond the migrations before it. A host's pipeline runs `migrate` before its own
+   migrations (OPS-MIG-004) and before the new version deploys (OPS-MIG-001). The library's
+   own pipeline applies its migrations the same way, the double run of OPS-MIG-007
+   included, so there is one way to apply them; the EF Core migration bundle is no longer
+   built.
+3. **Bootstrap names the administrative organization.** On success `bootstrap` writes two
+   lines to standard output: the enrolment link, then the administrative organization's
+   identifier (OPS-BOOT-001), which a host keeps in its own configuration; the library
+   reads none.
+4. **A testing package.** `Janus.Testing` ships as its own package (LIB-PKG-001), for a
+   host's tests and its development setup. It registers nothing on its own, and nothing in
+   it skips, bypasses or short-cuts a check (OPS-ENV-001 criterion 2): everything it does
+   goes through the library's own commands, endpoints and operations. It carries:
+   - `InMemoryMailTransport` and `InMemorySmsTransport`, which keep every message sent,
+     readable by destination, and fail a delivery only where the test says so;
+   - `FixedSecretSource`, for tests, which answers a key-encryption key version and a
+     fingerprint key version of 32 bytes each, drawn once for the instance so that each
+     test's deployment starts clean (a development setup that keeps its database across
+     restarts supplies a secret source of its own), and the maintenance credential, the
+     mail server's secret and each social provider's credential the test gives it, and
+     writes the JSON document the commands other than `migrate` read, with the same keys
+     and the application connection the test gives it;
+   - stand-ins for the optional environment seams that answer a reading in order, so a
+     development deployment raises no `degradation`: `FixedClockReference`
+     (`IClockReference`, no offset), `SucceededCertificateRenewal` (`ICertificateRenewal`,
+     a renewal that succeeded), and `EmptyLocationSource` and `EmptyDatacenterRangeSource`
+     (`ILocationSource`, `IDatacenterRangeSource`), each a file holding only its first
+     line, dated the day it is read, and no range (INT-GEN-006, AUTH-ABUSE-008);
+   - `SoftwarePasskey`, a WebAuthn authenticator in memory (ES256, `none` attestation,
+     user presence and user verification performed, backup eligibility and backup state
+     set on every ceremony, as a synced passkey reports them) that answers the library's
+     creation and request options, so a test enrols a passkey and signs in with it through
+     the library's own ceremonies (AUTH-FACT-014), and a staff member completes enrolment
+     under the administrative organization's credential redundancy (AUTH-RECOV-001) and
+     reaches its floor (AUTH-SESS-005b);
+   - `TestDeployment`, which prepares an empty database as a production one is prepared
+     (OPS-ENV-001), through the installed tool: `migrate`, with a document holding the
+     migration connection the test gives and nothing else, then `bootstrap`, then
+     `register-client` for each browser application the host declares (its
+     `SignOnClient`, AUTH-SESS-012), with the document of the host's `FixedSecretSource`,
+     keeping
+     the enrolment link and the administrative organization's identifier `bootstrap`
+     printed;
+   - `TestPeople`, over a running host: a customer registered through the registration
+     endpoints with the codes the in-memory transports hold; the first administrator,
+     enrolled with a software passkey through the enrolment link; a staff member invited by
+     an administrator with the roles the test names and enrolled through the invitation;
+     and for each a `TestSession`, an `HttpClient` that carries the session cookie, the
+     synchronizer token and `X-Identity-Request` (BFF-CSRF-001, BFF-CSRF-003) on every
+     request, with the person's subject, and a step-up with the person's passkey or
+     password.
+5. **A sample host in the gate.** A sample host lives in the repository outside the
+   library's solution, in a solution of its own (`samples/HostSample`, its tests in
+   `samples/HostSample.Tests`), and references only the packages packed from the same
+   commit (the main package and `Janus.Testing`, with `Janus.Cli` as its tool), restored
+   from a folder feed the gate fills, never a project of the library's solution. It has
+   its own package versions and tool manifest: the `Janus.*` packages and the tool at the
+   version the gate passes it, every other package one CONV-DESIGN-008 permits; the
+   committed lockfile and locked restore of CONV-SETUP-002 hold for the library's solution,
+   and the sample keeps no lockfile and restores unlocked, since the `Janus.*` version
+   changes with every commit: the gate passes it as a property the sample's own package
+   versions read and installs the tool at it. Building it and running its tests is a gate of CONV-GATE-001, and an
+   obstacle there is a gap in the public surface, never a project reference or an
+   internals grant (the working guide, Tier 2). It is a small business application whose
+   domain is its own invention, never a real host's: types of its own with an encrypted
+   personal field, a sensitive type with a consent-based purpose, an objectable purpose
+   with its handler, a subject-event subscriber and an export contributor, a declared role
+   and a derivation over it, a job, and endpoints of its own needing a session or marked as
+   answering anyone, protected by permissions, one bound to a step-up gate, with a list
+   filtered by the gate and carrying capabilities. Its tests sign in a customer, an
+   administrator and a staff member through `Janus.Testing` and prove, through its own
+   endpoints: a record written and read with its personal field encrypted; an endpoint
+   refused without a session and one marked as answering anyone reached without one; a
+   bound action refused without its step-up; a record registered and rolled back leaving
+   neither; a registration removed; an erased customer whose host field no longer
+   decrypts; an export carrying the host's section; a withdrawal and an objection handled
+   by the handler; a job admitted for its declared permission and refused for another. The
+   conformance suite's own sample stays in `Janus.Conformance.Tests`, and takes its schema
+   from `migrate` and its configuration through the library's operations, no longer from a
+   library test project or a direct write (LIB-API-002 criterion 2). Every later decision
+   that adds to what a host meets adds to the sample.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-PRIN-001 (the deployment-scoped principal's operations, the
+start steps); `02` AUTH-KEY-002 (`migrate` reads no key); `07` LIB-PKG-001 (body,
+criterion 3), LIB-PKG-003 (criterion 1), LIB-API-001 (the model builder, the testing
+package and command-line rows, criterion 2), LIB-API-002 (criterion 2), LIB-HOST-001 (the
+roles and secret source rows), LIB-EXT-001 (the secret source row), LIB-TEST-002
+(criterion 1), new LIB-TEST-003 and LIB-TEST-004; `06` OPS-BOOT-001 (values, criterion 8),
+OPS-MIG-001 (values, criteria 3 to 5), OPS-ENV-001 (values), OPS-SEC-001 (the commands'
+document, criterion 4); `03` AUTHZ-GRANT-004 (declared roles, criterion 7),
+AUTHZ-MODEL-004 (what `Janus.Cli` validates); `08` CONV-LAYOUT-001 (`Janus.Cli`,
+`Janus.Testing`, the sample host), CONV-LAYOUT-002, CONV-DESIGN-003 (migrations),
+CONV-SETUP-002 (the tools, the sample's restore, criteria 1 and 2), CONV-SETUP-003 (the
+public surface files), CONV-SETUP-004 (the analyser scope), CONV-DESIGN-007 (`migrate`
+fills no key ring), CONV-DESIGN-008 (the design package's use, `System.Formats.Cbor` for
+`Janus.Testing`, criterion 1), CONV-TEST-001 (the samples), CONV-DEP-001 (the library's
+solution, criteria 1 and 2), CONV-GATE-001 (the sample host's gate, the locked restore);
+`09` `POST /admin/roles` (the role name rule); `10` section 1
+(`model.startup.declarationinvalid`, `model.role.undeclaredpermission`,
+`model.startup.secretunavailable`), section 3, section 5.24 (`authz.role.defined`),
+section 5.28 (`migration`, `role-seeding`), section 5.29 (the preamble, `migrate`,
+`role-declaration`), REF-001 (criterion 2); `19` INF-HOST-003 (the migration credential,
+the pipeline's credential, the commands' document); `implementation-plan.md` (sections 2,
+3a and 4); the working guide (sections 3, 4 and 6).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -16309,6 +16903,9 @@ the frontends' server side, the known issues carried).
 | The Tier 3 questions of the run that built D-198: 252 and 253 | D-199 |
 | The exit gate review: a credential the account does not hold is judged first | D-200 |
 | Milestone 1 closes: the review of the run that built D-200 | D-201 |
+| A host builds on the public surface: who is asking, its own endpoints, its own jobs | D-202 |
+| The host's privacy duties: its own fields, its transaction, its part of an export | D-203 |
+| A host is set up, migrated and tested from the packages, and a sample host proves it | D-204 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

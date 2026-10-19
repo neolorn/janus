@@ -2025,16 +2025,25 @@ host publishes (terms of service, consent texts).
   "version": "...",
   "governingLanguage": "ar",
   "text": "...",
-  "translations": [ { "language": "en", "text": "..." } ]
+  "translations": [ { "language": "en", "text": "..." } ],
+  "cookies": [ { "name": "...", "purpose": null, "lifetime": "...", "thirdParty": false } ]
 }
 ```
+
+`cookies` is carried by `/privacy/notice` alone, and lists the cookies kept with the
+version answered, those the deployment set when it was published: every cookie the
+library sets (`17` BFF-SESS-002) and every one the host declares (LIB-HOST-001), each with its `name`, the
+consent-based `purpose` it serves (null for one strictly necessary), its `lifetime` as an
+ISO 8601 duration (null for one that ends with the browser's session) and whether a
+third party can read it (`thirdParty`), so the notice enumerates them (PRIV-CONS-006a,
+D-203).
 
 **400**: `api.request.malformed` naming `document` where `{document}` is not a document
 name (INT-SMS-003).
 **404**: `privacy.document.notfound`, the document, or the named version, was never
 published.
 
-*Source: PRIV-CONS-005, PRIV-CONS-006, D-146, D-162, D-166, D-183*
+*Source: PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-006a, D-146, D-162, D-166, D-183, D-203*
 
 Public, unauthenticated. The governing text is always returned with the translations,
 so a screen can show either without changing the interface language (PRIV-CONS-005
@@ -2087,8 +2096,10 @@ Restriction enters the request queue; erasure reaches it only through
 **Requires step-up at the account's reachable assurance** (AUTH-STEP-002a — never
 phishing-resistant under the system policy), and is **rate-limited**.
 
-The limit is `privacy.export.ratelimit` exports in the 24 hours ending at the request.
-Past it the answer is **429** `auth.throttled` with `Retry-After` and `details.retryAt`,
+The limit is `privacy.export.ratelimit` exports in the 24 hours ending at the request;
+an export is counted once every export contributor has answered, under a lock on the
+subject with the window counted again, and one a contributor failed is not counted
+(PRIV-RIGHT-003, D-203). Past it the answer is **429** `auth.throttled` with `Retry-After` and `details.retryAt`,
 the instant the oldest counted export leaves the window; a request at that instant is
 served.
 
@@ -2096,7 +2107,7 @@ served.
 without it, or with any other value, is **400** `api.request.malformed` naming `format`;
 nothing is assembled.
 
-*Source: D-086, D-141, D-162, D-166*
+*Source: D-086, D-141, D-162, D-166, D-203*
 
 Without it, anyone holding a live session (a borrowed phone, a shared computer)
 pulled a complete export, sensitive records included, in one request, from a session that
@@ -2115,9 +2126,16 @@ The staff bulk-export controls in D-045 remain scoped to staff and do not apply 
 stable-named. Each membership carries `acknowledgedAt` where an invitation attached it,
 and the section `membership-acknowledgements` holds one record per document
 acknowledged: `membership`, `document`, `version`, `acknowledgedAt` (REG-INV-001 AC3);
-the sections and their order are PRIV-RIGHT-003's. **Neither is a rendered document.**
-The frontend renders the readable view and localizes it through the frontend
-localization library.
+the sections and their order are PRIV-RIGHT-003's, the library's first and then each
+export contributor's in contributor name order. A host's section is carried as the
+library's are: in `machine` as the section's records, each an object of its named values;
+in `human` grouped under the section in the same order, its labels read from the
+deployment's frontend message catalogue under the key `export/<section>` for a section and
+`export/<section>/<value>` for a value, which the host adds for its own (`18` FE-LOC-001);
+`/` is outside the names' rule, so no two keys coincide. A contributor that fails or faults
+fails the export: **500** `system.fault`, nothing returned (D-203). **Neither is a
+rendered document.** The frontend renders the readable view and localizes it through the
+frontend localization library.
 
 No server-generated PDF. A rendered page satisfies the obligation, browsers print to
 PDF anyway, and a downloadable file of health data is a larger exposure than a page
@@ -2254,7 +2272,9 @@ change that would take a library-owned permission out of the role the reserved
 **201** creates the role; **204** gives the role of that name the permissions stated.
 `DELETE /admin/roles/{name}` `{ "reason": "..." }`: **204**.
 
-**400**: `api.request.malformed` naming `name` where it is not a role name,
+**400**: `api.request.malformed` naming `name` where it is not a role name (a lower-case
+letter, then lower-case letters and digits, in parts joined by single hyphens:
+`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`),
 `permissions` where one is declared neither by the library nor by the host
 (AUTHZ-MODEL-004), `reason` where it is absent, blank or longer than 1024 characters
 after trimming
@@ -2570,7 +2590,7 @@ configuration change's missing reason excepted, below). **404**
 |---|---|
 | `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` in the organization and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007). `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
 | `DELETE /admin/organizations/{id}/invitations/{invitationId}` | Revokes an invitation not yet acknowledged, whether or not its link was opened; what it bound is forgotten and a mailbox nobody ever held is released, marked and owed `removed` (REG-MAIL-001, INT-MAIL-006). **204**, also for one already revoked. **404** `identity.invitation.notfound` where the organization issued no such invitation; **422** `identity.invitation.expired` where it was acknowledged. Not a step-up action |
-| `DELETE /admin/organizations/{id}/memberships/{subject}` | Ends a membership; the account and organization persist (IDN-MEM-001), and the account's grants in the organization are not removed (`16` section 3 step 4); a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001). Requires step-up (`membership:end`). **204** · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
+| `DELETE /admin/organizations/{id}/memberships/{subject}` | Ends a membership; the account and organization persist (IDN-MEM-001), and the account's grants in the organization are not removed (`16` section 3 step 4); a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001). Requires step-up (`membership:end`). **204** · **403** `authz.denied` where `{subject}` is the reserved `emergency` account and `{id}` the administrative organization, before the step-up (OPS-BOOT-002, D-202) · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
 
 ### Groups — `group:manage`
 
@@ -2616,8 +2636,8 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 | `GET /admin/privacy/requests` | The queue, each request with its decision deadline and status — `open` · `fulfilled` · `refused` · `granted-by-lapse` · `deemed-refused-by-lapse` (PRIV-RIGHT-002) |
 | `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); what an `erasure` fulfilled does follows the account's state (the fulfil row below, IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt`: required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture`. `detail` is optional; where present it is 1 to 1024 characters after trimming (API-CONV-002), as `channel` and the identity confirmation are. An absent or `null` `detail` is recorded as none, never as empty text; a blank one is refused **400** `api.request.malformed` naming `detail`. A subject no account bears is refused **422** `api.request.invalid`, `details.member` the member naming it (D-183) |
 | `POST /admin/privacy/requests/{id}/fulfil` · `/refuse` | The decision. Fulfilment of restriction sets the state; refusal records the reason. Fulfilment of erasure follows the state it finds (IDN-LIFE-003): an account `active` or `restricted` enters `deleting` by `oob-request`, holding a restriction where one is in force; an account `suspended` begins its deletion all the same, holding the suspension with its origin, so that a cancellation returns it to `suspended`; an account already `deleting`, by any origin, has the request recorded fulfilled against the running window, and nothing restarts; an account `deleted` has the request recorded fulfilled, and nothing further happens. Where a window starts, the security-notice set is sent `oob-deletion-notice`, which carries no cancel link. Fulfilment of every request type, rectification included, requires step-up (`privacyrequest:fulfil`); refusing is not gated. Receipt is automatic at creation (D-126); no acknowledge endpoint. **403** `authz.denied` without `privacyrequest:manage`, before the request is read, and for an erasure whose subject is the reserved `emergency` account, once that account is read (OPS-BOOT-002), before the step-up; **404** `privacy.request.notfound` where the identifier names no request; **409** `privacy.request.decided` where it is already decided. Nothing is concealed (section 8, AUTHZ-CONCEAL-005). The fulfilment of an erasure refuses nothing on the account's state, each state having its outcome above, and nothing on its existence, which the entry checked; a deletion that will not begin after that is a fault (D-183) |
-| `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for one (IDN-LIFE-003b): `{ id, subject, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153). `id` is the identifier of the outbox record the erasure's host-side work travels on. **200** · **404** `privacy.erasure.notfound` where no erasure is held under it |
-| `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a): closes a `failed` erasure, takedown (`takedownId`) or restriction delivery named by its identifier. Requires step-up (`erasure:complete`). **204** · **404** `privacy.erasure.notfound` where no such delivery is held under the identifier · **409** `privacy.erasure.notfailed` where it is `awaiting-subscribers` or `complete` |
+| `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete delivery of host-side work in one query, an erasure's, a takedown's, a restriction change's, a consent change's and an objection change's alike; per-subscriber state for one (IDN-LIFE-003a, IDN-LIFE-003b): `{ id, kind, subject, purpose, change, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153, D-203). `id` is the identifier of the outbox record the delivery travels on, whatever its kind; `kind` is spelled as `10` section 5.50 (`erasure` · `takedown` · `restriction` · `consent` · `objection`), `status` as section 5.12, `subscribers` naming the subject-event subscribers or the purpose handlers the delivery is owed to; `purpose` is the purpose a consent or an objection delivery concerns and null for another kind; `change` is the change its event announces, as `10` section 5.50 spells it, and null for an erasure or a takedown; `reason` is an erasure's (`10` section 5.12a) and null for another kind; `required` is true for every purpose handler, each being required (`10` section 5b). A takedown's `takedownId` (`GET /admin/accounts/{subject}/takedown`) is its delivery's `id`. Every kind is listed under `privacyrequest:manage`, whose manual completion path closes every kind (`10` section 2.1). **200** · **404** `privacy.erasure.notfound` where no delivery is held under it |
+| `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a): closes a `failed` delivery of any kind of `10` section 5.50 named by its identifier, a takedown's by its `takedownId`. Requires step-up (`erasure:complete`). **204** · **404** `privacy.erasure.notfound` where no delivery is held under the identifier · **409** `privacy.erasure.notfailed` where it is `awaiting-subscribers` or `complete` |
 
 ### Audit and explanations — `audit:read`
 
@@ -2891,7 +2911,8 @@ address bar, and presents it to the endpoint that consumes it in the request bod
 ## 13. Capabilities
 
 **API-CAP-001** — Resource responses SHALL carry the capabilities the caller holds
-for that record, computed in the same query.
+for that record, computed for the whole page at once, in the record's own query or in one
+statement beside it, never per record.
 
 ```json
 {
@@ -2902,7 +2923,7 @@ for that record, computed in the same query.
 }
 ```
 
-*Source: AUTHZ-GATE-005, D-078, D-087*
+*Source: AUTHZ-GATE-005, D-078, D-087, D-202*
 
 A capability means **"permitted by grants, subject to session gates."** It is not a
 promise the action will succeed: an action may still be refused for step-up, a
@@ -2919,7 +2940,7 @@ The frontend renders controls from `can` and SHALL NOT infer permissions from ro
 names.
 
 **Acceptance criteria**
-1. A list of 50 records returns capabilities without additional queries.
+1. A list of 50 records returns capabilities without a query per record.
 2. A capability with an empty `requires` always succeeds.
 3. A capability with `requires` prompts for what is named rather than failing.
 4. No frontend code contains a role name.
@@ -2929,4 +2950,7 @@ names.
 ## 14. Open items
 
 None. The host's own business endpoints are out of scope — they consume the gate
-directly (`03-authorization`) rather than through this surface.
+directly (`03-authorization`) rather than through this surface, reading who is asking
+from the request, needing a session unless marked as answering anyone (`AllowNoSession`)
+and answering the library's results
+through the public surface `17` section 2a gives (D-202).

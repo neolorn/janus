@@ -3310,7 +3310,8 @@ server serves: the versions of the key-encryption key, the versions of the finge
 key, the maintenance credential (OPS-MIG-003a), the mail server's secret where the
 shipped adapter is the mail server in use (CONV-DESIGN-007), and each social provider's
 credential by provider name. No secret is an argument of `AddJanus`. A `Janus.Cli`
-command reads the same values from one JSON document on standard input (OPS-SEC-001). A
+command reads the same values from one JSON document on standard input (OPS-SEC-001),
+save `migrate`, which reads no key (OPS-MIG-001, D-204). A
 secret that cannot be read stops startup with `model.startup.secretunavailable`,
 `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`,
 `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`, and `input`
@@ -3325,7 +3326,7 @@ string `identity:oidc:token-protection:v1`, the current version encrypting; no k
 its own SHALL be created or stored. A code or refresh token encrypted under a version
 that has been retired (OPS-SEC-003) is refused.
 
-*Source: D-026.3, D-105, D-166, D-176, D-180, D-183*
+*Source: D-026.3, D-105, D-166, D-176, D-180, D-183, D-204*
 
 **Acceptance criteria**
 1. No secret value appears in any configuration file in the repository.

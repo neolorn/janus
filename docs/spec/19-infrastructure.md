@@ -211,7 +211,7 @@ it, as deployment-injected configuration: the **database connection** and the
 **secrets-manager access credential**. No other secret SHALL be present in files,
 images, environment variables, or the repository.
 
-*Source: D-148, D-166; OPS-SEC-001, D-047, D-105*
+*Source: D-148, D-166; OPS-SEC-001, D-047, D-105, D-204*
 
 **Why two, and why these.** The application must prove who it is to the secrets
 manager before it can fetch anything, and that proof has to live somewhere — this is
@@ -228,8 +228,9 @@ maintenance credential, the mail server's management key where the shipped adapt
 used (INT-MAIL-001), and each declared social provider's credential by the provider's
 name (INT-GEN-002); a refusal names them in `details.key` as OPS-SEC-001 lists. A
 `Janus.Cli` command reads its database connection and every key
-version and credential it needs from one JSON document the operator pipes to its
-standard input from the secrets manager's own client, never from an argument, a file or
+version and credential it needs from one JSON document the operator, or for `migrate`
+the pipeline's migration step, pipes to its standard input from the secrets manager's own
+client (`migrate`'s carries the migration connection alone, OPS-MIG-001, D-204), never from an argument, a file or
 an environment variable (OPS-SEC-001). The secrets of the
 provider's client registry are none of these: the library generates and rotates them
 itself and no deployment supplies one (OPS-SEC-002).
@@ -241,9 +242,11 @@ itself and no deployment supplies one (OPS-SEC-002).
 | Be **off-host** | Losing the host must not lose the keys (DR-009) |
 | Be **reachable at boot** | Every secret above is read at startup; nothing serves without them |
 | Hold **every version of the KEK and of the fingerprint key** the deployment holds, and the **backup private key** | The keys a restore needs, also escrowed in the envelope (DR-009). Each key is a set of versions with one current; a version a rotation retires stays until every backup taken before that rotation completed has expired (OPS-SEC-003, DR-009) |
+| Hold the **migration database credential** | Read only by the pipeline's migration step, which pipes it to `migrate` (OPS-MIG-001, OPS-MIG-003, D-204); never in the application's configuration (INF-DB-003) |
 | Hold the **maintenance database credential** | Read by the application at startup for the audit partition job, and by the `Janus.Cli` key-rotation commands from the document piped to them (OPS-MIG-003a, OPS-SEC-003, D-148); not escrowed, recreated by migration |
 | Hold the **mail server's management key**, where the shipped adapter is used, and **each social provider's credential** the deployment declares | Read at startup (INT-MAIL-001, INT-GEN-002, IDN-LIFE-012) |
 | Authenticate the application by a **scoped credential**, revocable and rotatable without a code change | A leaked secret zero is contained and replaced, not redeployed around |
+| Authenticate the pipeline's migration step by a **credential of its own**, which reads the migration database credential and nothing else, held by the pipeline platform's secret store and never on the host | The migration step never reaches the key-encryption key (OPS-MIG-001, D-173, D-204) |
 | Protect its own access by hardware-backed multi-factor authentication | D-084 |
 
 **Boot dependency, accepted.** A restart while the secrets manager is unreachable

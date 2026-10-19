@@ -29,14 +29,18 @@ mounts. The host SHALL NOT implement session handling, CSRF enforcement, capabil
 projection, or error translation itself. The host mounts the browser profile with
 `UseBrowserProfile`, the machine profile (BFF-MACH-001) with `UseMachineProfile`, and the
 library's routes with `MapIdentityEndpoints` and `MapIdentityWellKnown`; nothing else is
-required to mount it.
+required to mount it. The host's own endpoints, mounted after the browser profile, read
+who is asking from the request (BFF-HOST-001), need a session unless marked as answering
+anyone (BFF-HOST-002), carry their records' capabilities through `CapabilityFields`
+(BFF-CAP-002) and answer the library's results through the library's own answers
+(BFF-HOST-003), so the host builds none of the four for them either (D-202).
 
 **Values (D-162).** Which application a process serves is declared once, at
 registration: `AddJanus` takes an `ApplicationKind` (`Management` · `Public`), and the
 mount takes nothing. It decides `SameSite` and nothing else (BFF-CSRF-005). The unset
 value is `Management`, so an undeclared kind yields `SameSite=Strict`.
 
-*Source: D-052, D-162, D-166*
+*Source: D-052, D-162, D-166, D-202*
 
 AUTH-SESS-007 requires that no endpoint can opt out of CSRF. That is achievable only
 if the library owns the middleware — a host-built BFF makes "no endpoint can forget"
@@ -65,8 +69,9 @@ specified as enforced, not followed.
 | Capability projection plumbing | Which capabilities are relevant per resource |
 | Assurance and step-up gating | Route layout and mounting point |
 | Correlation identifier propagation | Frontend served, if any |
+| Who is asking, read for the host's endpoints (BFF-HOST-001) | Which of its endpoints answer anyone, and which permission each asks (BFF-HOST-002) |
 
-*Source: D-052, LIB-HOST-003*
+*Source: D-052, LIB-HOST-003, D-202*
 
 **Acceptance criteria**
 1. No library code contains a host domain type name.
@@ -84,6 +89,144 @@ Consumers depend on it, so it cannot change freely.
 1. The pipeline's mounting API and ordering guarantees are documented.
 2. A contract test guards them; the browser profile's stage order is one of the contract
    lists the release gate compares (REF-001 AC2).
+
+---
+
+## 2a. Host endpoints
+
+**BFF-HOST-001** — A host's own endpoint SHALL learn who is asking from the request
+through the public surface, and SHALL never read or resolve the session itself.
+
+**Values (D-202).** `IRequestAccess` (`Janus.Core`), registered by `AddJanus` in each
+request scope, answers `Current()`: a `Result<RequestAccess>` holding the access of the
+request being served, or the failure `auth.session.expired` where there is none
+(CONV-DESIGN-005). A `RequestAccess` carries `Context`, the `AccessContext` the library's
+own endpoints pass for the same request, its break-glass reason included where the
+session is a break-glass session or one another application opened from it
+(OPS-BOOT-002); `Session`, the `SessionId` the library's own endpoints pass to an operation
+for it; and `Assurance`, an `AttainedAssurance` read from the session record
+(AUTH-SESS-001) as the gate counts it: the instant each assurance level and phishing
+resistance were last reached since the session's last downgrade (AUTH-SESS-009), and the
+account's reachable level (AUTH-STEP-006). There is none where stage 5 left the request
+without a live sign-in session (none presented, one that has ended, or only a
+pre-authentication, registration or enrolment session), and none outside the browser
+profile or outside a request (the machine profile, a job). It is what stage 5
+established, read and never looked up again (BFF-ORDER-001). A host endpoint passes
+`Context` and `Session` to every operation and gate it asks for the person, and keeps
+neither past the request it read them for, so a break-glass session's reason never
+reaches later work (D-170). A host whose requests carry the library's sessions takes a
+person's context from here and never builds one; `AccessContext.Of(SubjectId)` is for a
+host that consumes authorization without the library's authentication (LIB-HOST-004), for
+the conformance suite and for tests (AUTHZ-IMP-001).
+
+*Source: D-202*
+
+The library's own endpoints read the session the pipeline resolved; a host's endpoint is
+the same kind of endpoint and reads the same thing. A context the host built for the
+person itself would carry neither the step-up the session proved nor a break-glass
+session's reason.
+
+**Acceptance criteria**
+1. In a request carrying a live sign-in session, `Current()` holds the context, the
+   session identifier and the attained assurance the library's own endpoints use for the
+   same request, and an operation called with them answers as it answers the library's
+   endpoint.
+2. `Current()` answers `auth.session.expired` for a request carrying no session, an ended
+   one, or only a pre-authentication, registration or enrolment session, and in a job.
+3. In a break-glass session the context carries the break-glass reason, and a record a
+   host's call writes in it carries the reason.
+4. No public member of the library makes a context whose acting and effective identities
+   differ.
+5. After a step-up rotates the session (BFF-SESS-004), the next request's `Current()`
+   names the new session identifier.
+6. The attained assurance of a session downgraded since it reached `aal2` reports no
+   `aal2` instant before the downgrade.
+
+---
+
+**BFF-HOST-002** — A host endpoint SHALL need a live sign-in session unless it says
+where it is mounted that it answers anyone, and the pipeline SHALL refuse it as it
+refuses the library's own.
+
+**Values (D-202).** Every endpoint the host maps after the browser profile requires a
+live sign-in session: stage 8 refuses a request that reaches it without one with 401
+`auth.session.expired`, carrying `details.reauthenticate` where a sign-in session ended
+(BFF-STEP-001) and the code alone where none was held, before the endpoint runs.
+`AllowNoSession()` (`Janus.Hosting`), on an endpoint's convention builder, marks one that
+answers anyone (a catalogue page, a checkout open to everyone). A marked endpoint still
+passes stages 2 to 6: it is a pre-session endpoint, so the browser profile issues the
+pre-authentication session to a request that reaches it carrying none (BFF-CSRF-005a), and
+a state-changing request to it carries that session's synchronizer token or is refused at
+stage 6 (BFF-CSRF-001). The library's own
+endpoints keep their own marks. **Step-up stays on the action, never on the endpoint:** a
+host binds a gate to its permission (`StepUpGate`, AUTHZ-GATE-005), and `IAccessGate`
+answers `auth.stepup.required` with its `details` when the endpoint asks for that
+permission (`RequireAsync`, `FilterAsync`, `FragmentAsync`) on a record its grants admit
+and the request's session does not meet the gate. `IStepUpGate` is the gate one library
+area asks of another (LIB-API-001) and names only the library's actions.
+
+*Source: D-202*
+
+A forgotten mark fails closed: a host endpoint left unmarked answers 401, never anyone
+(P-003; protection comes from where an endpoint is mounted, D-070). A step-up mark on the
+endpoint would state a second time a rule the permission's binding already states; the
+two could disagree, and an endpoint asking two permissions could not express it.
+
+**Acceptance criteria**
+1. A request without a live sign-in session to an unmarked host endpoint is answered 401
+   `auth.session.expired` before the endpoint runs, with `details.reauthenticate` where a
+   sign-in session ended.
+2. A host endpoint marked with `AllowNoSession()` is reached by a `GET` carrying no
+   session, which is issued the pre-authentication session, and by a state-changing
+   request carrying that session and its token; one without the token is refused at
+   stage 6.
+3. A host endpoint asking `IAccessGate` for a permission bound to a gate the request's
+   session does not meet, on a record its grants admit, is answered
+   `auth.stepup.required` with the gate's `details` (BFF-STEP-001).
+4. The library's own endpoints answer a request carrying no session as before.
+
+---
+
+**BFF-HOST-003** — A host endpoint SHALL answer the library's results in the library's
+wire format through the public surface, never by translating a code itself.
+
+**Values (D-202).** `Answers` (`Janus.Hosting`) answers a `Result` or a `Result<T>` as
+the library's own endpoints do: the success the endpoint gives, or the failure in the
+API-CONV-002 body, with the status `10` section 1 gives its code, its `details` and the
+request's correlation identifier (BFF-ERR-001); `Answers.Refused` answers an `Error`
+alone. A refusal of a record of a concealing type is still answered by stage 11 whatever
+the endpoint writes (BFF-ERR-003). A code `10` section 1 does not list is a fault of the
+calling code (CONV-ERR-001), answered as every fault is (BFF-ERR-002). A host's own codes,
+for its own business, are the host's to answer.
+
+*Source: D-202*
+
+**Acceptance criteria**
+1. A failure answered through `Answers` carries the code, its `details`, the status `10`
+   section 1 gives and the request's own correlation identifier, and is otherwise byte for
+   byte what the library's own endpoint answers for the same failure.
+2. A gate refusal of a record of a concealing type in a host endpoint is answered as
+   BFF-ERR-003 states, whatever the endpoint wrote.
+3. A code `10` section 1 does not list is answered 500 `system.fault`.
+
+---
+
+**BFF-HOST-004** — A host endpoint SHALL pass an operation the request's source as the
+library's own endpoints do.
+
+**Values (D-202).** `RequestSource.Of(HttpRequest)` (`Janus.Hosting`) answers the source
+an operation takes for the request, keyed exactly as AUTH-ABUSE-001 keys it: the address
+the connection arrived on as the framework's trusted proxies resolve it, an IPv4-mapped
+address as its IPv4 address, an IPv6 address as its /64 save one whose first three bits
+are `000`, which is keyed whole, and `unknown` where there is none.
+
+*Source: D-202*
+
+**Acceptance criteria**
+1. For the same request, `RequestSource.Of` answers what the library's own endpoints
+   pass; two addresses of one IPv6 /64 answer one source, an IPv6 address whose first
+   three bits are `000` its whole address, an IPv4-mapped address its IPv4 address, and a
+   request with no address `unknown`.
 
 ---
 
@@ -107,9 +250,21 @@ opaque identifier in a cookie and nothing else.
 `__Host-identity-preauth` (BFF-CSRF-005a), `__Host-identity-csrf` (BFF-CSRF-006),
 `__Host-identity-device` (the trusted device, AUTH-FACT-015) and
 `__Host-identity-browser` (the new-device check, AUTH-FACT-016), one set per application
-origin; the `__Host-` prefix already scopes them. The library sets no other cookie.
+origin; the `__Host-` prefix already scopes them. The library sets no other cookie. The
+pre-authentication cookie ends with the browser's session. The session cookie, and the
+CSRF cookie beside it, last until the session's absolute expiry where the session's
+policy requires `aal1`, so a customer stays signed in across a browser's restart as
+AUTH-SESS-005 intends, and end with the browser's session where it requires `aal2`, so a
+staff session also ends when its browser closes; a CSRF cookie bound to a
+pre-authentication session ends with the browser's session too, and a cookie issued
+again at a rotation follows the policy then in force. The trusted-device cookie lives
+`factor.trusteddevice.lifetime` and the remembered-browser cookie
+`device.verification.lifetime`; no third party can read any of them. The privacy notice
+lists them so, the session and CSRF cookies at `session.default.absolute`, the longest
+they last (PRIV-CONS-006a, D-203). Whatever a cookie carries, the session record's own
+lifetimes decide whether it is honoured (AUTH-SESS-005).
 
-*Source: AUTH-SESS-003, D-053, D-166*
+*Source: AUTH-SESS-003, D-053, D-166, D-203*
 
 Each is load-bearing. Making them configurable creates a path to an insecure
 deployment through omission, which P-003's secure-by-default test prohibits.
@@ -123,6 +278,10 @@ this prefix is what keeps their sessions genuinely separate rather than nominall
 **Acceptance criteria**
 1. All four attributes are present on every issue.
 2. No configuration key weakens any of them.
+3. Under a policy requiring `aal1` the session and CSRF cookies carry an expiry at the
+   session's absolute expiry; under one requiring `aal2` they carry none, and neither
+   does the pre-authentication cookie nor a CSRF cookie bound to a pre-authentication
+   session.
 
 ---
 
@@ -378,10 +537,10 @@ the browser profile (BFF-MACH-001).
 serving as the CSRF token's binding target before a real session exists.
 
 **Values (D-153).** The pre-authentication session lives `registration.session.lifetime`,
-the registration session it carries being bound to it; no separate key. The notice
-(PRIV-CONS-006a) states that lifetime.
+the registration session it carries being bound to it; no separate key. Its cookie ends
+with the browser's session, as the notice lists it (BFF-SESS-002, PRIV-CONS-006a, D-203).
 
-*Source: D-092, D-146, D-166*
+*Source: D-092, D-146, D-166, D-202, D-203*
 
 `/register`, `/auth/begin`, `/auth/link`, `/auth/factor` and `/recovery/begin` are
 state-changing browser endpoints reached before any session exists. Without this, an implementer must
@@ -396,7 +555,7 @@ to the session), and for the registration session (BFF-CSRF-005b).
 
 **Acceptance criteria**
 1. A pre-authentication session is issued on first contact with any pre-session
-   endpoint.
+   endpoint, a host endpoint marked with `AllowNoSession()` among them (BFF-HOST-002).
 2. Its token is validated identically to an authenticated one.
 3. Authentication rotates it rather than issuing a second session alongside.
 4. It carries no identity and grants no access.
@@ -620,7 +779,7 @@ A capability means "permitted by grants, subject to session gates" — see API-C
 for the wire format and the reasoning.
 
 **Acceptance criteria**
-1. A list of 50 records returns capabilities without additional queries.
+1. A list of 50 records returns capabilities without a query per record.
 2. A capability with an empty `requires` always succeeds.
 3. A capability with `requires` carries the gates that remain, never an empty list.
 
@@ -629,7 +788,18 @@ for the wire format and the reasoning.
 **BFF-CAP-002** — The library SHALL provide the projection plumbing; the host SHALL
 declare which capabilities are relevant per resource type.
 
-*Source: D-052, AUTHZ-MODEL-003*
+**Values (D-202).** The host declares which of its permissions are capabilities of each of
+its types: `ResourceTypeDeclarationBuilder<T>.Capabilities`, each a declared permission;
+one not declared fails startup with `model.startup.declarationinvalid`,
+`details.declaration` naming the type and `details.field` `capabilities`.
+`IAccessGate.CapabilitiesAsync` on a host type answers only for the permissions declared
+as its capabilities: asking it for any other, a declared permission the type does not
+list among them included, is a fault of the calling code (CONV-ERR-001).
+`CapabilityFields.Of(Capability)` (`Janus.Hosting`) answers the `can` list and the
+`requires` map API-CAP-001 writes, each residual by its `10` section 5.20 name, for the
+host to place on its record. A type that declares none answers none.
+
+*Source: D-052, AUTHZ-MODEL-003, D-202*
 
 The library cannot know that a document has a "share" action. The host declares it;
 the library computes and attaches it.
@@ -637,15 +807,23 @@ the library computes and attaches it.
 **Acceptance criteria**
 1. Declaring a new capability requires no library change.
 2. An undeclared capability never appears in a response.
+3. Capabilities read for a host's records and written through `CapabilityFields` carry
+   `can` and `requires` exactly as API-CAP-001 writes them.
+4. A declaration naming as a capability a permission it does not declare fails startup
+   with `model.startup.declarationinvalid`.
 
 ---
 
-**BFF-CAP-003** — Capabilities SHALL be computed in the same query as the resource.
+**BFF-CAP-003** — Capabilities SHALL be computed for a whole page at once: in the
+resource's own query or in one statement beside it, never per record.
 
-*Source: AUTHZ-GATE-005*
+*Source: AUTHZ-GATE-005, D-202*
 
 Per-row computation produces N+1 queries, which is why this is a requirement rather
-than an implementation note.
+than an implementation note. For a host's records the capabilities of a page are read
+with one `IAccessGate.CapabilitiesAsync` call, one statement beside the page's query,
+whatever the page's size (AUTHZ-GATE-005, D-202); the host places what `CapabilityFields`
+answers on each record (BFF-CAP-002).
 
 **Acceptance criteria**
 1. Query count is independent of result size.
@@ -895,9 +1073,9 @@ reads or changes the account's state.
 | 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
-| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188) |
+| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked with `AllowNoSession()`, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188) |
 | 9 | Host endpoint | |
-| 10 | Capability projection | Requires the result set |
+| 10 | Capability projection | Requires the result set. A host endpoint places what `CapabilityFields` answers on its records itself (BFF-CAP-002); the stage adds nothing to its answer |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |
 
 **Values (D-153).** Stage 4 admits `abuse.source.ratelimit` requests per source
@@ -908,7 +1086,7 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166, D-188, D-189*
+*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202*
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because

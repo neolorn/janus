@@ -50,13 +50,16 @@ not start until Milestone 1's exit gate is green.
   working branch (the working guide, section 6; D-182). Milestone 2 never starts without
   the owner.
 - **Fast checks per commit** (build, analysers, unit suites); the **full gate** (integration,
-  migration twice, contract tests, conformance suite) runs once per phase before the
-  report (CONV-GATE-001, CONV-GATE-002).
+  migration twice, contract tests, conformance suite, the sample host of LIB-TEST-004)
+  runs once per phase and once per host round before the report (CONV-GATE-001,
+  CONV-GATE-002).
 - **No measurements, sweeps or re-runs** beyond what a criterion literally asks for.
 - **Content rule.** No user-facing wording is decided in library code. Messages surface as
   codes (CONV-CONTENT-001, API-CONV-002); the frontend renders them.
 - **Generic library.** No code path, default or fixture assumes a particular host,
   product or market. Hosts declare purposes, factors, policies and preferences (LIB-HOST-001).
+  The sample host (LIB-TEST-004) has an invented domain of its own, naming no real
+  product, company or market (D-204).
 - **Secure by default.** Every key ships with its `10` default; a host that configures
   nothing but the required values (eighteen, six of them conditional, `10` section 4;
   D-197) gets a conformant deployment (OPS-CFG-003).
@@ -116,6 +119,29 @@ DNS, certificates, host machine, package feed or frontend. Each is met at its
 abstraction (LIB-EXT-001) with a fake that honours the contract, and the fake is what
 the integration tests run against.
 
+## 3a. The host rounds: the library from a host's side
+
+Milestone 1 built and tested the library from the inside; no test played a host writing
+its own features on top of it (D-202). Before the frontends (section 4, step 10), the
+library is made usable by a host built only on its public surface, in rounds. A round is
+library work, as a phase of section 3 is: every rule of the working guide holds, the
+implementer starts a round only on the owner's word, and each ends with a report in the
+shape of section 5, written to `docs/reports/round-<id>.md` (`round-h1.md` for the first),
+and the owner's review. A Tier 2 or Tier 3 question parks its item as in section 3; the
+owner answers it with a decision before the round's report is reviewed.
+
+| # | Round | Builds | Chapters and items | Proves |
+|---|---|---|---|---|
+| H1 | The host's way in, its privacy duties, its setup and its tests | D-202, D-203, D-204 | Every item the three decisions' "Propagated to" lines name: `17` section 2a (BFF-HOST-001 to BFF-HOST-004), BFF-OWN-001, BFF-OWN-002, BFF-CAP-001, BFF-CAP-002, BFF-CAP-003, BFF-ORDER-001 (stages 8 and 10), BFF-SESS-002, BFF-CSRF-005a; `07` LIB-PKG-001, LIB-PKG-003, LIB-API-001, LIB-API-002, LIB-API-005, LIB-HOST-001 (resource types, roles, subject-event handlers, purpose handlers, export contributors, cookies, jobs), LIB-HOST-004, LIB-EXT-001, LIB-TEST-002, LIB-TEST-003, LIB-TEST-004; `03` AUTHZ-IMP-001, AUTHZ-GATE-005, AUTHZ-INHERIT-002, AUTHZ-INHERIT-003, AUTHZ-GRANT-003, AUTHZ-GRANT-004, AUTHZ-MODEL-004; `01` IDN-PRIN-001, IDN-MEM-001, IDN-LIFE-003a; `02` AUTH-KEY-002; `04` PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-003, PRIV-RIGHT-001a, PRIV-CONS-006a, PRIV-CONS-008; `05` INT-SMS-003; `06` OPS-BOOT-001, OPS-BOOT-002, OPS-MIG-001, OPS-SEC-001, OPS-ENV-001, OPS-ALERT-001, OPS-ALERT-006; `08` CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-SETUP-002, CONV-SETUP-003, CONV-SETUP-004, CONV-DESIGN-003, CONV-DESIGN-007, CONV-DESIGN-008, CONV-TEST-001, CONV-DEP-001, CONV-GATE-001; `09` section 14, API-CAP-001, `GET /privacy/notice`, `GET /privacy/export`, `/admin/erasures`, `POST /admin/erasures/{id}/complete`, `POST /admin/roles`, `DELETE /admin/organizations/{id}/memberships/{subject}`; `10` section 1 (`privacy.subject.erased`, `authz.resource.inuse`, `authz.denied`, `api.request.invalid`, `privacy.erasure.notfound`, `privacy.erasure.notfailed`, `model.role.undeclaredpermission`, the startup codes), sections 2.1, 3, 4 (`outbox.retry.maxattempts`, `privacy.export.ratelimit`), 5a, 5b, 5.23, 5.24, 5.26, 5.28, 5.29, 5.46 and 5.50, REF-001; `11` section 5; `19` INF-HOST-003; `18` FE-COMP-006 criteria 1b and 3, their server side only (the frontends are built in section 4, step 10) | The sample host builds from the packages packed from the same commit and its tests pass in the gate (LIB-TEST-004); every acceptance criterion of the items listed has a passing test carrying its identifier, or is named in the report as one a test cannot decide with how it was verified, save LIB-PKG-001 criterion 3 and LIB-PKG-003 criterion 1, which need the release workflow and the feed of section 4 steps 1 and 2 and are proven there |
+| H2 | What a host reads and is told | the decision written before the round begins | organizations, members and invitations; another person's account, sessions and standing for staff and jobs; the events a host lacks | as its decision states |
+| P | People without an account | the decision written before the round begins | the person records, consent at collection, "your data" by code, attaching to an account, the age question and the takedown for records, and the staff search | as its decision states |
+| R | Reports and import | the decision written before the round begins | the report feed and the bulk import | as its decision states |
+
+The rounds come in this order, each after the owner's review of the one before. Round H1
+comes before section 4 begins, since its steps 1 and 2 use the sample host H1 builds; the
+others come before section 4's step 10. The sample host grows with each round: every decision that
+adds to what a host meets adds to it.
+
 ## 4. Milestone 2: the deployment
 
 Sequential; each step names who acts. "Owner" steps need the person; "implementer" steps
@@ -124,22 +150,22 @@ autonomous end to end.
 
 | # | Step | Who | What | Done when |
 |---|---|---|---|---|
-| 1 | Repository workflows | implementer | Pipeline definitions for the gates of CONV-GATE-001/002, release workflow (tag, MinVer, changelog check, package publish), dependency alerting, secret scanning, and the manually dispatched workflow that draws the leaked-password list with `tools/leaked-passwords/` on a hosted runner, its output the dated list CONV-VCS-005 refreshes at each release (D-197) | Every gate runs on a pull request; a tagged commit produces a versioned package; the leaked-password workflow, dispatched by hand, yields the dated list as its artifact |
-| 2 | Package feed | owner, then implementer | Owner provisions the private feed and its credential (LIB-PKG-003); implementer wires the release workflow to it | The package installs from the feed into the sample host |
+| 1 | Repository workflows | implementer | Pipeline definitions for the gates of CONV-GATE-001/002, the sample host's among them (LIB-TEST-004), release workflow (tag, MinVer, changelog check, publishing the packages of LIB-PKG-001, the `Janus.Cli` tool package and `Janus.Testing` among them), dependency alerting, secret scanning, and the manually dispatched workflow that draws the leaked-password list with `tools/leaked-passwords/` on a hosted runner, its output the dated list CONV-VCS-005 refreshes at each release (D-197) | Every gate runs on a pull request; a tagged commit produces every package of LIB-PKG-001 at one version; the leaked-password workflow, dispatched by hand, yields the dated list as its artifact |
+| 2 | Package feed | owner, then implementer | Owner provisions the private feed and its credential (LIB-PKG-003); implementer wires the release workflow to it | The packages install from the feed into the sample host (LIB-TEST-004), the tool among them |
 | 3 | Infrastructure definition | implementer, owner reviews | Container arrangement, reverse proxy, DNS records, volumes, certificate mechanism, pipeline target, committed per DR-017; PostgreSQL with ICU collation, secrets manager, clock sync per `19` | Owner approves the definition; DR-007 test builds from it |
 | 4 | Host and secrets | owner | Provision the host outside Egypt (INF-HOST-004), the secrets manager (INF-HOST-003), the database credentials (INF-DB-003), TLS (INF-TLS-001 to 003), alert channels (INF-OBS-001), the reachability check (INF-OBS-003) | The implementer's connectivity checks pass from the pipeline |
 | 5 | Mail server | owner, then implementer | Owner deploys the mail server and registers the sending domains (INT-MAIL-011); implementer configures the OIDC client, the mail server's `requireAudience` set to its client identifier, provisioning and reconciliation against it (INT-MAIL-001 to 010, AUTH-OIDC-006 AC3), the mail-server adapter being built in Milestone 1 (D-166) | A staff invitation creates a disabled mailbox; acknowledgement enables it; reconciliation reports no drift |
 | 6 | SMS gateway | owner, then implementer | Owner contracts the gateway and sets the balance floor; implementer wires the transport, delivery report and balance polling (INT-SMS); the delivery transports come from the shared messaging library the owner has decided on, settled before this step | A verification code arrives on a real number; a failed delivery does not count |
 | 7 | Configuration | owner with implementer | The required values (`10` section 4), the governing language (`legal.governinglanguage`), the legal documents and their versions, the host's purposes and lawful bases, the preference declaration, the holiday list | Startup succeeds with no default overridden except the required values; compliance texts publish |
-| 8 | Bootstrap | owner | Run the bootstrap command on the real host (OPS-BOOT-001): first organization, first administrator's enrolment link, `emergency`; complete the enrolment with a passkey; issue the break-glass credential from the management app and seal the envelope (OPS-BOOT-002 to 004, DR-009) | The envelope holds the code, the three keys and the deployment credentials; the escrow copy exists; the annual reseal is on the maintenance log |
+| 8 | Bootstrap | owner | Run the bootstrap command on the real host (OPS-BOOT-001): first organization, first administrator's enrolment link, `emergency`; put the administrative organization's identifier it prints into the host's own configuration; complete the enrolment with a passkey; issue the break-glass credential from the management app and seal the envelope (OPS-BOOT-002 to 004, DR-009) | The envelope holds the code, the three keys and the deployment credentials; the escrow copy exists; the annual reseal is on the maintenance log |
 | 9 | Backups and restore | implementer, owner verifies | Continuous archiving, base backups, encryption under the backup key, the erasure ledger off host, the scheduled restore test (`12`) | First restore test passes on the real host; DR-011 rebuild rehearsed once from the envelope and the repository |
 | 10 | Frontends | implementer | Authentication, account and management applications per `18` against the real BFF; wording written natively per language (CONV-CONTENT-001) | Every FE item's criteria pass end to end against the deployed BFF |
 | 11 | Business actions | owner | The outstanding actions of the decision log (counsel confirmations, DPO, licences, permits) | Each recorded as done in the log's table |
 | 12 | Release 1.0.0 | implementer, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag, publish (CONV-VCS-005) | Version 1.0.0 on the feed; changelog and migration note published; every known issue carried into Milestone 2 answered by a decision and built or deferred (D-197) |
 
 The frontend applications (`18`) are built in step 10 against the deployed BFF;
-Milestone 1 phases 5 and 8 deliver the server side they need, save what a known issue
-below leaves open (D-201).
+Milestone 1 phases 5 and 8 and the host rounds of section 3a deliver the server side they
+need, save what a known issue below leaves open (D-201, D-202).
 
 **Known issues carried into Milestone 2.**
 

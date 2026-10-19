@@ -23,7 +23,7 @@ projects and is not published publicly, so no registry check applies.
 ## 1. Project layout
 
 **CONV-LAYOUT-001** — The solution SHALL be organised as **one project per internal
-area**, published as a single package.
+area**, published as one package, beside the further packages LIB-PKG-001 lists.
 
 | Project | Contains | Depends on |
 |---|---|---|
@@ -34,11 +34,24 @@ area**, published as a single package.
 | `Janus.Privacy` | Purposes and bases, consent and objection, legal documents, rights queue, erasure and export (chapter `04`) | Core |
 | `Janus.Storage` | EF Core, Dapper, migrations; implements the persistence ports the areas declare; the OIDC provider's stores | Core, Identity, Authentication, Authorization, Privacy (D-149) |
 | `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default notification handler (template resolution over the transports) and the shipped message catalogue, the outbox and event publishers, the alert router, the default mail and SMS transports and the JMAP mail-server adapter (chapter `05`, LIB-EXT-001 defaults), and the provider probes of the conformance suite, made by the sign-on's client half (BFF-SESS-006, LIB-TEST-001) | all |
-| `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001), which asks for its provider probes through a contract in `Janus.Core` and holds no client secret; the one further project with public types, shipped as its own package | Core, Hosting |
+| `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001), which asks for its provider probes through a contract in `Janus.Core` and holds no client secret; one of the two further projects with public types, shipped as its own package | Core, Hosting |
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
 | `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154), the IDNA mapping of UTS #46 that gives a domain its ASCII form among them (REG-DOM-001): a console project outside the package, with the Unicode Character Database files and the UTS #46 IDNA mapping table and conformance test file (`IdnaTestV2.txt`, REG-DOM-001) of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
 | `tools/leaked-passwords` | The draw of the offline leaked-password list (AUTH-PASS-004, CONV-VCS-005): a script outside the package and the solution that streams the ranges and keeps a running top 100,000, run at each release by a manually dispatched workflow on a hosted runner (D-197) | nothing |
-| `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication, Privacy — it creates the first organization, administrator, enrolment link, the credential-less `emergency` account and the restore-test canary (DR-007); **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
+| `Janus.Cli` | Bootstrap, migration and key rotation; ships as a .NET tool package at the library's version, its command `identity`, the neutral word of CONV-NAME-001 (LIB-PKG-001, D-204) | Core, Storage, Identity, Authentication, Privacy — it applies the library's migrations (`migrate`, OPS-MIG-001); it creates the first organization, administrator, enrolment link, the credential-less `emergency` account and the restore-test canary (DR-007); **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
+| `Janus.Testing` | The testing package a host's tests and its development setup use (LIB-TEST-003): stand-in transports, the fixed secret source, stand-ins for the optional environment seams, the software passkey, the test deployment and the test people; a project with public types, shipped as its own package, built only on the public surface | Core, Hosting (D-204) |
+
+**The sample host (D-204).** `samples/HostSample` and its test project
+`samples/HostSample.Tests`, in a solution of their own beside the library's, are a small
+business application built only on the public surface (LIB-TEST-004): they reference the
+packages packed from the same commit, from a folder feed the gate fills, and never a
+project of the library's solution. Their solution has its own package versions and tool
+manifest: the `Janus.*` packages and `Janus.Cli` as its tool at the version the gate
+passes it, every other package one CONV-DESIGN-008 permits; it keeps no lockfile and
+restores unlocked, since the `Janus.*` version changes with every commit (CONV-SETUP-002). CONV-LAYOUT-002 and
+CONV-SETUP-003 govern shipped projects and do not reach it, and the dependency allow-list
+(CONV-DESIGN-008) is checked against the library's solution's `Directory.Packages.props`;
+the sample's own holds the `Janus.*` packages beside packages the table permits.
 
 Dependencies point **inward toward Core**. Nothing points outward. The column names the
 projects each project depends on; the packages a project references are
@@ -52,7 +65,7 @@ credential source of AUTH-KEY-001, with its stores in `Janus.Storage`.
 source holds (CONV-CODE-007).
 
 *Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176, D-181,
-D-183, D-187, D-189, D-197*
+D-183, D-187, D-189, D-197, D-204*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -68,13 +81,17 @@ does for free.
 ---
 
 **CONV-LAYOUT-002** — Public types SHALL exist **only in `Janus.Core` and
-`Janus.Hosting`**. Types in other projects SHALL be internal.
+`Janus.Hosting`**, and in the two packages that ship beside the library for a host to run
+or test with, `Janus.Conformance` and `Janus.Testing`. Types in other projects SHALL be
+internal.
 
 `Janus.Hosting` is public because the middleware pipeline and its ordering are part of
 the public contract (LIB-API-001, BFF-OWN-003) — a host must be able to mount it.
 Public in that project are exactly the mounting types, the `MapAuthorizationTables`
-model-builder extension (AUTHZ-GATE-002, D-159) and the `AddJanus` registration
-entry point (CONV-DESIGN-007); request and response DTOs are `internal sealed record`,
+model-builder extension (AUTHZ-GATE-002, D-159), the `AddJanus` registration
+entry point (CONV-DESIGN-007), and what a host's own endpoints use: `AllowNoSession`,
+`Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` (`17` section 2a
+and BFF-CAP-002, `03` AUTHZ-INHERIT-002, D-202, D-203); request and response DTOs are `internal sealed record`,
 their wire shape being the contract, not their type.
 
 Where one area needs a rule another area owns, the contract SHALL be a public interface
@@ -94,15 +111,16 @@ area's internals, save as the grants below allow `Janus.Storage`, `Janus.Hosting
 handlers, jobs and middleware onto their internal operation services and asks the
 internal interfaces CONV-DESIGN-007 names (LIB-API-005, D-189).
 
-*Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171, D-176, D-183, D-189, D-190*
+*Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171, D-176, D-183, D-189, D-190,
+D-202, D-203, D-204*
 
 Makes the public surface reviewable by reading one project.
 
 **Acceptance criteria**
-1. A public type outside `Janus.Core`, `Janus.Hosting`'s mounting types and
-   `Janus.Conformance` fails the build (CONV-SETUP-003). The only `InternalsVisibleTo`
-   grants permitted are: every source project except `Janus.Conformance` to its own test
-   project (`Janus.Core`'s for the key ring's clearing, D-171); each area project to
+1. A public type outside `Janus.Core`, `Janus.Hosting`'s public types this item names,
+   `Janus.Conformance` and `Janus.Testing` fails the build (CONV-SETUP-003). The only `InternalsVisibleTo`
+   grants permitted are: every source project except `Janus.Conformance` and
+   `Janus.Testing` to its own test project (`Janus.Core`'s for the key ring's clearing, D-171); each area project to
    `Janus.Storage` (persistence ports), to `Janus.Storage.Tests` (a port implementation
    is tested against the aggregate it translates, D-156), to `Janus.Hosting` (service
    registration, the operation services it maps onto and the internal interfaces
@@ -111,15 +129,17 @@ Makes the public surface reviewable by reading one project.
    same aggregates); `Janus.Core` to `Janus.Hosting` (registration, and the internal
    interface CONV-DESIGN-007 names with what is declared beside it) and to `Janus.Cli`
    (registration and the filling of the key ring); `Janus.Storage` to `Janus.Hosting`
-   and to `Janus.Cli` (registration); `Janus.Storage` to `Janus.Hosting.Tests` (the
+   and to `Janus.Cli` (registration, and for `Janus.Cli` the migrations `migrate`
+   applies); `Janus.Storage` to `Janus.Hosting.Tests` (the
    protocol server's stores, stood up over fakes of their records);
    `Janus.Authentication.Tests`, `Janus.Authorization.Tests` and `Janus.Privacy.Tests`
    to `Janus.Hosting.Tests` (their fakes, used at the browser boundary).
-   `Janus.Conformance` grants nothing: its test project holds the consumer sample of
-   LIB-API-002 AC2. Any other grant, by a source or a test project, fails the build
+   `Janus.Conformance` and `Janus.Testing` grant nothing and are granted nothing: the
+   first's test project holds the conformance suite's sample, and the sample host is
+   built from the packages (LIB-API-002 AC2). Any other grant, by a source or a test project, fails the build
    (D-135, D-149, D-156).
-2. The public surface is enumerable from `Janus.Core` plus the mounting types in
-   `Janus.Hosting`.
+2. The public surface is enumerable from `Janus.Core`, the public types this item names in
+   `Janus.Hosting`, and the two further packages.
 
 ---
 
@@ -155,28 +175,36 @@ and nothing beyond it, and the feature band moves only by a decision-log entry.
 
 ---
 
-**CONV-SETUP-002** — Package versions SHALL be managed centrally in
-`Directory.Packages.props` (Central Package Management) with a committed lockfile per
-project (`RestorePackagesWithLockFile`); restore SHALL run in locked mode in the pipeline.
+**CONV-SETUP-002** — Package versions of the library's solution SHALL be managed
+centrally in `Directory.Packages.props` (Central Package Management) with a committed
+lockfile per project (`RestorePackagesWithLockFile`); its restore SHALL run in locked mode
+in the pipeline.
 
-The repository's one .NET tool is `dotnet-ef`, which writes the migrations and builds
-the migration bundle (CONV-DESIGN-003); it is pinned in the committed tool manifest
-(`.config/dotnet-tools.json`) at the version of `Microsoft.EntityFrameworkCore`
-(CONV-DESIGN-008).
+The library's solution has one .NET tool, `dotnet-ef`, which writes the migrations and the
+idempotent script the destructive-operation report reads (CONV-DESIGN-003, OPS-DEP-002); it
+is pinned in the committed tool manifest (`.config/dotnet-tools.json`) at the version of
+`Microsoft.EntityFrameworkCore` (CONV-DESIGN-008). The sample host's solution
+(LIB-TEST-004) is outside the lockfile rule: it keeps package versions and a tool manifest
+of its own and no lockfile, and restores unlocked, since its `Janus.*` packages change
+with every commit. The gate passes their version as a property the sample's own
+`Directory.Packages.props` reads, restores them from the gate's folder feed, and installs
+`Janus.Cli` at that version into the sample's tool manifest before its tests run
+(CONV-LAYOUT-001, D-204).
 
-*Source: CONV-DEP-001, D-149, D-184*
+*Source: CONV-DEP-001, D-149, D-184, D-204*
 
 **Acceptance criteria**
-1. No project file carries a package version.
-2. A restore whose resolved set differs from the lockfile fails.
+1. No project file of either solution carries a package version.
+2. A restore of the library's solution whose resolved set differs from the lockfile
+   fails.
 
 ---
 
 **CONV-SETUP-003** — The public surface SHALL be tracked with
 `Microsoft.CodeAnalysis.PublicApiAnalyzers`, enabled on **every source project** and on
 no test project: `PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt` are populated in
-`Janus.Core`, `Janus.Hosting` and `Janus.Conformance` and empty in every other source
-project, so that a public member anywhere else in the shipped code is a build error.
+`Janus.Core`, `Janus.Hosting`, `Janus.Conformance` and `Janus.Testing` and empty in every
+other source project, so that a public member anywhere else in the shipped code is a build error.
 Test projects ship nothing and their test classes are public by the framework's
 requirement, so the analyser does not apply to them (D-150). A public change without its line in the
 unshipped file fails the build; the shipped file changes only in a release commit.
@@ -209,7 +237,7 @@ and no others; any further deviation is a specification defect, not a local supp
 |---|---|---|---|
 | CA1812 (uninstantiated internal class) | none | source projects | every service is `internal sealed` and constructed by dependency injection (CONV-DESIGN-002) |
 | CA2007 (`ConfigureAwait`) | none | test projects, `Janus.Hosting`, `Janus.Cli` | required of library code only (CONV-CODE-002) |
-| CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance`, test projects | these projects hold the contract; test fixtures and classes are instantiated by the test framework and must be public (D-154) |
+| CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance`, `Janus.Testing`, test projects | these projects hold the contract; test fixtures and classes are instantiated by the test framework and must be public (D-154) |
 | CA1062 (validate public arguments) | none | all | guards are placed by CONV-CODE-006, not on every public member |
 | CA1707 (underscores in identifiers) | none | test projects | the test naming scheme of CONV-TEST-007 uses underscores by design (D-150) |
 
@@ -370,9 +398,13 @@ area and feature. **What EF Core maps is a persistence record, never a domain en
 (D-155):** an `internal sealed class` in `Janus.Storage` with one property per column,
 encrypted columns as `byte[]`, beside its configuration. The port implementation
 translates between the aggregate and its records in both directions, and that
-translation is the one place per-subject encryption happens: it calls the field cipher
-with the subject identifier read from the record's declared subject column
-(PRIV-RIGHT-005a) and the table and column names as associated data. A value that
+translation is the one place per-subject encryption of the library's own fields happens:
+it calls the field cipher with the subject identifier read from the record's declared
+subject column (PRIV-RIGHT-005a) and the table and column names as associated data. A
+host's own fields are encrypted by the host through `IPersonalFields`, whose
+implementation in `Janus.Storage` calls the same field cipher with the associated data
+PRIV-RIGHT-005a gives a host's field: the fixed mark `host` and the type's and the field's
+declared names in the place of the table and the column (D-203). A value that
 belongs to no subject and that the field cipher encrypts is encrypted there too, under
 the deployment's data key or a data key of its row's own that the deployment's data key
 wraps, with its own row's identifier in the place of the subject identifier, never the
@@ -416,7 +448,8 @@ with its locked date (REG-PROF-002), and where a staged identifier was taken or 
 since (REG-SESS-005). A refusal SHALL commit every kept write it made, together, and
 nothing else, and an operation SHALL decide every refusal that keeps a write before it
 makes any write that is not kept. An operation whose refusal keeps a write begins the
-outermost unit of work and is never called inside another's, and a call it makes to
+outermost unit of work and is never called inside another's, a host's own included
+(`UseUnitOfWorkAsync`, AUTHZ-INHERIT-002, D-203), and a call it makes to
 write a kept write (a throttle's count, an audit record) joins its unit of work. A host
 callback that may call across the network (the challenge verifier, AUTH-ABUSE-008; the
 phone signal, AUTH-FACT-002b) is never called inside an open transaction: a kept write
@@ -490,8 +523,8 @@ that has none (a message whose ask is answered before any transport is called,
 AUTH-ABUSE-003) is due at its admission (D-189).
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
 it serves, never at a call site. Migrations are EF Core migrations in `Janus.Storage`,
-applied in the pipeline as an **EF Core migration bundle** built from the same commit
-(OPS-MIG-001); the destructive-operation report (OPS-DEP-002) is the idempotent SQL
+applied in the pipeline by `migrate`, the command of the `Janus.Cli` tool built from the
+same commit (OPS-MIG-001, D-204); the destructive-operation report (OPS-DEP-002) is the idempotent SQL
 script of the migrations pending on the target database, read from its migration history
 table (a pull request reports the migrations its range adds), scanned for `DROP`,
 `ALTER ... TYPE`, `ADD CONSTRAINT`, `TRUNCATE`, `DELETE FROM`, and, on a table the same
@@ -501,7 +534,7 @@ serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
 generation to `artifacts/model.json`.
 
 *Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166,
-D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190, D-198*
+D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190, D-198, D-204*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -701,9 +734,9 @@ member included: what it reads of the key ring's implementation (the names of th
 secrets the ring holds, the refusal of a secret not available) is declared on the
 internal contract that `Janus.Core` declares for filling the ring, or in a static class
 of `Janus.Core` beside it (D-190). The access gate, the key ring and the mail server in
-use are the only seams of this rule. `IResources` and `ICallbackReferences`, which
-LIB-API-005 also calls seams because they join the host's transaction, are contracts the
-host calls, and `Janus.Hosting` reaches what implements them as it reaches an operation
+use are the only seams of this rule. `IResources`, `ICallbackReferences` and
+`IPersonalFields`, which LIB-API-005 also calls seams because they join the host's work,
+are contracts the host calls, and `Janus.Hosting` reaches what implements them as it reaches an operation
 service. A port and its implementation that live in one project need no adapter in
 another: `AccessGate` implements `Janus.Authorization`'s unscoped refusal itself
 (D-188). The services that `Janus.Hosting`'s endpoints, handlers, jobs and middleware
@@ -717,7 +750,8 @@ method, each only where none is registered. A `Janus.Cli` command's composition 
 the methods of the projects it uses and itself registers the types only a command uses
 (the deployment bootstrap, the client registry and the protected configuration of
 `Janus.Authentication`; the erasure replay and the two key rotations of `Janus.Privacy`;
-the rotations' stores of `Janus.Storage`). A composition a job builds inside the
+the rotations' stores and the migrations `migrate` applies of `Janus.Storage`), save that
+`migrate` registers no key ring (OPS-MIG-001). A composition a job builds inside the
 application over another credential (the audit retention's, the restore test's)
 registers the key ring the start filled, as it stands, and calls the methods of the
 projects it uses other than `Janus.Core`'s. A registration method MAY call registration
@@ -742,8 +776,8 @@ back to a default or a constant (OPS-CFG-008, CONV-ERR-001). Time comes from
 Every secret the library needs (the members LIB-HOST-001 lists for the secret source) is
 read once, through the host-supplied `ISecretSource` of LIB-EXT-001, asynchronously,
 when the application starts and before the server serves a request, into the key ring of
-CONV-CODE-007; no secret is an argument of `AddJanus`. A `Janus.Cli` command reads the
-same values once, at its start, into the same key ring, from one JSON key document on
+CONV-CODE-007; no secret is an argument of `AddJanus`. A `Janus.Cli` command other than
+`migrate`, which reads no key (OPS-MIG-001), reads the same values once, at its start, into the same key ring, from one JSON key document on
 standard input that the operator pipes from the secrets manager's own client
 (OPS-SEC-001). The library ships no secrets-manager client.
 
@@ -776,7 +810,7 @@ where the database holds none, and then builds the OIDC provider's options, whic
 no `ValidateOnStart` (CONV-CODE-007).
 
 *Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181, D-183,
-D-187, D-188, D-189, D-190*
+D-187, D-188, D-189, D-190, D-203, D-204*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -818,9 +852,9 @@ references it.
 
 | Purpose | Package | Why this one |
 |---|---|---|
-| Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage only, at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for the migration bundle), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage` resolves it at EF Core's version, not at the lower floor the provider declares |
+| Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage only, at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for writing the migrations and their script), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage` resolves it at EF Core's version, not at the lower floor the provider declares |
 | Password hashing | `Konscious.Security.Cryptography.Argon2` | Argon2id is absent from the base class library; managed implementation, MIT licence (package listing inspected 2026-09-18) |
-| WebAuthn | `Fido2` (Fido2NetLib), which brings, among others, `Fido2.Models`, `System.Formats.Cbor` and `NSec.Cryptography` (which verifies EdDSA), none referenced directly (D-197) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
+| WebAuthn | `Fido2` (Fido2NetLib), which brings, among others, `Fido2.Models`, `System.Formats.Cbor` and `NSec.Cryptography` (which verifies EdDSA), none referenced directly (D-197), save `System.Formats.Cbor`, which `Janus.Testing` references for the software passkey's attestation object and authenticator data (LIB-TEST-003, D-204) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
 | TOTP | `Otp.NET` | RFC 6238 defaults; small |
 | OIDC provider | `OpenIddict.AspNetCore`, `OpenIddict.Server`, `OpenIddict.Validation`; stores are hand-written in `Janus.Storage` over the single `DbContext` (no `OpenIddict.EntityFrameworkCore`) | The maintained free OpenID Connect server for ASP.NET Core; a hand-written provider is a security risk this library does not take; hand-written stores keep one `DbContext` (CONV-DESIGN-003) |
 | OIDC client (Google, Apple) | None: the round trip is the library's own (IDN-LIFE-012); the identity token is validated with `Microsoft.IdentityModel.JsonWebTokens`, which `OpenIddict.Server` and `OpenIddict.Validation` bring, and the provider's discovery and key-set documents are read through the document and configuration retrievers of `Microsoft.IdentityModel.Protocols`, which `OpenIddict.Validation` brings | The handler and OpenIddict's client each bind the round trip with a `SameSite=None` cookie, which BFF-SESS-002 and BFF-CSRF-005 AC3 forbid and which Apple's form-post return needs |
@@ -843,14 +877,15 @@ shared framework of .NET is not a package: a project takes the container's abstr
 through the reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and their package
 is never referenced.
 
-*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197*
+*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197, D-204*
 
 **Acceptance criteria**
 1. The set of direct package references, read from `Directory.Packages.props`, equals
    the identifiers in this table, less the packages the table names only as ones another
    package brings (`Microsoft.IdentityModel.JsonWebTokens`,
-   `Microsoft.IdentityModel.Protocols`, `Fido2.Models`, `System.Formats.Cbor`,
-   `NSec.Cryptography`), which are not referenced directly.
+   `Microsoft.IdentityModel.Protocols`, `Fido2.Models`, `NSec.Cryptography`), which are
+   not referenced directly; `System.Formats.Cbor` is referenced directly by
+   `Janus.Testing` alone (D-204).
 2. A pull request adding a package not in the table fails a check.
 3. `Directory.Packages.props` gives `Microsoft.EntityFrameworkCore`,
    `Microsoft.EntityFrameworkCore.Relational` and `Microsoft.EntityFrameworkCore.Design`
@@ -1204,10 +1239,11 @@ project MAY reference another test project to use its fakes and helpers, and MAY
 reference a shipped project other than its own where a criterion reads it. A test that
 reads every shipped assembly (LIB-API-002 AC1, CONV-DESIGN-002 AC1, CONV-DESIGN-006 AC1,
 CONV-DESIGN-007 AC6 to AC8) SHALL live in `Janus.Hosting.Tests`, which references every
-shipped project. The consumer sample of LIB-API-002 AC2 SHALL live in
-`Janus.Conformance.Tests`.
+shipped project. The conformance suite's consumer sample (LIB-API-002 AC2) SHALL live in
+`Janus.Conformance.Tests`, and the sample host of LIB-TEST-004 in `samples/HostSample`
+and `samples/HostSample.Tests` (CONV-LAYOUT-001, D-204).
 
-*Source: D-156, D-166, D-180, D-183*
+*Source: D-156, D-166, D-180, D-183, D-204*
 
 **Acceptance criteria**
 1. A test's location identifies what it covers without reading it.
@@ -1628,16 +1664,19 @@ the suffix rules the conversion sets aside being reviewed and updated with the l
 code runs inside your system with full access. Three cheap habits close most of it.
 
 **CONV-DEP-001** — Package versions SHALL be pinned via a committed lockfile. Updates
-SHALL be deliberate, never implicit.
+SHALL be deliberate, never implicit. The rule holds for the library's solution; the
+sample host's keeps no lockfile (CONV-SETUP-002, D-204).
 
-*Source: D-046*
+*Source: D-046, D-204*
 
 An unpinned dependency means a build on a different day produces different code, and
 a compromised release reaches production without anyone choosing it.
 
 **Acceptance criteria**
-1. A lockfile is committed and restore is deterministic.
-2. A build with no source change produces the same dependency set.
+1. A lockfile is committed for each project of the library's solution and its restore is
+   deterministic.
+2. A build of the library's solution with no source change produces the same dependency
+   set.
 
 ---
 
@@ -1706,7 +1745,7 @@ With one developer, the checks a reviewer would perform are mechanical.
 | Destructive-operation detection report | OPS-DEP-002 |
 | `dotnet format --verify-no-changes` | CONV-SETUP-004 |
 | Public surface files up to date | CONV-SETUP-003 |
-| Locked restore | CONV-SETUP-002 |
+| Locked restore of the library's solution | CONV-SETUP-002 |
 | Commit message format | CONV-VCS-003 |
 | Changelog line present | CONV-VCS-005 |
 | Dependency allow-list | CONV-DESIGN-008 |
@@ -1715,6 +1754,7 @@ With one developer, the checks a reviewer would perform are mechanical.
 | Acceptance-criterion test names present for each item of the phase | CONV-TEST-007 |
 | `Janus.Analyzers` rules JAN0001 to JAN0006 | CONV-CODE-008 |
 | Unicode tables regenerate without a diff | IDN-ACCT-004, D-154 |
+| The sample host builds from the packages packed from the same commit, and its tests pass | LIB-TEST-004, D-204 |
 
 **Acceptance criteria**
 1. Each runs on pull request.

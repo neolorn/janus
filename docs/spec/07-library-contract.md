@@ -20,9 +20,13 @@ internal operation services and asks the internal interfaces `08` CONV-DESIGN-00
 (LIB-API-005, `08` CONV-DESIGN-007), and `Janus.Storage`, which implements their ports
 (D-189). The conformance suite (LIB-TEST-001) and the analysers (`08` CONV-CODE-008)
 ship as two further packages, because a host runs the first and the build consumes the
-second; neither carries library behaviour.
+second; neither carries library behaviour. Two more ship beside them (D-204): `Janus.Cli`,
+as a .NET tool package at the library's version, because a host's pipeline runs its
+`migrate` and a deployment its other commands; and `Janus.Testing`, the stand-ins and
+helpers a host's tests and its development setup use, which registers nothing on its own
+and skips no check (OPS-ENV-001).
 
-*Source: D-005, D-149, D-189*
+*Source: D-005, D-149, D-189, D-204*
 
 Splitting into separate packages up front means maintaining a version matrix between
 packages that only ever ship together. Split when a real second consumer needs one
@@ -33,6 +37,8 @@ part without the others, not before.
    body allows `Janus.Hosting` and `Janus.Storage`.
 2. A test asserts no cross-area dependency outside declared contracts and the grants
    `08` CONV-LAYOUT-002 permits.
+3. A release publishes the main package, `Janus.Conformance`, `Janus.Analyzers`,
+   `Janus.Cli` as a .NET tool and `Janus.Testing`, all at one version.
 
 ---
 
@@ -54,7 +60,7 @@ own infrastructure.
 *Source: D-005*
 
 **Acceptance criteria**
-1. The package is not published to a public registry.
+1. No package of the library (LIB-PKG-001) is published to a public registry.
 
 ---
 
@@ -65,22 +71,24 @@ breaking.
 
 | Surface | Includes |
 |---|---|
-| **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, roles, the step-up gate and the purpose bound to an action, **derivations**; and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
+| **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, the encrypted fields and the capabilities of a type, roles, the roles a deployment starts with, the step-up gate and the purpose bound to an action, **derivations**, the host's jobs and cookies (`Capabilities`, `Role`, `Job`, `Cookie`, D-202, D-203, D-204); and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
-| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements |
-| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the mail and SMS transports, `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
-| **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, naming the purposes it handles (`Purposes`) |
+| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, whose `BeginAsync` answers whether it opened the outermost level, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements; the request's access a host endpoint reads (`IRequestAccess`, `RequestAccess`, `17` BFF-HOST-001), and the seams a host's own work joins, `IResources`, `ICallbackReferences` and the field cipher of a host's own fields (`IPersonalFields`, `SubjectFields`, PRIV-RIGHT-005a) (D-202, D-203) |
+| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the export contributors (`IExportContributor`, PRIV-RIGHT-003, D-203); the mail and SMS transports, `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
+| **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, named (`Name`) and naming the purposes it handles (`Purposes`), to which each `ConsentChanged` and `ObjectionChanged` of those purposes is delivered through the outbox (`ConsentChangedAsync`, `ObjectionChangedAsync`), confirmed by its success and on exhaustion failed with `erasure-delivery-exhausted` as a subject event's delivery is (PRIV-RIGHT-001a, D-203) |
 | **Database schema** | All library-owned tables |
 | **Ancestry closure table** | Structure and semantics of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` |
 | **Error codes** | Machine-readable codes, their meanings and the status each answers |
 | **Audit actions and permissions** | The audit actions and the permissions `10` lists; each is an identifier, stable as a code is (CONV-NAME-003) |
+| **Testing package** | The public types of `Janus.Testing` (LIB-TEST-003, D-204) |
+| **Command-line tool** | The commands of `Janus.Cli`, their arguments, their standard input and output and their exit codes (OPS-BOOT-001, OPS-MIG-001, D-204) |
 | **Conformance suite** | The public types of `Janus.Conformance` (LIB-TEST-001): the suite's four calls, the report, the finding, the check, the truth-table case and scenario, the host-rows seam and the deployment factory delegate the step-up scenarios run through (LIB-TEST-001 criterion 2); and the contract in `Janus.Core` through which the suite asks for its provider probes (LIB-TEST-001) |
-| **BFF middleware pipeline** | Mounting API and stage ordering (D-052) |
+| **BFF middleware pipeline** | Mounting API and stage ordering (D-052), and what a host's own endpoints use: `AllowNoSession`, `Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` (`17` section 2a and BFF-CAP-002, `03` AUTHZ-INHERIT-002, D-202, D-203) |
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
 *Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
-D-187, D-188*
+D-187, D-188, D-202, D-203, D-204*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.
@@ -88,7 +96,9 @@ restructured without a major version.
 **Acceptance criteria**
 1. Each surface is documented with its stability guarantee.
 2. A change to any is caught before release by a contract test holding it to a committed
-   contract file or to its `PublicAPI` file (REF-001 AC2).
+   contract file or to its `PublicAPI` file (REF-001 AC2); the commands of `Janus.Cli`,
+   with their arguments, standard input and output and exit codes, are one of the contract
+   lists (LIB-TEST-002).
 
 ---
 
@@ -99,7 +109,10 @@ change in any release.
 
 **Acceptance criteria**
 1. Internal types are not publicly accessible.
-2. No consumer sample depends on an internal type.
+2. No consumer sample depends on an internal type: the sample host references only the
+   packages packed from the same commit, never a project of the solution, and the
+   conformance suite's sample takes its schema from `migrate` and its configuration
+   through the library's operations (`08` CONV-LAYOUT-001, D-204).
 
 ---
 
@@ -156,7 +169,7 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183, D-190*
+*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -188,9 +201,11 @@ provider's protocol endpoints are not operations. Beside its contract an endpoin
 take the browser's own records: its pre-authentication binding, the rotation of its
 session, and the registration signal.
 
-**Every operation takes an access context** (AUTHZ-IMP-001) — a system principal with a
-stated reason when called from background work (IDN-PRIN-001) — and is authorized by the
-gate exactly as the endpoint would be, save that an operation a registration or an
+**Every operation takes an access context** (AUTHZ-IMP-001) — a person's, which a host's
+endpoint reads from the request with the session it passes beside it (`17` BFF-HOST-001),
+or a system principal with a stated reason when called from background work
+(IDN-PRIN-001), a host's job among them (D-202) — and is authorized by the gate exactly as
+the endpoint would be, save that an operation a registration or an
 enrolment session reaches takes in its place a credential authority
 (`CredentialAuthority`), or has an overload that takes the enrolment session; an
 enrolment session's authority is judged as `08` CONV-DESIGN-002 states (D-190). Calling
@@ -200,11 +215,16 @@ gate: it answers the public keys `GET /oidc/jwks` publishes and nothing else, re
 record of a person, and is asked by the key set's endpoint and by the sign-on's reading
 of the identity token (BFF-SESS-006), where no person acts and no background work runs.
 
-**Seams that join the host's transaction.** `IResources` (AUTHZ-INHERIT-002) and
-`ICallbackReferences` (BFF-MACH-003) are seams, not operations of this contract: each
-joins the host's own transaction, so neither has an endpoint, and neither takes an
-access context. Placing or moving a record is the host's own action, which the host asks
-of the gate before it writes.
+**Seams that join the host's transaction.** `IResources` (AUTHZ-INHERIT-002),
+`ICallbackReferences` (BFF-MACH-003) and `IPersonalFields`, the cipher of a host's own
+fields (PRIV-RIGHT-005a), are seams, not operations of this contract: each joins the
+host's own work, so none has an endpoint, and none takes an access context. Placing,
+moving or removing a record, and who may read what a record holds, are the host's own
+actions, which the host asks of the gate before it writes or answers. The host's context
+joins the unit of work's connection and transaction with `UseUnitOfWorkAsync`
+(`Janus.Hosting`), so its writes and the library's commit together (AUTHZ-INHERIT-002,
+D-203); an operation whose refusal keeps a write begins the outermost unit of work and is
+never called inside the host's (CONV-DESIGN-003).
 
 **Operations called in process only.** Three operations are called in process only, and
 none has an endpoint or meets a gate (CONV-DESIGN-002 AC3): read-volume counting
@@ -232,8 +252,8 @@ operation that changes a relationship; and the conformance suite's provider prob
 |---|---|
 | **Connection details** | Database |
 | **Enabled authentication factors** and their policy | Per organization |
-| **Resource types and containment** | The only place the library learns the host's domain — including, for each encrypted field, the column identifying its subject (PRIV-RIGHT-005a) and the data category the field holds (PRIV-PRIN-001 AC2); a field whose category no purpose on its type names fails startup with `model.startup.declarationinvalid`. Each record is registered with its data subject read from its subject column (PRIV-SENS-002) |
-| **Roles** | Named bundles, and the actions that exist, each with the step-up gate and the purpose it is bound to where it has one (AUTHZ-GATE-005) |
+| **Resource types and containment** | The only place the library learns the host's domain — including, for each encrypted field, the column identifying its subject (PRIV-RIGHT-005a) and the data category the field holds (PRIV-PRIN-001 AC2), and, optionally, the permissions that are capabilities of the type (`Capabilities`, BFF-CAP-002, D-202); a field whose category no purpose on its type names fails startup with `model.startup.declarationinvalid`. Each record is registered with its data subject read from its subject column (PRIV-SENS-002) |
+| **Roles** | The actions that exist, each with the step-up gate and the purpose it is bound to where it has one (AUTHZ-GATE-005); and, optionally, the named bundles the deployment starts with (`Role`), each seeded once at a start and from then on the administrators' to change (AUTHZ-GRANT-004, D-204); a declared role naming a permission not declared or `system:administer`, named as a role of `10` section 3 or outside the rule of `09` `POST /admin/roles`, or declared twice, fails startup with `model.startup.declarationinvalid`, `details.declaration` `role.<name>` |
 | **Processing purposes and lawful bases** | Per resource type (AUTHZ-MODEL-003), each purpose with the data categories and subject categories it requires (PRIV-PRIN-001) and naming the legal document that governs its consent, the privacy notice where it names none; one purpose names one document across every type, and a document's name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_` (INT-SMS-003). A retention floor is declared for each data category a purpose is over, and is the default of `retention.<host-category>` (PRIV-RET-001). The jurisdiction's basis list with its properties, and its sensitive-data categories, are declared once; Egypt's ship as `LawfulBases.Default` and `SensitiveCategories.Default`, which the host passes to the builder. The library applies no list the host did not declare, and reads one category by name, `children` (PRIV-BASIS-001, PRIV-SENS-001, D-108) |
 | **Hosting location, environment and cross-border basis** | Configuration: `hosting.location` (INT-HOST-001) and `hosting.environment`, the free-text environment cell of the records of processing (PRIV-ROPA-001); the basis only where hosting is outside Egypt |
 | **Relying party identifier and origins** | Configuration (AUTH-FACT-010) |
@@ -245,9 +265,12 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Alert destinations** | At least one email and one SMS destination for the operator (OPS-ALERT-004), **and the owner's email and SMS destination** — break-glass alerts reach them always (OPS-BOOT-002, D-129) |
 | **SMS balance floor** | A prepaid amount the library cannot guess (INT-SMS-004) |
 | **Mail and SMS transports** | `IMailTransport` and `ISmsTransport` (LIB-EXT-001), each required unless the library's shipped transport for its channel is in use (`integration.mail.endpoint`, `integration.sms.endpoint`). A channel with neither fails startup with `model.startup.declarationmissing`, `details.key` `mailTransport` or `smsTransport` |
-| **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); and each declared social provider's credential, by the provider's name (IDN-LIFE-012). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
-| **Subject-event handlers** | Erasure, restriction and export. Each registered subscriber (`ISubjectEventSubscriber`) names the resource types it covers (`Covers`), and every type declared sensitive SHALL be covered by at least one. **Startup fails otherwise** (PRIV-RIGHT-005b), `details.handler` naming the type. Subscriber names are distinct and `erasure-ledger` is the library's own (`model.startup.subscribername`, IDN-LIFE-003a); a name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`, any other refused with `model.startup.declarationinvalid` (INT-SMS-003) |
-| **Purpose handlers** | For every purpose on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
+| **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); and each declared social provider's credential, by the provider's name (IDN-LIFE-012). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, save `migrate`, which reads no key (OPS-MIG-001, D-204), and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
+| **Subject-event handlers** | Erasure, restriction and takedown (`ErasureRequested`, `RestrictionChanged`, `TakedownExecuted`). Each registered subscriber (`ISubjectEventSubscriber`) names the resource types it covers (`Covers`), and every type declared sensitive SHALL be covered by at least one. **Startup fails otherwise** (PRIV-RIGHT-005b), `details.handler` naming the type. Subscriber names are distinct and `erasure-ledger` is the library's own (`model.startup.subscribername`, IDN-LIFE-003a); a name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`, any other refused with `model.startup.declarationinvalid` (INT-SMS-003) |
+| **Purpose handlers** | For every purpose resting on consent or on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`), under a name distinct among the purpose handlers and the subject-event subscribers (`Name`, IDN-LIFE-003a), which handles each `ConsentChanged` and `ObjectionChanged` of the purposes it names, delivered through the outbox (PRIV-RIGHT-001a, PRIV-CONS-008, D-203). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
+| **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule (D-203) |
+| **Cookies** | Every cookie the host sets: `Cookie(name, lifetime, thirdPartyReadable, purpose)`, its lifetime none for one that ends with the browser's session, its purpose none for one strictly necessary and the consent-based purpose it serves for one that is not (PRIV-CONS-006a); a purpose not declared or not resting on consent, a name the library's own cookies take, or a cookie declared twice fails startup with `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>` (D-203) |
+| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29, with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
 | **Governing language** | `legal.governinglanguage`: the default governing language of every legal document version (PRIV-CONS-005). Required, no default; protected once set (OPS-CFG-004) |
 | **Preference declaration** | Each host-declared preference: name, type (`string` · `boolean` · `integer` · `enum` with its values), default, and whether the person or only an administrator may edit it (REG-PREF-001). The declaration MAY be empty; a malformed one fails startup |
 | **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup, and a change of the restriction set naming one is refused with `config.value.notallowed`, `details.supplier` naming it. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (nullable: a send no request asked for has none) (D-153) |
@@ -282,8 +305,10 @@ default at the safe end of its range. They are of three kinds. Most are required
 have no default. Some may be empty: the preference declaration and the restriction key
 suppliers. The rest are required only where a feature the deployment uses needs them
 (the relationship sources, the image codec, a transport for a channel whose shipped
-transport is not in use, the mail server client, the password screening sources), or are
-optional, each row stating what its absence does. A minimal configuration therefore
+transport is not in use, the mail server client, the password screening sources, the
+export contributors, a purpose handler for each purpose that needs one, and a cookie
+declaration for each cookie the host sets), or are optional (the declared roles, the
+capabilities, the jobs), each row stating what its absence does. A minimal configuration therefore
 needs only the required declarations and those its own features call for.
 
 *Corrected three times: the list originally said "exactly four things," which four
@@ -292,7 +317,7 @@ were still missing after that correction; and `10` then listed twenty keys with 
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
-D-179, D-180, D-183, D-189, D-190, D-197*
+D-179, D-180, D-183, D-189, D-190, D-197, D-202, D-203, D-204*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -374,9 +399,11 @@ gate judged from a report asks below `aal1`), the instant phishing resistance wa
 reached (`PhishingResistantAt`, none where never) and the account's reachable assurance
 (`Reachable`), a presentation renewing only what it reaches. The gate is judged from
 that report as AUTH-STEP-002 step 1 judges a session (D-191). Absent one, step-up checks
-SHALL fail closed.
+SHALL fail closed. Such a host makes its caller's context with
+`AccessContext.Of(SubjectId)`, the one way a person's context is made where no session
+of the library carries the request (AUTHZ-IMP-001, D-202).
 
-*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191, D-192*
+*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191, D-192, D-202*
 
 **Acceptance criteria**
 1. Authorization alone compiles and runs.
@@ -408,7 +435,7 @@ source.
 | Authentication factors | The catalogue in `02-authentication` |
 | Record-level rules atop the permission model | None |
 | Mail server (`IMailServer`: mailbox provisioning and app passwords, INT-MAIL-001) | The JMAP adapter in `Janus.Hosting`, used where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-HOST-001, CONV-DESIGN-007) |
-| Secret source (`ISecretSource`: the secrets LIB-HOST-001 lists; INF-HOST-003) | None: the host supplies it (D-149). The library reads every secret through it, asynchronously, when the application starts and before it serves a request; no secret is an argument of `AddJanus`, and startup fails without it. A `Janus.Cli` command reads the same values from one key document on standard input (OPS-SEC-001) |
+| Secret source (`ISecretSource`: the secrets LIB-HOST-001 lists; INF-HOST-003) | None: the host supplies it (D-149). The library reads every secret through it, asynchronously, when the application starts and before it serves a request; no secret is an argument of `AddJanus`, and startup fails without it. A `Janus.Cli` command reads the same values from one key document on standard input (OPS-SEC-001), save `migrate`, which reads no key (OPS-MIG-001, D-204) |
 | Environment seams (clock reference, certificate renewal, DNS resolver, location file, datacenter range file, restore-test instance, off-host erasure ledger) | None: each is an optional declaration of LIB-HOST-001, whose row states what its absence does |
 
 A core namespace is `Janus.Core` or an area project's (`Janus.Identity`,
@@ -416,7 +443,7 @@ A core namespace is `Janus.Core` or an area project's (`Janus.Identity`,
 extension point SHALL be named only in `Janus.Hosting`, where the shipped defaults and
 adapters live.
 
-*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197*
+*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189, D-197, D-204*
 
 **Acceptance criteria**
 1. Each is registered through configuration, not inheritance from a library type.
@@ -546,8 +573,105 @@ the build on an unintended change.
    minor part where one gained an entry. The contract lists are the configuration keys
    with type, scope and constraints, and the key families; the library-owned schema; the
    error codes with their status; the audit actions; the permissions; the endpoints with
-   method, route, body members and statuses; and the browser profile's stage order.
+   method, route, body members and statuses; the browser profile's stage order; and the
+   commands of `Janus.Cli` with their arguments, standard input and output and exit codes
+   (D-204).
 2. Altering the ancestry closure structure fails the build.
+
+---
+
+**LIB-TEST-003** — The library SHALL ship a testing package a host's tests and its
+development setup use, through which a test stands a deployment up and signs a person in
+by the library's own commands, endpoints and operations, and which skips, bypasses or
+short-cuts no check.
+
+**Values (D-204).** `Janus.Testing` registers nothing on its own (OPS-ENV-001). It
+carries:
+
+- `InMemoryMailTransport` and `InMemorySmsTransport`, which keep every message sent,
+  readable by destination, and fail a delivery only where the test says so;
+- `FixedSecretSource`, for tests, which answers a key-encryption key version and a
+  fingerprint key version of 32 bytes each, drawn once for the instance so that each
+  test's deployment starts clean (a development setup that keeps its database across
+  restarts supplies a secret source of its own), and the maintenance credential, the mail
+  server's secret and each social provider's credential the test gives it, and writes the
+  JSON document the commands other than `migrate` read (OPS-SEC-001), with the same keys
+  and the application connection the test gives it;
+- stand-ins for the optional environment seams that answer a reading in order, so a
+  development deployment raises no `degradation`: `FixedClockReference`
+  (`IClockReference`, no offset), `SucceededCertificateRenewal` (`ICertificateRenewal`, a
+  renewal that succeeded), and `EmptyLocationSource` and `EmptyDatacenterRangeSource`
+  (`ILocationSource`, `IDatacenterRangeSource`), each a file holding only its first line,
+  dated the day it is read, and no range (INT-GEN-006, AUTH-ABUSE-008);
+- `SoftwarePasskey`, a WebAuthn authenticator in memory (ES256, `none` attestation, user
+  presence and user verification performed, backup eligibility and backup state set on
+  every ceremony, as a synced passkey reports them) that answers the library's creation
+  and request options, so a test enrols a passkey and signs in with it through the
+  library's own ceremonies (AUTH-FACT-014), and a staff member completes enrolment under
+  the administrative organization's credential redundancy (AUTH-RECOV-001) and reaches its
+  floor (AUTH-SESS-005b);
+- `TestDeployment`, which prepares an empty database as a production one is prepared
+  (OPS-ENV-001), through the installed `Janus.Cli` tool: `migrate`, with a document
+  holding the migration connection the test gives and nothing else (OPS-MIG-001), then
+  `bootstrap`, then `register-client` for each browser application the host declares (its
+  `SignOnClient`, AUTH-SESS-012), with the document of the host's `FixedSecretSource`, keeping
+  the enrolment link and the administrative organization's identifier `bootstrap`
+  printed;
+- `TestPeople`, over a running host: a customer registered through the registration
+  endpoints with the codes the in-memory transports hold; the first administrator,
+  enrolled with a software passkey through the enrolment link; a staff member invited by
+  an administrator with the roles the test names and enrolled through the invitation; and
+  for each a `TestSession`, an `HttpClient` that carries the session cookie, the
+  synchronizer token and `X-Identity-Request` (BFF-CSRF-001, BFF-CSRF-003) on every
+  request, with the person's subject, and a step-up with the person's passkey or password.
+
+*Source: D-204*
+
+**Acceptance criteria**
+1. A test using only `Janus.Testing` and a host built on the public surface stands a
+   deployment up from an empty database, signs in a customer, an administrator and a
+   staff member, and calls the host's own endpoints as each.
+2. No member of `Janus.Testing` writes a library-owned table or calls an internal type.
+3. A staff member signed in with `SoftwarePasskey` completes enrolment in the
+   administrative organization and meets a gate that asks for phishing resistance at
+   `aal2`.
+4. A development deployment composed with the stand-ins raises no `degradation` for the
+   seams they stand in for.
+5. A state-changing request made through a `TestSession` passes the browser profile's
+   CSRF stages.
+
+---
+
+**LIB-TEST-004** — A sample host built only from the packages SHALL be part of the gate,
+so that a host can be built on the public surface and stays able to be.
+
+**Values (D-204).** The sample host lives in the repository outside the library's
+solution, in a solution of its own (`samples/HostSample`, its tests in
+`samples/HostSample.Tests`, `08` CONV-LAYOUT-001), and references only the packages packed
+from the same commit (the main package and `Janus.Testing`, with `Janus.Cli` as its tool),
+restored from a folder feed the gate fills, never a project of the library's solution. Its
+domain is its own invention, never a real host's. It is a small business application:
+types of its own with an encrypted personal field, a sensitive type with a consent-based
+purpose, an objectable purpose with its handler, a subject-event subscriber and an export
+contributor, a declared role and a derivation over it, a job, and endpoints of its own
+needing a session or marked as answering anyone, protected by permissions, one bound to a
+step-up gate, with a list filtered by the gate and carrying capabilities. An obstacle met
+in building it is a gap in the public surface, raised as a question, never closed by a
+project reference or an internals grant. Every later decision that adds to what a host
+meets adds to the sample.
+
+*Source: D-204*
+
+**Acceptance criteria**
+1. Building the sample host and running its tests is a gate of `08` CONV-GATE-001.
+2. Its tests prove, through its own endpoints and as the people `Janus.Testing` signs in:
+   a record written and read with its personal field encrypted; an endpoint refused
+   without a session and one marked as answering anyone reached without one; a bound
+   action refused without its step-up; a record registered and rolled back leaving
+   neither; a registration removed; an erased customer whose host field no longer
+   decrypts; an export carrying the host's section; a withdrawal and an objection handled
+   by the handler; a job admitted for its declared permission and refused for another.
+3. The sample host references no project of the library's solution.
 
 ---
 

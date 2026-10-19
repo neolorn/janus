@@ -468,23 +468,51 @@ about what was shown as authoritative.
 
 **PRIV-CONS-006a** — The privacy notice SHALL list every cookie the deployment sets —
 name, purpose, lifetime, and whether any third party can read it — and SHALL state
-that none requires consent because each is strictly necessary for the service. The
-library sets only such cookies (session, pre-authentication, CSRF, trusted device,
+that none requires consent but those that name a consent-based purpose, each other being
+strictly necessary for the service. The library sets only strictly necessary cookies (session, pre-authentication, CSRF, trusted device,
 remembered browser). A host that adds any
 cookie that is not strictly necessary SHALL declare a consent-based purpose for it,
 at which point a consent prompt becomes necessary; no cookie banner exists otherwise.
 
-*Source: D-145*
+**Values (D-203).** A host declares every cookie it sets
+(`AuthorizationDeclarationBuilder.Cookie(name, lifetime, thirdPartyReadable, purpose)`,
+LIB-HOST-001), with the lifetime it is set for (none for one that ends with the browser's
+session): no purpose for one strictly necessary, and for one that is not, the
+consent-based purpose it serves; a purpose not declared or not resting on consent, a name
+the library's own cookies take, or a cookie declared twice fails startup with
+`model.startup.declarationinvalid`, `details.declaration` `cookie.<name>`. A cookie that
+rests on consent is set only for a person whose session carries the request and who holds
+that consent; the library records no consent for a visitor it knows nothing of. The list
+belongs to the notice's version: when a version is published, the cookies the deployment
+then sets are kept with it (every cookie the library sets, `17` BFF-SESS-002, with the
+lifetime its configuration then gives, and every one the host declares), and `GET
+/privacy/notice` answers the version's own list in `cookies`, each with `name`, `purpose`
+(none for a strictly necessary one), `lifetime` (none for one that ends with the browser's
+session) and `thirdParty`, which the notice shows beside its text, so a reader of an old
+version sees what it listed (D-024, D-056). Where the cookies the deployment sets differ
+from the current version's list in a cookie's name, purpose, lifetime or readability by a
+third party, `degradation` is raised under the scope `notice.cookies` (`10` section 5.23),
+at each start and at each change of a key that gives a library cookie's lifetime, until a
+version listing them is published; a deployment with no version published yet raises
+nothing under it.
+
+*Source: D-145, D-203*
 
 No Egyptian rule addresses cookies; the ePrivacy exemption for strictly necessary
 storage is the reference practice, and transparency about them is required
 everywhere (CJEU Planet49: duration and third-party access are required information).
 
 **Acceptance criteria**
-1. The notice enumerates the cookies set, with purpose and lifetime.
+1. The notice enumerates the cookies set, with purpose and lifetime: `GET
+   /privacy/notice` lists the library's and every declared host cookie, as they stood when
+   the version it answers was published.
 2. No page shows a cookie consent prompt while only necessary cookies are set.
-3. Registering a non-necessary cookie without a consent-based purpose fails
-   validation.
+3. Declaring a cookie that names a purpose not declared or not resting on consent fails
+   startup with `model.startup.declarationinvalid`.
+4. A start whose cookies differ from those the current notice version lists, by name,
+   purpose, lifetime or third-party readability, raises `degradation` under
+   `notice.cookies`, and so does a change of `factor.trusteddevice.lifetime` that the
+   current version does not list.
 
 ---
 
@@ -540,7 +568,8 @@ which consent was given.
 
 **Withdrawal ends the purpose, not only the activity.** Any data held *solely* for the
 withdrawn purpose SHALL be erased on withdrawal, in the library and by every
-registered handler for that purpose (`ConsentChanged`); the consent record itself is
+registered handler for that purpose (`ConsentChanged`, delivered to its
+`ConsentChangedAsync` through the outbox, D-203); the consent record itself is
 retained for `retention.consent` as the evidence Law 151/2020 Art. 18 requires
 (D-145).
 
@@ -691,11 +720,17 @@ objection SHALL be recorded as a consent record is (PRIV-CONS-001: purpose, docu
 version, which for an objection is always the privacy notice, timestamp, mechanism,
 withdrawal timestamp) and SHALL raise `ObjectionChanged`, whose
 handlers are **required** for every objectable purpose: processing of that subject for
-that purpose stops when the event is handled. An objection while the subject's objection
+that purpose stops when the event is handled. A handler is an `IPurposeHandler` naming the
+purpose, under a `Name` held as a subject-event subscriber's is (IDN-LIFE-003a): the library delivers it each `ObjectionChanged` and `ConsentChanged` of the
+purposes it names (`ObjectionChangedAsync`, `ConsentChangedAsync`) through the
+transactional outbox, as the subject events are (IDN-LIFE-003a), and its success confirms
+the work; a delivery whose attempts are spent alerts (`erasure-delivery-exhausted`) and is
+completed by hand (D-203). Every purpose resting on consent or on an objectable basis is
+named by at least one handler. An objection while the subject's objection
 to the purpose stands changes nothing and is answered as an objection (D-183). An
 objection is **always honoured**; the library offers no "compelling grounds" refusal.
 
-*Source: Law 151/2020 Art. 2, Decree 816/2025 Art. 3(5), D-145, D-166, D-183*
+*Source: Law 151/2020 Art. 2, Decree 816/2025 Art. 3(5), D-145, D-166, D-183, D-203*
 
 Consent means the person was asked and said yes, so they *withdraw*. An objectable
 basis means the controller proceeded on its own recorded justification, so the person
@@ -709,8 +744,11 @@ is a fact about its declaration, never assumed either way.
 1. A purpose on an objectable basis shows an objection switch; one on a consent basis
    shows a consent switch; the label names the basis.
 2. Objecting writes a record and raises `ObjectionChanged` in one transaction.
-3. A deployment declaring an objectable purpose without a registered handler for it
-   fails startup, as for erasure and restriction (PRIV-RIGHT-005b).
+3. A deployment declaring an objectable or a consent-based purpose without a registered
+   handler for it fails startup, as for erasure and restriction (PRIV-RIGHT-005b); a
+   registered handler receives each `ObjectionChanged` and `ConsentChanged` of the
+   purposes it names, retried under `outbox.retry.*` until it answers success or its
+   attempts are spent, which alerts with `erasure-delivery-exhausted`.
 4. Objection and its withdrawal take effect without human approval.
 5. A purpose whose basis is not objectable returns `privacy.purpose.notobjectable`.
 6. An objection before any version of the privacy notice is published is refused with
@@ -817,7 +855,29 @@ account's live sessions, AUTH-SESS-013), `consents` and `objections` (every reco
 PRIV-CONS-001). No section SHALL carry secret material: no password hash, TOTP secret,
 public key, WebAuthn credential identifier, recovery code or device token fingerprint.
 
-*Source: D-148; D-037, D-146, D-162, D-166*
+**What the host holds (D-203).** After the library's sections the export SHALL carry the
+host's. An export contributor (`IExportContributor`, LIB-HOST-001) names itself (`Name`,
+under INT-SMS-003's rule, distinct among contributors), the types whose records it holds
+(`Covers`), and answers a subject's sections (`SectionsAsync`, a `Result` holding a list
+of `ExportSection`). An `ExportSection` has a `Name` (under INT-SMS-003's rule, distinct
+from every library section and every other contributor's) and its `Records`; an
+`ExportRecord` holds `Values`, each a value the host writes as text (an instant in ISO
+8601, a number in invariant form) under a stable name (under INT-SMS-003's rule), and no
+prose. `IExports.AssembleAsync` assembles the library's sections, then asks every
+registered contributor, outside any unit of work, in contributor name order, and appends
+what each answers; a section named as a library section or as another contributor's, or
+a section or value whose name breaks the rule, is a fault and fails the export as below.
+The export is counted against `privacy.export.ratelimit` once all have answered, in one
+transaction that takes a lock on the subject and then counts the window again, so exports
+asked at once are each counted against the ones before them (D-166 X3). A contributor that
+fails or faults fails the export: nothing is returned (500 `system.fault`, the contributor
+named in the log), the export is not counted, and the person may ask again, since an export that left out what a host holds would mislead. Every
+type that declares an encrypted field or a sensitive category is covered by at least one
+contributor; startup fails otherwise with `model.startup.declarationmissing`,
+`details.handler` naming the type. Both formats carry a host section as the library's
+(`09` `GET /privacy/export`).
+
+*Source: D-148; D-037, D-146, D-162, D-166, D-203*
 
 **Acceptance criteria**
 1. Both formats contain the same data.
@@ -828,6 +888,13 @@ public key, WebAuthn credential identifier, recovery code or device token finger
 4. The export of an account holding a revoked grant, a grant in an organization it holds
    no membership of, a group membership and an ended membership carries all four, each
    ended one with the instant it ended.
+5. The export of a subject a host holds records about carries each contributor's sections
+   after the library's, in contributor name order, in both formats; one whose contributor
+   fails returns nothing and is not counted against `privacy.export.ratelimit`, and of
+   exports asked at once past the limit, those past it are refused as exports asked one
+   after another are.
+6. A deployment declaring a type with an encrypted field or a sensitive category that no
+   export contributor covers fails startup with `model.startup.declarationmissing`.
 
 ---
 
@@ -946,7 +1013,7 @@ unwrap refuses a wrapped key of 32 zero bytes before it is tried, and the DR-016
 and a restore recognise it as erased.
 
 *Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178, D-183,
-D-187*
+D-187, D-203*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -1007,7 +1074,11 @@ foreign key does that today.
 - **Ciphertext SHALL be bound to its location** by additional authenticated data —
   subject identifier, table, column, **and the format marker below**. Without it
   ciphertext can be **moved between rows or between subjects**; with it, decryption
-  fails when moved
+  fails when moved. The data is laid out as the format marker, the subject identifier's
+  16 bytes in network order, then the table and the column, each as its length in two
+  bytes, big-endian, followed by its UTF-8 bytes. A host's own field is bound by the fixed
+  mark `host` and its type's and its field's declared names in the place the table and
+  column take, laid out the same way (below, D-203)
 - **The KEK SHALL be versioned**, with prior versions held by the application until
   re-wrapping completes. Rotation otherwise strands everything encrypted under the old
   version. A retired version leaves the application's key document at once
@@ -1068,6 +1139,42 @@ foreign key does that today.
 - **Primitives SHALL come from a maintained cryptographic library**, not be
   hand-written. The pattern is standardised — authenticated encryption for data, key
   wrapping for keys — and implementing it directly is a documented source of error
+
+**A host's own fields (D-203).** A host encrypts and reads its declared fields through
+`IPersonalFields` (`Janus.Core`), a seam as `IResources` is: it joins the host's work, has
+no endpoint and takes no access context, since who may see a record is the host's own
+question to the gate. `WithSubjectAsync(subject, use)` serves one subject and
+`WithSubjectsAsync(subjects, use)` a page of them, each answering the `Result` of `use`:
+the library reads their wrapped keys in one statement, unwraps each once (criterion 12),
+hands `use` a `SubjectFields` for each, and clears every data key when `use` returns, as
+the key ring lends a key (CONV-CODE-007); `use` is synchronous, so no key outlives the
+call, and a `SubjectFields` used after it returned is a fault. The subject is the value of
+the field's declared subject column, which the host passes; `SubjectId` cannot name the
+deployment's reserved identifier. `SubjectFields.Encrypt(type, field, value)` answers the
+stored value for a string, and its byte overload for a binary field; `Decrypt` and
+`DecryptBytes` answer the value. Each answers a `Result` (CONV-DESIGN-005): where the
+subject's key is erased (`SubjectFields.Erased`), the failure `privacy.subject.erased`
+(409), since no value can be read for a person who has been erased and none is written. A
+subject the deployment holds no key for is refused 422 `api.request.invalid` naming
+`subject`, the batch judged whole. A field its type does not declare encrypted, and a
+stored value that does not authenticate (altered, or moved to another subject, type or
+field), are faults: the first the calling code's, the second a broken invariant, never a
+refusal. The value is written as the library's own are (AES-256-GCM, `[format
+marker][initialisation vector][ciphertext + tag]`, marker `0x01`). Its additional
+authenticated data is laid out as the library's own (above): the format marker, the
+subject identifier's 16 bytes in network order, then the fixed mark `host`, the type's
+declared name and the field's declared name, each as its length in two bytes, big-endian,
+followed by its UTF-8 bytes. The mark keeps a host's value from ever authenticating as a
+library value or the reverse, whatever names the host chooses: a host's value carries
+three named parts and a library's two, and a sequence of length-prefixed parts reads one
+way only. The field's declared name is its member's name, or the name `Encrypted` is given,
+so a member the host renames keeps its values readable by being given its old name. The
+library reads nothing of the host's (LIB-HOST-002), the declared names bind a value as
+tightly as a table and a column would, and the host may rename its table or column
+freely. *Rejected:* an EF Core value converter (it sees one value, never the row's
+subject column, and cannot read a key asynchronously); an interceptor that encrypts on
+save (it would read the host's entities, and hide from the code that writes a value that
+the value is personal).
 
 **What this does not protect.** A backup taken **before** an erasure holds the wrapped
 key as it then was. Anyone holding both that backup and the KEK can recover the
@@ -1145,6 +1252,14 @@ transaction, and a row whose key is erased SHALL be removed without being carrie
 19. A mailbox nobody has held, released when its invitation is revoked, holds no readable
     address and no live fingerprint once the server has confirmed its removal, and its row
     remains.
+20. A host's field written through `IPersonalFields` decrypts under its subject, type and
+    field, fails to decrypt once moved to another subject, type or field or into a column
+    of the library's, and answers `privacy.subject.erased` after the subject is erased;
+    several fields of a page of subjects are read with one statement for the keys and one
+    unwrap per subject.
+21. Encrypting a host's field for an erased subject is refused with
+    `privacy.subject.erased`; opening the fields of a subject the deployment holds no key
+    for, with `api.request.invalid` naming `subject`.
 
 ---
 
@@ -1250,9 +1365,12 @@ SHALL perform the work on what it holds and confirm completion**.
 |---|---|
 | `ErasureRequested` | Clears what destroying the subject's key does not reach: the copies it derived from the subject's fields (caches, search indexes, files it produced) and what it passed to its own processors |
 | `RestrictionChanged` | Stops acting on that subject's records |
-| `ExportRequested` | Returns everything it holds about the subject |
+| `TakedownExecuted` | Stops what it holds for the subject (IDN-LIFE-003) |
 
-*Source: D-068, D-082, D-168*
+What the host holds about the subject reaches an export through its export contributors
+when the export is assembled (PRIV-RIGHT-003), so no event is owed for it (D-203).
+
+*Source: D-068, D-082, D-168, D-203*
 
 The permission gate answers "may this principal do this to that record." Erasure,
 restriction and export ask "which records are **about** this person" — a different
@@ -1271,8 +1389,9 @@ application clears only what the destroyed key does not reach: the copies it der
 the subject's fields and what it passed to its own processors. That is a fixed list of
 places, not a procedure that follows its schema (D-168). Personal fields in
 management-only schemas are outside this event; their erasure is manual (PRIV-SENS-002,
-D-101). Applications still handle **restriction** and **export**, which concern data they
-hold and which no key destruction reaches.
+D-101). Applications still handle **restriction**, and contribute their part of an
+**export** (PRIV-RIGHT-003), which concern data they hold and which no key destruction
+reaches.
 
 **Acceptance criteria**
 1. The request remains open until every required subscriber confirms completion.

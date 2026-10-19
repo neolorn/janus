@@ -119,9 +119,11 @@ the drift check takes back is recorded as `authz.grant.retracted` the same way, 
 transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a person, an
 acknowledgement or bootstrap writes is recorded as `authz.grant.created`, and a
 revocation a person makes as `authz.grant.revoked`, each with its reason, in the
-transaction that writes it (`10` section 5.24, D-197).
+transaction that writes it (`10` section 5.24, D-197). A grant revoked because the record
+it names was removed (`IResources.RemoveAsync`, AUTHZ-INHERIT-002) records the nil subject
+as its revoker and the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203).
 
-*Source: D-015, D-166, D-187, D-197*
+*Source: D-015, D-166, D-187, D-197, D-203*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -156,7 +158,24 @@ expired or revoked), a declared derivation or a standing invitation (neither
 acknowledged nor revoked, expired or not) names SHALL NOT be removed
 (`authz.role.inuse`).
 
-*Source: D-010, D-015, D-166*
+**Declared roles (D-204).** A host may declare the roles its deployment starts with
+(`AuthorizationDeclarationBuilder.Role(name, permissions)`, LIB-HOST-001), each name a
+role name as `POST /admin/roles` takes it and none a role of `10` section 3, and each
+permission a declared host permission or a library-owned one other than
+`system:administer` (OPS-CFG-007); any other fails startup with
+`model.startup.declarationinvalid`, `details.declaration` `role.<name>`. At each start,
+before the application serves a request, every declared role the deployment has not yet
+seeded is seeded, under the lock of its name, by the start principal `role-declaration`
+(`10` section 5.29, operation `role-seeding`), inside the start step and through no public
+operation. The role definition admits it there without `role:manage`, a step-up or a
+person's reason, its reason being `AUTHZ-GRANT-004`, and `IRoles` admits no system
+principal, refusing one with `authz.denied`, so no code outside the start step defines a
+role as it does, whatever principal it builds: the role is defined where no role of that name exists, recorded `authz.role.defined`, and left
+as it stands where one does; either way the name is kept as seeded, a row of a library
+table. A role once seeded is never seeded again, so a change or a removal an
+administrator makes later stands.
+
+*Source: D-010, D-015, D-166, D-204*
 
 **Acceptance criteria**
 1. Creating a role and assigning permissions to it requires no restart.
@@ -168,6 +187,12 @@ acknowledged nor revoked, expired or not) names SHALL NOT be removed
    with `authz.denied` and change nothing.
 6. Removing a role that a grant, a derivation or a standing invitation names, an
    expired one included, is refused with `authz.role.inuse` and changes nothing.
+7. A declared role is defined at the first start of a fresh deployment; changed or removed
+   by an administrator, it is not defined again at the next start; one an administrator
+   made before it was declared is left as it stands; a declared role named as a role of
+   `10` section 3 fails startup; an `IRoles` call made with a system principal's context,
+   one named `role-declaration` included, is refused with `authz.denied` and changes
+   nothing.
 
 ---
 
@@ -242,13 +267,34 @@ container is not of the declared type, is unregistered, belongs to another
 organization or is absent where the type requires one; or, for a sensitive type, the
 subject it names holds no account, or one `deleting` or `deleted` (IDN-LIFE-002a). A
 batch is judged whole before anything is written. `IResources` is a seam, not an
-operation: it joins the host's transaction, has no endpoint and takes no access context
-(LIB-API-005).
+operation: it joins the unit of work, which the host's context joins, has no endpoint and
+takes no access context (LIB-API-005).
+
+**Values (D-203).** The host's context joins the unit of work with
+`UseUnitOfWorkAsync` (`Janus.Hosting`), called on its `DatabaseFacade` inside an open unit
+of work: it takes the unit of work's connection and transaction, and releases them at the
+outermost commit or rollback, so its `SaveChangesAsync` and the library's writes commit
+together at the outermost `CommitAsync` and roll back together. The connection runs under
+the deployment's one application credential, `identity_app`, to which the host's own
+migrations grant the host's tables (OPS-MIG-003). Called outside an open unit of work, or
+on a context that holds a connection of its own, it is a fault (CONV-ERR-001); so is an
+operation whose refusal keeps a write called inside the host's open unit of work
+(CONV-DESIGN-003). The host saves before the outermost commit; the library commits nothing
+the host has not saved and clears nothing the host's context tracks.
+`IResources.RemoveAsync(resource)` removes a record's registration and its ancestry rows,
+in the unit of work, for a record the host removes from its own table, and revokes every
+live grant that names the record (AUTHZ-GRANT-003), so a later registration of the same
+identifier inherits none of them. It is refused 422 `api.request.invalid` naming
+`resource` where the record is not registered, and 409 `authz.resource.inuse` where a
+record is registered inside it. A record's data subject is fixed at registration: a host
+that must change it removes the registration and registers the record again, encrypting
+its fields again under the new subject (PRIV-RIGHT-005a), in one unit of work, and records
+the change in its own history (IDN-PRIN-003).
 Placing a record, or moving it, confers on it the grants held on its new containers
 (AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action, which the
 host asks of the gate before it writes.
 
-*Source: D-015, D-017, D-166*
+*Source: D-015, D-017, D-166, D-203*
 
 Precomputation is what keeps the rule composable into a query and therefore usable
 as a `WHERE` clause. Same-transaction maintenance is why permission data and business
@@ -257,10 +303,15 @@ service.
 
 **Acceptance criteria**
 1. Creating a resource writes its ancestry in the same transaction; a rollback
-   leaves neither.
+   leaves neither, the host's own row written through a context joined with
+   `UseUnitOfWorkAsync` included.
 2. Moving a subtree updates ancestry for every descendant.
 3. A bulk import of 10,000 resources produces correct ancestry for all.
 4. No permission query contains a recursive common table expression.
+5. Removing a registration leaves no ancestry row of the record and no live grant naming
+   it; removing one not registered is refused with `api.request.invalid` naming
+   `resource`, and one that holds a registered record with `authz.resource.inuse`, each
+   changing nothing.
 
 ---
 
@@ -275,7 +326,8 @@ they should not, silently. No choice of registry syntax makes it easier or harde
 **Acceptance criteria**
 1. Tests cover moving a subtree beneath its own former sibling.
 2. Tests cover concurrent moves of overlapping subtrees.
-3. A test asserts no orphaned ancestry rows remain after any operation.
+3. A test asserts no orphaned ancestry rows remain after any operation, a removal
+   (`IResources.RemoveAsync`, AUTHZ-INHERIT-002) included.
 
 ---
 
@@ -607,14 +659,15 @@ and compliance records all derive from it.
 that need only the declaration run inside `AddJanus`; checks that read the database
 (an undeclared permission granted by a stored role, an unindexed derivation column) run
 in a hosted service `Janus.Hosting` registers before the web server, so the process
-exits non-zero before a request is served; `Janus.Cli` runs the same validation before
-any command (D-160). The
+exits non-zero before a request is served. `Janus.Cli` reads no host declaration
+(OPS-BOOT-001), so none of these checks runs before its commands (D-160, D-204). The
 following SHALL fail:
 
 - A containment cycle
 - A type referencing an undeclared type
 - A type with no path to an organization
-- A role granting an undeclared permission
+- A role the deployment holds granting an undeclared permission (a declared role
+  naming one fails as AUTHZ-GRANT-004 states)
 - A purpose declaring legitimate interest without a linked assessment
 - A queryable entity with no registered policy
 - **A derivation naming an unindexed column** (AUTHZ-DERIVE-004)
@@ -625,7 +678,7 @@ following SHALL fail:
 - A consent-based purpose named for the hosting or its cross-border transfer
   (INT-HOST-002)
 
-*Source: D-015, D-032, D-043, D-162, D-166*
+*Source: D-015, D-032, D-043, D-162, D-166, D-204*
 
 Failing at boot rather than at first query. The same principle as the relying party
 identifier validation in `02-authentication`.
@@ -805,8 +858,8 @@ from the correlation identifier.
 ---
 
 **AUTHZ-GATE-005** — The API SHALL return **capabilities** alongside each record,
-meaning **"permitted by grants, subject to session gates"** — computed in the same
-query.
+meaning **"permitted by grants, subject to session gates"** — computed for a whole page
+at once, in the record's own query or in one statement beside it, never per record.
 
 **A capability is not a promise the action will succeed.** An action can still be
 refused for step-up, a downgraded session, the subject's processing restriction, missing
@@ -858,14 +911,14 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
 produces N+1 queries.
 
 **Acceptance criteria**
-1. A list of 50 records returns capabilities without additional queries.
+1. A list of 50 records returns capabilities without a query per record.
 2. A capability present with an empty `requires` always succeeds.
 3. A capability with `requires` prompts rather than failing silently.
 4. No frontend code contains a role name.
@@ -1104,7 +1157,15 @@ subject (PRIV-BREACH-002) reads the records naming the subject as acting identit
 identities from it; an event raised from a link a message carried, with no context,
 carries neither (`10` section 5b, D-187).
 
-*Source: D-014, D-166, D-183, D-187*
+**Where a context comes from (D-202).** No public member makes a context whose acting and
+effective identities differ. A host whose requests carry the library's sessions takes a
+person's context from the request their session carries (`17` BFF-HOST-001), so the
+step-up the session proved and a break-glass session's reason come with it, and never
+builds one; `AccessContext.Of(SubjectId)` is for a host that consumes authorization
+without the library's authentication (LIB-HOST-004), for the conformance suite and for
+tests; `AccessContext.Of(SystemPrincipal)` makes a system principal's.
+
+*Source: D-014, D-166, D-183, D-187, D-202*
 
 Impersonation is out of scope. Two identity fields where one would do is defensible
 on its own terms — it makes "who did this" unambiguous — and retrofitting a second
@@ -1120,6 +1181,8 @@ identity into every audit record and permission check later would not be.
 5. Every event raised with the access context of a person who acted carries the acting
    and the effective identity from it; one raised from a link with no context carries
    neither.
+6. No public member of the library makes a context whose acting and effective
+   identities differ.
 
 ---
 

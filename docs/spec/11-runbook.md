@@ -250,14 +250,18 @@ permanent failure alerts you immediately (`erasure-delivery-exhausted`). Once th
 host's step is done by other means, close the failed delivery by hand with the manual
 completion control (`POST /admin/erasures/{id}/complete`, naming the takedown's
 identifier, step-up `erasure:complete`); the completion is itself recorded
-(IDN-LIFE-003a).
+(IDN-LIFE-003a). Every other delivery of host-side work that raises the same alert (an
+erasure's, a restriction change's, a consent change's or an objection's) is closed the
+same way: find it in the list of incomplete deliveries (`GET /admin/erasures`, which shows
+each with its kind and the subscribers still owed), make sure the host's step is done by
+other means, and complete it by its identifier (D-203).
 
 **Do not** ask for proof of age. The date of birth entered at registration is retained
 only where `profile.dateofbirth` is on (REG-PROF-002, PRIV-MINOR-001); by default only
 the derived affirmation is held, and collecting a date to resolve a takedown would
 create the data the policy exists to avoid.
 
-*Source: D-039, IDN-LIFE-003, PRIV-MINOR-002, D-166*
+*Source: D-039, IDN-LIFE-003, PRIV-MINOR-002, D-166, D-203*
 
 ---
 
