@@ -496,9 +496,11 @@ internal sealed class AuthorizationModel
                     "the library reserves the name for the whole organization");
             }
 
+            // PRIV-RIGHT-005a (D-206): a host's encrypted value is bound to its type's
+            // declared name, so two types under one name could swap values unnoticed.
             if (!types.TryAdd(type.Name, type))
             {
-                throw Malformed("the resource type " + type.Name + " is declared twice");
+                throw Invalid(type.Name.ToString(), "name", "the resource type " + type.Name + " is declared twice");
             }
         }
 
@@ -613,6 +615,7 @@ internal sealed class AuthorizationModel
         var held = new HashSet<string>(
             type.Purposes.SelectMany(purpose => purpose.DataCategories),
             StringComparer.Ordinal);
+        var named = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
         {
@@ -623,6 +626,16 @@ internal sealed class AuthorizationModel
                     "key",
                     type.Name + "." + field.Field,
                     "an encrypted field is declared with the column naming its subject");
+            }
+
+            // PRIV-RIGHT-005a (D-206): a value is bound to its field's declared name, so
+            // two fields of one type under one name could swap values unnoticed.
+            if (!named.Add(field.Name))
+            {
+                throw Invalid(
+                    type.Name.ToString(),
+                    field.Name,
+                    "the type " + type.Name + " declares two encrypted fields under the name " + field.Name);
             }
 
             Held(type, field.Field);

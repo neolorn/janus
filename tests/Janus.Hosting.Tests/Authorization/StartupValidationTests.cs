@@ -514,6 +514,51 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3 (D-206): an export contributor registered beside the deployment's
+    /// own under a name outside the rule, or under the name the deployment's own holds,
+    /// stops the deployment as it starts with <c>model.startup.declarationinvalid</c>,
+    /// naming <c>contributor.&lt;name&gt;</c> and its member; one under a name of its own
+    /// inside the rule starts.
+    /// </summary>
+    /// <param name="name">The name the second contributor is registered under.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("Host Parcels")]
+    [InlineData("host..parcels")]
+    [InlineData("host")]
+    public async Task INT_SMS_003_AC3_AnExportContributorNamedOutsideTheRuleOrTwiceIsRefusedAsync(string name)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IExportContributor>(new ContributorNamed(name));
+                Declared(services);
+            })
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("contributor." + name, refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IExportContributor>(new ContributorNamed("host.parcels_2"));
+                Declared(services);
+            })
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC7, D-203: a purpose handler's confirmation is recorded under its
     /// name as a subscriber's is, so one registered under a subscriber's name stops the
     /// deployment as it starts, naming it.
@@ -2434,6 +2479,20 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         public ValueTask<Result> ObjectionChangedAsync(ObjectionChanged changed, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Result.Success());
+    }
+
+    // An export contributor of the host's own under the name given, covering nothing and
+    // answering no section.
+    private sealed class ContributorNamed(string name) : IExportContributor
+    {
+        public string Name => name;
+
+        public IReadOnlyCollection<ResourceType> Covers { get; } = [];
+
+        public ValueTask<Result<IReadOnlyList<ExportSection>>> SectionsAsync(
+            SubjectId subject,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success<IReadOnlyList<ExportSection>>([]));
     }
 
     // A subscriber of the host's that took the name the erasure ledger's confirmation

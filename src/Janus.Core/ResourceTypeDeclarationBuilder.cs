@@ -126,7 +126,8 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     /// <param name="name">
     /// The name the field's values are bound to, where it is not the member's own: a
     /// member the host renames is given its old name here, and its values stay readable
-    /// (PRIV-RIGHT-005a).
+    /// (PRIV-RIGHT-005a). Two encrypted fields of one type under one name stop the
+    /// deployment as the model is built.
     /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">Either expression is absent.</exception>

@@ -3854,3 +3854,24 @@ against the public contract of LIB-API-001.
   context: a check and both renderings of the filter alike, each refusal recorded with
   its correlation identifier. A host's webhook that needs a host permission hands the
   work to a declared job. `AddJanus` registers the framework's `IHttpContextAccessor`.
+- A preference declared under a name holding a `.` or a `/`, or named `language` or
+  `timeZone`, the names the export gives the account's language and time zone, fails
+  startup with `model.startup.preferencedeclaration` naming it.
+- A resource type declared twice under one name fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` the type and
+  `details.field` `name`, since a host's encrypted value is bound to its type's name.
+- A resource type declaring two encrypted fields under one name, a member's own or
+  the one `Encrypted` gives it, fails startup with `model.startup.declarationinvalid`,
+  `details.declaration` the type and `details.field` the name.
+- An export contributor answering two sections under one name fails the export as one
+  answering a section under a library section's name does: 500 `system.fault`, the
+  contributor named in the log, and the export not counted.
+- The names of the sections and values an export contributor answers are held to 1 to
+  64 lower-case letters and digits separated by single `-` or `_`, so no two keys
+  `<section>.<index>.<value>` of the machine format coincide; an answer naming one
+  outside the rule fails the export with 500 `system.fault`, the contributor named in
+  the log, and the export is not counted.
+- An export contributor registered under a name outside the rule of a message place, or
+  under a name another contributor holds, fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>` and
+  `details.field` `name`.

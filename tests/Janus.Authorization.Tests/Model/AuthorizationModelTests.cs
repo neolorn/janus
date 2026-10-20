@@ -275,6 +275,34 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a AC22 (D-206): a host's value is bound to its type's and its field's
+    /// declared names, so two encrypted fields of one type under one declared name, the
+    /// name one is given or the member's own another is given, stop the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming the type and the name; the same
+    /// fields under names of their own build.
+    /// </summary>
+    /// <param name="first">The name the first field is bound to: its member's own, or one it is given.</param>
+    /// <param name="given">The name the second field is given.</param>
+    [Theory]
+    [InlineData("notes", "notes")]
+    [InlineData("Body", "Body")]
+    public void PRIV_RIGHT_005a_AC22_TwoEncryptedFieldsOfOneTypeUnderOneNameFailStartup(string first, string given)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(
+                new EncryptedFieldDeclaration("Body", "Author", "identity", first),
+                new EncryptedFieldDeclaration("FolderId", "Author", "identity", given))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(given, refused.Failure?.Details["field"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(
+            new EncryptedFieldDeclaration("Body", "Author", "identity", first),
+            new EncryptedFieldDeclaration("FolderId", "Author", "identity", "FolderId"))));
+    }
+
+    /// <summary>
     /// BFF-CAP-002 AC4 (D-202): a type declaring as a capability a permission the model
     /// does not declare stops the deployment with <c>model.startup.declarationinvalid</c>,
     /// naming the type and <c>capabilities</c>, and one whose capabilities are declared
@@ -529,6 +557,44 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-MODEL-004 AC1 (D-206): a host's encrypted value is bound to its type's
+    /// declared name, so a resource type declared twice under one name, over another
+    /// entity or the same one, stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming the type and <c>name</c>; the
+    /// second declaration under a name of its own builds.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_004_AC1_AResourceTypeDeclaredTwiceUnderOneNameFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Twice("article")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+
+        StartupException again = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(HostDomain.Declared()
+                .Resource<HostDomain.Folder>("folder", folder => folder
+                    .ContainedIn("workspace")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, again.Failure?.Code);
+        Assert.Equal("folder", again.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", again.Failure?.Details["field"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Twice("draft")));
+
+        static AuthorizationDeclaration Twice(string type) =>
+            HostDomain.Declared()
+                .Resource<HostDomain.Draft>(type, draft => draft
+                    .ContainedIn("folder")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build();
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC3: an entity the host queries and never declared has no
     /// policy, which a test enumerating the host's entities reads as a red build.
     /// </summary>
@@ -748,7 +814,7 @@ public sealed class AuthorizationModelTests
                 .Capabilities(capabilities))
             .Build();
 
-    private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
+    private static AuthorizationDeclaration Encrypting(params EncryptedFieldDeclaration[] fields)
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
@@ -760,7 +826,7 @@ public sealed class AuthorizationModelTests
 
         return declared with
         {
-            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = [field] }],
+            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = fields }],
         };
     }
 

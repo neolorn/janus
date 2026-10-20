@@ -1113,6 +1113,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddSingleton<IExportContributor>(ExportContributor);
+        _ = services.AddSingleton<IExportNameRule, ExportNames>();
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
