@@ -211,6 +211,7 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<CategoryRetention>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
 
         // AUTH-PASS-004: what a password is screened against, and the record of each
@@ -285,6 +286,7 @@ public static class HostingRegistration
         services.AddSingleton(declaration);
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         services.AddScoped<IDeploymentCookies, DeploymentCookies>();
+        services.AddScoped<NoticeCookieCheck>();
         services.AddScoped<ISubjectNotices, SubjectNotices>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
@@ -365,10 +367,14 @@ public static class HostingRegistration
         // before the server serves.
         services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
 
+        // PRIV-CONS-006a AC4 (D-203): the cookies the deployment now sets are compared with
+        // those the current privacy notice lists once the declaration has been checked.
+        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, NoticeCookiesStartService>());
+
         // BFF-LOG-002 (D-197): what the host's logging makes of the server's per-request
         // entries is read once the host has written every rule it will, and before the
         // server serves.
-        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
+        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

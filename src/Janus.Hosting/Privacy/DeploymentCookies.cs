@@ -40,6 +40,16 @@ internal sealed class DeploymentCookies(IConfigurationStore configuration, Autho
         BrowserCookies.Browser,
     }.ToFrozenSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The keys that give the lifetime of a cookie the library sets.
+    /// </summary>
+    public static FrozenSet<ConfigurationKey> Lifetimes { get; } = new[]
+    {
+        Settings.SessionDefaultAbsolute.Key,
+        Settings.FactorTrustedDeviceLifetime.Key,
+        Settings.DeviceVerificationLifetime.Key,
+    }.ToFrozenSet();
+
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<NoticeCookie>>> ReadAsync(CancellationToken cancellationToken)
     {

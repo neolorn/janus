@@ -368,6 +368,55 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// PRIV-CONS-006a AC4 (D-203): a start whose cookies are those the current notice
+    /// version lists raises nothing under <c>notice.cookies</c>, and a start whose host
+    /// declares a cookie the version does not list raises <c>degradation</c> under it,
+    /// naming the cookie as added.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC4_AStartWhoseCookiesTheNoticeDoesNotListRaisesADegradationAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IReadOnlyList<CookieDeclaration> cookies = new AuthorizationDeclarationBuilder()
+            .Cookie("host-tab", lifetime: null, thirdPartyReadable: false, purpose: null)
+            .Build()
+            .Cookies;
+
+        await NoticedAsync(cancellationToken);
+
+        try
+        {
+            using (IHost listed = new HostBuilder()
+                .ConfigureServices(services => Declared(services))
+                .Build())
+            {
+                await listed.StartAsync(cancellationToken);
+                await listed.StopAsync(cancellationToken);
+            }
+
+            IReadOnlyList<(string?, string?, string?, string?)> quiet = await StaleAsync();
+
+            using (IHost declaring = new HostBuilder()
+                .ConfigureServices(services => Declared(services, cookies: cookies))
+                .Build())
+            {
+                await declaring.StartAsync(cancellationToken);
+                await declaring.StopAsync(cancellationToken);
+            }
+
+            Assert.Empty(quiet);
+            Assert.Equal([("degradation", "[\"host-tab\"]", "[]", "[]")], await StaleAsync());
+        }
+        finally
+        {
+            await WriteAsync(
+                "DELETE FROM identity.legal_document_versions WHERE document = 'privacy-notice';",
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// INT-SMS-003 AC3, D-203: a purpose handler's name fills the <c>outstanding</c>
     /// place as a subscriber's does, so one registered under a name outside the rule
     /// stops the deployment as it starts, naming it and its member; one inside the rule
@@ -2107,6 +2156,53 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 WHERE kind = 'ConsentChanged' AND payload->>'IdempotencyKey' LIKE @key
                 """,
                 new { key = subject + ":recommendations:Superseded@%" }));
+    }
+
+    // A version of the privacy notice listing the library's five cookies at the
+    // lifetimes the defaults give, as a deployment that changed none publishes it
+    // (PRIV-CONS-006a).
+    private async Task NoticedAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.legal_document_versions
+                (document, version, governing_language, governing_text, published_at)
+            VALUES ('privacy-notice', '1', 'en', 'The notice', @at);
+            INSERT INTO identity.legal_document_cookies
+                (document, version, cookie, purpose, lifetime, third_party)
+            VALUES
+                ('privacy-notice', '1', '__Host-identity-browser', NULL, @browser, FALSE),
+                ('privacy-notice', '1', '__Host-identity-csrf', NULL, @session, FALSE),
+                ('privacy-notice', '1', '__Host-identity-device', NULL, @device, FALSE),
+                ('privacy-notice', '1', '__Host-identity-preauth', NULL, NULL, FALSE),
+                ('privacy-notice', '1', '__Host-identity-session', NULL, @session, FALSE);
+            """,
+            new
+            {
+                at = Deployment.Noon,
+                browser = Settings.DeviceVerificationLifetime.Default,
+                session = Settings.SessionDefaultAbsolute.Default,
+                device = Settings.FactorTrustedDeviceLifetime.Default,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    // The degradations raised under notice.cookies, each with the cookies its details
+    // name as added, removed and changed, as the rows of the events table.
+    private async Task<IReadOnlyList<(string?, string?, string?, string?)>> StaleAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<(string?, string?, string?, string?)>(
+            """
+            SELECT payload->>'Condition', payload->'Details'->>'added',
+                   payload->'Details'->>'removed', payload->'Details'->>'changed'
+            FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->>'Scope' = 'notice.cookies'
+            ORDER BY id
+            """)];
     }
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)

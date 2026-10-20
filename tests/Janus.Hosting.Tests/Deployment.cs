@@ -1071,6 +1071,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IDeploymentCookies>(_ => new DeploymentCookies(
             Configuration,
             Janus.Authorization.Tests.HostDomain.Declared().Build()));
+        _ = services.AddScoped<NoticeCookieCheck>();
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
         _ = services.AddSingleton<IConsentStore>(Consents);
@@ -1128,6 +1129,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<Janus.Privacy.CategoryRetention>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();

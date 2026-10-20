@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Where the cookies the deployment sets differ from those the current privacy notice
+  lists, by name, purpose, lifetime or readability by a third party, `degradation` is
+  raised under `notice.cookies` at each start and with each change of a key that gives
+  a library cookie's lifetime, its details naming the cookies `added`, `removed` and
+  `changed`; nothing is raised before a first version of the notice is published.
 - A published version of the privacy notice keeps the cookies the deployment then sets:
   the library's five, at the lifetimes its configuration gives, and every one the host
   declares. `GET /privacy/notice` answers the version's own list in `cookies`, each
