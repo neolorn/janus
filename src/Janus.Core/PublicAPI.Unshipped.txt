@@ -3595,7 +3595,6 @@ override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.DomainEve
 override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.TakedownExecuted.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.TakedownReversed.Equals(Janus.Core.DomainEvent? other) -> bool
-static Janus.Core.AccessContext.Of(Janus.Core.SubjectId acting, Janus.Core.SubjectId effective) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
 static Janus.Core.AccessExplanation.operator !=(Janus.Core.AccessExplanation? left, Janus.Core.AccessExplanation? right) -> bool

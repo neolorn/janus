@@ -302,6 +302,30 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// BFF-HOST-001 AC4 (D-202): no public member of any shipped assembly makes a context
+    /// whose acting and effective identities differ. The only public members that make
+    /// one are the person's own and the system principal's, each with one identity
+    /// standing for both, and no public constructor opens the type.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_001_AC4_NoPublicMemberMakesAContextWhoseIdentitiesDiffer()
+    {
+        string[] makers =
+        [
+            .. Shipped
+                .SelectMany(name => Load(name).GetExportedTypes())
+                .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                .Where(method => method.ReturnType == typeof(AccessContext))
+                .Select(method => method.DeclaringType!.Name + "." + method.Name + "("
+                    + string.Join(", ", method.GetParameters().Select(parameter => parameter.ParameterType.Name)) + ")")
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Empty(typeof(AccessContext).GetConstructors(BindingFlags.Public | BindingFlags.Instance));
+        Assert.Equal(["AccessContext.Of(SubjectId)", "AccessContext.Of(SystemPrincipal)"], makers);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-006 AC1: no type of any shipped assembly is a controller, so every
     /// endpoint is a minimal API mapping.
     /// </summary>

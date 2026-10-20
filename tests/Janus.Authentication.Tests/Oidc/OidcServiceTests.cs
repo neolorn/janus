@@ -253,14 +253,14 @@ public sealed class OidcServiceTests : IAsyncDisposable
         SubjectId other = await AccountAsync();
 
         OidcClaims own = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid", Cancellation))!;
-        OidcClaims effective = Value(await Service.ClaimsAsync(AccessContext.Of(other, subject), "openid", Cancellation))!;
+        OidcClaims others = Value(await Service.ClaimsAsync(AccessContext.Of(other), "openid", Cancellation))!;
         ErrorCode principal = Refused(await Service.ClaimsAsync(
             AccessContext.Of(SystemPrincipal.ForDeployment("claims-reader", "LIB-API-005", SystemOperation.Configuration)),
             "openid",
             Cancellation));
 
         Assert.Equal(subject, own.Subject);
-        Assert.Equal(subject, effective.Subject);
+        Assert.Equal(other, others.Subject);
         Assert.Equal(ErrorCodes.Denied, principal);
     }
 

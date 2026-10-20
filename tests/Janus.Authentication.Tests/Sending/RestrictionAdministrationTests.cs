@@ -531,7 +531,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_AnEditCarriesBothIdentitiesOfItsContextAsync()
     {
-        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+        var context = AccessContext.Of(SubjectId.New(_randomness));
 
         (await Administration.EditAsync(
             "sms.destination",
@@ -555,7 +555,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_AGrantCarriesBothIdentitiesOfItsContextAsync()
     {
-        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+        var context = AccessContext.Of(SubjectId.New(_randomness));
 
         _ledger.Given(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), Noon, Noon, Noon);
 

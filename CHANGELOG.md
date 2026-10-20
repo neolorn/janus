@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- No public member makes an `AccessContext` whose acting and effective identities
+  differ: `AccessContext.Of(SubjectId, SubjectId)` is no longer public, and a person's
+  context is made with `AccessContext.Of(SubjectId)`, one identity standing for both.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
   number, that the credential is still active and the number still the account's before
   it issues the code. Where either changed since the ask read the credential, nothing is
