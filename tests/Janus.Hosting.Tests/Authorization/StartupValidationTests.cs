@@ -297,6 +297,77 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// PRIV-CONS-006a AC3, D-203: a declared cookie serving a purpose not declared or not
+    /// resting on consent, named as a cookie the library sets, under a name that is no
+    /// cookie name, or declared twice stops the deployment as it starts, naming the
+    /// cookie and its member at fault.
+    /// </summary>
+    /// <param name="name">The name the cookie is declared under.</param>
+    /// <param name="purpose">The purpose it is declared to serve, or nothing.</param>
+    /// <param name="twice">Whether it is declared twice.</param>
+    /// <param name="field">The member the refusal names.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("host-theme", "running the host", false, "purpose")]
+    [InlineData("host-theme", "advertising", false, "purpose")]
+    [InlineData("__Host-identity-session", null, false, "name")]
+    [InlineData("__Host-identity-device", null, false, "name")]
+    [InlineData("host theme", null, false, "name")]
+    [InlineData("host;theme", null, false, "name")]
+    [InlineData("", null, false, "name")]
+    [InlineData("host-theme", null, true, "name")]
+    public async Task PRIV_CONS_006a_AC3_ACookieDeclaredOutsideItsRuleIsRefusedAsync(
+        string name,
+        string? purpose,
+        bool twice,
+        string field)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        AuthorizationDeclarationBuilder cookies = new AuthorizationDeclarationBuilder()
+            .Cookie(name, TimeSpan.FromDays(30), thirdPartyReadable: false, purpose);
+
+        if (twice)
+        {
+            _ = cookies.Cookie(name, lifetime: null, thirdPartyReadable: false, purpose: null);
+        }
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(services, cookies: cookies.Build().Cookies))
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("cookie." + name, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(field, refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a, D-203: a strictly necessary cookie naming no purpose, one that ends
+    /// with the browser's session, and one serving a purpose that rests on consent start.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_CookiesDeclaredWithinTheirRuleStartAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IReadOnlyList<CookieDeclaration> cookies = new AuthorizationDeclarationBuilder()
+            .Cookie("host-cart", TimeSpan.FromDays(7), thirdPartyReadable: false, purpose: null)
+            .Cookie("host-tab", lifetime: null, thirdPartyReadable: false, purpose: null)
+            .Cookie("host-picks", TimeSpan.FromDays(90), thirdPartyReadable: true, "recommendations")
+            .Build()
+            .Cookies;
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services => Declared(services, cookies: cookies))
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// INT-SMS-003 AC3, D-203: a purpose handler's name fills the <c>outstanding</c>
     /// place as a subscriber's does, so one registered under a name outside the rule
     /// stops the deployment as it starts, naming it and its member; one inside the rule
@@ -1826,7 +1897,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         LandingOrigins? landing = null,
         bool landed = true,
         string source = "whole",
-        bool materialised = false)
+        bool materialised = false,
+        IReadOnlyList<CookieDeclaration>? cookies = null)
     {
         Sourced(services, connection ?? host.ConnectionString, source);
 
@@ -1908,7 +1980,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         return services.AddJanus(
             connection ?? host.ConnectionString,
-            HostFixture.Declaration(materialised, document),
+            HostFixture.Declaration(materialised, document) with { Cookies = cookies ?? [] },
             ApplicationKind.Public);
     }
 

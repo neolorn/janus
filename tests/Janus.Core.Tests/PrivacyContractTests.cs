@@ -91,14 +91,12 @@ public sealed class PrivacyContractTests
     }
 
     /// <summary>
-    /// PRIV-CONS-006a AC3: the library sets five cookies, every one of them strictly
-    /// necessary to the service, and offers no way to register another. A cookie that
-    /// is not necessary cannot be registered without a consent-based purpose because
-    /// it cannot be registered at all.
+    /// PRIV-CONS-006a, BFF-SESS-002: the library sets five cookies, every one of them
+    /// strictly necessary to the service; a cookie the host sets is declared, and one
+    /// that is not necessary names the consent-based purpose it serves (D-203).
     /// </summary>
     [Fact]
-    public void PRIV_CONS_006a_AC3_TheLibrarySetsOnlyTheFiveNecessaryCookies()
-    {
+    public void PRIV_CONS_006a_TheLibrarySetsOnlyTheFiveNecessaryCookies() =>
         Assert.Equal(
             [
                 "__Host-identity-browser",
@@ -108,11 +106,6 @@ public sealed class PrivacyContractTests
                 "__Host-identity-session",
             ],
             Cookies());
-
-        Assert.DoesNotContain(
-            typeof(Result).Assembly.GetTypes().Where(type => type.IsPublic),
-            type => type.Name.Contains("Cookie", StringComparison.Ordinal));
-    }
 
     // Every cookie name the library's source sets, which is the whole of what a
     // browser carries from it.

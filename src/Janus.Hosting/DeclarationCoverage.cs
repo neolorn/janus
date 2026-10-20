@@ -9,6 +9,7 @@ using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Privacy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Hosting;
@@ -57,8 +58,8 @@ namespace Janus.Hosting;
 /// <param name="scope">The scope the check runs in, which gives a host context as a request does.</param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
-/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005
-/// and AUTHZ-DERIVE-007.
+/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005,
+/// AUTHZ-DERIVE-007 and PRIV-CONS-006a.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -84,6 +85,10 @@ namespace Janus.Hosting;
 /// access a record and by the drift check through the source the host declares for it,
 /// so one with no source, or a source that does not fit its relationship or names a
 /// context the library cannot read through, stops the deployment here (D-166, D-183).
+/// A cookie the host declares is listed in the privacy notice beside the library's
+/// own, so one under a name that is no cookie name, under a library cookie's name or
+/// declared twice, or serving a purpose that does not rest on consent, is refused here
+/// (D-203).
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -122,6 +127,12 @@ internal sealed class DeclarationCoverage(
     private const string Social = "socialProvider";
 
     private const string Source = "relationshipSource";
+
+    private const string Cookie = "cookie";
+
+    // RFC 2616 section 2.2: the characters a token never holds, space and tab aside,
+    // which fall outside the visible range.
+    private const string Separators = "()<>@,;:\\\"/[]?={}";
 
     /// <summary>
     /// Reads what LIB-HOST-001 requires against what is registered.
@@ -193,6 +204,11 @@ internal sealed class DeclarationCoverage(
         if (Unruled() is (string named, string member))
         {
             return Invalid(named, member);
+        }
+
+        if (Uncookied() is (string cookie, string at))
+        {
+            return Invalid(cookie, at);
         }
 
         if (Sourced().Match<Error?>(() => null, error => error) is Error unsourced)
@@ -350,6 +366,52 @@ internal sealed class DeclarationCoverage(
 
         return null;
     }
+
+    // PRIV-CONS-006a, LIB-HOST-001 (D-203): the declared cookie that is no cookie name, a
+    // name the library's own cookies take or one declared twice, as its name, or one
+    // serving a purpose not declared or not resting on consent, as its purpose; or
+    // nothing where every one holds. A cookie that is not strictly necessary rests on
+    // the consent its purpose asks for, so a purpose on any other basis would set it
+    // for everyone.
+    private (string Declaration, string Field)? Uncookied()
+    {
+        var consenting = new HashSet<string>(
+            declaration.LawfulBases.Where(basis => basis.IsConsent).Select(basis => basis.Key),
+            StringComparer.Ordinal);
+        var consented = new HashSet<string>(
+            declaration.ResourceTypes
+                .SelectMany(type => type.Purposes)
+                .Where(purpose => consenting.Contains(purpose.Basis))
+                .Select(purpose => purpose.Name),
+            StringComparer.Ordinal);
+        var named = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (CookieDeclaration cookie in declaration.Cookies)
+        {
+            string declared = Cookie + "." + cookie.Name;
+
+            if (!IsCookieName(cookie.Name)
+                || DeploymentCookies.Library.Contains(cookie.Name)
+                || !named.Add(cookie.Name))
+            {
+                return (declared, "name");
+            }
+
+            if (cookie.Purpose is string purpose && !consented.Contains(purpose))
+            {
+                return (declared, "purpose");
+            }
+        }
+
+        return null;
+    }
+
+    // RFC 6265 section 4.1.1: a cookie's name is a token of RFC 2616 section 2.2, one or
+    // more visible US-ASCII characters none of which is a separator.
+    private static bool IsCookieName(string name) =>
+        name.Length > 0
+        && name.All(character =>
+            character is > ' ' and < '\u007f' && !Separators.Contains(character, StringComparison.Ordinal));
 
     // LIB-HOST-001, AUTHZ-DERIVE-005 AC5: a source is given once, for a relationship the
     // model declares, answers the row type that relationship's selectors are declared

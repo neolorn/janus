@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `AuthorizationDeclarationBuilder.Cookie(name, lifetime, thirdPartyReadable, purpose)`
+  declares each cookie the host sets. A cookie serving a purpose that is not declared or
+  does not rest on consent, one named as a cookie the library sets, one whose name is no
+  cookie name, and one declared twice stop startup with
+  `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>`.
 - `GET /admin/erasures` lists every incomplete delivery of host-side work, an erasure's,
   a takedown's, a restriction's, a consent's and an objection's, each with its `kind`,
   `purpose` and `change`; `GET /admin/erasures/{id}` reads any of them, and
