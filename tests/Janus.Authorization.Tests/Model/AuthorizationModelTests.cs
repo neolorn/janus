@@ -275,6 +275,27 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC4 (D-202): a type declaring as a capability a permission the model
+    /// does not declare stops the deployment with <c>model.startup.declarationinvalid</c>,
+    /// naming the type and <c>capabilities</c>, and one whose capabilities are declared
+    /// permissions starts with them.
+    /// </summary>
+    [Fact]
+    public void BFF_CAP_002_AC4_ACapabilityTheModelDoesNotDeclareFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Capable("article:read", "article:publish")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("draft", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("capabilities", refused.Failure?.Details["field"].GetString());
+        Assert.Equal(
+            [Permission.Parse("article:read"), Permission.Parse("article:edit")],
+            AuthorizationModel.Of(Capable("article:read", "article:edit"))
+                .Find(ResourceType.Parse("draft"))?.Capabilities);
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC1: each condition the chapter lists produces its own named
     /// error, identifying the declaration that has to change.
     /// </summary>
@@ -522,6 +543,14 @@ public sealed class AuthorizationModelTests
     // The builder takes an expression for each side of an encrypted field, so what it
     // produces always names members that exist. A host writing the declaration itself
     // does not, which is what the startup check is there for.
+    private static AuthorizationDeclaration Capable(params string[] capabilities) =>
+        HostDomain.Declared()
+            .Resource<HostDomain.Draft>("draft", draft => draft
+                .ContainedIn("folder")
+                .Purpose("collaboration", "contract", data: ["identity"])
+                .Capabilities(capabilities))
+            .Build();
+
     private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()

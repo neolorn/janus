@@ -419,6 +419,38 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-002 AC7, IDN-MEM-001 AC6 and 09 section 8a (D-202): ending the reserved
+    /// account's membership of the administrative organization is <c>403</c>
+    /// <c>authz.denied</c> for an administrator holding <c>membership:manage</c> there,
+    /// before the step-up, so a session whose proof has aged meets the refusal and not
+    /// the challenge it meets ending the account's membership of another organization;
+    /// nothing is ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC7_TheReservedAccountsMembershipOfTheAdministrativeOrganizationIsKeptAsync()
+    {
+        var reserved = new SubjectId(Guid.NewGuid());
+
+        _deployment.Reserves(reserved);
+        _deployment.Memberships.Place(reserved, Administration);
+        _deployment.Memberships.Place(reserved, Branch);
+
+        Browser administrator = await AuthorisedAsync();
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
+
+        Answer kept = await administrator.SendAsync("DELETE", MembershipOf(Administration, reserved));
+        Answer challenged = await administrator.SendAsync("DELETE", MembershipOf(Branch, reserved));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, kept.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), kept.Text("code"));
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), challenged.Text("code"));
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
     /// REG-INV-001, IDN-MEM-001 and 09 section 8a: issuing, revoking and ending a
     /// membership under an organization the deployment does not hold is <c>404</c>
     /// <c>identity.organization.notfound</c>, whichever organization the permission is

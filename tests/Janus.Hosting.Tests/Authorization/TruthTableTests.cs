@@ -131,6 +131,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
+        ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
     ];
 
     // An action bound to a step-up gate, judged from what a host's assurance provider
@@ -982,6 +983,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 return await DriftCheckedAsync(
                     deployment,
                     supported: scenario.StartsWith("a fact", StringComparison.Ordinal));
+
+            case "a page asked for a declared permission its type does not list as a capability":
+                return await RaisedOrAsync(async () =>
+                    (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .CapabilitiesAsync(
+                            context,
+                            Document,
+                            [Reference(Document).Id],
+                            [HostPermissions.Export],
+                            cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused));
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");

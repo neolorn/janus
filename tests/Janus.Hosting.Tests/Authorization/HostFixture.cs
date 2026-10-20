@@ -304,6 +304,11 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
+                .Capabilities(
+                    HostPermissions.Read.ToString(),
+                    HostPermissions.Edit.ToString(),
+                    HostPermissions.Publish.ToString(),
+                    HostPermissions.Recommend.ToString())
                 // PRIV-RIGHT-005a: the field is bound to a name of its own, which decides
                 // no outcome of the gate (CONV-VCS-004).
                 .Encrypted(held => held.Notes, held => held.Owner, "history", name: "case-notes")

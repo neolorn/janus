@@ -311,7 +311,11 @@ public interface IAccessGate
     /// <param name="context">Who is asking.</param>
     /// <param name="type">The kind of thing the records are.</param>
     /// <param name="resources">The records of the page.</param>
-    /// <param name="permissions">The permissions the caller's surface offers on them.</param>
+    /// <param name="permissions">
+    /// The permissions the caller's surface offers on them, each one the host declared as
+    /// a capability of the type; naming any other is the calling code's fault, and raises
+    /// (BFF-CAP-002).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>One capability per record, in the order the records were given.</returns>
     ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync(
@@ -329,7 +333,11 @@ public interface IAccessGate
     /// <param name="context">Who is asking.</param>
     /// <param name="type">The kind of thing the records are.</param>
     /// <param name="resources">The records of the page.</param>
-    /// <param name="permissions">The permissions the caller's surface offers on them.</param>
+    /// <param name="permissions">
+    /// The permissions the caller's surface offers on them, each one the host declared as
+    /// a capability of the type; naming any other is the calling code's fault, and raises
+    /// (BFF-CAP-002).
+    /// </param>
     /// <param name="sources">
     /// The same contract tables and relationship rows the filter takes, from the host's
     /// own context.
