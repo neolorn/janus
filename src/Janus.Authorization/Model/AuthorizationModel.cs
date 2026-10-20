@@ -50,6 +50,22 @@ internal sealed class AuthorizationModel
     // no declared role may take, since a role is seeded once and these are seeded first.
     private static readonly string[] Administrative = ["system-administrator", "auditor", "support"];
 
+    // IDN-PRIN-001 (D-206): the principals chapter 10 section 5.29 names, and `migrate`,
+    // the command that runs as none, which no host job may take, so no audit row names
+    // a host's job as the library's own work.
+    private static readonly string[] Reserved =
+    [
+        "expiry-sweep", "registration-sweep", "invitation-sweep", "account-deletion",
+        "organization-erasure", "privacy-deadlines", "loss-reports", "recovery-code-reminder",
+        "domain-reverification", "outbox", "events", "sends", "mailbox-provisioning",
+        "alert-dispatch", "mail-reconciliation", "derivation-driftcheck", "location-database",
+        "datacenter-ranges", "read-volume-baseline", "holiday-list", "emergency-credential",
+        "clock-drift", "certificate-renewal", "restore-test", "audit-partitions",
+        "licence-expiry", "envelope-rotation", "sms-balance", "bootstrap", "configure",
+        "register-client", "rotate-kek", "rotate-fingerprint-key", "replay-erasures",
+        "role-declaration", "migrate",
+    ];
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
@@ -165,6 +181,7 @@ internal sealed class AuthorizationModel
 
         var processing = DeclaredProcessing.Of(declaration);
         CheckFloors(declaration, processing);
+        CheckJobs(declaration);
 
         return new AuthorizationModel(
             types,
@@ -894,6 +911,47 @@ internal sealed class AuthorizationModel
         }
 
         return declared;
+    }
+
+    // IDN-PRIN-001, OPS-ALERT-006 (D-202, D-206): a job exercises the host's own
+    // permissions with no person present, so it takes none of the library's, none a
+    // step-up gate asks a session to prove and no export; and its name is its own, never
+    // another job's, a library principal's or `migrate`. A host redeclares none of the
+    // library's permissions, so one of its own is never one of those. The rule a name
+    // keeps is judged where the other names of INT-SMS-003 are.
+    private static void CheckJobs(AuthorizationDeclaration declaration)
+    {
+        var hosts = new HashSet<Permission>(declaration.Permissions);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (JobDeclaration job in declaration.Jobs)
+        {
+            string at = "job." + job.Name;
+
+            if (Reserved.Contains(job.Name, StringComparer.Ordinal))
+            {
+                throw Invalid(at, "name", "the job " + job.Name + " is named as a principal of the library");
+            }
+
+            if (!names.Add(job.Name))
+            {
+                throw Invalid(at, "name", "the job " + job.Name + " is declared twice");
+            }
+
+            foreach (Permission permission in job.Permissions)
+            {
+                if (!hosts.Contains(permission)
+                    || declaration.StepUpGates.ContainsKey(permission)
+                    || string.Equals(permission.Action, Export, StringComparison.Ordinal))
+                {
+                    throw Invalid(
+                        at,
+                        "permissions",
+                        "the job " + job.Name + " exercises " + permission
+                        + ", which is not a host permission it may exercise");
+                }
+            }
+        }
     }
 
     // `10` section 1.5: a declaration that is present but malformed names the

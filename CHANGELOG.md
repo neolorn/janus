@@ -3835,3 +3835,15 @@ against the public contract of LIB-API-001.
   not declared or `system:administer` stops the deployment with
   `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
   principal with `authz.denied`.
+- `AuthorizationDeclarationBuilder.Job(name, permissions)` declares one of the host's
+  background jobs and the host permissions it exercises. A job declared with a
+  permission not declared, one of the library's own, one bound to a step-up gate or one
+  whose action is `export`, or under a name outside the rule of a message place, given
+  twice, taken by one of the library's principals or `migrate`, stops the deployment
+  with `model.startup.declarationinvalid` naming `job.<name>`.
+- The gate refuses a context of `SystemPrincipal.ForOrganization`, a host's job, with
+  `authz.denied` while an HTTP request is served on the calling flow, through either
+  profile or neither and in any scope opened within the request, whoever built the
+  context: a check and both renderings of the filter alike, each refusal recorded with
+  its correlation identifier. A host's webhook that needs a host permission hands the
+  work to a declared job. `AddJanus` registers the framework's `IHttpContextAccessor`.

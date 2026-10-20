@@ -118,6 +118,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, to a member of it", Decided.Allowed),
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
         ("a check by background work, which holds no grant", Decided.Denied),
+        ("a host permission asked by background work under a principal naming no declared job", Decided.Denied),
         ("a check refused inside work the caller rolls back", Decided.Denied),
         ("a modifying check asked again inside the caller's unit of work", Decided.Allowed),
         (
@@ -214,6 +215,20 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a record that names no data subject", Decided.ConsentRequired),
     ];
 
+    // A host's declared job asking a host permission its declaration names, on a record
+    // of its organization, while a request is served: through either profile or neither,
+    // and in a scope opened within the request. A job is background work, so the check
+    // and both renderings are refused with the code the check answers, and a rendering
+    // handed out is a list the job was admitted to, whatever rows it matches
+    // (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, D-206).
+    private static readonly (string Scenario, Decided Decided)[] Jobs =
+    [
+        ("a declared job asking while a request is served through the browser profile", Decided.Denied),
+        ("a declared job asking while a request is served through the machine profile", Decided.Denied),
+        ("a declared job asking while a request is served outside both profiles", Decided.Denied),
+        ("a declared job asking in a scope opened within a request", Decided.Denied),
+    ];
+
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
@@ -238,6 +253,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The consents' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> ConsentCases => Read(Consents);
+
+    /// <summary>
+    /// The jobs' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> JobCases => Read(Jobs);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -353,6 +373,52 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(decided, await ChecksAsync(written));
         Assert.Equal(listed, await ExpressionAdmitsAsync(written));
         Assert.Equal(listed, await FragmentAdmitsAsync(written));
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6 (D-206): every case of the jobs' table
+    /// decides the way the table says through the single check, the expression and the
+    /// fragment alike, each asked inside the request the case serves.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(JobCases))]
+    public async Task AUTHZ_TEST_001_AC2_EveryJobCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteJobAsync();
+        (Decided Check, Decided Expression, Decided Fragment)? answered = null;
+
+        await using ServedRequests served = await ServedRequests.StartAsync(
+            host,
+            async context =>
+            {
+                if (scenario == "a declared job asking in a scope opened within a request")
+                {
+                    await using AsyncServiceScope within = context.RequestServices
+                        .GetRequiredService<IServiceScopeFactory>()
+                        .CreateAsyncScope();
+
+                    answered = await JobAskedAsync(within.ServiceProvider, written);
+                }
+                else
+                {
+                    answered = await JobAskedAsync(context.RequestServices, written);
+                }
+            },
+            TestContext.Current.CancellationToken);
+
+        _ = await served.SendAsync(scenario switch
+        {
+            "a declared job asking while a request is served through the machine profile" => ServedRequests.Machine,
+            "a declared job asking while a request is served outside both profiles" => ServedRequests.Outside,
+            _ => ServedRequests.Browser,
+        });
+
+        Assert.Equal((decided, decided, decided), answered);
     }
 
     /// <summary>
@@ -990,6 +1056,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             cancellationToken))
                     .Match(() => Decided.Allowed, Refused);
 
+            // IDN-PRIN-001 (D-202): a principal naming no job the host declared is
+            // refused every host permission, on its own organization's records too.
+            case "a host permission asked by background work under a principal naming no declared job":
+                return await JobCheckedAsync(deployment, "import");
+
             case "a check refused inside work the caller rolls back":
                 return await RolledBackAsync(caller, deployment.Organization);
 
@@ -1053,6 +1124,89 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // IDN-PRIN-001: a host permission asked of a record of the organization, under the
+    // context of an organization-scoped principal naming the job given.
+    private async Task<Decided> JobCheckedAsync(Deployment deployment, string job)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(SystemPrincipal.ForOrganization(job, "the nightly digest", deployment.Organization)),
+                    HostPermissions.Read,
+                    record,
+                    Sources(reading),
+                    cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+    }
+
+    // A record of the case's organization, which the host's declared job is asked a
+    // permission its declaration names on.
+    private async Task<Case> WriteJobAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        ResourceReference outer = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        ResourceReference sibling = Reference(Document);
+
+        await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, outer, cancellationToken);
+        await deployment.RegisterAsync(sibling, outer, cancellationToken);
+
+        return new Case(host, deployment, account, record, sibling, outer, outer, HostPermissions.Read);
+    }
+
+    // The check, the expression and the fragment asked under the declared job's context
+    // from the scope given; a rendering handed out rather than refused is a list admitted.
+    private async Task<(Decided Check, Decided Expression, Decided Fragment)> JobAskedAsync(
+        IServiceProvider asking,
+        Case written)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IAccessGate gate = asking.GetRequiredService<IAccessGate>();
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the nightly digest",
+            written.Deployment.Organization));
+
+        await using HostContext reading = host.Context();
+
+        Decided check = (await gate.RequireAsync(job, written.Asked, written.Record, Sources(reading), cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+        Decided expression = (await gate.FilterAsync(
+                job,
+                written.Asked,
+                written.Record.Type,
+                written.Deployment.Organization,
+                Sources(reading),
+                cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
+        Decided fragment = (await gate.FragmentAsync(
+                job,
+                written.Asked,
+                written.Record.Type,
+                written.Deployment.Organization,
+                "identity_authz_row",
+                "id",
+                cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
+
+        return (check, expression, fragment);
     }
 
     // AUTHZ-DERIVE-007, LIB-HOST-001: the view of who can access a record a fact in the

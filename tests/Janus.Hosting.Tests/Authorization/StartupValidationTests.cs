@@ -478,6 +478,42 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3, IDN-PRIN-001 (D-206): a job declared under a name outside the
+    /// rule stops the deployment as it starts, naming <c>job.&lt;name&gt;</c> and
+    /// <c>name</c>; one inside the rule starts.
+    /// </summary>
+    /// <param name="name">The name the job is declared under.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("Nightly Digest")]
+    [InlineData("nightly--digest")]
+    [InlineData("nightly-")]
+    [InlineData("")]
+    public async Task INT_SMS_003_AC3_AJobNamedOutsideTheRuleIsRefusedAsync(string name)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services => Declared(services, jobs: Job(name)))
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("job." + name, refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services => Declared(services, jobs: Job("nightly.digest_2")))
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC7, D-203: a purpose handler's confirmation is recorded under its
     /// name as a subscriber's is, so one registered under a subscriber's name stops the
     /// deployment as it starts, naming it.
@@ -2042,7 +2078,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         string source = "whole",
         bool materialised = false,
         IReadOnlyList<CookieDeclaration>? cookies = null,
-        IReadOnlyList<RoleDeclaration>? roles = null)
+        IReadOnlyList<RoleDeclaration>? roles = null,
+        IReadOnlyList<JobDeclaration>? jobs = null)
     {
         Sourced(services, connection ?? host.ConnectionString, source);
 
@@ -2129,9 +2166,18 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         return services.AddJanus(
             connection ?? host.ConnectionString,
-            HostFixture.Declaration(materialised, document) with { Cookies = cookies ?? [], Roles = roles ?? [] },
+            HostFixture.Declaration(materialised, document) with
+            {
+                Cookies = cookies ?? [],
+                Roles = roles ?? [],
+                Jobs = jobs ?? [],
+            },
             ApplicationKind.Public);
     }
+
+    // IDN-PRIN-001: one job under the name given, exercising a host permission it may.
+    private static IReadOnlyList<JobDeclaration> Job(string name) =>
+        new AuthorizationDeclarationBuilder().Job(name, HostPermissions.Read.ToString()).Build().Jobs;
 
     // LIB-HOST-001: the source of the one relationship the declaration's derivation is
     // over, declared whole or in one of the ways a declaration can fail to hold.

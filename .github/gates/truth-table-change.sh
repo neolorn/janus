@@ -13,7 +13,9 @@
 # session does not meet offers the account (AUTH-STEP-002 steps 2 and 3) admits and
 # refuses nothing: it is held in a file of its own beside the judgement and is not
 # watched (D-193), and neither are the services that resolve a gate's values from the
-# policy, hold a step-up's challenge and answer its calls.
+# policy, hold a step-up's challenge and answer its calls. The answer to whether a
+# request is served on the calling flow admits or refuses a host job's context, so the
+# file holding it is watched (D-206).
 
 set -euo pipefail
 
@@ -34,6 +36,7 @@ logic=(
   'src/Janus.Hosting/AuthorizationTables.cs'
   'src/Janus.Authentication/Sessions/Session.cs'
   'src/Janus.Authentication/Factors/StepUp.cs'
+  'src/Janus.Hosting/Authorization/RequestGates.cs'
 )
 
 # A force-pushed branch leaves the event's previous commit unreachable, which is a

@@ -108,6 +108,11 @@ public static class HostingRegistration
         // request.
         services.AddScoped<ISessionGates, RequestGates>();
 
+        // IDN-PRIN-001, CONV-DESIGN-007 (D-206): whether a request is served on the
+        // calling flow is read from the request the framework tracks for it, which it
+        // tracks only where this is registered.
+        services.AddHttpContextAccessor();
+
         // API-CONV-002: a body the reader could not parse is answered by the library
         // with a code and a correlation identifier, so the reader raises the failure
         // instead of writing a bare status the pipeline never sees.

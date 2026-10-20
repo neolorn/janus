@@ -13,7 +13,7 @@ namespace Janus.Authorization.Tests.Model;
 /// <summary>
 /// The model a host declares and what building it refuses
 /// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
-/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006, INT-HOST-002).
+/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006, INT-HOST-002, IDN-PRIN-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -375,6 +375,116 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// IDN-PRIN-001 AC7, OPS-ALERT-006 (D-202): a job declared with a permission the
+    /// model does not declare, one of the library's own, one bound to a step-up gate or
+    /// one whose action is <c>export</c> stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming <c>job.&lt;name&gt;</c> and
+    /// <c>permissions</c>.
+    /// </summary>
+    /// <param name="permission">The permission the job is declared with.</param>
+    [Theory]
+    [InlineData("ledger:close")]
+    [InlineData("audit:read")]
+    [InlineData("system:administer")]
+    [InlineData("article:publish")]
+    [InlineData("article:export")]
+    public void IDN_PRIN_001_AC7_AJobDeclaredWithAPermissionItMayNotExerciseFailsStartup(string permission)
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(Jobbed()
+            .Job("nightly-digest", "article:read", permission)
+            .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("job.nightly-digest", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("permissions", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC7 (D-206): a job declared under a principal's name of chapter 10
+    /// section 5.29, or under <c>migrate</c>, stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming <c>job.&lt;name&gt;</c> and
+    /// <c>name</c>.
+    /// </summary>
+    /// <param name="name">The reserved name.</param>
+    [Theory]
+    [InlineData("expiry-sweep")]
+    [InlineData("registration-sweep")]
+    [InlineData("invitation-sweep")]
+    [InlineData("account-deletion")]
+    [InlineData("organization-erasure")]
+    [InlineData("privacy-deadlines")]
+    [InlineData("loss-reports")]
+    [InlineData("recovery-code-reminder")]
+    [InlineData("domain-reverification")]
+    [InlineData("outbox")]
+    [InlineData("events")]
+    [InlineData("sends")]
+    [InlineData("mailbox-provisioning")]
+    [InlineData("alert-dispatch")]
+    [InlineData("mail-reconciliation")]
+    [InlineData("derivation-driftcheck")]
+    [InlineData("location-database")]
+    [InlineData("datacenter-ranges")]
+    [InlineData("read-volume-baseline")]
+    [InlineData("holiday-list")]
+    [InlineData("emergency-credential")]
+    [InlineData("clock-drift")]
+    [InlineData("certificate-renewal")]
+    [InlineData("restore-test")]
+    [InlineData("audit-partitions")]
+    [InlineData("licence-expiry")]
+    [InlineData("envelope-rotation")]
+    [InlineData("sms-balance")]
+    [InlineData("bootstrap")]
+    [InlineData("configure")]
+    [InlineData("register-client")]
+    [InlineData("rotate-kek")]
+    [InlineData("rotate-fingerprint-key")]
+    [InlineData("replay-erasures")]
+    [InlineData("role-declaration")]
+    [InlineData("migrate")]
+    public void IDN_PRIN_001_AC7_AJobDeclaredUnderAReservedNameFailsStartup(string name)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Jobbed().Job(name, "article:read").Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("job." + name, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001, LIB-HOST-001 (D-206): a job declared twice under one name stops the
+    /// deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>job.&lt;name&gt;</c> and <c>name</c>.
+    /// </summary>
+    [Fact]
+    public void IDN_PRIN_001_AJobDeclaredTwiceFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(Jobbed()
+            .Job("nightly-digest", "article:read")
+            .Job("nightly-digest", "article:edit")
+            .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("job.nightly-digest", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001, LIB-HOST-001 (D-202): jobs declared with the host permissions they
+    /// exercise, a reading and a modifying one among them, build.
+    /// </summary>
+    [Fact]
+    public void IDN_PRIN_001_JobsDeclaredWithinTheirRuleBuild()
+    {
+        Assert.Null(Record.Exception(() => AuthorizationModel.Of(Jobbed()
+            .Job("nightly-digest", "article:read", "article:edit")
+            .Job("archive", "article:read")
+            .Build())));
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC1: each condition the chapter lists produces its own named
     /// error, identifying the declaration that has to change.
     /// </summary>
@@ -618,6 +728,14 @@ public sealed class AuthorizationModelTests
     public void CONV_NAME_002_AC1_APermissionOutsideThePatternFailsModelValidation(string permission) =>
         Assert.Throws<ArgumentException>(
             () => new AuthorizationDeclarationBuilder().Permission(permission));
+
+    // The domain with an action bound to a step-up gate and an export beside its two
+    // permissions, which a job may not be declared with.
+    private static AuthorizationDeclarationBuilder Jobbed() =>
+        HostDomain.Declared()
+            .Permission("article:publish")
+            .StepUpGate("article:publish", "publishing")
+            .Permission("article:export");
 
     // The builder takes an expression for each side of an encrypted field, so what it
     // produces always names members that exist. A host writing the declaration itself

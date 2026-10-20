@@ -11,10 +11,23 @@ namespace Janus.Authorization.Gate;
 /// <remarks>
 /// Implements AUTH-STEP-001, AUTH-STEP-002, AUTHZ-GATE-005 and CONV-LAYOUT-001. The
 /// session record and the policy are authentication's, so the gate reaches them through
-/// this narrow view and never reads a factor itself.
+/// this narrow view and never reads a factor itself; the request a flow serves is the
+/// host's, so the gate asks it here too.
 /// </remarks>
 internal interface ISessionGates
 {
+    /// <summary>
+    /// Whether an HTTP request is being served on the calling flow: through either
+    /// profile or neither, and in every scope opened within it, and never in the flow of
+    /// background work.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 and CONV-DESIGN-007 (D-206). A host's job is background
+    /// work, so the gate refuses a job's context asked while this holds, whoever built
+    /// the context.
+    /// </remarks>
+    bool ServesRequest { get; }
+
     /// <summary>
     /// Whether a session of the library carries the request the context acts in, so
     /// that a gate can be judged against what it proved.

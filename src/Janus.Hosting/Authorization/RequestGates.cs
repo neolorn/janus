@@ -7,6 +7,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Microsoft.AspNetCore.Http;
 
 namespace Janus.Hosting.Authorization;
 
@@ -16,17 +17,30 @@ namespace Janus.Hosting.Authorization;
 /// </summary>
 /// <param name="request">The session the request resolved to, where it resolved to one.</param>
 /// <param name="guard">What judges a session against a gate under the person's policy.</param>
+/// <param name="requests">The request the framework tracks for the calling flow, where it serves one.</param>
 /// <remarks>
 /// Implements AUTH-STEP-001, AUTH-STEP-002, AUTHZ-GATE-005 and D-160. Only the acting
 /// person's own live session is judged: a context acting for someone else is judged by
 /// the actor's session, and a context the request's session does not belong to is not
 /// judged here at all. A gate is judged once a request, since a session proves more only
-/// through a request of its own.
+/// through a request of its own. Whether a request is served at all is answered here too
+/// (IDN-PRIN-001, CONV-DESIGN-007, D-206).
 /// </remarks>
-internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : ISessionGates
+internal sealed class RequestGates(
+    RequestSession request,
+    StepUpGuard guard,
+    IHttpContextAccessor requests) : ISessionGates
 {
     private readonly Dictionary<string, (Error? Outstanding, bool Downgraded)> _judged =
         new(StringComparer.Ordinal);
+
+    // IDN-PRIN-001, CONV-DESIGN-007 (D-206): the framework sets the request it serves on
+    // the flow that serves it, from before the first middleware to after the last, so it
+    // is there through either profile or neither and in every scope opened within it,
+    // and a background job's flow, which no request began, holds none. It is read at
+    // each question rather than kept, since one scope may be asked from either flow.
+    /// <inheritdoc/>
+    public bool ServesRequest => requests.HttpContext is not null;
 
     /// <inheritdoc/>
     public bool Judges(AccessContext context)
