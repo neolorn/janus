@@ -189,6 +189,69 @@ public sealed class ExportEndpointTests : IAsyncDisposable
             (await browser.SendAsync("GET", "/privacy/export?format=human")).Status);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: the readable arrangement carries the host's sections after the
+    /// library's, grouped as the library's are, each record an object of its named values.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_TheReadableFormatCarriesTheContributorsSectionsAfterTheLibrarysAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Held();
+        _deployment.ExportContributor.Sections =
+        [
+            new ExportSection(
+                "parcels",
+                [
+                    new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["tracking-number"] = "pn-1001",
+                        ["delivered-at"] = "2026-09-21T10:00:00.0000000+00:00",
+                    }),
+                ]),
+        ];
+
+        JsonElement sections =
+            (await browser.SendAsync("GET", "/privacy/export?format=human"))
+            .Json()
+            .GetProperty("sections");
+
+        Assert.Equal(
+            ["identifiers", "consents", "objections", "parcels"],
+            sections.EnumerateArray().Select(section => section.GetProperty("name").GetString()));
+        Assert.Equal(
+            "pn-1001",
+            sections[3].GetProperty("records")[0].GetProperty("tracking-number").GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: a contributor that faults fails the export with a fault that
+    /// carries nothing but the correlation identifier, names the contributor in the log,
+    /// and spends nothing of the person's limit.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_AFaultingContributorAnswersAFaultAndIsNotCountedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.ExportContributor.Faults = true;
+
+        Answer refused = await browser.SendAsync("GET", "/privacy/export?format=human");
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, refused.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), refused.Text("code"));
+        Assert.Empty(refused.Json().GetProperty("details").EnumerateObject());
+        Assert.Empty(_deployment.ExportLedger.Taken);
+        Assert.Contains(
+            _deployment.Logs.Lines,
+            line => line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal)
+                && line.Contains("contributor", StringComparison.Ordinal)
+                && line.Contains("host", StringComparison.Ordinal));
+    }
+
     private static Dictionary<string, string> Flattened(JsonElement sections)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);

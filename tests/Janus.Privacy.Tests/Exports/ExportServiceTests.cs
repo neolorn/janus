@@ -39,12 +39,14 @@ public sealed class ExportServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
+    private readonly List<IExportContributor> _contributors = [];
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     private ExportService Exports => new(
         _source,
+        _contributors,
         _ledger,
         _consents,
         _stepUp,
@@ -340,13 +342,177 @@ public sealed class ExportServiceTests : IAsyncDisposable
                 Browser,
                 TestContext.Current.CancellationToken)).Code);
 
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: each contributor's sections follow the library's, in the order
+    /// of the contributors' names whatever order they were registered in, and every
+    /// contributor is asked before the unit of work that counts the export begins.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_EachContributorsSectionsFollowTheLibrarysInNameOrderAsync()
+    {
+        var open = new List<bool>();
+        ExportContributorInMemory tickets = Contributor("tickets", "support-tickets", "ticket-notes");
+        ExportContributorInMemory orders = Contributor("orders", "orders");
+
+        tickets.Meanwhile = () => open.Add(_work.Open);
+        orders.Meanwhile = () => open.Add(_work.Open);
+        _contributors.Add(tickets);
+        _contributors.Add(orders);
+
+        SubjectExport export = Assembled(await Exports.AssembleAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["consents", "objections", "orders", "support-tickets", "ticket-notes"],
+            export.Sections.Select(section => section.Name));
+        Assert.Equal("orders", Assert.Single(export.Sections[2].Records).Values["held-in"]);
+        Assert.Equal([Ahmed], orders.Asked);
+        Assert.Equal([Ahmed], tickets.Asked);
+        Assert.Equal([false, false], open);
+        Assert.Equal((Ahmed, Noon), Assert.Single(_ledger.Taken));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: a contributor that answers a failure fails the export: nothing
+    /// is returned, the refusal is a fault naming the contributor, no unit of work
+    /// begins and the export is not counted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_AFailingContributorFailsTheExportUncountedAsync()
+    {
+        ExportContributorInMemory orders = Contributor("orders", "orders");
+
+        orders.Fails = Error.From(ErrorCodes.Denied);
+        _contributors.Add(orders);
+        _contributors.Add(Contributor("tickets", "support-tickets"));
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "orders");
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: a contributor that throws fails the export as one that
+    /// answered a failure does, and the person may ask again, since nothing was counted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_AFaultingContributorFailsTheExportUncountedAsync()
+    {
+        _configuration.Set(Settings.PrivacyExportRateLimit, 1);
+
+        ExportContributorInMemory tickets = Contributor("tickets", "support-tickets");
+
+        tickets.Faults = true;
+        _contributors.Add(tickets);
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "tickets");
+
+        tickets.Faults = false;
+
+        _ = Assembled(await Exports.AssembleAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Assert.Single(_ledger.Taken);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 (D-203): a section named as a library section, or as another
+    /// contributor's, is a fault of the contributor that answered it second, and fails
+    /// the export uncounted.
+    /// </summary>
+    /// <param name="taken">The name the second contributor answers a section under.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("consents")]
+    [InlineData("identifiers")]
+    [InlineData("orders")]
+    public async Task PRIV_RIGHT_003_AC5_ASectionUnderANameAlreadyTakenFailsTheExportAsync(string taken)
+    {
+        _source.Holds(Ahmed, new ExportSection("identifiers", []));
+        _contributors.Add(Contributor("orders", "orders"));
+        _contributors.Add(Contributor("tickets", taken));
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "tickets");
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: of exports asked at once past the limit, the one counted while
+    /// this one's contributors answered is counted against it, so this one is refused as
+    /// it would be had it been asked after, and returns nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_AnExportCountedWhileTheContributorsAnsweredIsCountedAsync()
+    {
+        _configuration.Set(Settings.PrivacyExportRateLimit, 1);
+
+        ExportContributorInMemory orders = Contributor("orders", "orders");
+
+        orders.Meanwhile = () =>
+            _ = _ledger.RecordAsync(Ahmed, Noon, TestContext.Current.CancellationToken).AsTask();
+        _contributors.Add(orders);
+
+        Error refused = Refused(await Exports.AssembleAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, refused.Code);
+        Assert.Equal(
+            Noon + ExportService.Window,
+            refused.Details["retryAt"].Deserialize<DateTimeOffset>());
+        Assert.Single(_ledger.Taken);
+        Assert.Equal(0, _work.Committed);
+        Assert.False(_work.Open);
+    }
+
     private static SubjectExport Assembled(Result<SubjectExport> outcome) =>
         outcome.Match(
             export => export,
             error => throw new InvalidOperationException(error.Code.ToString()));
 
+    private static ExportContributorInMemory Contributor(string name, params string[] sections) =>
+        new(name)
+        {
+            Sections =
+            [
+                .. sections.Select(section => new ExportSection(
+                    section,
+                    [new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { ["held-in"] = section })])),
+            ],
+        };
+
     private static Error Refused(Result<SubjectExport> outcome) =>
         outcome.Match(
             _ => throw new InvalidOperationException("The export was assembled."),
             error => error);
+
+    private void AssertFaulted(Error refused, string contributor)
+    {
+        Assert.Equal(ErrorCodes.SystemFault, refused.Code);
+        Assert.Equal(contributor, refused.Details["contributor"].GetString());
+        Assert.Empty(_ledger.Taken);
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _work.Opened);
+    }
 }

@@ -492,6 +492,11 @@ internal sealed class Deployment : IAsyncDisposable
     public ExportLedgerInMemory ExportLedger { get; } = new();
 
     /// <summary>
+    /// The host's export contributor, answering nothing until a test arranges what it holds.
+    /// </summary>
+    public ExportContributorInMemory ExportContributor { get; } = new("host");
+
+    /// <summary>
     /// The three fields the deployment supplies to the records of processing.
     /// </summary>
     public Janus.Privacy.Tests.Records.ComplianceStoreInMemory Compliance { get; } = new();
@@ -1089,6 +1094,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
+        _ = services.AddSingleton<IExportContributor>(ExportContributor);
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);

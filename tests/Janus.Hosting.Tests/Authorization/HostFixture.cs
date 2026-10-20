@@ -177,6 +177,9 @@ public sealed class HostFixture : IAsyncLifetime
         // registers what does the host-side work for them.
         services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
 
+        // PRIV-RIGHT-003: and what carries what it holds about a person into their export.
+        services.AddSingleton<IExportContributor>(new HostExportContributor());
+
         _services = Started(services.BuildServiceProvider());
     }
 

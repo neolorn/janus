@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IExportContributor` carries what a host holds about a subject into the subject's
+  export: `GET /privacy/export` carries each registered contributor's sections after the
+  library's, in contributor name order, in both formats. The export is counted only once
+  every contributor has answered; one that fails, faults or answers a section under a
+  name already taken fails the export with 500 `system.fault`, naming the contributor in
+  the log, and the export is not counted. A deployment declaring a type with an encrypted
+  field or a sensitive category that no contributor covers fails startup with
+  `model.startup.declarationmissing`, `details.handler` naming the type.
 - `IPersonalFields` encrypts and decrypts a host's own declared encrypted fields under
   the subject's key: `WithSubjectAsync` lends one subject's `SubjectFields`, and
   `WithSubjectsAsync` lends a page of them, reading their keys in one statement and

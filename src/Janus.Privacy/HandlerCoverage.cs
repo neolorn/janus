@@ -10,20 +10,24 @@ namespace Janus.Privacy;
 /// <summary>
 /// What the deployment declared read against what it registered: every subject-event
 /// subscriber answers to a name of its own, every sensitive resource type has one that
-/// covers it, and every objectable purpose has a handler that names it.
+/// covers it, every type holding personal data an export must carry has an export
+/// contributor that covers it, and every objectable purpose has a handler that names it.
 /// </summary>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="handlers">The purpose handlers the host registered.</param>
+/// <param name="contributors">The export contributors the host registered.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, IDN-LIFE-003a, DR-016 and LIB-HOST-001.
+/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-003, PRIV-RIGHT-001a, IDN-LIFE-003a, DR-016 and
+/// LIB-HOST-001.
 /// Adding a subscriber requires no library change; leaving one out stops the
 /// deployment rather than the erasure that would half happen.
 /// </remarks>
 internal sealed class HandlerCoverage(
     AuthorizationDeclaration declaration,
     IEnumerable<ISubjectEventSubscriber> subscribers,
-    IEnumerable<IPurposeHandler> handlers)
+    IEnumerable<IPurposeHandler> handlers,
+    IEnumerable<IExportContributor> contributors)
 {
     /// <summary>
     /// Reads the declaration against the registrations.
@@ -58,6 +62,19 @@ internal sealed class HandlerCoverage(
             }
         }
 
+        // PRIV-RIGHT-003 (D-203): what a host holds under a subject's key or in a
+        // sensitive category reaches the subject's export only through a contributor.
+        var exported = new HashSet<ResourceType>(
+            contributors.SelectMany(contributor => contributor.Covers));
+
+        foreach (ResourceTypeDeclaration type in Personal())
+        {
+            if (!exported.Contains(type.Name))
+            {
+                return Missing(type.Name.ToString());
+            }
+        }
+
         var named = new HashSet<string>(
             handlers.SelectMany(handler => handler.Purposes),
             StringComparer.Ordinal);
@@ -84,6 +101,11 @@ internal sealed class HandlerCoverage(
     private IEnumerable<ResourceTypeDeclaration> Sensitive() =>
         declaration.ResourceTypes
             .Where(type => type.SensitiveCategories.Count > 0)
+            .OrderBy(type => type.Name.ToString(), StringComparer.Ordinal);
+
+    private IEnumerable<ResourceTypeDeclaration> Personal() =>
+        declaration.ResourceTypes
+            .Where(type => type.EncryptedFields.Count > 0 || type.SensitiveCategories.Count > 0)
             .OrderBy(type => type.Name.ToString(), StringComparer.Ordinal);
 
     private IEnumerable<string> Objectable()

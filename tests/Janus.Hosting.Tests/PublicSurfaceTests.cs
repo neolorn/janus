@@ -81,6 +81,7 @@ public sealed class PublicSurfaceTests
         typeof(IDnsResolver), // LIB-HOST-001, optional: an environment seam (REG-DOM-001).
         typeof(IErasureLedger), // LIB-HOST-001, optional: an environment seam (DR-016).
         typeof(IEventConsumer<>), // LIB-API-001 and IDN-LIFE-003a: the receiver of an emitted event.
+        typeof(IExportContributor), // LIB-API-001 and LIB-HOST-001: an export contributor (PRIV-RIGHT-003).
         typeof(ILocationSource), // LIB-HOST-001, optional: an environment seam (INT-GEN-006).
         typeof(IMailServer), // LIB-HOST-001, optional: an environment seam (INT-MAIL-001).
         typeof(IMailTransport), // LIB-EXT-001 and LIB-HOST-001: mail delivery.

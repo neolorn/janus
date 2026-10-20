@@ -1389,6 +1389,10 @@ Janus.Core.IOrganizations.CreateAsync(Janus.Core.AccessContext! context, string!
 Janus.Core.IOrganizations.PolicyAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationPolicy!>>
 Janus.Core.IOrganizations.ReplacePolicyAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.PolicyOverride! replacement, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.RequestDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IExportContributor
+Janus.Core.IExportContributor.Covers.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.ResourceType>!
+Janus.Core.IExportContributor.Name.get -> string!
+Janus.Core.IExportContributor.SectionsAsync(Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>!>>
 Janus.Core.IPersonalFields
 Janus.Core.IPersonalFields.WithSubjectAsync<TValue>(Janus.Core.SubjectId subject, System.Func<Janus.Core.SubjectFields!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.IPersonalFields.WithSubjectsAsync<TValue>(System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>! subjects, System.Func<System.Collections.Generic.IReadOnlyDictionary<Janus.Core.SubjectId, Janus.Core.SubjectFields!>!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
