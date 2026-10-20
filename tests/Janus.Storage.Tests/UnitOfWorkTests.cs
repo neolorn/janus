@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
@@ -281,6 +282,115 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
         Assert.False(joined);
         Assert.False(joinedAgain);
         Assert.True(openedAgain);
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: what a host's context joins is there only while the unit
+    /// of work has begun: then it is the accessor's own connection, open, with the
+    /// transaction the unit of work runs in; before it begins and after it ends there
+    /// is nothing to join, and asking for it is a fault.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_WhatIsJoinedIsTheOpenConnectionAndTransactionWhileBegunAsync()
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        bool before = work.Begun;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await work.ConnectionAsync(TestContext.Current.CancellationToken));
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        AmbientConnection joined = await work.ConnectionAsync(TestContext.Current.CancellationToken);
+        AmbientConnection accessed = await new DataConnections(context).UseAsync(TestContext.Current.CancellationToken);
+        bool during = work.Begun;
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(before);
+        Assert.True(during);
+        Assert.False(work.Begun);
+        Assert.Same(accessed.Connection, joined.Connection);
+        Assert.Same(accessed.Transaction, joined.Transaction);
+        Assert.NotNull(joined.Transaction);
+        Assert.Throws<InvalidOperationException>(() => work.AtEnd(() => { }));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a joined context is given its connection back at the
+    /// outermost commit, once, after the transaction committed and before what was
+    /// registered to run after the commit, and not when a level inside it commits.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_TheNoticeComesOnceAtTheOutermostCommitAsync()
+    {
+        List<string> order = [];
+
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        work.AtEnd(() => order.Add(context.Database.CurrentTransaction is null ? "released" : "released open"));
+        Assert.True(work
+            .AfterCommit(_ =>
+            {
+                order.Add("after commit");
+
+                return ValueTask.CompletedTask;
+            })
+            .Match(() => true, _ => false));
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(order);
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["released", "after commit"], order);
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a joined context is given its connection back however the
+    /// unit of work ends without committing: at the outermost rollback, at a commit an
+    /// inner rollback refused, and when the scope ends it with nothing committed.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_TheNoticeComesOnceAtEveryEndWithoutACommitAsync()
+    {
+        int rolledBack = 0;
+        int refused = 0;
+        int disposed = 0;
+
+        await using StoreContext context = database.Context();
+
+        await using (var work = new UnitOfWork(context))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            work.AtEnd(() => rolledBack++);
+            await work.RollbackAsync();
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            work.AtEnd(() => refused++);
+            await work.RollbackAsync();
+
+            Assert.Equal(0, refused);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await work.CommitAsync(TestContext.Current.CancellationToken));
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            work.AtEnd(() => disposed++);
+        }
+
+        Assert.Equal(1, rolledBack);
+        Assert.Equal(1, refused);
+        Assert.Equal(1, disposed);
     }
 
     private static bool Outermost(Result<bool> begun) =>

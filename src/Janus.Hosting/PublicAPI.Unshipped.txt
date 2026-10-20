@@ -55,6 +55,7 @@ Janus.Hosting.Callbacks.IUnsignedCallback.ReferenceOf(Janus.Hosting.Callbacks.Ca
 Janus.Hosting.Callbacks.IUnsignedCallback.Sources.get -> System.Collections.Generic.IReadOnlyCollection<System.Net.IPNetwork>!
 Janus.Hosting.HostingRegistration
 Janus.Hosting.IdentityEndpoints
+Janus.Hosting.UnitOfWorkJoin
 static Janus.Hosting.AuthorizationTables.MapAuthorizationTables(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
 static Janus.Hosting.Bff.Answers.Of(Janus.Core.Result outcome, Microsoft.AspNetCore.Http.IResult! answered) -> Microsoft.AspNetCore.Http.IResult!
 static Janus.Hosting.Bff.Answers.Of<TValue>(Janus.Core.Result<TValue> outcome, System.Func<TValue, Microsoft.AspNetCore.Http.IResult!>! answered) -> Microsoft.AspNetCore.Http.IResult!
@@ -74,6 +75,7 @@ static Janus.Hosting.Callbacks.CallbackSignature.operator ==(Janus.Hosting.Callb
 static Janus.Hosting.HostingRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.AuthorizationDeclaration! declaration, Janus.Hosting.Bff.ApplicationKind application) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Janus.Hosting.IdentityEndpoints.MapIdentityEndpoints(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
 static Janus.Hosting.IdentityEndpoints.MapIdentityWellKnown(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
+static Janus.Hosting.UnitOfWorkJoin.UseUnitOfWorkAsync(this Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade! database, Janus.Core.IUnitOfWork! work, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 override Janus.Hosting.Callbacks.CallbackDelivery.Equals(object? obj) -> bool
 override Janus.Hosting.Callbacks.CallbackDelivery.GetHashCode() -> int
 override Janus.Hosting.Callbacks.CallbackDelivery.ToString() -> string!

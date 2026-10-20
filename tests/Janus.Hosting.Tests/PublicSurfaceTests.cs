@@ -295,6 +295,7 @@ public sealed class PublicSurfaceTests
             typeof(IdentityEndpoints),
             typeof(Answers),
             typeof(RequestSource),
+            typeof(UnitOfWorkJoin),
         ];
 
         IEnumerable<Type> exposed = Internal.SelectMany(name => Load(name).GetExportedTypes());
@@ -316,6 +317,22 @@ public sealed class PublicSurfaceTests
         Assert.Equal(["Of(Result, IResult)", "Of(Result`1, Func`2)", "Refused(Error)"], Members(typeof(Answers)));
         Assert.Equal(["Of(HttpRequest)"], Members(typeof(RequestSource)));
         Assert.Contains("AllowNoSession(TBuilder)", Members(typeof(PipelineProfiles)));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 (D-206): the host's context joins the unit of work through one
+    /// extension on its database facade, taking the open unit of work and a token and
+    /// answering a value task, and nothing else stands beside it.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_INHERIT_002_TheHostsContextJoinsThroughOneExtensionOnItsDatabaseFacade()
+    {
+        MethodInfo join = Assert.Single(
+            typeof(UnitOfWorkJoin).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
+
+        Assert.Equal(["UseUnitOfWorkAsync(DatabaseFacade, IUnitOfWork, CancellationToken)"], Members(typeof(UnitOfWorkJoin)));
+        Assert.True(join.IsDefined(typeof(ExtensionAttribute), inherit: false));
+        Assert.Equal(typeof(ValueTask), join.ReturnType);
     }
 
     /// <summary>

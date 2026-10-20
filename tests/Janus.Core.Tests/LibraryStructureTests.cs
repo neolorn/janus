@@ -84,9 +84,12 @@ public sealed class LibraryStructureTests
     // OPS-DATA-002: the accessor is the one place a connection comes from. These are
     // the ways a caller could get another one instead: the context's own, one a data
     // source or a factory opens, or one constructed, which names its type whether the
-    // type follows `new` or the declaration it is constructed into.
+    // type follows `new` or the declaration it is constructed into; and the ways a caller
+    // could hand a context another connection or transaction, directly or through the
+    // context's connection service.
     private static readonly Regex DirectConnection = new(
-        @"\b(GetDbConnection|OpenConnection(Async)?|CreateConnection)\s*\(|\bNpgsql(Connection|DataSource)\b",
+        @"\b(GetDbConnection|OpenConnection(Async)?|CreateConnection|SetDbConnection|SetConnectionString|UseTransaction(Async)?)\s*\("
+            + @"|\bNpgsql(Connection|DataSource)\b|\bIRelationalConnection\b",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -761,16 +764,21 @@ public sealed class LibraryStructureTests
     /// hand-written query can never run outside the operation's transaction. The one
     /// other connection is the one that listens for registration signals, a
     /// listen/notify use of OPS-DATA-003: it runs no query, holds no operation's
-    /// transaction, and nothing above the port it implements reaches it.
+    /// transaction, and nothing above the port it implements reaches it. Outside the
+    /// storage project, only <c>UseUnitOfWorkAsync</c> touches a context's connection,
+    /// reading the host's to judge it and handing it the accessor's (D-206).
     /// </summary>
     [Fact]
-    public void OPS_DATA_002_AC2_OnlyTheAccessorAndTheListenerRetrieveAConnection() =>
+    public void OPS_DATA_002_AC2_OnlyTheAccessorTheListenerAndTheHostsJoinTouchAConnection() =>
         Assert.Equal(
-            ["DataConnections.cs", "RegistrationSignals.cs"],
+            [
+                "src/Janus.Hosting/UnitOfWorkJoin.cs",
+                "src/Janus.Storage/Authentication/Registration/RegistrationSignals.cs",
+                "src/Janus.Storage/DataConnections.cs",
+            ],
             Sources()
                 .Where(file => DirectConnection.IsMatch(File.ReadAllText(file)))
-                .Select(Path.GetFileName)
-                .Select(name => name!)
+                .Select(file => Path.GetRelativePath(Repository.Root, file).Replace('\\', '/'))
                 .Order(StringComparer.Ordinal));
 
     /// <summary>

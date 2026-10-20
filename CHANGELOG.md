@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `UseUnitOfWorkAsync(work, cancellationToken)`, on the host's own context's
+  `DatabaseFacade`, joins the context to the library's unit of work once it has begun:
+  what the host saves and what the library writes commit together at the outermost
+  commit and roll back together, and the context then returns to the connection it was
+  configured with. A unit of work not begun, a context whose own connection is open or
+  which holds a transaction, and another unit of work while one is joined each throw
+  `InvalidOperationException`; joining the same unit of work again changes nothing.
 - A `Janus.Testing` package for a host's tests and development setup, depending on the
   main package: `InMemoryMailTransport` and `InMemorySmsTransport`, which keep each
   message by destination and fail a delivery only where the test says so;
