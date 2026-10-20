@@ -54,6 +54,7 @@ Janus.Hosting.Callbacks.IUnsignedCallback.Sources.get -> System.Collections.Gene
 Janus.Hosting.HostingRegistration
 Janus.Hosting.IdentityEndpoints
 static Janus.Hosting.AuthorizationTables.MapAuthorizationTables(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+static Janus.Hosting.Bff.PipelineProfiles.AllowNoSession<TBuilder>(this TBuilder builder) -> TBuilder
 static Janus.Hosting.Bff.PipelineProfiles.UseBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.ISignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.IUnsignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!

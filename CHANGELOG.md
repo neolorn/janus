@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every endpoint a host maps after the browser profile needs a live sign-in session:
+  a request that reaches one without it is answered 401 `auth.session.expired` before
+  the endpoint runs. `AllowNoSession()` on an endpoint marks one that answers anyone,
+  which is still issued the pre-authentication session and held to its token.
 - No public member makes an `AccessContext` whose acting and effective identities
   differ: `AccessContext.Of(SubjectId, SubjectId)` is no longer public, and a person's
   context is made with `AccessContext.Of(SubjectId)`, one identity standing for both.

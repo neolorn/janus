@@ -153,6 +153,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// What judges a challenge token, where the host declared a challenge verifier
     /// (AUTH-ABUSE-008); nothing, unless it says otherwise.
     /// </param>
+    /// <param name="host">
+    /// The host's own endpoints, mapped after the browser profile beside the library's;
+    /// none, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -165,7 +169,8 @@ internal sealed class Deployment : IAsyncDisposable
         bool codec = true,
         bool resolver = true,
         PhoneSignalProvider? signals = null,
-        ChallengeVerifier? verifier = null)
+        ChallengeVerifier? verifier = null,
+        Action<IEndpointRouteBuilder>? host = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -237,11 +242,11 @@ internal sealed class Deployment : IAsyncDisposable
             // answers and every address its document publishes carries the prefix
             // (API-CONV-001, LIB-HOST-003). The two documents of REG-PM-001 are the
             // exception: they belong to the site and stay at its root.
-            _ = ((IApplicationBuilder)_application).Map(prefix, Mounted);
+            _ = ((IApplicationBuilder)_application).Map(prefix, mount => Mounted(mount, host));
         }
         else
         {
-            Mounted(_application);
+            Mounted(_application, host);
         }
 
         _ = ((IApplicationBuilder)_application).UseRouting();
@@ -829,14 +834,18 @@ internal sealed class Deployment : IAsyncDisposable
         }
     }
 
-    // What a host mounts: the two profiles around the library's endpoints, with
-    // routing named by hand because no web server composes it here.
-    private static void Mounted(IApplicationBuilder mount)
+    // What a host mounts: the two profiles around the library's endpoints and its own,
+    // with routing named by hand because no web server composes it here.
+    private static void Mounted(IApplicationBuilder mount, Action<IEndpointRouteBuilder>? host)
     {
         _ = mount.UseRouting();
         _ = mount.UseMachineProfile();
         _ = mount.UseBrowserProfile();
-        _ = mount.UseEndpoints(endpoints => endpoints.MapIdentityEndpoints());
+        _ = mount.UseEndpoints(endpoints =>
+        {
+            _ = endpoints.MapIdentityEndpoints();
+            host?.Invoke(endpoints);
+        });
     }
 
     // Everything AddJanus registers, over the area's own fakes instead of the

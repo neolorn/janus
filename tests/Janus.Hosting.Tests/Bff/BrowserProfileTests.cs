@@ -388,6 +388,17 @@ public sealed class BrowserProfileTests : IDisposable
         {
             ParameterInfo[] parameters = mount.GetParameters();
 
+            // BFF-HOST-002: marking one of the host's endpoints as answering anyone
+            // takes the endpoint and nothing else.
+            if (mount.Name is nameof(PipelineProfiles.AllowNoSession))
+            {
+                Assert.Equal(
+                    [typeof(IEndpointConventionBuilder)],
+                    Assert.Single(parameters).ParameterType.GetGenericParameterConstraints());
+
+                continue;
+            }
+
             Assert.Equal(typeof(IApplicationBuilder), parameters[0].ParameterType);
 
             if (mount.Name is not nameof(PipelineProfiles.UseCallback))
@@ -565,9 +576,10 @@ public sealed class BrowserProfileTests : IDisposable
     /// <summary>
     /// AUTH-SESS-007 AC2: enforcement is the pipeline's, so nothing an endpoint
     /// carries and no key of chapter 10 section 4 takes it out of the layer. What an
-    /// endpoint carries is read for enforcement in two files and only ever adds a
-    /// refusal to it: an endpoint says that it needs a session, and nothing says it
-    /// needs less than the stages give it (BFF-STEP-001). The third reader is the
+    /// endpoint carries is read for enforcement in two files, and only for whether stage
+    /// 8 holds it to a session (BFF-STEP-001, BFF-HOST-002): an endpoint marked as
+    /// answering anyone still passes every stage that establishes and checks what the
+    /// browser carries. The third reader is the
     /// logging of BFF-LOG-002, which only ever takes a body out of a log, and the
     /// fourth is error translation, which asks only whether routing found an endpoint,
     /// once every stage has run, to answer a path none serves. The fifth is the
