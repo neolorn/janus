@@ -30,6 +30,33 @@ internal static class BootstrapCommand
     public const string Name = "bootstrap";
 
     /// <summary>
+    /// What the command declares (LIB-API-001): its arguments, the key document, the
+    /// enrolment address and the administrative organization's identifier on two lines
+    /// (D-204), and the codes a refusal carries.
+    /// </summary>
+    public static CommandContract Contract { get; } = new(
+        Name,
+        BootstrapArguments.Declared,
+        KeyDocument.Members,
+        [
+            new("text/plain", ["enrolment: string"]),
+            new("text/plain", ["organization: string"]),
+        ],
+        [
+            ErrorCodes.RequestMalformed,
+            ErrorCodes.Denied,
+            ErrorCodes.ConfigurationValueNotAllowed,
+            ErrorCodes.IdentifierInvalid,
+            ErrorCodes.IdentifierMixedScript,
+            ErrorCodes.ProfileUnderage,
+            ErrorCodes.StartupDeclarationMissing,
+            ErrorCodes.StartupGoverningLanguage,
+            ErrorCodes.StartupRelyingPartyId,
+            ErrorCodes.StartupSchemaMismatch,
+            ErrorCodes.StartupSecretUnavailable,
+        ]);
+
+    /// <summary>
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name.</param>

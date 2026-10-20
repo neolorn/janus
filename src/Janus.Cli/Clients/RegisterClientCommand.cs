@@ -31,6 +31,22 @@ internal static class RegisterClientCommand
     public const string Name = "register-client";
 
     /// <summary>
+    /// What the command declares (LIB-API-001): its arguments, the key document, the
+    /// client registered, and the codes a refusal carries.
+    /// </summary>
+    public static CommandContract Contract { get; } = new(
+        Name,
+        RegisterClientArguments.Declared,
+        KeyDocument.Members,
+        [new("application/json", ["registered: string"])],
+        [
+            ErrorCodes.RequestMalformed,
+            ErrorCodes.StartupRedirectClient,
+            ErrorCodes.StartupSchemaMismatch,
+            ErrorCodes.StartupSecretUnavailable,
+        ]);
+
+    /// <summary>
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name.</param>

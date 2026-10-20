@@ -32,6 +32,30 @@ internal static class ConfigureCommand
     public const string Name = "configure";
 
     /// <summary>
+    /// What the command declares (LIB-API-001): its arguments, the key document, the keys
+    /// changed, and the codes a refusal carries, the start's checks over the settings the
+    /// change leaves among them.
+    /// </summary>
+    public static CommandContract Contract { get; } = new(
+        Name,
+        ConfigureArguments.Declared,
+        KeyDocument.Members,
+        [new("application/json", ["changed[]: string"])],
+        [
+            ErrorCodes.RequestMalformed,
+            ErrorCodes.ConfigurationChangeReasonRequired,
+            ErrorCodes.ConfigurationValueNotAllowed,
+            ErrorCodes.EndpointInsecure,
+            ErrorCodes.StartupDeclarationMissing,
+            ErrorCodes.StartupGoverningLanguage,
+            ErrorCodes.StartupLabelLimit,
+            ErrorCodes.StartupRedirectClient,
+            ErrorCodes.StartupRelyingPartyId,
+            ErrorCodes.StartupSchemaMismatch,
+            ErrorCodes.StartupSecretUnavailable,
+        ]);
+
+    /// <summary>
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name.</param>

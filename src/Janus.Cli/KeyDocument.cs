@@ -30,6 +30,24 @@ internal sealed class KeyDocument
     // A connection and a handful of keys; anything longer is not the document.
     private const int Longest = 64 * 1024;
 
+    /// <summary>
+    /// The members of the document every command but <c>migrate</c> reads, each with the
+    /// type it is written as (LIB-API-001); a version's key is base64.
+    /// </summary>
+    public static IReadOnlyList<string> Members { get; } =
+    [
+        "connection: string",
+        "keyEncryptionKeys.current: number",
+        "keyEncryptionKeys.versions{}: string",
+        "fingerprintKeys.current: number",
+        "fingerprintKeys.versions{}: string",
+    ];
+
+    /// <summary>
+    /// The one member of the document <c>migrate</c> reads (OPS-MIG-001).
+    /// </summary>
+    public static IReadOnlyList<string> ConnectionMembers { get; } = ["connection: string"];
+
     private KeyDocument(string connection, IKeyRing ring)
     {
         Connection = connection;

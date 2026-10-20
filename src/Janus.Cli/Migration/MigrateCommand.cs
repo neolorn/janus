@@ -37,6 +37,18 @@ internal static class MigrateCommand
     public const string Report = "--report";
 
     /// <summary>
+    /// What the command declares (LIB-API-001): the report as its one argument, the
+    /// connection alone, nothing written after a run and the report's lines after a
+    /// report, and the codes a refusal carries.
+    /// </summary>
+    public static CommandContract Contract { get; } = new(
+        Name,
+        [new(Report, Required: false, "flag")],
+        KeyDocument.ConnectionMembers,
+        [new("application/jsonl", ["migration: string", "statement: string", "destructive: boolean"], Report)],
+        [ErrorCodes.RequestMalformed, ErrorCodes.StartupSecretUnavailable, ErrorCodes.SystemFault]);
+
+    /// <summary>
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name: nothing, or <c>--report</c>.</param>

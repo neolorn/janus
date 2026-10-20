@@ -42,17 +42,25 @@ internal static class Program
     /// </summary>
     private const int UnknownCommandExitCode = 1;
 
+    // Each command the executable carries, under the contract it declares (LIB-API-001).
+    private static readonly (CommandContract Contract, Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>> Run)[] Carried =
+    [
+        (BootstrapCommand.Contract, BootstrapCommand.RunAsync),
+        (RotateKeyEncryptionKeyCommand.Contract, RotateKeyEncryptionKeyCommand.RunAsync),
+        (RotateFingerprintKeyCommand.Contract, RotateFingerprintKeyCommand.RunAsync),
+        (ConfigureCommand.Contract, ConfigureCommand.RunAsync),
+        (ReplayErasuresCommand.Contract, ReplayErasuresCommand.RunAsync),
+        (RegisterClientCommand.Contract, RegisterClientCommand.RunAsync),
+        (MigrateCommand.Contract, MigrateCommand.RunAsync),
+    ];
+
     private static readonly Dictionary<string, Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>>> Commands =
-        new(StringComparer.Ordinal)
-        {
-            [BootstrapCommand.Name] = BootstrapCommand.RunAsync,
-            [RotateKeyEncryptionKeyCommand.Name] = RotateKeyEncryptionKeyCommand.RunAsync,
-            [RotateFingerprintKeyCommand.Name] = RotateFingerprintKeyCommand.RunAsync,
-            [ConfigureCommand.Name] = ConfigureCommand.RunAsync,
-            [ReplayErasuresCommand.Name] = ReplayErasuresCommand.RunAsync,
-            [RegisterClientCommand.Name] = RegisterClientCommand.RunAsync,
-            [MigrateCommand.Name] = MigrateCommand.RunAsync,
-        };
+        Carried.ToDictionary(command => command.Contract.Name, command => command.Run, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The contract of every command the executable carries (LIB-API-001, D-206).
+    /// </summary>
+    public static IReadOnlyList<CommandContract> Contracts { get; } = [.. Carried.Select(command => command.Contract)];
 
     /// <summary>
     /// Runs the command the arguments name.

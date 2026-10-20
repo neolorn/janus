@@ -1,0 +1,150 @@
+bootstrap
+  arguments
+    --organization required text
+    --email required email
+    --phone required phone
+    --dateofbirth required date yyyy-MM-dd
+    --mailbox optional email
+    --abuse.sms.balancefloor required setting
+    --alerting.email.destinations required setting
+    --alerting.owner.email required setting
+    --alerting.owner.sms required setting
+    --alerting.sms.destinations required setting
+    --hosting.crossborderbasis optional setting
+    --hosting.environment required setting
+    --hosting.location required setting
+    --legal.governinglanguage required setting
+    --notification.email.sendingdomain required setting
+    --notification.languages required setting
+    --password.blocklist.selfhosted.address optional setting
+    --privacy.calendar.timezone required setting
+    --service.name optional setting
+    --webauthn.origins required setting
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    text/plain
+      enrolment: string
+    text/plain
+      organization: string
+  1 api.request.malformed authz.denied config.value.notallowed identity.identifier.invalid identity.identifier.mixedscript identity.profile.underage model.startup.declarationmissing model.startup.governinglanguage model.startup.rpid model.startup.schemamismatch model.startup.secretunavailable
+configure
+  arguments
+    --abuse.throttle.enabled optional setting
+    --exfiltration.export.auditing optional setting
+    --hosting.crossborderbasis optional setting
+    --hosting.location optional setting
+    --integration.mail.endpoint optional setting
+    --integration.mailserver.endpoint optional setting
+    --integration.sms.endpoint optional setting
+    --legal.governinglanguage optional setting
+    --privacy.calendar.timezone optional setting
+    --redirect.defaultclient optional setting
+    --token.signing.algorithm optional setting
+    --webauthn.algorithms optional setting
+    --webauthn.origins optional setting
+    --webauthn.rpid optional setting
+    --reason required text
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    application/json
+      changed[]: string
+  1 api.request.malformed config.change.reasonrequired config.value.notallowed integration.endpoint.insecure model.startup.declarationmissing model.startup.governinglanguage model.startup.labellimit model.startup.redirectclient model.startup.rpid model.startup.schemamismatch model.startup.secretunavailable
+migrate
+  arguments
+    --report optional flag
+  input application/json
+    connection: string
+  0
+    application/jsonl --report
+      migration: string
+      statement: string
+      destructive: boolean
+  1 api.request.malformed model.startup.secretunavailable system.fault
+register-client
+  arguments
+    --client required text
+    --name required text
+    --kind required choice allowed=browser-application,protocol
+    --redirect required url
+    --scopes required text-list separator=space
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    application/json
+      registered: string
+  1 api.request.malformed model.startup.redirectclient model.startup.schemamismatch model.startup.secretunavailable
+replay-erasures
+  arguments
+    ledger required path
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    application/json
+      reapplied: number
+      standing: number
+      absent: number
+  1 api.request.malformed model.startup.secretunavailable
+rotate-fingerprint-key
+  arguments
+    --sealed optional flag
+    --retention optional duration requires=--sealed
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    application/json
+      fingerprintKeys.current: number
+      fingerprintKeys.versions{}: string
+    application/json
+      version: number
+      processed: number
+    application/json --sealed
+      version: number
+      processed: number
+      retired[]: number
+      keepUntil: DateTime
+  1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable
+rotate-kek
+  arguments
+    --sealed optional flag
+    --retention optional duration requires=--sealed
+  input application/json
+    connection: string
+    keyEncryptionKeys.current: number
+    keyEncryptionKeys.versions{}: string
+    fingerprintKeys.current: number
+    fingerprintKeys.versions{}: string
+  0
+    application/json
+      keyEncryptionKeys.current: number
+      keyEncryptionKeys.versions{}: string
+    application/json
+      version: number
+      processed: number
+    application/json --sealed
+      version: number
+      processed: number
+      retired[]: number
+      keepUntil: DateTime
+  1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable
