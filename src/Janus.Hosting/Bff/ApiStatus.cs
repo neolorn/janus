@@ -110,6 +110,7 @@ internal static class ApiStatus
         [ErrorCodes.GroupCycle] = StatusCodes.Status409Conflict,
         [ErrorCodes.GroupInUse] = StatusCodes.Status409Conflict,
         [ErrorCodes.RoleInUse] = StatusCodes.Status409Conflict,
+        [ErrorCodes.ResourceInUse] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,

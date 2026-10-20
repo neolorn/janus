@@ -52,6 +52,7 @@ authz.grant.unresolved 422
 authz.group.cycle 409
 authz.group.inuse 409
 authz.policy.unregistered 500
+authz.resource.inuse 409
 authz.resource.notfound 404
 authz.restricted 403
 authz.role.inuse 409

@@ -47,6 +47,7 @@ public sealed class AuditActionsTests
         "authz.access.exported",
         "authz.grant.materialised",
         "authz.grant.retracted",
+        "authz.grant.revoked",
         "authz.group.created",
         "authz.group.memberadded",
         "authz.group.memberremoved",

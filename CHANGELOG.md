@@ -3724,3 +3724,12 @@ against the public contract of LIB-API-001.
   organization (`DELETE /admin/organizations/{id}/memberships/{subject}`) is refused
   with 403 `authz.denied`, for anyone, before the step-up, and the membership stays
   current; its membership of another organization ends as anyone's does.
+- `IResources.RemoveAsync` removes a record's registration and its ancestry in the unit
+  of work, for a record the host removes from its own table, and revokes every live
+  grant naming the record, each with the nil subject as revoker and the reason
+  `AUTHZ-INHERIT-002`, recorded `authz.grant.revoked`; a later registration of the same
+  identifier inherits none of them. A record not registered is refused with
+  `api.request.invalid` naming `resource`, and one holding a registered record with 409
+  `authz.resource.inuse`. A registration, a move and a grant on a record judge the
+  container or the record again with the organization's tree held, so none lands on a
+  record removed meanwhile.

@@ -87,6 +87,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data on a container above", Decided.Allowed),
         ("a grant on the container the record was moved into", Decided.Allowed),
         ("a grant on the container the record was moved out of", Decided.Denied),
+        ("a grant on a record whose registration was removed, the record registered again", Decided.Denied),
         ("a record of a type the model does not declare", Decided.Raised),
         ("a permission the model does not declare", Decided.Raised),
     ];
@@ -808,6 +809,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling, elsewhere);
         await ReviewAsync(deployment, scenario, account, inner, outer);
         await MovedAsync(scenario, record, elsewhere);
+        await RemovedAsync(deployment, scenario, record, inner);
 
         // CONV-ERR-001, AUTHZ-PRIN-003: a permission no rule governs is asked of a record
         // the whole organization's grant would otherwise admit.
@@ -835,6 +837,41 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             .MoveAsync(record, elsewhere, TestContext.Current.CancellationToken);
 
         Assert.True(moved.Match(() => true, _ => false));
+    }
+
+    // AUTHZ-INHERIT-002 AC5 (D-203): the record's registration is removed by the library,
+    // which revokes the grant naming it, and the same identifier is registered again
+    // where it sat, so what the case decides by is whether a revoked grant comes back.
+    private async Task RemovedAsync(
+        Deployment deployment,
+        string scenario,
+        ResourceReference record,
+        ResourceReference inner)
+    {
+        if (scenario != "a grant on a record whose registration was removed, the record registered again")
+        {
+            return;
+        }
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result removed = await scope.ServiceProvider.GetRequiredService<IResources>()
+                .RemoveAsync(record, TestContext.Current.CancellationToken);
+
+            Assert.True(removed.Match(() => true, _ => false));
+        }
+
+        // The host deletes its own row with the record, and writes it again with the
+        // record created again.
+        await using (NpgsqlConnection connection = await host.OpenAsync())
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM host.documents WHERE id = @id;",
+                new { id = record.Id.ToString() },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await deployment.RegisterAsync(record, inner, TestContext.Current.CancellationToken);
     }
 
     // Each operation case in a deployment of its own, its caller holding the reading and
@@ -1684,6 +1721,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         {
             case "a grant on the record itself":
             case "a grant whose role does not allow the permission":
+            case "a grant on a record whose registration was removed, the record registered again":
                 await deployment.GrantAsync(
                     holder, role, record, false, null, null, cancellationToken);
                 break;

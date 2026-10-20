@@ -330,6 +330,13 @@ public static class AuditActions
     public static AuditAction GrantRetracted { get; } = AuditAction.Parse("authz.grant.retracted");
 
     /// <summary>
+    /// A grant was revoked; one the removal of the record it names revoked records the
+    /// nil subject as its revoker and the reason <c>AUTHZ-INHERIT-002</c>.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003 and AUTHZ-INHERIT-002 (D-203), chapter 10 section 5.</remarks>
+    public static AuditAction GrantRevoked { get; } = AuditAction.Parse("authz.grant.revoked");
+
+    /// <summary>
     /// A group was created.
     /// </summary>
     /// <remarks>Implements AUTHZ-GROUP-001.</remarks>

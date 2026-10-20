@@ -1428,6 +1428,7 @@ Janus.Core.IResources
 Janus.Core.IResources.MoveAsync(Janus.Core.ResourceReference resource, Janus.Core.ResourceReference? containedIn, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IResources.RegisterAsync(Janus.Core.ResourceRegistration! registration, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IResources.RegisterManyAsync(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceRegistration!>! registrations, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IResources.RemoveAsync(Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestoreTestInstance
 Janus.Core.IRestoreTestInstance.RestoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<string!>>
 Janus.Core.IRestoreTestInstance.TearDownAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -3668,6 +3669,7 @@ static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantMaterialised.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantRetracted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GrantRevoked.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberAdded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberRemoved.get -> Janus.Core.AuditAction
@@ -4117,6 +4119,7 @@ static Janus.Core.ErrorCodes.RequestInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestMalformed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ResourceInUse.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode

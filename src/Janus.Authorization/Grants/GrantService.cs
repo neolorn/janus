@@ -415,6 +415,23 @@ internal sealed class GrantService(
             standing = await HolderAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false);
         }
 
+        // AUTHZ-INHERIT-002 (D-203): a grant on a record is written with its organization's
+        // tree held, which a removal holds too, so the record still stands and a removal
+        // finds the grant to revoke. One removed since is answered as a record no
+        // registration names is (AUTHZ-SCOPE-001).
+        if (grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id)
+        {
+            await resources.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
+
+            if (await resources.FindAsync(new ResourceReference(type, id), cancellationToken).ConfigureAwait(false)
+                is null)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
+            }
+        }
+
         // D-166 X3: the role is read under its row's lock, which a definition and a
         // removal hold too, so OPS-CFG-007 is judged on what the role allows as
         // committed; and two grants of one role at once are written one after the other,
