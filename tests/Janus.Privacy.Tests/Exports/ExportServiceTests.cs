@@ -36,6 +36,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly List<IExportContributor> _contributors = [];
+    private readonly ExportNameRuleInMemory _names = new();
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
@@ -43,6 +44,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
     private ExportService Exports => new(
         _source,
         _contributors,
+        _names,
         _ledger,
         _consents,
         _stepUp,
@@ -437,6 +439,68 @@ public sealed class ExportServiceTests : IAsyncDisposable
     {
         _contributors.Add(Contributor("orders", "orders"));
         _contributors.Add(Contributor("tickets", "support-tickets", "support-tickets"));
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "tickets");
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): the assembly asks the rule of every section and value
+    /// name a contributor answers, and of none of the library's, before it takes the
+    /// answer: every name is asked before the unit of work that counts the export begins.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC7_EveryNameAContributorAnswersIsJudgedBeforeItIsTakenAsync()
+    {
+        var open = new List<bool>();
+
+        _source.Holds(Ahmed, new ExportSection(
+            "identifiers",
+            [new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { ["kind"] = "Email" })]));
+        _contributors.Add(Contributor("tickets", "support-tickets", "ticket-notes"));
+        _contributors.Add(Contributor("orders", "orders"));
+        _names.Meanwhile = () => open.Add(_work.Open);
+
+        SubjectExport export = Assembled(await Exports.AssembleAsync(
+            AccessContext.Of(Ahmed),
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["orders", "held-in", "support-tickets", "held-in", "ticket-notes", "held-in"],
+            _names.Asked);
+        Assert.Equal([false, false, false, false, false, false], open);
+        Assert.Equal(6, export.Sections.Count);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): a section or a value named outside the rule is a fault
+    /// of the contributor that answered it, failing the export uncounted as one that
+    /// faults does, whatever the contributors before it answered.
+    /// </summary>
+    /// <param name="refused">The name the rule refuses.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("ticket-notes")]
+    [InlineData("ticket-number")]
+    public async Task PRIV_RIGHT_003_AC7_ANameOutsideTheRuleFailsTheExportAsync(string refused)
+    {
+        _contributors.Add(Contributor("orders", "orders"));
+        _contributors.Add(new ExportContributorInMemory("tickets")
+        {
+            Sections =
+            [
+                new ExportSection(
+                    "ticket-notes",
+                    [new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { ["ticket-number"] = "t-1" })]),
+            ],
+        });
+        _names.Refused.Add(refused);
 
         AssertFaulted(
             Refused(await Exports.AssembleAsync(

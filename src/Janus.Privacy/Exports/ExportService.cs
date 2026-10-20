@@ -18,6 +18,7 @@ namespace Janus.Privacy.Exports;
 /// </summary>
 /// <param name="source">Where the parts the other areas hold are read.</param>
 /// <param name="contributors">The export contributors the host registered, which answer what it holds.</param>
+/// <param name="names">The rule the names a contributor answers are held to.</param>
 /// <param name="ledger">Where the exports already taken are counted.</param>
 /// <param name="consents">Where the consent and objection records are.</param>
 /// <param name="stepUp">The gate the account's own assurance is asked at.</param>
@@ -26,13 +27,14 @@ namespace Janus.Privacy.Exports;
 /// <param name="work">The one transaction the export is counted in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003, LIB-API-005, D-086, D-141 and D-203. One routine and not
-/// two: two routines are two answers to the same legal question, and the second one is
-/// the one nobody maintains.
+/// Implements PRIV-RIGHT-003, LIB-API-005, D-086, D-141, D-203 and D-206. One routine
+/// and not two: two routines are two answers to the same legal question, and the second
+/// one is the one nobody maintains.
 /// </remarks>
 internal sealed class ExportService(
     IExportSource source,
     IEnumerable<IExportContributor> contributors,
+    IExportNameRule names,
     IExportLedger ledger,
     IConsentStore consents,
     IStepUpGate stepUp,
@@ -211,14 +213,27 @@ internal sealed class ExportService(
     // PRIV-RIGHT-003 (D-206): whether a contributor's answer may be taken, judged whole
     // before any of it is. A section under a name already taken, the library's, another
     // contributor's or another of the same answer, would be read as that one by the
-    // frontend's labels and by the reader. The names of the answer join those taken.
-    private static bool Kept(IReadOnlyList<ExportSection> answered, HashSet<string> taken)
+    // frontend's labels and by the reader, and a section or value named outside the rule
+    // could make two keys of the machine format coincide. The names of the answer join
+    // those taken.
+    private bool Kept(IReadOnlyList<ExportSection> answered, HashSet<string> taken)
     {
         foreach (ExportSection section in answered)
         {
-            if (section is null || !taken.Add(section.Name))
+            if (section is null
+                || section.Records is null
+                || !names.Holds(section.Name)
+                || !taken.Add(section.Name))
             {
                 return false;
+            }
+
+            foreach (ExportRecord record in section.Records)
+            {
+                if (record is null || record.Values is null || !record.Values.Keys.All(names.Holds))
+                {
+                    return false;
+                }
             }
         }
 

@@ -248,6 +248,78 @@ public sealed class ExportEndpointTests : IAsyncDisposable
                 && line.Contains("host", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): in <c>machine</c> a host's value is keyed
+    /// <c>&lt;section&gt;.&lt;index&gt;.&lt;value&gt;</c> as a library value is, the index
+    /// counting the section's records from 0.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC7_AHostValueIsKeyedAsALibraryValueIsAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Held();
+        _deployment.ExportContributor.Sections = [Parcels("parcels", "tracking-number")];
+
+        JsonElement values =
+            (await browser.SendAsync("GET", "/privacy/export?format=machine"))
+            .Json()
+            .GetProperty("values");
+
+        Assert.Equal("ahmed@example.test", values.GetProperty("identifiers.0.value").GetString());
+        Assert.Equal("pn-1001", values.GetProperty("parcels.0.tracking-number").GetString());
+        Assert.Equal("pn-1002", values.GetProperty("parcels.1.tracking-number").GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): a section or a value a contributor names with a
+    /// <c>.</c>, or otherwise outside the rule, fails the export as a contributor that
+    /// faults does: 500 <c>system.fault</c>, the contributor named in the log, and
+    /// nothing counted; the same contributor named inside the rule is exported.
+    /// </summary>
+    /// <param name="section">The name the contributor gives its section.</param>
+    /// <param name="value">The name it gives its value.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("parcels.v2", "tracking-number")]
+    [InlineData("parcels", "tracking.number")]
+    [InlineData("Parcels", "tracking-number")]
+    [InlineData("parcels", "trackingNumber")]
+    public async Task PRIV_RIGHT_003_AC7_ANameOutsideTheRuleFailsTheExportAsync(string section, string value)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.ExportContributor.Sections = [Parcels(section, value)];
+
+        Answer refused = await browser.SendAsync("GET", "/privacy/export?format=machine");
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, refused.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), refused.Text("code"));
+        Assert.Empty(_deployment.ExportLedger.Taken);
+        Assert.Contains(
+            _deployment.Logs.Lines,
+            line => line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal)
+                && line.Contains("contributor", StringComparison.Ordinal)
+                && line.Contains("host", StringComparison.Ordinal));
+
+        _deployment.ExportContributor.Sections = [Parcels("parcels", "tracking-number")];
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("GET", "/privacy/export?format=machine")).Status);
+    }
+
+    // A host's section of two parcels, each holding its tracking number under the name
+    // given.
+    private static ExportSection Parcels(string section, string value) =>
+        new(
+            section,
+            [
+                new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { [value] = "pn-1001" }),
+                new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { [value] = "pn-1002" }),
+            ]);
+
     private static Dictionary<string, string> Flattened(JsonElement sections)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);

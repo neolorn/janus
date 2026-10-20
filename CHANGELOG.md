@@ -3847,3 +3847,8 @@ against the public contract of LIB-API-001.
 - An export contributor answering two sections under one name fails the export as one
   answering a section under a library section's name does: 500 `system.fault`, the
   contributor named in the log, and the export not counted.
+- The names of the sections and values an export contributor answers are held to 1 to
+  64 lower-case letters and digits separated by single `-` or `_`, so no two keys
+  `<section>.<index>.<value>` of the machine format coincide; an answer naming one
+  outside the rule fails the export with 500 `system.fault`, the contributor named in
+  the log, and the export is not counted.

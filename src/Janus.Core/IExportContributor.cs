@@ -35,10 +35,12 @@ public interface IExportContributor
     /// <param name="subject">Whose export it is.</param>
     /// <param name="cancellationToken">Abandons the work.</param>
     /// <returns>
-    /// The sections, each under a name of INT-SMS-003's rule that no library section and
-    /// no other contributor's takes, its values written as text under names of the same
-    /// rule; or a failure, which fails the export: nothing is returned and nothing is
-    /// counted.
+    /// The sections, each under a name of INT-SMS-003's rule without <c>.</c> that no
+    /// library section, no other contributor's and no other of these takes, its values
+    /// written as text under names of the same rule, since the machine format keys each
+    /// value <c>&lt;section&gt;.&lt;index&gt;.&lt;value&gt;</c>; or a failure, which fails
+    /// the export: nothing is returned and nothing is counted. A name outside the rule
+    /// fails the export as a failure does.
     /// </returns>
     ValueTask<Result<IReadOnlyList<ExportSection>>> SectionsAsync(
         SubjectId subject,

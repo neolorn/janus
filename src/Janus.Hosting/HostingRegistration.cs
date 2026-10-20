@@ -41,6 +41,7 @@ using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Exports;
 using Janus.Privacy.Requests;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
@@ -292,6 +293,10 @@ public static class HostingRegistration
         services.AddScoped<IDeploymentCookies, DeploymentCookies>();
         services.AddScoped<NoticeCookieCheck>();
         services.AddScoped<ISubjectNotices, SubjectNotices>();
+
+        // PRIV-RIGHT-003 (D-206): the names a contributor answers are judged by the rule
+        // this project holds the check of, before the export takes them.
+        services.AddSingleton<IExportNameRule, ExportNames>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
         // declaration the host makes, so the privacy side reads it from there rather
