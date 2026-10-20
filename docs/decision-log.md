@@ -799,6 +799,8 @@ drop the part that cannot be acted on.
 
 > **Amended.** The package split: the core and the EF Core provider are separate projects (`Janus.Core`, `Janus.Storage`) packed as assemblies of the one main package, `Janus.Hosting`; neither is a package of its own (D-205).
 
+> **Amended.** Direct connection retrieval: `UseUnitOfWorkAsync` is the one place outside the accessor that touches a context's connection, reading the host's context's connection to judge it and handing it the accessor's connection and transaction (D-206).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Affects:** D-015
 
 **Decision.** Both EF Core and Dapper from the start, with one unambiguous rule:
@@ -1562,6 +1564,8 @@ belong in the enumeration for RoPA completeness; no code branches on them.
 > **Superseded in part.** The 30-day AAL1 absolute lifetime is replaced by 90-day inactivity / 365-day absolute for customers — D-123, D-130.
 
 > **Amended.** 33.1: no organization holds lifetimes of its own; the AAL2 lifetimes, shorter or longer, are the deployment's, through `session.aal2.*` (D-197).
+
+> **Amended.** 33.4: at a step-up or a privilege change the identifier rotated is the one the session's cookie carries, and the session record and its `SessionId` are kept; at authentication the pre-authentication session rotates into the sign-in session (D-206).
 
 **Date:** 2026-08-25 · **Status:** accepted · **Resolves:** R-06, R-07, R-08, R-09 · **Amends:** D-007
 
@@ -7560,6 +7564,8 @@ the library* — the library supports both bases; the choice is the host's.
 
 > **Amended.** Item 18: the `phoneCode` second step is enrolled by `begin` and `confirm`, bound to the number it was confirmed on, and stays off by default; item 17: the shipped restrictions gain `sms.resend` (1 per 3 minutes, sliding, marked `resend`), which judges and counts a send once whatever its languages, its one count released when every text of the send fails for good, when any text of a `secondfactor` send is reported delivered, or when its code is presented right or its link pressed (D-197).
 
+> **Amended.** Item 7: a preference's name holds no `.` or `/` and is neither `language` nor `timeZone`, the names the export gives the account's language and time zone (D-206).
+
 **Date:** 2026-09-17 · **Status:** accepted · **Amends:** D-006, D-009, D-011, D-012, D-013, D-027, D-031, D-035, D-039, D-055, D-114, D-144 · **Resolves:** review-4 M-5 and M-6 · **Renders:** new chapter `20-registration-and-account.md`
 
 **TL;DR.** Review-4 M-5 found that the specification described the pieces of an account
@@ -12851,6 +12857,8 @@ line); `10` section 1 (`config.value.notallowed`), section 4 (`token.signing.alg
 
 > **Amended.** The last corrections run of Milestone 1: a Tier 2 question parks its item and is carried into Milestone 2 as a known issue, unanswered before the exit gate; a Tier 3 question is still answered at once (D-197).
 
+> **Amended.** No part outlives the run, save a finished commit that cannot be made green until a question is answered: it is kept on its part's local branch, unmerged and unpushed, named in the report, and merged into the branch it was cut from once the answer comes, that branch reaching `main` only after the merge (D-206).
+
 **Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-161 (item 4, as D-166 left it), D-166 (section B and rule X5, the stop at each question), D-167 (items 4 and 5)
 
 **TL;DR.** A Tier 2 or Tier 3 question is still written up, asked and never decided by the
@@ -13693,6 +13701,8 @@ REG-SESS-005 (body, criterion 4), REG-MAIL-002 (body).
 > **Amended.** Question 83: a Hosting type reaches a member no public contract declares through an internal contract the owning project declares, never the implementation, and `AccessGate` implements the unscoped refusal itself; 93: the suite's step-up scenarios run on a deployment the host's factory builds with the suite's provider; 94: at a step-up the ask on `risk` is answered as `/auth/factor` answers it, 200 with `required` empty where the gate is already met, and no truth-table row is owed; 97, 98 and 118: every public member that carries such a name or identifier takes the type; 115: an undo is never refused for pending adds, whose verification judges the maximum again, 409 where verified identifiers fill the kind; 116: the sweep locks its candidates and judges again, and a press that finds no record is `auth.code.expired` and counted; 119: section 8's text gives `authz.restricted` to the modifying `/admin` routes and the step-up route lists the shape's refusals (D-188).
 
 > **Amended.** Question 94: a step-up judges step 1 against the strictest of the policy's gates, offers every combination that reaches the weakest of them, field by field, judges step 3 against that weakest gate, and answers `factorRequired` until the strictest is reached (D-197).
+
+> **Amended.** Question 101: `authz.grant.materialised` and `authz.grant.retracted` name the grant's holder as subject where the holder is an account, and none where it is a group (D-206).
 
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-166 (X3, a decision on a value no one row holds is made under a lock on the value; 115 (2), the holder is an unkeyed hash; 209 (2), the UTS #46 checks; 265, the drift check's audit record; 306, what the sweep waits for and what it removes; section E item 4, what `AddJanus` registers), D-183 (questions 24 and 53, names and identifiers as value types; 25, both directions; 27, 38 and 63, a send's counters taken after the value locks too; 31, where an add is staged and the lock a value is judged under; 39, an invitation's erased value; 40, every site that raises an event; 46, the filter of an unmet step-up row and the suite's step-up scenarios; 50 and 51, the codes a section's text gives; 56, a token not yet valid; 57, the registrations that stay in Hosting)
 
@@ -15185,6 +15195,8 @@ BFF-STEP-001 (criterion 1); `18` FE-API-004 (body), FE-ACCT-001 (new criterion 7
 
 > **Amended.** Question 229: at a sign-in a second step presented before a first factor is refused before it is verified, so `required` after a second step accepted first no longer arises (D-197).
 
+> **Amended.** Question 230: a change under review that only moves lines in a watched place decides nothing and meets CONV-VCS-004 with a row restating the decision; a commit inside a change still owes no row of its own (D-206).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-193 (question 221, a link's return after the session ended; questions 225 and 226, which answers at the sign-on's push and exchange are refusals), D-192 (question 212, a redirect's `error` carries only codes its route declares, and a link's return whose session has ended is answered 403)
 
 **TL;DR.** Building D-193 raised seven questions, each answered narrowly; one corrects a
@@ -15488,6 +15500,8 @@ reached it is now a 202, so no sign-in test is owed, and the step-up tests hold 
 > **Amended.** A second step before a first factor: a security key's assertion presented as `passkey` is refused `auth.factor.notpermitted` once it verifies; the `resend` release: a right authentication code's release stands whatever refusal follows, with its spend; the last corrections run's Tier 3 answers are built in one short run before the exit gate (D-198).
 
 > **Amended.** WebAuthn on the package: step 6 of section 7.2, whether the account holds the credential, is the library's and is judged before every other step (D-200).
+
+> **Amended.** Known issues 1 and 11 of the fourth corrections report are answered: every audit record of a grant names its holder as subject where the holder is an account, and a watched change that decides nothing meets CONV-VCS-004 with a row restating the decision (D-206).
 
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-146 (item 18, the `phoneCode` second step: its enrolment; item 17, the shipped restrictions gain `sms.resend`), D-193 (question 218, the enrolment gap closed and the number bound), D-196 (question 247, the framework's request log), D-195 (questions 236 and 238, a second step accepted before a first factor no longer arises), D-194 (question 229, a second step presented before a first factor at a sign-in), D-188 (question 145, what a step-up's ask offers), D-187 (question 94, what a step-up offers), D-184 (the analyser-authoring packages), D-183 (question 36, where `auth.factor.notpermitted` is judged), D-182 (the last corrections run's questions), D-166 (item 114, where the leaked-password draw runs; item 235, a `resend` restriction counts a send once), D-149 (item 9, the permitted packages), D-141 (item 5, a suspension no cancel returns), D-092 (L3, a cache outage), D-079 and D-043 (the permission cache), D-033 (33.1, staff lifetimes), D-013 (the resend window), D-007 (the session record held in PostgreSQL alone)
 
@@ -16333,6 +16347,8 @@ working guide (section 6).
 
 ## D-203 — The host's privacy duties: its own fields, its transaction, its part of an export
 
+> **Amended.** Rule 1: two encrypted fields of one type under one declared name fail startup; rule 2: `UseUnitOfWorkAsync` takes the open `IUnitOfWork`, and a context holding a connection of its own is one whose connection is open or which holds a transaction; rule 4: a host's section and value names take no `.`, the machine format keys a value `<section>.<index>.<value>`, and `Janus.Hosting` judges a contributor's names (D-206).
+
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Extends:** D-068 (erasure reaches host data), D-099 (the subject of an encrypted field is declared), D-145 (cookies, objection), D-148 (the takedown's delivery) · **Amends:** D-068 (`ExportRequested` retired), D-079b (`Janus.Hosting` beyond mounting), D-097 and D-100 (a host field's authenticated data), D-155 item 1, D-165 (the host's hooks), D-166 items 264, 320 and 352, D-168 item 2
 
 **TL;DR.** The specification gives a host privacy duties the public surface never let it
@@ -16536,6 +16552,8 @@ host's fields, the seam's direction), CONV-DESIGN-007 (the seams); `09` `GET
 ---
 
 ## D-204 — A host is set up, migrated and tested from the packages, and a sample host proves it
+
+> **Amended.** Rule 2: `migrate` writes no audit row and runs as no principal, the `migration` operation is gone and no host job may take the name `migrate`; `migrate --report` writes one JSON line per matched statement and exits 0; rule 4: `TestDeployment` registers the sign-on client with arguments it derives; CONV-DESIGN-008: `Janus.Testing` takes `System.Formats.Cbor` from the shared framework, never as a package reference (D-206).
 
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Amends:** D-018 (migrations are applied by `migrate`, not by an EF Core bundle), D-149 items 4 and 9, D-153 (the command list), D-160 item 4 (what `Janus.Cli` validates), D-184 (the repository's tools), D-028 (what bootstrap prints), D-046 and D-149 item 1 (the sample host keeps no lockfile)
 
@@ -16824,6 +16842,283 @@ criterion 3); `09` `POST /auth/step-up` (a host's gate); `13` R-M20; `15` sectio
 
 ---
 
+## D-206 — Round H1 questions 4 to 19, and the subject of a grant's audit record
+
+**Date:** 2026-10-20 · **Status:** accepted · **Follows from:** D-202, D-203, D-204, D-205 · **Amends:** D-203 (rule 1, one declared name per encrypted field of a type; rule 2, how the host's context joins the unit of work; rule 4, the machine format's keys, the names of a host's export sections and values and where they are judged), D-204 (rule 2, `migrate` runs as no principal, the `migration` operation is gone, the name `migrate` stays reserved, and what `migrate --report` writes; rule 4, `TestDeployment`; CONV-DESIGN-008's direct reference to `System.Formats.Cbor`), D-197 (known issues 1 and 11 of the fourth corrections report, answered), D-187 (question 101, the drift check's records name the holder), D-182 (a finished commit a question holds waits on its part's branch), D-017 (the one place outside the accessor that touches a context's connection), D-033 (33.4, the identifier rotated is the one the cookie carries), D-146 (item 7, a preference's name), D-194 (question 230, a change under review that only moves lines in a watched place owes a restating row) · **Extends:** D-202 (rule 5, `CapabilityFields`; rule 7, how a job is told from a request), D-205 (question 1, `System.Formats.Cbor`)
+
+**TL;DR.** Round H1 built every item no question held and reported sixteen more
+questions. Each is answered here, with known issues 1 and 11 of the fourth corrections
+report, which the held commit of question 16 needs. In short: `Janus.Testing` takes
+`System.Formats.Cbor` from the shared framework (4); `TestDeployment` registers the
+host's sign-on client with arguments it derives from the address the test serves the
+application at (5); `migrate --report` writes one JSON line per matched statement and
+exits 0 (6); the host's context joins the unit of work by an extension taking the open
+`IUnitOfWork`, and "a connection of its own" means an open connection or a transaction
+(7); the export's machine format stays flat, keyed `<section>.<index>.<value>`, and a
+host's section and value names take no `.` (8); the assembly asks `Janus.Hosting`,
+through an internal contract, whether a contributor's names keep the rule (9), and a
+contributor's own name is refused under `details.declaration` `contributor.<name>` (10);
+two encrypted fields of one type under one name, or two resource types under one name,
+fail startup (11); `CapabilityFields` is a record whose entries are action names, as the
+browser already reads them (12); the session record's `SessionId` survives a step-up's
+rotation, which changes the identifier its cookie carries (13); `AddJanus` leaves the
+application's JSON options alone, and the library reads every body of its endpoints
+through its own contexts, as it writes them (14); the gate tells a request from a job by
+whether an HTTP request is being served on the calling flow (15); a commit that is not
+pushed and that no other branch has merged may be amended, a finished commit a question
+holds waits on its part's branch for the answer, and every audit record of a grant names
+its holder as subject where the holder is an account (16); `migrate` runs as no
+principal (17); the commands' contract list is rendered from each command's declared
+contract into a committed file (18); the conformance sample enrols its first
+administrator, signs in and changes `policy.default` through the library's endpoint
+(19).
+
+**The questions.** Questions 4 to 19 of the round H1 report (`docs/reports/round-h1.md`
+section 4). Questions 4, 11 and 13 are Tier 3; the others are Tier 2, question 16 among
+them, which the report gives no tier. Each answer names its question; the chapters carry
+the full rule.
+
+4. **`System.Formats.Cbor` (Tier 3).** CONV-DESIGN-008 had `Janus.Testing` reference
+   `System.Formats.Cbor` directly, and the ASP.NET Core shared framework of .NET 10 serves
+   it, so CONV-LAYOUT-001's shared-framework rule resolves it from the framework and NuGet
+   reports the reference unneeded (NU1510). `Janus.Testing` references no package for it:
+   it takes `System.Formats.Cbor` from the shared framework through its framework
+   reference, as the library takes every package the framework serves (D-205), and the
+   allow-list names it again only as a package `Fido2` brings (CONV-DESIGN-008 criterion
+   1). *Rejected:* keeping the reference beside the framework (a package the rule says
+   never to resolve as one).
+5. **`TestDeployment`'s registration of the sign-on client.** `register-client` takes
+   `--client`, `--name`, `--kind`, `--redirect` and `--scopes` (AUTH-OIDC-001), and the
+   host's `SignOnClient` gives the client identifier alone. `TestDeployment` takes the
+   address the test serves the host's application at: its origin, `https`, or `http` on a
+   loopback IP literal, as every registered return address is (AUTH-OIDC-006), and the
+   path the browser profile is mounted under. It registers the sign-on client with
+   `--client` its identifier, `--name` the same identifier, `--kind browser-application`,
+   `--redirect` that address's `auth/signon/return` route (`09` `GET /auth/signon/return`)
+   and `--scopes openid`, as a deployment registers the client it declares
+   (AUTH-OIDC-001, LIB-HOST-001).
+6. **`migrate --report`.** It generates the idempotent script of the pending migrations
+   with EF Core's migrator and writes to standard output one JSON line per statement of it
+   that `08` CONV-DESIGN-003's scan matches, the statement itself and never the block that
+   guards it in the script: an object whose `migration` is the migration's identifier,
+   `statement` the statement and `destructive` `true` where OPS-DEP-001 names the
+   statement destructive and `false` otherwise, in the order the migrations apply. It
+   writes nothing where nothing matches, applies nothing, and exits 0 whatever it found:
+   whether a destructive statement stops a deploy is the host's pipeline's gate
+   (OPS-DEP-001), not the command's. A refusal exits 1 as every command's does
+   (OPS-SEC-001). The library's own pipeline goes on writing the script with `dotnet-ef`.
+7. **How the host's context joins.** `UseUnitOfWorkAsync(IUnitOfWork work,
+   CancellationToken cancellationToken)` (`Janus.Hosting`) is an extension method on the
+   context's `DatabaseFacade` answering a `ValueTask`. With `work` begun, it gives the
+   host's context the unit of work's open connection, which the context does not own, and
+   its transaction; at the outermost commit or rollback the unit of work takes both back,
+   and the context returns to the connection it was configured with. "A context that
+   holds a connection of its own" is one whose connection is open or which holds a
+   transaction when it is called (reading A); a context configured with a connection
+   string or a closed connection holds neither, and is given the unit of work's. Called
+   with `work` not begun, on a context that holds a connection of its own, or for another
+   unit of work while one is joined, it throws `InvalidOperationException`, a fault of the
+   calling code (CONV-ERR-001); called again for the unit of work it joined, it changes
+   nothing. It reaches the unit of work through an internal contract `Janus.Storage`
+   declares and its unit of work implements (whether it is begun, its open connection and
+   transaction, a notice at the outermost commit or rollback), and is the one place outside
+   the accessor that touches a context's connection, which OPS-DATA-002 now names beside
+   D-017's rule against direct connection retrieval. *Rejected:* reading B (a host context
+   is always configured with a connection string, so every call would be a fault).
+8. **The export's machine format.** `machine` stays as built and as `09` names it, flat
+   and stable-named: one object of values keyed `<section>.<index>.<value>`, the index
+   counting a section's records from 0, a host's sections keyed as the library's are. So
+   that no two keys coincide, a host's section and value names follow INT-SMS-003's rule
+   without `.`: 1 to 64 lower-case letters and digits separated by single `-` or `_`.
+   The library's own names take no `.` either, a host's preference among them, which the
+   `preferences` section keys its value by: a preference's name holds no `.` or `/` and
+   is neither `language` nor `timeZone`, the section's names for the account's language
+   and time zone, or its declaration fails startup with
+   `model.startup.preferencedeclaration` (REG-PREF-001). A section's name is distinct
+   from every other section of the export, so a contributor answering two sections under
+   one name faults as one answering a library section's name does. *Rejected:* reading
+   B, a nested shape (it changes the built answer for every library section and the
+   contract file that holds it).
+9. **Where a contributor's names are judged.** The rule's check is internal to
+   `Janus.Core` (`PlaceName`), and `Janus.Privacy` holds no grant to it. The assembly asks
+   of each name a contributor answers whether it keeps the rule of answer 8, before it
+   takes the answer, through an internal contract `Janus.Privacy` declares
+   (`IExportNameRule`) and `Janus.Hosting`, which registers the contributors and already
+   judges a subscriber's and a purpose handler's names over that check, implements (`08`
+   CONV-DESIGN-007). A section or value named outside the rule is a fault of the
+   contributor, failing the export as PRIV-RIGHT-003 states. No type becomes public and no
+   grant is added; the call is explicit in the assembly, never a wrapper around the
+   contributor (D-149 item 3). *Rejected:* making the rule's check public (a public member
+   for an internal rule); a grant from `Janus.Core` to `Janus.Privacy` (CONV-LAYOUT-002).
+10. **The contributor's startup refusal.** A contributor whose name breaks INT-SMS-003's
+    rule, or is given twice, fails startup with `model.startup.declarationinvalid`,
+    `details.declaration` `contributor.<name>` and `details.field` `name`, as a job's is
+    `job.<name>` (reading B).
+11. **Two encrypted fields of one type under one name (Tier 3).** The authenticated data
+    binds a host's value to its type's and its field's declared names (PRIV-RIGHT-005a),
+    so two fields of one type declared under one name could have their values swapped
+    with nothing failing. A type that declares two encrypted fields under one name, its
+    member's or the one `Encrypted` is given, fails startup with
+    `model.startup.declarationinvalid`, `details.declaration` the type and `details.field`
+    the name. Two resource types declared under one name could swap values the same way,
+    so AUTHZ-MODEL-004 refuses a resource type declared twice under one name, with
+    `model.startup.declarationinvalid`, `details.declaration` the type and `details.field`
+    `name`.
+12. **`CapabilityFields`.** `CapabilityFields` (`Janus.Hosting`) is a sealed record with
+    `Can`, an `IReadOnlyList<string>`, and `Requires`, an
+    `IReadOnlyDictionary<string, IReadOnlyList<string>>`, made by
+    `CapabilityFields.Of(Capability)`. Each entry is a permission's action, the part of
+    its identifier after the `:` (CONV-NAME-002), as API-CAP-001's example already
+    writes them, so no permission name reaches the browser (BFF-SESS-001, `18`
+    FE-API-001); each residual is its `10` section 5.20 name. `Can`, the keys of
+    `Requires` and each residual list are in ordinal order, as the examples of
+    API-CAP-001 and AUTHZ-GATE-005 now write them, and a permission with no residual is
+    absent from `Requires`. So that no two capabilities share an entry, a type whose
+    capabilities hold two permissions of one action fails startup with
+    `model.startup.declarationinvalid`, `details.declaration` the type and
+    `details.field` `capabilities`. A host's record carries the two as its members `can`
+    and `requires`. *Rejected:* permission identifiers as entries (the browser would
+    read permission names, which BFF-SESS-001 keeps on the server).
+13. **What rotation changes (Tier 3).** BFF-SESS-004 and AUTH-SESS-006 rotate the session
+    identifier the cookie carries: the old one stops resolving, so a cookie planted before
+    sign-in or a step-up is worth nothing after it, which is what D-033 33.4 guards. At a
+    step-up or a privilege change the session record's `SessionId`, which
+    `RequestAccess.Session` carries and the operations take, names the record and survives
+    the rotation; at authentication the pre-authentication session rotates into the
+    sign-in session (BFF-CSRF-005a). Both items now say so, and so does `09`
+    `POST /auth/step-up`. BFF-HOST-001 criterion 5 asked for a new `SessionId`; it now
+    asks that the next request's `Current()` name the same `SessionId` and that a request
+    carrying the cookie from before the rotation have no `RequestAccess`.
+14. **The application's JSON options.** `AddJanus` cleared the resolver chain of the
+    application's HTTP JSON options and put the library's contexts in its place, so that
+    a body no library context declares failed where it was read instead of being
+    reflected over; a host's endpoint types then failed too. The library's endpoints
+    already write their answers through a library context's `JsonTypeInfo`, under that
+    context's own options, but read their request bodies through the application's
+    options, so a host's settings for its own endpoints (a naming policy,
+    case-insensitive names, number handling) would change how the library reads a body
+    of `09`. `AddJanus` now changes nothing of the application's HTTP JSON options, so a
+    host's types serialize as the host configures them, and every endpoint of the
+    library reads its JSON body as it writes its answer, through a library context's
+    `JsonTypeInfo`; a body that does not read is 400 `api.request.malformed` as before.
+    Every body the library writes outside an endpoint, the pipeline's answers among
+    them, is written the same way, as it already is; a body its protocol shapes (the
+    provider's endpoints of `09` section 9, the RFC 8935 answers of the Google
+    security-event route) stays the protocol's. Each context is generated with
+    camel-case names and enumerations as strings and the serializer's defaults otherwise
+    (CONV-DESIGN-006), so the library now reads a member only under the name `09`
+    spells, case-sensitively, and a number only as a JSON number, where the
+    application's defaults read names in any case and numbers from strings. An endpoint
+    that reads a body declares the body's type as endpoint metadata, so the endpoints'
+    contract list still names its members. A test holds every request and response type
+    of the library's endpoints to a library context, which is where the old safeguard
+    now lives, and another shows a host's naming policy, case-insensitive names and
+    numbers read from strings change nothing the library reads or writes
+    (CONV-DESIGN-007). *Rejected:* inserting the library's contexts ahead of what the
+    application's chain holds (the host's settings would still govern how the library
+    reads its bodies).
+15. **How a job is told from a request.** D-202 refuses a job's context while a request
+    is being served, and nothing told the two apart. The gate asks whether an HTTP
+    request is being served on the calling flow, through the internal contract
+    `Janus.Hosting` already implements for judging a session (`ISessionGates`,
+    `Janus.Authorization`), which answers from the request the framework tracks for that
+    flow (`IHttpContextAccessor`, which `AddJanus` registers): present for the whole of
+    any request the application serves, through either profile or neither, in every
+    scope opened within it, and absent in the flow of a background job. A job's context
+    asked while a request is served is refused `authz.denied`, whoever built it. A
+    host's webhook that needs a host permission records what arrived and hands the work
+    to a declared job (IDN-PRIN-001). That answer admits or refuses a job's context, so
+    it is now a place CONV-VCS-004 watches. *Rejected:* a mark on the request's scope (a
+    scope opened within the request, or a request a host serves outside both profiles,
+    would carry none, and the job's context would be admitted there).
+16. **The held commits, and the subject of a grant's audit record.**
+    - A commit that is not pushed and that no other branch has merged may be amended or
+      rebased to meet a gate, save after a finding that is, or may be, a real credential,
+      which ends the run; history that is merged or pushed is never rewritten, save the
+      removal the working guide's section 5 requires and a rewrite the owner decides, and
+      the default branch is force-pushed only where the owner decides it (the working
+      guide, section 7). `78ae1925`'s body is brought to CONV-VCS-003 and the part
+      merged. A finished commit that cannot be made green until a question is answered is
+      kept on its part's local branch, unmerged and unpushed, named in the report, and
+      merged into the branch it was cut from once the answer comes, that branch reaching
+      `main` only after the merge (the working guide, section 6), which D-182's "no part
+      outlives the run" now excepts.
+    - Known issue 1 of the fourth corrections report is answered with its reading (a): the
+      `subject` of `authz.grant.created` and `authz.grant.revoked` is the grant's holder
+      where the holder is an account, and none where it is a group, whoever acted, as
+      `10` section 5.24's preamble states for every record that concerns an account. A
+      revocation by a registration's removal names the holder so too, the nil subject
+      acting (AUTHZ-INHERIT-002). The drift check's `authz.grant.materialised` and
+      `authz.grant.retracted`, which D-187 question 101 left without a subject, name the
+      holder the same way. The four records are built now, whole.
+    - Known issue 11 is answered with its reading (a): a change to a watched place of
+      CONV-VCS-004 that changes no permission decision, an audit write among them, meets
+      the gate with a truth-table row that restates the unchanged decision; a change
+      under review that only moves lines decides nothing, so it meets the gate the same
+      way (D-194 question 230, amended). The rule binds the change under review, not
+      each of its commits, so a commit that only moves lines still owes no row of its
+      own. The places watched now include `Janus.Hosting`'s answer of answer 15, and the
+      truth table covers a host job's context (AUTHZ-TEST-001 criteria 1 and 2).
+17. **`migrate` runs as no principal.** `10` section 5.29 names the principal a job,
+    command or start step writes on its audit rows. `migrate` writes none, asks no gate
+    and raises no job failure, so it runs as no principal: its row leaves section 5.29
+    and the `migration` operation leaves section 5.28, and `SystemOperation.Migration`
+    with them. `migrate` stays a name no host job may take, so no audit row names a
+    host's job as the library's command (IDN-PRIN-001). *Rejected:* a row with no code
+    object (a principal nothing ever names); an audit row of its own (a record of
+    applying the schema, which the migration history table already is).
+18. **The commands' contract list.** Each command of `Janus.Cli` declares its contract
+    as an internal value beside its parser (reading A): its name; each argument, whether
+    it is required and the form of its value; its standard input (none, or the members
+    of its document); what it writes on standard output; and its exit codes with the
+    codes a refusal carries. A contract test renders them into the committed file
+    `tests/Janus.Cli.Tests/commands.txt`, in the line form of the endpoints' list
+    `tests/Janus.Hosting.Tests/endpoints.txt`, and fails where the rendering differs;
+    the release gate compares it with the previous release's as it compares the other
+    contract lists (REF-001 criterion 2).
+19. **The conformance sample's configuration.** The sample sets `policy.default`, a
+    runtime key, and a runtime key changes only through the management application, by a
+    person, with a reason (OPS-CFG-008, `09` `PUT /admin/config/{key}`). The sample does
+    as an operator does (reading A): it enrols its first administrator through the
+    enrolment link its `bootstrap` printed with `Janus.Testing`'s `SoftwarePasskey`, signs
+    in with that passkey, and changes the key at `PUT /admin/config/{key}`, meeting
+    whatever gate the endpoint asks. It runs its commands as it already does: the
+    conformance suite's sample is in the library's solution, where no `Janus.Cli` tool is
+    installed, so it does not use `TestDeployment`. *Rejected:* `bootstrap` taking
+    `--policy.default` (bootstrap takes the required values only, OPS-BOOT-001);
+    `configure` taking runtime keys (a change from the server would bypass the person, the
+    step-up and the reason every runtime change carries).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-PRIN-001 (the job's refusal, a host's webhook, the commands'
+principals, the name `migrate`, criteria 6 and 7); `02` AUTH-SESS-006 (the identifier
+rotated); `03` AUTHZ-GATE-005 (the example's order), AUTHZ-INHERIT-002 (values,
+criterion 6), AUTHZ-GRANT-003 (body, criterion 6), AUTHZ-MODEL-004 (a resource type
+declared twice, criterion 1), AUTHZ-TEST-001 (a host job's context, criteria 1 and 2);
+`04` PRIV-RIGHT-003 (the names, where they are judged, the `preferences` section,
+criterion 7), PRIV-RIGHT-005a (one name per field, criterion 22); `05` INT-SMS-003 (the
+export names, criterion 3 and the declarations it names); `06` OPS-DATA-002
+(`UseUnitOfWorkAsync`, criterion 2), OPS-MIG-001 (the principal, `--report`, criterion
+5); `07` LIB-API-001 (criterion 2), LIB-API-002 (criterion 2), LIB-HOST-001 (the export
+contributors and jobs rows), LIB-TEST-002 (criterion 1), LIB-TEST-003
+(`TestDeployment`); `08` CONV-DESIGN-003 (the report's script), CONV-DESIGN-006 (the
+contexts' options), CONV-LAYOUT-002 (criterion 1, the grants' reasons), CONV-DESIGN-007
+(the application's JSON options, a request or background work, the host's context and
+the unit of work, a contributor's names, criterion 9), CONV-DESIGN-008 (the WebAuthn
+row, criterion 1), CONV-VCS-004 (the request's answer watched, a change that decides
+nothing, a commit that only moves lines); `09` API-CAP-001 (the example's order),
+`POST /auth/step-up` (the rotation), `GET /privacy/export` (the machine format, why no
+two keys coincide); `10` section 1 (`model.startup.declarationinvalid`,
+`model.startup.preferencedeclaration`), section 5.24 (`authz.grant.created`,
+`authz.grant.materialised`, `authz.grant.retracted`, `authz.grant.revoked`), sections
+5.28, 5.29 and 5.46, REF-001 (criterion 2); `17` BFF-HOST-001 (values, criteria 1 and
+5), BFF-SESS-004 (the identifier rotated, criteria 1 and 2), BFF-CAP-002
+(`CapabilityFields`, criterion 4); `20` REG-PREF-001 (a preference's name, criterion 1);
+`implementation-plan.md` (section 3a); the working guide (sections 5, 6 and 7).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -17039,6 +17334,7 @@ criterion 3); `09` `POST /auth/step-up` (a host's gate); `13` R-M20; `15` sectio
 | The host's privacy duties: its own fields, its transaction, its part of an export | D-203 |
 | A host is set up, migrated and tested from the packages, and a sample host proves it | D-204 |
 | Round H1 questions 1 to 3: test projects take the shared framework, the main package is `Janus.Hosting`, a host's request carries no assurance | D-205 |
+| Round H1 questions 4 to 19, and the subject of a grant's audit record | D-206 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

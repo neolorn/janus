@@ -100,15 +100,17 @@ through the public surface, and SHALL never read or resolve the session itself.
 **Values (D-202).** `IRequestAccess` (`Janus.Core`), registered by `AddJanus` in each
 request scope, answers `Current()`: a `Result<RequestAccess>` holding the access of the
 request being served, or the failure `auth.session.expired` where there is none
-(CONV-DESIGN-005). A `RequestAccess` carries `Context`, the `AccessContext` the library's
-own endpoints pass for the same request, its break-glass reason included where the
-session is a break-glass session or one another application opened from it
+(CONV-DESIGN-005). A `RequestAccess` carries `Context`, the `AccessContext` the
+library's own endpoints pass for the same request, its break-glass reason included where
+the session is a break-glass session or one another application opened from it
 (OPS-BOOT-002); and `Session`, the `SessionId` the library's own endpoints pass to an
-operation for it. It carries no assurance: a host never judges assurance, and the gate it
-asks reads the session record and the account's reachable assurance when it judges
-(AUTH-STEP-002, AUTHZ-GATE-005), as it does for the library's own endpoints (D-205).
-There is no `RequestAccess` where stage 5 left the request
-without a live sign-in session (none presented, one that has ended, or only a
+operation for it, which names the session record and survives a rotation: at a step-up
+or a privilege change BFF-SESS-004 rotates the identifier the session's cookie carries,
+never the `SessionId` (D-206). A `RequestAccess` carries no assurance: a host never
+judges assurance, and the gate it asks reads the session record and the account's
+reachable assurance when it judges (AUTH-STEP-002, AUTHZ-GATE-005), as it does for the
+library's own endpoints (D-205). There is no `RequestAccess` where stage 5 left the
+request without a live sign-in session (none presented, one that has ended, or only a
 pre-authentication, registration or enrolment session), and none outside the browser
 profile or outside a request (the machine profile, a job). It is what stage 5
 established, read and never looked up again (BFF-ORDER-001). A host endpoint passes
@@ -116,10 +118,10 @@ established, read and never looked up again (BFF-ORDER-001). A host endpoint pas
 neither past the request it read them for, so a break-glass session's reason never
 reaches later work (D-170). A host whose requests carry the library's sessions takes a
 person's context from here and never builds one; `AccessContext.Of(SubjectId)` is for a
-host that consumes authorization without the library's authentication (LIB-HOST-004), for
-the conformance suite and for tests (AUTHZ-IMP-001).
+host that consumes authorization without the library's authentication (LIB-HOST-004),
+for the conformance suite and for tests (AUTHZ-IMP-001).
 
-*Source: D-202, D-205*
+*Source: D-202, D-205, D-206*
 
 The library's own endpoints read the session the pipeline resolved; a host's endpoint is
 the same kind of endpoint and reads the same thing. A context the host built for the
@@ -129,16 +131,17 @@ the session's (AUTHZ-GATE-005).
 
 **Acceptance criteria**
 1. In a request carrying a live sign-in session, `Current()` holds the context and the
-   session identifier the library's own endpoints use for the same request, and an
-   operation called with them answers as it answers the library's endpoint.
+   `SessionId` the library's own endpoints use for the same request, and an operation
+   called with them answers as it answers the library's endpoint.
 2. `Current()` answers `auth.session.expired` for a request carrying no session, an ended
    one, or only a pre-authentication, registration or enrolment session, and in a job.
 3. In a break-glass session the context carries the break-glass reason, and a record a
    host's call writes in it carries the reason.
 4. No public member of the library makes a context whose acting and effective identities
    differ.
-5. After a step-up rotates the session (BFF-SESS-004), the next request's `Current()`
-   names the new session identifier.
+5. After a step-up rotates the identifier the session's cookie carries (BFF-SESS-004),
+   the next request's `Current()` names the same `SessionId`, and a request carrying the
+   cookie from before the rotation has no `RequestAccess`.
 6. A gate asked from a host endpoint judges the session as it judges for the library's
    own endpoints: a session downgraded since it reached `aal2` does not meet an `aal2`
    gate on the strength of the instant before the downgrade.
@@ -383,11 +386,16 @@ from a request — the registered value is the only one.
 **BFF-SESS-004** — The BFF SHALL rotate the session identifier on authentication, on
 step-up, and on privilege change.
 
-*Source: AUTH-SESS-006*
+On a step-up and on a privilege change the identifier rotated is the one the session's
+cookie carries, and the session record and its `SessionId` are kept (BFF-HOST-001); on
+authentication the pre-authentication session rotates into the sign-in session
+(BFF-CSRF-005a, D-206).
+
+*Source: AUTH-SESS-006, D-206*
 
 **Acceptance criteria**
-1. The identifier differs before and after each event.
-2. The previous identifier is invalidated, not merely orphaned.
+1. The identifier the session's cookie carries differs before and after each event.
+2. The previous such identifier is invalidated, not merely orphaned.
 
 ---
 
@@ -796,11 +804,19 @@ one not declared fails startup with `model.startup.declarationinvalid`,
 `IAccessGate.CapabilitiesAsync` on a host type answers only for the permissions declared
 as its capabilities: asking it for any other, a declared permission the type does not
 list among them included, is a fault of the calling code (CONV-ERR-001).
-`CapabilityFields.Of(Capability)` (`Janus.Hosting`) answers the `can` list and the
-`requires` map API-CAP-001 writes, each residual by its `10` section 5.20 name, for the
-host to place on its record. A type that declares none answers none.
+`CapabilityFields` (`Janus.Hosting`) is a sealed record made by
+`CapabilityFields.Of(Capability)`: `Can`, an `IReadOnlyList<string>`, and `Requires`, an
+`IReadOnlyDictionary<string, IReadOnlyList<string>>`, the `can` list and the `requires`
+map API-CAP-001 writes. Each entry is a permission's action, the part of its identifier
+after the `:` (CONV-NAME-002), so no permission name reaches the browser (BFF-SESS-001),
+and each residual is its `10` section 5.20 name; `Can`, the keys of `Requires` and each
+residual list are in ordinal order, and a permission with no residual is absent from
+`Requires`. A type whose capabilities hold two permissions of one action fails startup
+with `model.startup.declarationinvalid`, `details.declaration` the type and
+`details.field` `capabilities`. A host's record carries the two as its members `can` and
+`requires` (D-206). A type that declares none answers none.
 
-*Source: D-052, AUTHZ-MODEL-003, D-202*
+*Source: D-052, AUTHZ-MODEL-003, D-202, D-206*
 
 The library cannot know that a document has a "share" action. The host declares it;
 the library computes and attaches it.
@@ -810,8 +826,8 @@ the library computes and attaches it.
 2. An undeclared capability never appears in a response.
 3. Capabilities read for a host's records and written through `CapabilityFields` carry
    `can` and `requires` exactly as API-CAP-001 writes them.
-4. A declaration naming as a capability a permission it does not declare fails startup
-   with `model.startup.declarationinvalid`.
+4. A declaration naming as a capability a permission it does not declare, or two
+   capabilities of one action, fails startup with `model.startup.declarationinvalid`.
 
 ---
 

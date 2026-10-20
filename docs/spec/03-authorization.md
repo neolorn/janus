@@ -120,10 +120,13 @@ transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a person,
 acknowledgement or bootstrap writes is recorded as `authz.grant.created`, and a
 revocation a person makes as `authz.grant.revoked`, each with its reason, in the
 transaction that writes it (`10` section 5.24, D-197). A grant revoked because the record
-it names was removed (`IResources.RemoveAsync`, AUTHZ-INHERIT-002) records the nil subject
-as its revoker and the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203).
+it names was removed (`IResources.RemoveAsync`, AUTHZ-INHERIT-002) records the nil
+subject as its revoker and the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked`
+(D-203). Each of these four records names the grant's holder as its subject where the
+holder is an account, and none where it is a group, whoever acted (`10` section 5.24,
+D-206).
 
-*Source: D-015, D-166, D-187, D-197, D-203*
+*Source: D-015, D-166, D-187, D-197, D-203, D-206*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -140,8 +143,10 @@ migration across every query later.
    `derivation-driftcheck` and the reason `AUTHZ-DERIVE-005`, in the transaction that
    corrects the drift.
 6. A grant a person, an acknowledgement or bootstrap writes is recorded as
-   `authz.grant.created`, and a revocation a person makes as `authz.grant.revoked`, each
-   with its reason, in the transaction that writes it.
+   `authz.grant.created`, and a revocation a person or a registration's removal makes as
+   `authz.grant.revoked`, each with its reason, in the transaction that writes it. These
+   two records and the drift check's two name the grant's holder as their subject where
+   the holder is an account, and none where it is a group (D-206).
 
 ---
 
@@ -271,16 +276,24 @@ operation: it joins the unit of work, which the host's context joins, has no end
 takes no access context (LIB-API-005).
 
 **Values (D-203).** The host's context joins the unit of work with
-`UseUnitOfWorkAsync` (`Janus.Hosting`), called on its `DatabaseFacade` inside an open unit
-of work: it takes the unit of work's connection and transaction, and releases them at the
-outermost commit or rollback, so its `SaveChangesAsync` and the library's writes commit
-together at the outermost `CommitAsync` and roll back together. The connection runs under
-the deployment's one application credential, `identity_app`, to which the host's own
-migrations grant the host's tables (OPS-MIG-003). Called outside an open unit of work, or
-on a context that holds a connection of its own, it is a fault (CONV-ERR-001); so is an
-operation whose refusal keeps a write called inside the host's open unit of work
-(CONV-DESIGN-003). The host saves before the outermost commit; the library commits nothing
-the host has not saved and clears nothing the host's context tracks.
+`UseUnitOfWorkAsync(IUnitOfWork work, CancellationToken cancellationToken)`
+(`Janus.Hosting`), an extension method on the context's `DatabaseFacade` answering a
+`ValueTask`. With `work` begun, it gives the host's context the unit of work's open
+connection, which the context does not own, and its transaction; at the outermost commit
+or rollback the unit of work takes both back, and the context returns to the connection
+it was configured with (D-206). So its `SaveChangesAsync` and the library's writes
+commit together at the outermost `CommitAsync` and roll back together. The connection
+runs under the deployment's one application credential, `identity_app`, to which the
+host's own migrations grant the host's tables (OPS-MIG-003). Called with `work` not
+begun, on a context that holds a connection of its own (one whose connection is open, or
+which holds a transaction, when it is called; one configured with a connection string or
+a closed connection holds none, and one the unit of work gave it is not its own), or for
+another unit of work while one is joined, it throws `InvalidOperationException`, a fault
+of the calling code (CONV-ERR-001); a second call for the unit of work already joined
+changes nothing. An operation whose refusal keeps a write, called inside the host's open
+unit of work, is a fault too (CONV-DESIGN-003). The host saves before the outermost
+commit; the library commits nothing the host has not saved and clears nothing the host's
+context tracks.
 `IResources.RemoveAsync(resource)` removes a record's registration and its ancestry rows,
 in the unit of work, for a record the host removes from its own table, and revokes every
 live grant that names the record (AUTHZ-GRANT-003), so a later registration of the same
@@ -294,7 +307,7 @@ Placing a record, or moving it, confers on it the grants held on its new contain
 (AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action, which the
 host asks of the gate before it writes.
 
-*Source: D-015, D-017, D-166, D-203*
+*Source: D-015, D-017, D-166, D-203, D-206*
 
 Precomputation is what keeps the rule composable into a query and therefore usable
 as a `WHERE` clause. Same-transaction maintenance is why permission data and business
@@ -312,6 +325,11 @@ service.
    it; removing one not registered is refused with `api.request.invalid` naming
    `resource`, and one that holds a registered record with `authz.resource.inuse`, each
    changing nothing.
+6. `UseUnitOfWorkAsync` called with its unit of work not begun, on a context whose own
+   connection is open or which holds a transaction, or for another unit of work while
+   one is joined throws `InvalidOperationException`; called again for the unit of work
+   it joined, it changes nothing; after the outermost commit or rollback the host's
+   context uses the connection it was configured with (D-206).
 
 ---
 
@@ -673,12 +691,14 @@ following SHALL fail:
 - **A derivation naming an unindexed column** (AUTHZ-DERIVE-004)
 - **A derivation referencing an undeclared resource type or relationship**
 - An action bound to a purpose no resource type declares (AUTHZ-GATE-005)
+- A resource type declared twice under one name, since a host's encrypted value is bound
+  to its type's declared name (PRIV-RIGHT-005a, D-206)
 - A resource type named `organization`, which the library reserves for the whole
   organization (AUTHZ-MODEL-002)
 - A consent-based purpose named for the hosting or its cross-border transfer
   (INT-HOST-002)
 
-*Source: D-015, D-032, D-043, D-162, D-166, D-204*
+*Source: D-015, D-032, D-043, D-162, D-166, D-204, D-206*
 
 Failing at boot rather than at first query. The same principle as the relying party
 identifier validation in `02-authentication`.
@@ -690,7 +710,9 @@ identifier validation in `02-authentication`.
    `details.permission` naming the action), `model.role.undeclaredpermission`,
    `model.derivation.undeclaredreference`, `model.derivation.unindexed`,
    `model.type.reserved` (`details.key` naming the type), `model.purpose.hostingconsent`
-   (`details.key` naming `<type>.<purpose>`) (`10` section 1.5, D-153).
+   (`details.key` naming `<type>.<purpose>`), and for a resource type declared twice
+   `model.startup.declarationinvalid` (`details.declaration` the type, `details.field`
+   `name`, D-206) (`10` section 1.5, D-153).
 2. Validation runs before any request is served.
 3. A new entity added without a policy fails the build via test, not only at
    startup.
@@ -874,7 +896,7 @@ grants admit, so a step-up case of the truth table is one whose grants admit the
 **Each capability therefore carries what it still requires:**
 
 ```json
-{ "id": "...", "can": ["read", "edit"], "requires": { "edit": ["stepup"] } }
+{ "id": "...", "can": ["edit", "read"], "requires": { "edit": ["stepup"] } }
 ```
 
 The frontend renders the control and prompts for what is needed, rather than hiding a
@@ -911,7 +933,7 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
@@ -1192,7 +1214,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183, D-187, D-189, D-192*
+*Source: D-015, D-183, D-187, D-189, D-192, D-206*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1204,16 +1226,22 @@ authorization system that is trusted and one that is feared.
    **a derived grant on a container reaching its contents**, **a bound action judged
    from a host's assurance report** (met; unmet on its level, its phishing resistance,
    its age, each where the bound gate asks it, or an instant after now; a provider that
-   fails; no provider), and **a bound action judged from the library's session** (met;
-   unmet on its level, its phishing resistance or its age, each where the bound gate
-   asks it; a lower level reached since, beside a higher one past the gate's maximum
-   age; proof reached only before the session's last downgrade); the session's rows are
-   the library's own, not scenarios of `10` section 5.30, since the conformance suite
-   judges a step-up from a host's report alone (LIB-TEST-001).
+   fails; no provider), **a bound action judged from the library's session** (met; unmet
+   on its level, its phishing resistance or its age, each where the bound gate asks it;
+   a lower level reached since, beside a higher one past the gate's maximum age; proof
+   reached only before the session's last downgrade), and **a host job's context**
+   (admitted for a permission its declaration names outside a request; refused while a
+   request is served, through either profile or neither and in a scope opened within it;
+   D-206); the session's rows are the library's own, not scenarios of `10` section 5.30,
+   since the conformance suite judges a step-up from a host's report alone
+   (LIB-TEST-001), and so are the job's, since whether a request is being served is the
+   library's own answer (`08` CONV-DESIGN-007).
 2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
    step-up case agrees when the check answers the gate's outcome and the filter answers
    the same: where the gate is met, the filter lists the record; where it is not, the
-   filter is refused with the code the check answers (AUTHZ-GATE-005).
+   filter is refused with the code the check answers (AUTHZ-GATE-005). A host job's case
+   refused while a request is served agrees when the check and the filter are both
+   refused `authz.denied` (D-206).
 3. Where a derivation is materialised, the same cases pass identically before and
    after materialisation.
 

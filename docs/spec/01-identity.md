@@ -1413,34 +1413,38 @@ to where it goes: the outboxes, mailbox provisioning and raised alerts), monitor
 (reading the state of something the deployment depends on and raising what the reading
 calls for), bootstrap (OPS-BOOT-001), key rotation (OPS-SEC-003), configuration from
 the server (a protected key, OPS-CFG-004, or the provider's client registry,
-AUTH-OIDC-001), the replay of the erasure ledger after a restore (DR-016), applying the
-library's migrations (OPS-MIG-001) and seeding a host's declared roles at a start
-(AUTHZ-GRANT-004). It is restricted to the operations of `10` section 5.28. Each scheduled
-job of INF-BG-001, each server command and each start step runs as a principal of its own
-(`10` section 5.29), naming exactly one of those operations and stating as its reason the
-item that requires it.
+AUTH-OIDC-001), the replay of the erasure ledger after a restore (DR-016) and seeding a
+host's declared roles at a start (AUTHZ-GRANT-004). It is restricted to the operations
+of `10` section 5.28. Each scheduled job of INF-BG-001, each server command but
+`migrate`, which writes no audit row and runs as no principal (OPS-MIG-001), and each
+start step runs as a principal of its own (`10` section 5.29), naming exactly one of
+those operations and stating as its reason the item that requires it.
 
 **A host's jobs (D-202).** A host declares each of its background jobs
 (`AuthorizationDeclarationBuilder.Job(name, permissions)`, LIB-HOST-001): a name under
-INT-SMS-003's rule, distinct from every other job and from every name of `10` section
-5.29, and the host permissions it exercises. Its principal is organization-scoped,
-`SystemPrincipal.ForOrganization(name, reason, organization)` naming a declared job. The
-gate admits it for the host permissions its declaration names, on the records of its
-organization, with the consent the permission's purpose asks of the record's data subject
-(AUTHZ-GATE-005) and the subject's restriction (PRIV-RIGHT-004) applied as for anyone; the
-operations called in process only (`IReadVolume`, `IDerivationMaterialiser`, LIB-API-005)
-take its context. It is refused `authz.denied` for anything else: every library operation
-that meets a gate, since each that changes a person's account is a person's step-up
-action; any permission while a request is being served, since a job is background work;
+INT-SMS-003's rule, distinct from every other job, from every name of `10` section 5.29
+and from `migrate` (D-206), and the host permissions it exercises. Its principal is
+organization-scoped, `SystemPrincipal.ForOrganization(name, reason, organization)`
+naming a declared job. The gate admits it for the host permissions its declaration
+names, on the records of its organization, with the consent the permission's purpose
+asks of the record's data subject (AUTHZ-GATE-005) and the subject's restriction
+(PRIV-RIGHT-004) applied as for anyone; the operations called in process only
+(`IReadVolume`, `IDerivationMaterialiser`, LIB-API-005) take its context. It is refused
+`authz.denied` for anything else: every library operation that meets a gate, since each
+that changes a person's account is a person's step-up action; any permission while a
+request is being served, since a job is background work, the gate telling the two apart
+by whether an HTTP request is being served on the calling flow, in every scope opened
+within it, whoever built the context (`08` CONV-DESIGN-007, D-206), so a host's webhook
+that needs a host permission records what arrived and hands the work to a declared job;
 and any permission in an organization whose deletion is requested or which has been
 erased (IDN-ORG-003). A principal naming no declared job is refused for every host
 permission. A job is never declared with a permission not declared, a library-owned one,
 one bound to a step-up gate (no session proves a person) or one whose action is `export`
 (OPS-ALERT-006): startup fails with `model.startup.declarationinvalid`,
 `details.declaration` `job.<name>`, `details.field` `permissions`; nor under a name of
-`10` section 5.29 (`details.field` `name`).
+`10` section 5.29 or `migrate` (`details.field` `name`, D-206).
 
-*Source: D-079b, D-166, D-202, D-204*
+*Source: D-079b, D-166, D-202, D-204, D-206*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.
@@ -1451,11 +1455,12 @@ one bound to a step-up gate (no session proves a person) or one whose action is 
 5. Every scheduled job refuses to run under a principal that may not run its operation.
 6. A host's declared job is admitted for the host permissions its declaration names on its
    organization's records, and refused `authz.denied` for any other, for every library
-   operation that meets a gate, for any permission while a request is served, and in an
+   operation that meets a gate, for any permission while a request is served (through
+   either profile or neither, and in a scope opened within the request), and in an
    organization whose deletion is requested.
 7. A job declared with a permission not declared, a library-owned one, one bound to a
-   step-up gate or one whose action is `export`, or under a name of `10` section 5.29,
-   fails startup with `model.startup.declarationinvalid`.
+   step-up gate or one whose action is `export`, or under a name of `10` section 5.29 or
+   `migrate`, fails startup with `model.startup.declarationinvalid`.
 
 ---
 

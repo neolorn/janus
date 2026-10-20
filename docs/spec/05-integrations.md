@@ -756,21 +756,22 @@ rule is refused with `config.value.notallowed` where the `restrictions` value is
 written, and with 400 `api.request.malformed` naming `name` where a route names it; a
 document or subscriber declared under a name outside it is refused at startup with
 `model.startup.declarationinvalid`, `details.declaration` and `details.field` naming it,
-as is a host's job, purpose handler or export contributor declared under one (LIB-HOST-001,
-D-202, D-203); the names of the sections and values a contributor answers are held to it
-too, one outside it failing the export as a fault (PRIV-RIGHT-003); and a route naming a
-document outside it, the publish route included, is refused with
-400 `api.request.malformed` naming `document` before anything is read (`09` sections 7
-and 8a). A restriction's name and a document's name are the value types
-`RestrictionName` and `DocumentName` of `Janus.Core` (CONV-DESIGN-004), which bind a
-route's value through `IParsable` and which the operation contracts that name one take
-(`IRestrictionSet`, `ILegalDocuments`), so a route answers the name before any body is
-read and an in-process caller cannot name a restriction or a document outside the rule
-either; a declaration names a document as text, judged at startup as above (D-187).
-Bounding these values where they are written keeps every rendered template within the
-width it was measured at.
+as is a host's job, purpose handler or export contributor declared under one
+(LIB-HOST-001, D-202, D-203), a contributor's under `details.declaration`
+`contributor.<name>` (D-206); the names of the sections and values a contributor answers
+are held to it without `.`, one outside it failing the export as a fault
+(PRIV-RIGHT-003, D-206); and a route naming a document outside it, the publish route
+included, is refused with 400 `api.request.malformed` naming `document` before anything
+is read (`09` sections 7 and 8a). A restriction's name and a document's name are the
+value types `RestrictionName` and `DocumentName` of `Janus.Core` (CONV-DESIGN-004),
+which bind a route's value through `IParsable` and which the operation contracts that
+name one take (`IRestrictionSet`, `ILegalDocuments`), so a route answers the name before
+any body is read and an in-process caller cannot name a restriction or a document
+outside the rule either; a declaration names a document as text, judged at startup as
+above (D-187). Bounding these values where they are written keeps every rendered
+template within the width it was measured at.
 
-*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187, D-202, D-203*
+*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187, D-202, D-203, D-206*
 
 Unicode messages are 70 characters for a single message and 67 per part when
 concatenated; Latin gets 160 and 153. An Arabic message one character over 70 costs
@@ -779,12 +780,13 @@ double.
 **Acceptance criteria**
 1. A test fails if any rendered template exceeds its language's budget.
 2. Coverage spans every template in every supported language.
-3. A restriction, governing document or subscriber whose name breaks the rule is
-   refused where it is written or declared, a document's at the publish route before its
-   body is read, so no alert carries it; the `key` place is measured at the widest key
-   including each family's widest parameter, and `outstanding` at the joined width of
-   the registered required subscribers' names or of the registered purpose handlers'
-   names, whichever is wider.
+3. A restriction, governing document, subscriber, purpose handler, job or export
+   contributor whose name breaks the rule is refused where it is written or declared, a
+   document's at the publish route before its body is read, so no alert carries it, and
+   a contributor's section or value name outside the rule, or holding a `.`, fails the
+   export; the `key` place is measured at the widest key including each family's widest
+   parameter, and `outstanding` at the joined width of the registered required
+   subscribers' names or of the registered purpose handlers' names, whichever is wider.
 4. A text message carrying `{link}` that fits two segments of its alphabet at the
    width of its link is accepted, one that does not stops startup, and a text-message
    template naming a place with no defined width stops startup with

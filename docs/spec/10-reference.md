@@ -197,9 +197,9 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `model.startup.schemamismatch` **(new)** | Startup: the database's migration history lacks a migration the build declares; `details.pending` lists the migrations owed; non-zero exit. A history holding migrations the build does not declare is not a mismatch (OPS-MIG-005) | OPS-MIG-002, D-147, D-166 |
 | `model.startup.secretunavailable` **(renamed)** | Startup: a secret the library reads through the host's secret source (LIB-EXT-001) was not supplied, or was supplied empty or unusable: a key-encryption key or fingerprint key version (a fingerprint key version shorter than 32 bytes included), the maintenance credential, the mail server's secret where the library's mail-server adapter is used, or a social provider's credential, read by the provider's name; `details.key` names the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command gives it where its standard input is a terminal (`details.key` `input`) or the document it reads there holds no usable key (`details.key` naming the member); `migrate`, whose document carries the connection alone, gives it with `details.key` `input` where the document carries no connection (OPS-MIG-001, D-204). Also raised at the start where a row of the subject-key table that is not erased stands under a key-encryption key version the source does not supply, and, as a fault a request answers `system.fault` (section 6), by an unwrap of a stored value under a version no longer held; `details.version` names the version | OPS-SEC-001, AUTH-KEY-002, OPS-MIG-003a, OPS-SEC-003, LIB-EXT-001, D-147, D-166 (renamed from `model.startup.kekunavailable`), D-183 |
 | `model.startup.governinglanguage` **(new)** | Startup: `legal.governinglanguage` is unset | PRIV-CONS-005, LIB-HOST-001, D-147 |
-| `model.startup.preferencedeclaration` **(new)** | Startup: a host preference declaration is malformed | REG-PREF-001, D-147 |
+| `model.startup.preferencedeclaration` **(new)** | Startup: a host preference declaration is malformed, a preference's name holding a `.` or `/` or being `language` or `timeZone` among them (D-206) | REG-PREF-001, D-147, D-206 |
 | `model.startup.declarationmissing` | Startup: a required deployment value or host declaration is absent: a key of section 4 that names the deployment, or a conditional one whose condition holds; a declaration of LIB-HOST-001 (the secret source, the passkey pages, the authentication addresses, the sign-on client, the landing origins, the mail server client where a mail server is registered, and each mail and SMS transport the deployment does not take from the library); a subject-event handler (none covering a type declared sensitive), an export contributor (none covering a type that declares an encrypted field or a sensitive category, PRIV-RIGHT-003, D-203), a purpose handler (none naming a purpose resting on consent or on an objectable basis, PRIV-RIGHT-001a, D-203) or a restriction key supplier; a declaration a stored value or the model needs (the image codec while a policy's `photos` is `true`, the DNS resolver while a domain is listed, the relationship source of every declared derivation, materialised or not). Or the model declares an item without what it requires: an encrypted field without its subject column, a type without its purposes, a purpose without its data categories, a category without its retention floor, a consent-based purpose on a type with no one subject column (`details.key` `<type>.<purpose>`). `details.key`, `details.handler` or `details.supplier` names it. The declarations' `details.key` spellings are `secretSource`, `passkeyAddresses` (or its field), `authenticationAddresses.signIn`, `authenticationAddresses.provider`, `signOnClient.clientId`, `landingOrigins.authentication`, `landingOrigins.account`, `mailServerClient.clientId`, `mailTransport`, `smsTransport`, `imageCodec` and `dnsResolver`; a relationship source is named by its relationship | LIB-HOST-001, AUTHZ-MODEL-003, PRIV-PRIN-001, PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-001a, PRIV-RIGHT-003, PRIV-SENS-002, IDN-ATTR-002, REG-DOM-001, AUTHZ-DERIVE-005, AUTHZ-DERIVE-007, D-153, D-162, D-166, D-180, D-203 |
-| `model.startup.declarationinvalid` | Startup: a declaration is present but malformed: a name held to the rule of INT-SMS-003 that breaks it (a governing document's, a subject-event subscriber's, a purpose handler's: 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`); a text-message template naming a place section 5.26 does not list (`details.declaration` the message kind, `details.field` the place); an encrypted field or its subject column that is not a member of the declared type, or a subject column that is not of the library's subject identifier type; an encrypted field whose data category no purpose declared on its type names (`details.declaration` the type, `details.field` the field); a social provider declared twice or with a member outside its rule (`details.declaration` `socialProvider.<provider>`, for example `socialProvider.apple`, the name `model.startup.secretunavailable` gives the provider's credential; `details.field` the member, `provider` where the provider is declared twice or names a factor that is not a social provider); a relationship source given twice, naming no declared relationship, answering rows of another type than its derivation's, or naming a context the container does not give in a scope or whose model does not map the contract tables (`details.declaration` `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or `context`); a lawful basis list naming one key twice, or a basis with an empty key or label (`details.declaration` `lawfulBases`, `details.field` `key` or `label`); a type declaring as a capability a permission it does not declare (`details.declaration` the type, `details.field` `capabilities`, BFF-CAP-002, D-202); a job declared with a permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` (`details.declaration` `job.<name>`, `details.field` `permissions`), or under a name of section 5.29 (`details.field` `name`) (IDN-PRIN-001, D-202); a declared role naming a permission not declared or `system:administer` (`details.field` `permissions`), or named as a role of section 3 (`details.field` `name`) (`details.declaration` `role.<name>`, AUTHZ-GRANT-004, D-204); a declared cookie naming a purpose not declared or not resting on consent (`details.field` `purpose`), or named as a cookie the library sets (`details.field` `name`) (`details.declaration` `cookie.<name>`, PRIV-CONS-006a, D-203); a job's or an export contributor's name that breaks the rule of INT-SMS-003, a declared role's name outside the rule `09` `POST /admin/roles` gives, a declared cookie's name that is no cookie name (RFC 6265), or any of these given twice (`details.field` `name`). `details.declaration` and `details.field` name it. A landing origin that is not the origin of a registered browser client's return address, or an authentication landing origin that is not the origin of the sign-in address, is refused with `details.key` `landingOrigins.authentication` or `landingOrigins.account` | LIB-HOST-001, INT-SMS-003, PRIV-PRIN-001, PRIV-RIGHT-005a, AUTHZ-MODEL-003, IDN-LIFE-012, AUTHZ-DERIVE-005, PRIV-BASIS-001, D-166, D-175, D-183, D-202, D-203, D-204 |
+| `model.startup.declarationinvalid` | Startup: a declaration is present but malformed: a name held to the rule of INT-SMS-003 that breaks it (a governing document's, a subject-event subscriber's, a purpose handler's: 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`); a text-message template naming a place section 5.26 does not list (`details.declaration` the message kind, `details.field` the place); an encrypted field or its subject column that is not a member of the declared type, or a subject column that is not of the library's subject identifier type; two encrypted fields of one type under one declared name, a member's or the one `Encrypted` is given (`details.declaration` the type, `details.field` the name, PRIV-RIGHT-005a, D-206); an encrypted field whose data category no purpose declared on its type names (`details.declaration` the type, `details.field` the field); a social provider declared twice or with a member outside its rule (`details.declaration` `socialProvider.<provider>`, for example `socialProvider.apple`, the name `model.startup.secretunavailable` gives the provider's credential; `details.field` the member, `provider` where the provider is declared twice or names a factor that is not a social provider); a relationship source given twice, naming no declared relationship, answering rows of another type than its derivation's, or naming a context the container does not give in a scope or whose model does not map the contract tables (`details.declaration` `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or `context`); a lawful basis list naming one key twice, or a basis with an empty key or label (`details.declaration` `lawfulBases`, `details.field` `key` or `label`); a type declaring as a capability a permission it does not declare, or two capabilities of one action (`details.declaration` the type, `details.field` `capabilities`, BFF-CAP-002, D-202, D-206); a job declared with a permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` (`details.declaration` `job.<name>`, `details.field` `permissions`), or under a name of section 5.29 or `migrate` (`details.field` `name`) (IDN-PRIN-001, D-202, D-206); a resource type declared twice under one name (`details.declaration` the type, `details.field` `name`, AUTHZ-MODEL-004, D-206); a declared role naming a permission not declared or `system:administer` (`details.field` `permissions`), or named as a role of section 3 (`details.field` `name`) (`details.declaration` `role.<name>`, AUTHZ-GRANT-004, D-204); a declared cookie naming a purpose not declared or not resting on consent (`details.field` `purpose`), or named as a cookie the library sets (`details.field` `name`) (`details.declaration` `cookie.<name>`, PRIV-CONS-006a, D-203); a job's or an export contributor's name that breaks the rule of INT-SMS-003, a declared role's name outside the rule `09` `POST /admin/roles` gives, a declared cookie's name that is no cookie name (RFC 6265), or any of these given twice (`details.declaration` `job.<name>`, `contributor.<name>`, `role.<name>` or `cookie.<name>`, `details.field` `name`, D-206). `details.declaration` and `details.field` name it. A landing origin that is not the origin of a registered browser client's return address, or an authentication landing origin that is not the origin of the sign-in address, is refused with `details.key` `landingOrigins.authentication` or `landingOrigins.account` | LIB-HOST-001, INT-SMS-003, PRIV-PRIN-001, PRIV-RIGHT-005a, AUTHZ-MODEL-003, AUTHZ-MODEL-004, IDN-LIFE-012, AUTHZ-DERIVE-005, PRIV-BASIS-001, D-166, D-175, D-183, D-202, D-203, D-204, D-206 |
 | `model.startup.redirectclient` | Startup: a registered client's return address is not an absolute `https` address with a host (or `http` on a loopback IP literal), `details.client` naming the client; or `redirect.defaultclient` names no registered client of kind `browser-application`, `details.key` naming the key | API-REDIR-001 AC3, D-162, D-166 |
 | `model.startup.subscribername` | Startup: two subject-event subscribers or purpose handlers are registered under one name, or one under `erasure-ledger`, the name the library records the off-host ledger's confirmation under; `details.handler` names it | IDN-LIFE-003a, DR-016, D-166, D-203 |
 | `model.startup.requestlogging` **(new)** | Startup: the host's logging enables the category of the framework's per-request entries, `Microsoft.AspNetCore.Hosting.Diagnostics`, which carry a request's query string, at Information through any provider, or disables that category in every provider, which would drop the scope carrying `RequestId` (BFF-LOG-002) | BFF-LOG-002, D-197 |
@@ -1034,10 +1034,10 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `auth.session.presented` | security | A session began, or was stepped up, on the factors presented; `details.session` and `details.factors` | CONV-LOG-005, IDN-AUD-001 |
 | `authz.access.denied` | security | A permission was refused; the row a refusal's correlation identifier resolves to. Written outside the caller's transaction and committed at once, so a refusal inside an operation that rolls back is still recorded and counted | AUTHZ-CONCEAL-004, AUTHZ-GATE-004 |
 | `authz.access.exported` | security | An export operation was admitted at the gate; the exporter, or the nil subject with a system principal's name and reason; `details.permission`, `details.resourceType`, and `details.resource` where one record was checked. Not written while `exfiltration.export.auditing` is off | OPS-ALERT-006 |
-| `authz.grant.created` | security | A person, an acknowledgement or bootstrap created a grant; `details.grant`, `details.role`, `details.reason`; written in the operation's transaction | AUTHZ-GRANT-003, D-197 |
-| `authz.grant.materialised` | security | The drift check wrote a derivation's grant it found missing; principal `derivation-driftcheck`, reason `AUTHZ-DERIVE-005`; `details.grant`, `details.role` | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-187 |
-| `authz.grant.retracted` | security | The drift check took back a derivation's grant no relationship supports; principal `derivation-driftcheck`, reason `AUTHZ-DERIVE-005`; `details.grant`, `details.role` | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-187 |
-| `authz.grant.revoked` | security | A person revoked a grant, or the removal of the record it names revoked it (`IResources.RemoveAsync`, the nil subject as revoker, `details.reason` `AUTHZ-INHERIT-002`); `details.grant`, `details.role`, `details.reason`; written in the operation's transaction | AUTHZ-GRANT-003, AUTHZ-INHERIT-002, D-197, D-203 |
+| `authz.grant.created` | security | A person, an acknowledgement or bootstrap created a grant; its `subject` the grant's holder where the holder is an account and none where it is a group, whoever acted; `details.grant`, `details.role`, `details.reason`; written in the operation's transaction | AUTHZ-GRANT-003, D-197, D-206 |
+| `authz.grant.materialised` | security | The drift check wrote a derivation's grant it found missing; principal `derivation-driftcheck`, reason `AUTHZ-DERIVE-005`; its `subject` the grant's holder where the holder is an account and none where it is a group; `details.grant`, `details.role` | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-187, D-206 |
+| `authz.grant.retracted` | security | The drift check took back a derivation's grant no relationship supports; principal `derivation-driftcheck`, reason `AUTHZ-DERIVE-005`; its `subject` the grant's holder where the holder is an account and none where it is a group; `details.grant`, `details.role` | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-187, D-206 |
+| `authz.grant.revoked` | security | A person revoked a grant, or the removal of the record it names revoked it (`IResources.RemoveAsync`, the nil subject as revoker, `details.reason` `AUTHZ-INHERIT-002`); its `subject` the grant's holder where the holder is an account and none where it is a group, whoever acted; `details.grant`, `details.role`, `details.reason`; written in the operation's transaction | AUTHZ-GRANT-003, AUTHZ-INHERIT-002, D-197, D-203, D-206 |
 | `authz.group.created` | security | A group was created; `details.group`, `details.name`, `details.reason`; filed under the group's organization | AUTHZ-GROUP-001 |
 | `authz.group.memberadded` | security | An account or a group was added to a group; `details.group`, `details.name`, `details.memberType`, `details.memberId`, `details.reason` | AUTHZ-GROUP-001, OPS-CFG-007 |
 | `authz.group.memberremoved` | security | An account or a group was taken out of a group; the same details | AUTHZ-GROUP-001, OPS-CFG-007 |
@@ -1090,7 +1090,7 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `privacy.restriction.lifted` | security | An administrator lifted a restriction of processing and the subscribers were told; the administrator acting, the account the `subject`; no organization | PRIV-RIGHT-004 |
 
 *Source: IDN-AUD-001, PRIV-RET-001, PRIV-RET-002, CONV-NAME-003, D-162, D-166, D-170,
-D-187, D-197*
+D-187, D-197, D-206*
 
 ### 5.25 Message kinds
 
@@ -1187,27 +1187,27 @@ closed.
 
 `reconciliation` · `retention-purge` · `records-of-processing` · `expiry-sweep` ·
 `delivery` · `monitoring` · `bootstrap` · `key-rotation` · `configuration` ·
-`erasure-replay` · `migration` · `role-seeding`
+`erasure-replay` · `role-seeding`
 
 The operations a deployment-scoped system principal may run, and nothing else
 (IDN-PRIN-001 AC3); each principal of section 5.29 names exactly one. `delivery` carries
 what has committed to where it goes (the outboxes, mailbox provisioning, raised alerts);
 `monitoring` reads the state of something the deployment depends on and raises what the
-reading calls for; `configuration` changes the deployment's configuration from the
-server, a protected key or the provider's client registry; `migration` applies the
-library's migrations (OPS-MIG-001); `role-seeding` defines a host's declared roles at a
-start, inside the start step alone (AUTHZ-GRANT-004, D-204).
+reading calls for; `configuration` changes the deployment's configuration from the server,
+a protected key or the provider's client registry; `role-seeding` defines a host's
+declared roles at a start, inside the start step alone (AUTHZ-GRANT-004, D-204).
 
-*Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, OPS-BOOT-001, OPS-SEC-003, OPS-CFG-004, AUTH-OIDC-001, DR-016, OPS-MIG-001, AUTHZ-GRANT-004, D-166, D-204*
+*Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, OPS-BOOT-001, OPS-SEC-003, OPS-CFG-004, AUTH-OIDC-001, DR-016, AUTHZ-GRANT-004, D-166, D-204, D-206*
 
 ### 5.29 System principals
 
-The name each background job, server command and start step acts under, written as the
-principal of the audit rows it writes, with the reason below, and carried by
-`background-job-failed`. Every job refuses to run under a principal that may not run its
-operation (IDN-PRIN-001). A start step runs once at each start, before the application
-serves a request. A host's own jobs are declared by the host and named by it
-(IDN-PRIN-001, LIB-HOST-001); none takes a name of this table.
+The name each background job, server command but `migrate` (which runs as none,
+OPS-MIG-001, D-206) and start step acts under, written as the principal of the audit
+rows it writes, with the reason below, and carried by `background-job-failed`. Every job
+refuses to run under a principal that may not run its operation (IDN-PRIN-001). A start
+step runs once at each start, before the application serves a request. A host's own jobs
+are declared by the host and named by it (IDN-PRIN-001, LIB-HOST-001); none takes a name
+of this table, nor `migrate`, the command that runs as none (D-206).
 
 | Principal | Kind | Operation | Reason |
 |---|---|---|---|
@@ -1245,11 +1245,10 @@ serves a request. A host's own jobs are declared by the host and named by it
 | `rotate-kek` | command | `key-rotation` | OPS-SEC-003 |
 | `rotate-fingerprint-key` | command | `key-rotation` | OPS-SEC-003 |
 | `replay-erasures` | command | `erasure-replay` | DR-016 |
-| `migrate` | command | `migration` | OPS-MIG-001 |
 | `role-declaration` | start | `role-seeding` | AUTHZ-GRANT-004 |
 
 *Source: IDN-PRIN-001, INF-BG-001, INF-BG-002, AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-166,
-D-189, D-202, D-204*
+D-189, D-202, D-204, D-206*
 
 ### 5.30 Conformance checks and truth-table scenarios
 
@@ -1432,18 +1431,19 @@ whose holder was erased is owed nothing further (INT-MAIL-007).
 ### 5.46 Export formats and sections
 
 The `format` of `GET /privacy/export`: `human` (grouped, labelled and ordered for
-reading) · `machine` (flat, complete and stable-named). The `format` of
-`GET /admin/ropa`: `template`. Each is case-sensitive; an absent or other value is
-refused with `api.request.malformed` naming `format`.
+reading) · `machine` (flat, complete and stable-named: one object of values keyed
+`<section>.<index>.<value>`, the index counting a section's records from 0, D-206). The
+`format` of `GET /admin/ropa`: `template`. Each is case-sensitive; an absent or other
+value is refused with `api.request.malformed` naming `format`.
 
 The sections of the export, in this order (PRIV-RIGHT-003): `account` · `profile` ·
 `identifiers` · `identifier-backup` · `credentials` · `recovery-codes` · `devices` ·
 `preferences` · `memberships` · `membership-acknowledgements` · `group-memberships` ·
 `grants` · `assurance` · `sessions` · `consents` · `objections`; then each export
 contributor's sections, in contributor name order, none taking a name above
-(PRIV-RIGHT-003, D-203).
+(PRIV-RIGHT-003, D-203). No section or value name holds a `.` (D-206).
 
-*Source: PRIV-RIGHT-003, PRIV-ROPA-001, `09` `GET /privacy/export`, `09` `GET /admin/ropa`, D-166, D-203*
+*Source: PRIV-RIGHT-003, PRIV-ROPA-001, `09` `GET /privacy/export`, `09` `GET /admin/ropa`, D-166, D-203, D-206*
 
 ### 5.47 Provider round-trip intents
 
@@ -1641,7 +1641,7 @@ OPS-SEC-003); a conformance finding is a report of the suite (LIB-TEST-001);
 kind or any other value this document catalogues SHALL update this document in the same
 change.
 
-*Source: LIB-API-001, CONV-NAME-003, D-162, D-166, D-177, D-183, D-187, D-204*
+*Source: LIB-API-001, CONV-NAME-003, D-162, D-166, D-177, D-183, D-187, D-204, D-206*
 
 **Acceptance criteria**
 1. A contract test fails when a code or key exists in source but is not a live row here
@@ -1657,10 +1657,10 @@ change.
    error codes with their status; audit actions; permissions; endpoints with method,
    route, body members and statuses; the browser profile's stage order; and the commands
    of `Janus.Cli` with their arguments, standard input and output and exit codes
-   (LIB-TEST-002, D-204). A removed or
-   changed entry without a major version, or an added entry with only a patch version,
-   fails the gate, and so does a catalogue whose declarations and read entries do not
-   number the same.
+   (LIB-TEST-002, D-204), rendered into `tests/Janus.Cli.Tests/commands.txt` (D-206). A
+   removed or changed entry without a major version, or an added entry with only a patch
+   version, fails the gate, and so does a catalogue whose declarations and read entries
+   do not number the same.
 3. A contract test fails when a code a request can be answered with has no status in
    section 1.
 4. A contract test fails when a permission the library declares is not a row of

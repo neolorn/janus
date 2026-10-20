@@ -783,9 +783,10 @@ D-197).
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191, D-192, D-193, D-197, D-205*
+D-191, D-192, D-193, D-197, D-205, D-206*
 
-Rotates the session identifier on success.
+Rotates the identifier the session's cookie carries on success; the record's `SessionId`
+is kept (BFF-SESS-004).
 
 **What the gate tells the frontend.** Every `403` `auth.stepup.required` that judged a
 gate on a session of the library belonging to the acting account carries in `details`
@@ -2129,11 +2130,12 @@ and the section `membership-acknowledgements` holds one record per document
 acknowledged: `membership`, `document`, `version`, `acknowledgedAt` (REG-INV-001 AC3);
 the sections and their order are PRIV-RIGHT-003's, the library's first and then each
 export contributor's in contributor name order. A host's section is carried as the
-library's are: in `machine` as the section's records, each an object of its named values;
-in `human` grouped under the section in the same order, its labels read from the
-deployment's frontend message catalogue under the key `export/<section>` for a section and
-`export/<section>/<value>` for a value, which the host adds for its own (`18` FE-LOC-001);
-`/` is outside the names' rule, so no two keys coincide. A contributor that fails or faults
+library's are: in `machine` under the keys `<section>.<index>.<value>`, the index
+counting the section's records from 0 (D-206); in `human` grouped under the section in
+the same order, its labels read from the deployment's frontend message catalogue under
+the key `export/<section>` for a section and `export/<section>/<value>` for a value,
+which the host adds for its own (`18` FE-LOC-001); `/` and `.` are outside the names'
+rule and in no library name, so no two keys coincide. A contributor that fails or faults
 fails the export: **500** `system.fault`, nothing returned (D-203). **Neither is a
 rendered document.** The frontend renders the readable view and localizes it through the
 frontend localization library.
@@ -2142,7 +2144,7 @@ No server-generated PDF. A rendered page satisfies the obligation, browsers prin
 PDF anyway, and a downloadable file of health data is a larger exposure than a page
 read while authenticated.
 
-*Source: PRIV-RIGHT-003, D-054, D-058*
+*Source: PRIV-RIGHT-003, D-054, D-058, D-203, D-206*
 
 ---
 
@@ -2919,12 +2921,12 @@ statement beside it, never per record.
 {
   "id": "...",
   "...": "...",
-  "can": ["read", "edit", "share"],
+  "can": ["edit", "read", "share"],
   "requires": { "edit": ["stepup"] }
 }
 ```
 
-*Source: AUTHZ-GATE-005, D-078, D-087, D-202*
+*Source: AUTHZ-GATE-005, D-078, D-087, D-202, D-206*
 
 A capability means **"permitted by grants, subject to session gates."** It is not a
 promise the action will succeed: an action may still be refused for step-up, a

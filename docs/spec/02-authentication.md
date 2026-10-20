@@ -1556,7 +1556,12 @@ rejected at validation, not silently clamped.
 **AUTH-SESS-006** — A new session identifier SHALL be issued on authentication, on
 step-up, and on any privilege change.
 
-*Source: D-033.4*
+On a step-up and on a privilege change the identifier rotated is the one the session's
+cookie carries: the old one stops resolving, while the session record and its
+`SessionId`, which names it to the operations, are kept. On authentication the
+pre-authentication session rotates into the sign-in session (`17` BFF-CSRF-005a, D-206).
+
+*Source: D-033.4, D-206*
 
 Without this, an identifier planted in a victim's browser before sign-in remains
 valid afterwards.

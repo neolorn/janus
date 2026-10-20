@@ -845,28 +845,34 @@ notice version presented, the instant the age screen was answered and the affirm
 age group it recorded), `profile`, `identifiers` (each with its kind, role, verification
 state and whether it is in the security-notice set, REG-IDENT-002), `identifier-backup`,
 `credentials` (the password and every enrolled credential, by property and label),
-`recovery-codes` (how the set stands), `devices`, `preferences` (the value in force of
-every host-declared preference, REG-PREF-001), `memberships` (every membership, one that
-has ended included, with the instant it ended), `membership-acknowledgements`,
-`group-memberships`, `grants` (every grant naming the account, in every organization,
-live, expired or revoked, with the instant it stopped), `assurance` (the reachable
-assurance and whether it resists relay), `sessions` (the location records held on the
-account's live sessions, AUTH-SESS-013), `consents` and `objections` (every record,
-PRIV-CONS-001). No section SHALL carry secret material: no password hash, TOTP secret,
-public key, WebAuthn credential identifier, recovery code or device token fingerprint.
+`recovery-codes` (how the set stands), `devices`, `preferences` (one record: `language`,
+`timeZone` and the value in force of every host-declared preference under its name,
+REG-PREF-001, D-206), `memberships` (every membership, one that has ended included, with
+the instant it ended), `membership-acknowledgements`, `group-memberships`, `grants`
+(every grant naming the account, in every organization, live, expired or revoked, with
+the instant it stopped), `assurance` (the reachable assurance and whether it resists
+relay), `sessions` (the location records held on the account's live sessions,
+AUTH-SESS-013), `consents` and `objections` (every record, PRIV-CONS-001). No section
+SHALL carry secret material: no password hash, TOTP secret, public key, WebAuthn
+credential identifier, recovery code or device token fingerprint.
 
 **What the host holds (D-203).** After the library's sections the export SHALL carry the
 host's. An export contributor (`IExportContributor`, LIB-HOST-001) names itself (`Name`,
 under INT-SMS-003's rule, distinct among contributors), the types whose records it holds
 (`Covers`), and answers a subject's sections (`SectionsAsync`, a `Result` holding a list
-of `ExportSection`). An `ExportSection` has a `Name` (under INT-SMS-003's rule, distinct
-from every library section and every other contributor's) and its `Records`; an
-`ExportRecord` holds `Values`, each a value the host writes as text (an instant in ISO
-8601, a number in invariant form) under a stable name (under INT-SMS-003's rule), and no
-prose. `IExports.AssembleAsync` assembles the library's sections, then asks every
-registered contributor, outside any unit of work, in contributor name order, and appends
-what each answers; a section named as a library section or as another contributor's, or
-a section or value whose name breaks the rule, is a fault and fails the export as below.
+of `ExportSection`). An `ExportSection` has a `Name` (under INT-SMS-003's rule without
+`.`, so 1 to 64 lower-case letters and digits separated by single `-` or `_`, distinct
+from every other section of the export) and its `Records`; an `ExportRecord` holds
+`Values`, each a value the host writes as text (an instant in ISO 8601, a number in
+invariant form) under a stable name held to the same rule, and no prose; a name takes no
+`.`, since the machine format keys each value `<section>.<index>.<value>` (`09`
+`GET /privacy/export`, D-206). The assembly asks `Janus.Hosting`, which registers the
+contributors, to judge each answer's names before it takes the answer (`08`
+CONV-DESIGN-007, D-206). `IExports.AssembleAsync` assembles the library's sections, then
+asks every registered contributor, outside any unit of work, in contributor name order,
+and appends what each answers; a section named as a library section, as another
+contributor's or as another section of the same answer, or a section or value whose name
+breaks the rule, is a fault and fails the export as below.
 The export is counted against `privacy.export.ratelimit` once all have answered, in one
 transaction that takes a lock on the subject and then counts the window again, so exports
 asked at once are each counted against the ones before them (D-166 X3). A contributor that
@@ -877,7 +883,7 @@ contributor; startup fails otherwise with `model.startup.declarationmissing`,
 `details.handler` naming the type. Both formats carry a host section as the library's
 (`09` `GET /privacy/export`).
 
-*Source: D-148; D-037, D-146, D-162, D-166, D-203*
+*Source: D-148; D-037, D-146, D-162, D-166, D-203, D-206*
 
 **Acceptance criteria**
 1. Both formats contain the same data.
@@ -895,6 +901,11 @@ contributor; startup fails otherwise with `model.startup.declarationmissing`,
    after another are.
 6. A deployment declaring a type with an encrypted field or a sensitive category that no
    export contributor covers fails startup with `model.startup.declarationmissing`.
+7. In `machine` a host's value is keyed `<section>.<index>.<value>` as a library value is,
+   and a contributor answering a section or value name holding a `.`, or otherwise outside
+   the rule, or a section named as a library section, as another contributor's or as
+   another of its own sections, fails the export as a contributor that faults does
+   (D-206).
 
 ---
 
@@ -1013,7 +1024,7 @@ unwrap refuses a wrapped key of 32 zero bytes before it is tried, and the DR-016
 and a restore recognise it as erased.
 
 *Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178, D-183,
-D-187, D-203*
+D-187, D-203, D-206*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -1167,14 +1178,17 @@ declared name and the field's declared name, each as its length in two bytes, bi
 followed by its UTF-8 bytes. The mark keeps a host's value from ever authenticating as a
 library value or the reverse, whatever names the host chooses: a host's value carries
 three named parts and a library's two, and a sequence of length-prefixed parts reads one
-way only. The field's declared name is its member's name, or the name `Encrypted` is given,
-so a member the host renames keeps its values readable by being given its old name. The
-library reads nothing of the host's (LIB-HOST-002), the declared names bind a value as
-tightly as a table and a column would, and the host may rename its table or column
-freely. *Rejected:* an EF Core value converter (it sees one value, never the row's
-subject column, and cannot read a key asynchronously); an interceptor that encrypts on
-save (it would read the host's entities, and hide from the code that writes a value that
-the value is personal).
+way only. The field's declared name is its member's name, or the name `Encrypted` is
+given, so a member the host renames keeps its values readable by being given its old
+name; two encrypted fields of one type under one declared name fail startup with
+`model.startup.declarationinvalid`, `details.declaration` the type and `details.field`
+the name, since their values could be swapped with nothing failing (D-206). The library
+reads nothing of the host's (LIB-HOST-002), the declared names bind a value as tightly
+as a table and a column would, and the host may rename its table or column freely.
+*Rejected:* an EF Core value converter (it sees one value, never the row's subject
+column, and cannot read a key asynchronously); an interceptor that encrypts on save (it
+would read the host's entities, and hide from the code that writes a value that the
+value is personal).
 
 **What this does not protect.** A backup taken **before** an erasure holds the wrapped
 key as it then was. Anyone holding both that backup and the KEK can recover the
@@ -1260,6 +1274,9 @@ transaction, and a row whose key is erased SHALL be removed without being carrie
 21. Encrypting a host's field for an erased subject is refused with
     `privacy.subject.erased`; opening the fields of a subject the deployment holds no key
     for, with `api.request.invalid` naming `subject`.
+22. A type declaring two encrypted fields under one declared name fails startup with
+    `model.startup.declarationinvalid`, `details.declaration` the type and
+    `details.field` the name (D-206).
 
 ---
 

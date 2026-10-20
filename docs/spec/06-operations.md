@@ -36,9 +36,12 @@ for one job produce case-by-case judgment calls.
 transaction already attached. Direct connection retrieval SHALL NOT be used.
 
 A port that runs hand-written SQL inside a unit of work first saves the changes the
-context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003).
+context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003). The one
+other place that touches a context's connection is `UseUnitOfWorkAsync` in
+`Janus.Hosting`, which reads the host's context's connection to judge it and hands it the
+accessor's connection and transaction (AUTHZ-INHERIT-002, `08` CONV-DESIGN-007, D-206).
 
-*Source: D-017, D-166, D-186*
+*Source: D-017, D-166, D-186, D-206*
 
 Without this, a hand-written query on a separate connection silently misses rows
 written earlier in the same transaction — a nasty and easily-missed bug in financial
@@ -49,7 +52,8 @@ code.
    transaction, the changes the context tracked before the query included.
 2. Direct connection retrieval is unreachable from the service layer. In
    `Janus.Storage` only the accessor retrieves a connection, besides the listen/notify
-   connection of OPS-DATA-003, which runs nothing but `LISTEN`.
+   connection of OPS-DATA-003, which runs nothing but `LISTEN`; outside `Janus.Storage`,
+   only `UseUnitOfWorkAsync` touches a context's connection.
 3. A test asserts transaction visibility across both tools: it lives in
    `Janus.Storage.Tests` and uses an entity `Janus.Storage` itself owns (a settings
    row), written through the context and read through the accessor inside one
@@ -141,25 +145,31 @@ before the new version deploys. They SHALL NOT be applied at application startup
 **Values (D-204).** The step is `migrate`, a command of the `Janus.Cli` tool package
 (LIB-PKG-001): it applies the library's migrations to the database of the connection the
 JSON document on its standard input carries, under the `identity_migrate` credential
-(OPS-MIG-003), as the command principal `migrate` (`10` section 5.29). Its document
-carries the connection and nothing else: `migrate` reads no key and fills no key ring; it
-is refused with `model.startup.secretunavailable`, `details.key` `input`, where standard
-input is a terminal or the document carries no connection, and, first, with
-`api.request.malformed` naming `input` where the document carries any member but the
-connection, whether or not it carries the connection, so the migration step never holds
-the key-encryption key (D-173). It runs no schema check
-(OPS-MIG-002), which needs the schema it creates, and, as no command of the tool does,
-none of the model's checks, which need the host's declaration (AUTHZ-MODEL-004). It
-exits 0 with nothing on standard output; a migration the database refuses exits 1 with
-one JSON line `system.fault` on standard error, nothing applied beyond the migrations
-before it. `migrate --report` writes to standard output the destructive-operation report
-(OPS-DEP-002) of the migrations pending on its target and applies nothing, so a host's
-pipeline reports what a library upgrade would do before it does it. A host's pipeline runs
-`migrate` before its own migrations (OPS-MIG-004); the library's own pipeline applies its
-migrations the same way, the double run of OPS-MIG-007 included, so there is one way to
-apply them.
+(OPS-MIG-003). It writes no audit row, asks no gate and runs as no principal (D-206).
+Its document carries the connection and nothing else: `migrate` reads no key and fills
+no key ring; it is refused with `model.startup.secretunavailable`, `details.key`
+`input`, where standard input is a terminal or the document carries no connection, and,
+first, with `api.request.malformed` naming `input` where the document carries any member
+but the connection, whether or not it carries the connection, so the migration step
+never holds the key-encryption key (D-173). It runs no schema check (OPS-MIG-002), which
+needs the schema it creates, and, as no command of the tool does, none of the model's
+checks, which need the host's declaration (AUTHZ-MODEL-004). It exits 0 with nothing on
+standard output; a migration the database refuses exits 1 with one JSON line
+`system.fault` on standard error, nothing applied beyond the migrations before it.
+`migrate --report` writes to standard output the destructive-operation report
+(OPS-DEP-002) of the migrations pending on its target and applies nothing: one JSON line
+per statement of those migrations that `08` CONV-DESIGN-003's scan matches, in the order
+they apply, an object whose `migration` is the migration's identifier, `statement` the
+matched statement itself, never the block that guards it in the script, and
+`destructive` `true` where OPS-DEP-001 names the statement destructive and `false`
+otherwise; it writes nothing where nothing matches, and exits 0 whatever it found, since
+whether a destructive statement stops a deploy is the pipeline's gate (OPS-DEP-001,
+D-206), so a host's pipeline reports what a library upgrade would do before it does it.
+A host's pipeline runs `migrate` before its own migrations (OPS-MIG-004); the library's
+own pipeline applies its migrations the same way, the double run of OPS-MIG-007
+included, so there is one way to apply them.
 
-*Source: D-018, D-204*
+*Source: D-018, D-204, D-206*
 
 Startup migration means instances racing each other on deploy, failures surfacing as
 crash loops rather than failed pipelines, and the running application holding
@@ -174,8 +184,10 @@ permission to alter the tables that authorize it.
    command fills no key ring; one carrying any other member, with the connection or
    without it, is refused with `api.request.malformed` naming `input`, and nothing is
    applied.
-5. `migrate --report` applies nothing and reports each destructive statement of the
-   pending migrations as OPS-DEP-002 does.
+5. `migrate --report` applies nothing, writes one JSON line for each statement of the
+   pending migrations the scan matches, its `statement` the matched statement itself and
+   never the block that guards it in the script, marking as destructive exactly those
+   OPS-DEP-001 names, writes nothing where none matches, and exits 0 either way.
 
 ---
 

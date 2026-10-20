@@ -145,7 +145,7 @@ handlers, jobs and middleware onto their internal operation services and asks th
 internal interfaces CONV-DESIGN-007 names (LIB-API-005, D-189).
 
 *Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171, D-176, D-183, D-189, D-190,
-D-202, D-203, D-204*
+D-202, D-203, D-204, D-206*
 
 Makes the public surface reviewable by reading one project.
 
@@ -159,11 +159,13 @@ Makes the public surface reviewable by reading one project.
    registration, the operation services it maps onto and the internal interfaces
    CONV-DESIGN-007 names) and to `Janus.Cli` (service registration) and to
    `Janus.Hosting.Tests` (the ports `Janus.Hosting` implements are tested against the
-   same aggregates); `Janus.Core` to `Janus.Hosting` (registration, and the internal
-   interface CONV-DESIGN-007 names with what is declared beside it) and to `Janus.Cli`
+   same aggregates); `Janus.Core` to `Janus.Hosting` (registration, the internal
+   interface CONV-DESIGN-007 names with what is declared beside it, and the name rule by
+   which it answers `IExportNameRule`, D-206) and to `Janus.Cli`
    (registration and the filling of the key ring); `Janus.Storage` to `Janus.Hosting`
-   and to `Janus.Cli` (registration, and for `Janus.Cli` the migrations `migrate`
-   applies); `Janus.Storage` to `Janus.Hosting.Tests` (the
+   and to `Janus.Cli` (registration, for `Janus.Hosting` the unit of work's internal
+   contract `UseUnitOfWorkAsync` reaches, and for `Janus.Cli` the migrations `migrate`
+   applies, D-206); `Janus.Storage` to `Janus.Hosting.Tests` (the
    protocol server's stores, stood up over fakes of their records);
    `Janus.Authentication.Tests`, `Janus.Authorization.Tests` and `Janus.Privacy.Tests`
    to `Janus.Hosting.Tests` (their fakes, used at the browser boundary).
@@ -557,17 +559,20 @@ AUTH-ABUSE-003) is due at its admission (D-189).
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
 it serves, never at a call site. Migrations are EF Core migrations in `Janus.Storage`,
 applied in the pipeline by `migrate`, the command of the `Janus.Cli` tool built from the
-same commit (OPS-MIG-001, D-204); the destructive-operation report (OPS-DEP-002) is the idempotent SQL
-script of the migrations pending on the target database, read from its migration history
-table (a pull request reports the migrations its range adds), scanned for `DROP`,
-`ALTER ... TYPE`, `ADD CONSTRAINT`, `TRUNCATE`, `DELETE FROM`, and, on a table the same
-migrations did not create or have filled, `SET NOT NULL`, a unique index and a column
-added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's. The
-serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
-generation to `artifacts/model.json`.
+same commit (OPS-MIG-001, D-204); the destructive-operation report (OPS-DEP-002) is the
+idempotent SQL script of the migrations pending on the target database, read from its
+migration history table (a pull request reports the migrations its range adds), scanned
+for `DROP`, `ALTER ... TYPE`, `ADD CONSTRAINT`, `TRUNCATE`, `DELETE FROM`, and, on a
+table the same migrations did not create or have filled, `SET NOT NULL`, a unique index
+and a column added `NOT NULL` without a default; which of them stop a deploy is
+OPS-DEP-001's. The library's pipeline writes the script with `dotnet-ef`; in a host's
+pipeline `migrate --report` generates it with EF Core's migrator and reports each
+matched statement as itself, not as the block that guards it (D-206). The serialized
+model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source generation to
+`artifacts/model.json`.
 
 *Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166,
-D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190, D-198, D-204*
+D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190, D-198, D-204, D-206*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -681,38 +686,41 @@ returns `null` for "not found"; it returns a failure result with the named code.
 used only for a library-local concern (DTO shape validation, CONV-CODE-006). Request and
 response types are `internal sealed record` DTOs in `Janus.Hosting`; mapping between a
 DTO and a contract type is a hand-written static method beside the DTO. Serialization
-uses `System.Text.Json` source generation. No controllers, no reflection-based mapping.
-A route or query value for which a typed identifier or value exists (CONV-DESIGN-004)
-binds to that type at the edge through `IParsable<T>`; no handler takes it as a bare
-`Guid` or `string`, save a navigation route's (BFF-ERR-001), which takes each value as
-text and judges it itself, returning the browser with `api.request.malformed` in `error`
-where one does not read (the sign-on with `auth.session.expired`, BFF-SESS-006), since
-the framework's refusal has no way back to the browser (D-193). Each endpoint declares,
-as endpoint metadata added through one route-builder extension of `Janus.Hosting`, the
-error codes `09` gives it: its row's, and those the text of its section or subsection
-gives the routes that text governs, before or after a table (among them
-`authz.restricted` and `authz.denied` in section 6; `authz.restricted`, `authz.denied`
-and `identity.organization.notfound` in section 8; `identity.registration.incomplete`
-for the step endpoints of section 2), and 422 `integration.sms.balancefloor` where the
-`09` preamble gives it; what its mounting answers, where its row does not give it, is
-derived, as the chapter's preamble says, and declared by no endpoint. A navigation route
-(BFF-ERR-001) declares the same way the codes `09` gives it to carry in the query member
-`error` of its redirect, which the contract file lists under that redirect, since no
-status of `10` is sent with them (D-192). An endpoint declares codes only: the status of
-each is the one `10` gives it, which `ApiStatus` maps, and a code `ApiStatus` maps by
-its details is listed under each status it can take. The endpoint contract file
-(LIB-API-001) is generated from that metadata, from the typed results' and body
-metadata, and from the endpoint's mounting (`09`, preamble). Each endpoint declares
-those route and query values too, by name and type, in the same metadata (a navigation
-route declares none as typed, D-193); the declaration is generic over the type, so no
-reflection reads the handler (CONV-CODE-004). Where the framework could not bind a
-request, the error translation stage refuses it **400** `api.request.malformed`,
-`details.member` naming the first declared value, in the order declared, whose type's
-`TryParse` refuses the request's text; no navigation route meets that refusal, since
-none binds a typed value (D-193).
+uses `System.Text.Json` source generation: each of the library's serializer contexts is
+generated with camel-case names and enumerations as strings and the serializer's
+defaults otherwise, so a member is read only under the name `09` spells,
+case-sensitively, and a number only as a JSON number (CONV-DESIGN-007, D-206). No
+controllers, no reflection-based mapping. A route or query value for which a typed
+identifier or value exists (CONV-DESIGN-004) binds to that type at the edge through
+`IParsable<T>`; no handler takes it as a bare `Guid` or `string`, save a navigation
+route's (BFF-ERR-001), which takes each value as text and judges it itself, returning
+the browser with `api.request.malformed` in `error` where one does not read (the sign-on
+with `auth.session.expired`, BFF-SESS-006), since the framework's refusal has no way
+back to the browser (D-193). Each endpoint declares, as endpoint metadata added through
+one route-builder extension of `Janus.Hosting`, the error codes `09` gives it: its
+row's, and those the text of its section or subsection gives the routes that text
+governs, before or after a table (among them `authz.restricted` and `authz.denied` in
+section 6; `authz.restricted`, `authz.denied` and `identity.organization.notfound` in
+section 8; `identity.registration.incomplete` for the step endpoints of section 2), and
+422 `integration.sms.balancefloor` where the `09` preamble gives it; what its mounting
+answers, where its row does not give it, is derived, as the chapter's preamble says, and
+declared by no endpoint. A navigation route (BFF-ERR-001) declares the same way the
+codes `09` gives it to carry in the query member `error` of its redirect, which the
+contract file lists under that redirect, since no status of `10` is sent with them
+(D-192). An endpoint declares codes only: the status of each is the one `10` gives it,
+which `ApiStatus` maps, and a code `ApiStatus` maps by its details is listed under each
+status it can take. The endpoint contract file (LIB-API-001) is generated from that
+metadata, from the typed results' and body metadata, and from the endpoint's mounting
+(`09`, preamble). Each endpoint declares those route and query values too, by name and
+type, in the same metadata (a navigation route declares none as typed, D-193); the
+declaration is generic over the type, so no reflection reads the handler
+(CONV-CODE-004). Where the framework could not bind a request, the error translation
+stage refuses it **400** `api.request.malformed`, `details.member` naming the first
+declared value, in the order declared, whose type's `TryParse` refuses the request's
+text; no navigation route meets that refusal, since none binds a typed value (D-193).
 
 *Source: LIB-API-005, API-CONV-001 to 005, D-149, D-166, D-183, D-186, D-187, D-192,
-D-193, D-194*
+D-193, D-194, D-206*
 
 **Acceptance criteria**
 1. No type derives from `ControllerBase`.
@@ -842,8 +850,45 @@ reads the signing keys into the credential source of AUTH-KEY-001, making one cu
 where the database holds none, and then builds the OIDC provider's options, which take
 no `ValidateOnStart` (CONV-CODE-007).
 
+**The application's JSON options (D-206).** `AddJanus` changes nothing of the
+application's HTTP JSON options: it neither empties their resolver chain nor adds to it,
+so a host's own endpoint types serialize as the host configures them. Every JSON body a
+library endpoint reads or answers, and every JSON body the library writes outside one,
+its pipeline's answers included, is read and written through the `JsonTypeInfo` of a
+library context, under that context's own options (CONV-DESIGN-006), and never through
+the application's, so no setting a host makes for its own endpoints (a naming policy,
+case-insensitive names, number handling) changes a body of `09`; a body its protocol
+shapes (the provider's endpoints of `09` section 9, the RFC 8935 answers of the Google
+security-event route) is outside this rule. An endpoint that reads a body declares the
+body's type as endpoint metadata, so the endpoints' contract list still names its
+members (LIB-TEST-002). A body that does not read under the context's options is 400
+`api.request.malformed`, as `09` gives every endpoint that reads one. That every request
+and response type of the library's endpoints is declared in a library context is held by
+a test.
+
+**A request or background work (D-206).** The gate asks whether an HTTP request is being
+served on the calling flow through the internal contract `Janus.Hosting` implements for
+judging a session (`ISessionGates`, `Janus.Authorization`), which answers from the
+request the framework tracks for that flow (`IHttpContextAccessor`, which `AddJanus`
+registers): present for the whole of any request the application serves, through either
+profile or neither and in every scope opened within it, and absent in the flow of a
+background job. The gate refuses a host job's context while one is served
+(IDN-PRIN-001).
+
+**The host's context and the unit of work (D-206).** `UseUnitOfWorkAsync` reaches the open
+unit of work through an internal contract `Janus.Storage` declares and its unit of work
+implements: whether it is begun, its open connection and transaction, and a notice at the
+outermost commit or rollback. It is the one place outside the accessor of OPS-DATA-002
+that reads a context's connection, to judge the host's, and hands a context the accessor's
+connection and transaction.
+
+**A contributor's names (D-206).** The export's assembly asks of each name a contributor
+answers whether it keeps the rule of PRIV-RIGHT-003 through an internal contract
+`Janus.Privacy` declares (`IExportNameRule`) and `Janus.Hosting` implements over the
+rule's check in `Janus.Core`, before it takes the answer.
+
 *Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181, D-183,
-D-187, D-188, D-189, D-190, D-203, D-204*
+D-187, D-188, D-189, D-190, D-203, D-204, D-206*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -873,6 +918,14 @@ D-187, D-188, D-189, D-190, D-203, D-204*
 8. No project of the package but `Janus.Hosting` uses a type of a `Microsoft.AspNetCore`
    namespace; the framework reference gives the others the container's abstractions
    alone.
+9. After `AddJanus`, a host endpoint's own request and response types, declared in no
+   library context, serialize as they do without the library; every request and response
+   type of the library's endpoints is declared in a library context; and with the
+   application's HTTP JSON options set to a naming policy other than camel case, to
+   case-insensitive names and to reading numbers from strings, the library's endpoints
+   and its pipeline read and answer as their contexts' own options give: a member
+   spelled in another case is not read, and a member its type reads as a number, given
+   as a string, is refused 400 `api.request.malformed` naming it.
 
 ---
 
@@ -889,7 +942,7 @@ the main package reference at run time, for no purpose but the package's depende
 |---|---|---|
 | Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage, and `Janus.Hosting` for the main package's dependencies, CONV-LAYOUT-001; at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for writing the migrations and their script), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage`, and every host through the main package, resolves it at EF Core's version, not at the lower floor the provider declares |
 | Password hashing | `Konscious.Security.Cryptography.Argon2` | Argon2id is absent from the base class library; managed implementation, MIT licence (package listing inspected 2026-09-18) |
-| WebAuthn | `Fido2` (Fido2NetLib), which brings, among others, `Fido2.Models`, `System.Formats.Cbor` and `NSec.Cryptography` (which verifies EdDSA), none referenced directly (D-197), save `System.Formats.Cbor`, which `Janus.Testing` references for the software passkey's attestation object and authenticator data (LIB-TEST-003, D-204) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
+| WebAuthn | `Fido2` (Fido2NetLib), which brings, among others, `Fido2.Models`, `System.Formats.Cbor` and `NSec.Cryptography` (which verifies EdDSA), none referenced directly (D-197), `Janus.Testing` taking `System.Formats.Cbor` for the software passkey's attestation object and authenticator data from the ASP.NET Core shared framework, which serves it (LIB-TEST-003, CONV-LAYOUT-001, D-206) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
 | TOTP | `Otp.NET` | RFC 6238 defaults; small |
 | OIDC provider | `OpenIddict.AspNetCore`, `OpenIddict.Server`, `OpenIddict.Validation`; stores are hand-written in `Janus.Storage` over the single `DbContext` (no `OpenIddict.EntityFrameworkCore`) | The maintained free OpenID Connect server for ASP.NET Core; a hand-written provider is a security risk this library does not take; hand-written stores keep one `DbContext` (CONV-DESIGN-003) |
 | OIDC client (Google, Apple) | None: the round trip is the library's own (IDN-LIFE-012); the identity token is validated with `Microsoft.IdentityModel.JsonWebTokens`, which `OpenIddict.Server` and `OpenIddict.Validation` bring, and the provider's discovery and key-set documents are read through the document and configuration retrievers of `Microsoft.IdentityModel.Protocols`, which `OpenIddict.Validation` brings | The handler and OpenIddict's client each bind the round trip with a `SameSite=None` cookie, which BFF-SESS-002 and BFF-CSRF-005 AC3 forbid and which Apple's form-post return needs |
@@ -912,15 +965,14 @@ shared framework of .NET is not a package: a project takes the container's abstr
 through the reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and their package
 is never referenced.
 
-*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197, D-204, D-205*
+*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197, D-204, D-205, D-206*
 
 **Acceptance criteria**
 1. The set of direct package references, read from `Directory.Packages.props`, equals
    the identifiers in this table, less the packages the table names only as ones another
    package brings (`Microsoft.IdentityModel.JsonWebTokens`,
-   `Microsoft.IdentityModel.Protocols`, `Fido2.Models`, `NSec.Cryptography`), which are
-   not referenced directly; `System.Formats.Cbor` is referenced directly by
-   `Janus.Testing` alone (D-204).
+   `Microsoft.IdentityModel.Protocols`, `Fido2.Models`, `System.Formats.Cbor`,
+   `NSec.Cryptography`), which are not referenced directly (D-206).
 2. A pull request adding a package not in the table fails a check.
 3. `Directory.Packages.props` gives `Microsoft.EntityFrameworkCore`,
    `Microsoft.EntityFrameworkCore.Relational` and `Microsoft.EntityFrameworkCore.Design`
@@ -1650,15 +1702,21 @@ branch) that touches permission logic SHALL change the truth table in the same c
 Permission logic is the `Janus.Authorization` project, the authorization persistence of
 `Janus.Storage`, the model declaration types of `Janus.Core`, the mapping of the
 contract tables (`MapAuthorizationTables`), a migration that changes the view
-`effective_grants`, and the judgement in `Janus.Authentication` of whether a session
+`effective_grants`, the judgement in `Janus.Authentication` of whether a session
 meets a step-up gate (AUTH-STEP-002 step 1, the downgrade of AUTH-SESS-009 included),
 which admits or refuses a bound action as the judgement from a host's report does
-(D-192).
+(D-192); and `Janus.Hosting`'s answer to the gate of whether an HTTP request is being
+served on the calling flow (CONV-DESIGN-007), which admits or refuses a host job's
+context (IDN-PRIN-001, D-206). These are the watched places. A change to one that
+changes no permission decision (an audit write in a file of `Janus.Authorization`, say)
+meets the rule with a row that restates the decision unchanged (D-206). The rule binds
+the change under review, not each of its commits, so a commit that only moves lines owes
+no row of its own (D-194).
 
-*Source: AUTHZ-TEST-001, CONV-TEST-003, D-166, D-192*
+*Source: AUTHZ-TEST-001, CONV-TEST-003, D-166, D-192, D-194, D-206*
 
-If there is no truth-table change, that is the signal to stop and write one. This is
-the one place the discipline is hard rather than advisory.
+If there is no truth-table change, that is the signal to stop and write one. This is the
+one place the discipline is hard rather than advisory.
 
 **Acceptance criteria**
 1. A permission-logic change without a truth-table change is flagged.

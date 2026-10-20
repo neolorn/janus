@@ -107,7 +107,7 @@ breaking.
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
 *Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
-D-187, D-188, D-202, D-203, D-204*
+D-187, D-188, D-202, D-203, D-204, D-206*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.
@@ -117,21 +117,27 @@ restructured without a major version.
 2. A change to any is caught before release by a contract test holding it to a committed
    contract file or to its `PublicAPI` file (REF-001 AC2); the commands of `Janus.Cli`,
    with their arguments, standard input and output and exit codes, are one of the contract
-   lists (LIB-TEST-002).
+   lists, held in `tests/Janus.Cli.Tests/commands.txt` (LIB-TEST-002, D-206).
 
 ---
 
 **LIB-API-002** — Everything not listed in LIB-API-001 SHALL be internal and MAY
 change in any release.
 
-*Source: D-026.4*
+*Source: D-026.4, D-206*
 
 **Acceptance criteria**
 1. Internal types are not publicly accessible.
 2. No consumer sample depends on an internal type: the sample host references only the
    packages packed from the same commit, never a project of the solution, and the
    conformance suite's sample takes its schema from `migrate` and its configuration
-   through the library's operations (`08` CONV-LAYOUT-001, D-204).
+   through the library's operations, `bootstrap` for its required values and
+   `PUT /admin/config/{key}` for `policy.default`: it enrols its first administrator
+   through the enrolment link its `bootstrap` printed with `Janus.Testing`'s
+   `SoftwarePasskey`, signs in with that passkey, and changes `policy.default` at
+   `PUT /admin/config/{key}`; it runs its commands without `TestDeployment`, since no
+   `Janus.Cli` tool is installed in the library's solution (`08` CONV-LAYOUT-001, D-204,
+   D-206).
 
 ---
 
@@ -287,9 +293,9 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Secret source** | Required, no default: `ISecretSource`, through which the library reads every secret it needs, asynchronously, when the application starts and before it serves a request: the key-encryption key versions and the fingerprint key versions, each fingerprint key version at least 32 bytes (OPS-SEC-001, AUTH-KEY-002); the maintenance credential (OPS-MIG-003a); the mail server's secret where the shipped mail-server adapter is used (INT-MAIL-001); and each declared social provider's credential, by the provider's name (IDN-LIFE-012). No secret is an argument of `AddJanus`. Absent, startup fails with `model.startup.declarationmissing`, `details.key` `secretSource`; a secret it cannot answer, or answers empty or short, stops the start with `model.startup.secretunavailable`, `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command reads the same values from one JSON document on standard input, save `migrate`, which reads no key (OPS-MIG-001, D-204), and one whose standard input is a terminal is refused under `details.key` `input` (OPS-SEC-001, CONV-DESIGN-007) |
 | **Subject-event handlers** | Erasure, restriction and takedown (`ErasureRequested`, `RestrictionChanged`, `TakedownExecuted`). Each registered subscriber (`ISubjectEventSubscriber`) names the resource types it covers (`Covers`), and every type declared sensitive SHALL be covered by at least one. **Startup fails otherwise** (PRIV-RIGHT-005b), `details.handler` naming the type. Subscriber names are distinct and `erasure-ledger` is the library's own (`model.startup.subscribername`, IDN-LIFE-003a); a name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`, any other refused with `model.startup.declarationinvalid` (INT-SMS-003) |
 | **Purpose handlers** | For every purpose resting on consent or on an objectable basis, a registered `IPurposeHandler` naming it (`Purposes`), under a name distinct among the purpose handlers and the subject-event subscribers (`Name`, IDN-LIFE-003a), which handles each `ConsentChanged` and `ObjectionChanged` of the purposes it names, delivered through the outbox (PRIV-RIGHT-001a, PRIV-CONS-008, D-203). **Startup fails otherwise** (PRIV-RIGHT-001a AC3), `details.handler` naming the purpose |
-| **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule (D-203) |
+| **Export contributors** | Each registered `IExportContributor` names the types whose records it holds (`Covers`) and answers its sections of a subject's export (PRIV-RIGHT-003); every type that declares an encrypted field or a sensitive category SHALL be covered by at least one. **Startup fails otherwise** with `model.startup.declarationmissing`, `details.handler` naming the type; contributor names are distinct, each under INT-SMS-003's name rule, a name outside it or given twice failing startup with `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>`, `details.field` `name` (D-203, D-206); the names of the sections and values a contributor answers follow that rule without `.`, judged by `Janus.Hosting` before the assembly takes them (PRIV-RIGHT-003, D-206) |
 | **Cookies** | Every cookie the host sets: `Cookie(name, lifetime, thirdPartyReadable, purpose)`, its lifetime none for one that ends with the browser's session, its purpose none for one strictly necessary and the consent-based purpose it serves for one that is not (PRIV-CONS-006a); a purpose not declared or not resting on consent, a name the library's own cookies take, or a cookie declared twice fails startup with `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>` (D-203) |
-| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29, with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
+| **Jobs** | Optional: each of the host's background jobs, `Job(name, permissions)`, its name under INT-SMS-003's rule, distinct, and no name of `10` section 5.29 nor `migrate` (D-206), with the host permissions it exercises; its principal is `SystemPrincipal.ForOrganization` naming it (IDN-PRIN-001). A permission not declared, a library-owned one, one bound to a step-up gate or one whose action is `export` fails startup with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`, `details.field` `permissions` (D-202) |
 | **Governing language** | `legal.governinglanguage`: the default governing language of every legal document version (PRIV-CONS-005). Required, no default; protected once set (OPS-CFG-004) |
 | **Preference declaration** | Each host-declared preference: name, type (`string` · `boolean` · `integer` · `enum` with its values), default, and whether the person or only an administrator may edit it (REG-PREF-001). The declaration MAY be empty; a malformed one fails startup |
 | **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup, and a change of the restriction set naming one is refused with `config.value.notallowed`, `details.supplier` naming it. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (nullable: a send no request asked for has none) (D-153) |
@@ -336,7 +342,7 @@ were still missing after that correction; and `10` then listed twenty keys with 
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
 *Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
-D-179, D-180, D-183, D-189, D-190, D-197, D-202, D-203, D-204*
+D-179, D-180, D-183, D-189, D-190, D-197, D-202, D-203, D-204, D-206*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -584,7 +590,7 @@ the host (D-172).
 **LIB-TEST-002** — Contract tests SHALL guard every surface in LIB-API-001, failing
 the build on an unintended change.
 
-*Source: D-026.4, D-166*
+*Source: D-026.4, D-166, D-204, D-206*
 
 **Acceptance criteria**
 1. A release commit, one that changes a `PublicAPI.Shipped.txt`, fails the release gate
@@ -595,7 +601,12 @@ the build on an unintended change.
    error codes with their status; the audit actions; the permissions; the endpoints with
    method, route, body members and statuses; the browser profile's stage order; and the
    commands of `Janus.Cli` with their arguments, standard input and output and exit codes
-   (D-204).
+   (D-204), rendered from the internal contract each command declares beside its parser
+   (its name; each argument, whether it is required and the form of its value; its
+   standard input, none or its document's members; what it writes on standard output;
+   and its exit codes with the codes a refusal carries) into the committed file
+   `tests/Janus.Cli.Tests/commands.txt`, in the line form of the endpoints' list
+   `tests/Janus.Hosting.Tests/endpoints.txt` (D-206).
 2. Altering the ancestry closure structure fails the build.
 
 ---
@@ -633,10 +644,16 @@ carries:
 - `TestDeployment`, which prepares an empty database as a production one is prepared
   (OPS-ENV-001), through the installed `Janus.Cli` tool: `migrate`, with a document
   holding the migration connection the test gives and nothing else (OPS-MIG-001), then
-  `bootstrap`, then `register-client` for each browser application the host declares (its
-  `SignOnClient`, AUTH-SESS-012), with the document of the host's `FixedSecretSource`, keeping
-  the enrolment link and the administrative organization's identifier `bootstrap`
-  printed;
+  `bootstrap`, then `register-client` for each browser application the host declares
+  (its `SignOnClient`, AUTH-SESS-012), with the document of the host's
+  `FixedSecretSource`, keeping the enrolment link and the administrative organization's
+  identifier `bootstrap` printed. It takes the address the test serves the application
+  at: its origin, `https`, or `http` on a loopback IP literal, as every registered
+  return address is (AUTH-OIDC-006), and the path the browser profile is mounted under.
+  It registers the sign-on client with `--client` its identifier, `--name` the same
+  identifier, `--kind browser-application`, `--redirect` that address's
+  `auth/signon/return` route (`09` `GET /auth/signon/return`) and `--scopes openid`
+  (AUTH-OIDC-001, D-206);
 - `TestPeople`, over a running host: a customer registered through the registration
   endpoints with the codes the in-memory transports hold; the first administrator,
   enrolled with a software passkey through the enrolment link; a staff member invited by
@@ -651,7 +668,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205*
+*Source: D-204, D-205, D-206*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
