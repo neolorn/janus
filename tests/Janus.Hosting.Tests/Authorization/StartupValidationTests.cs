@@ -1418,6 +1418,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             typeof(RelayValidationService),
             typeof(LawfulBasisStartService),
             typeof(DocumentSupersessionStartService),
+            typeof(NoticeCookiesStartService),
             typeof(DeclaredRoleStartService),
         ];
 
