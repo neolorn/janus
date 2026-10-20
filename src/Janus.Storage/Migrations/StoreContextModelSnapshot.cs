@@ -3941,7 +3941,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
+                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'restriction-changed', 'takedown-executed')");
 
                         t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 

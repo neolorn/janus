@@ -15,9 +15,7 @@ namespace Janus.Core;
 /// and the consents and objections.
 /// </param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003 and LIB-API-005. What the host holds in its own tables
-/// is the host's to return, and reaches it as the <c>ExportRequested</c> event this
-/// assembly raises (PRIV-RIGHT-005b).
+/// Implements PRIV-RIGHT-003 and LIB-API-005.
 /// </remarks>
 public sealed record SubjectExport(
     SubjectId Subject,

@@ -48,7 +48,6 @@ internal sealed class EventConsumers(IServiceProvider services)
         CredentialSuspended each => Registered(each),
         DeviceVerified each => Registered(each),
         ErasureRequested each => Registered(each),
-        ExportRequested each => Registered(each),
         IdentifierAdded each => Registered(each),
         IdentifierPrimaryChanged each => Registered(each),
         IdentifierRemoved each => Registered(each),

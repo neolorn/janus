@@ -292,23 +292,16 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003a: an export's delivery is none of the three kinds the manual path
-    /// closes, so it is not found there, and an identifier naming nothing is not found
-    /// either; the step-up is not asked for either (X8).
+    /// IDN-LIFE-003a: an identifier naming no delivery is not found, and the step-up is
+    /// not asked for (X8).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003a_ADeliveryOfAnotherKindIsNotFoundAsync()
+    public async Task IDN_LIFE_003a_AnIdentifierNamingNoDeliveryIsNotFoundAsync()
     {
-        Delivery export = await FailedAsync(SubjectEventKind.ExportRequested);
-
-        Assert.Equal(
-            ErrorCodes.ErasureNotFound,
-            Refused(await CompletedAsync(Mona, new ErasureId(export.Id.Value))).Code);
         Assert.Equal(
             ErrorCodes.ErasureNotFound,
             Refused(await CompletedAsync(Mona, new ErasureId(Guid.NewGuid()))).Code);
-        Assert.Equal(ErasureStatus.Failed, export.Status);
         Assert.Empty(_audit.Entries);
         Assert.Empty(_stepUp.Asked);
     }

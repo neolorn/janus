@@ -1025,10 +1025,6 @@ Janus.Core.ExportRecord.Equals(Janus.Core.ExportRecord? other) -> bool
 Janus.Core.ExportRecord.ExportRecord(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void
 Janus.Core.ExportRecord.Values.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
 Janus.Core.ExportRecord.Values.init -> void
-Janus.Core.ExportRequested
-Janus.Core.ExportRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
-Janus.Core.ExportRequested.Equals(Janus.Core.ExportRequested? other) -> bool
-Janus.Core.ExportRequested.ExportRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
 Janus.Core.ExportSection
 Janus.Core.ExportSection.<Clone>$() -> Janus.Core.ExportSection!
 Janus.Core.ExportSection.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.ExportRecord!>! Records) -> void
@@ -3212,10 +3208,6 @@ override Janus.Core.ExplainedPrincipal.GetHashCode() -> int
 override Janus.Core.ExportRecord.Equals(object? obj) -> bool
 override Janus.Core.ExportRecord.GetHashCode() -> int
 override Janus.Core.ExportRecord.ToString() -> string!
-override Janus.Core.ExportRequested.<Clone>$() -> Janus.Core.ExportRequested!
-override Janus.Core.ExportRequested.Equals(object? obj) -> bool
-override Janus.Core.ExportRequested.GetHashCode() -> int
-override Janus.Core.ExportRequested.ToString() -> string!
 override Janus.Core.ExportSection.Equals(object? obj) -> bool
 override Janus.Core.ExportSection.GetHashCode() -> int
 override Janus.Core.ExportSection.ToString() -> string!
@@ -3582,7 +3574,6 @@ override sealed Janus.Core.CredentialRestored.Equals(Janus.Core.DomainEvent? oth
 override sealed Janus.Core.CredentialSuspended.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ErasureRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
-override sealed Janus.Core.ExportRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4169,8 +4160,6 @@ static Janus.Core.ExplainedPrincipal.operator !=(Janus.Core.ExplainedPrincipal l
 static Janus.Core.ExplainedPrincipal.operator ==(Janus.Core.ExplainedPrincipal left, Janus.Core.ExplainedPrincipal right) -> bool
 static Janus.Core.ExportRecord.operator !=(Janus.Core.ExportRecord? left, Janus.Core.ExportRecord? right) -> bool
 static Janus.Core.ExportRecord.operator ==(Janus.Core.ExportRecord? left, Janus.Core.ExportRecord? right) -> bool
-static Janus.Core.ExportRequested.operator !=(Janus.Core.ExportRequested? left, Janus.Core.ExportRequested? right) -> bool
-static Janus.Core.ExportRequested.operator ==(Janus.Core.ExportRequested? left, Janus.Core.ExportRequested? right) -> bool
 static Janus.Core.ExportSection.operator !=(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
 static Janus.Core.ExportSection.operator ==(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
 static Janus.Core.FactorPresentation.operator !=(Janus.Core.FactorPresentation? left, Janus.Core.FactorPresentation? right) -> bool

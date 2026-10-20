@@ -162,15 +162,13 @@ internal sealed class Delivery
     /// later raises what the transaction raised.
     /// </summary>
     /// <returns>The event.</returns>
-    /// <exception cref="InvalidOperationException">The row carries a kind that is not one of the four.</exception>
+    /// <exception cref="InvalidOperationException">The row carries a kind that is not one of the three.</exception>
     public SubjectEvent Raised() => Kind switch
     {
         SubjectEventKind.ErasureRequested =>
             new ErasureRequested(RaisedAt, IdempotencyKey, Reason) { Subject = Subject },
         SubjectEventKind.RestrictionChanged =>
             new RestrictionChanged(RaisedAt, IdempotencyKey, Restricted) { Subject = Subject },
-        SubjectEventKind.ExportRequested =>
-            new ExportRequested(RaisedAt, IdempotencyKey) { Subject = Subject },
         SubjectEventKind.TakedownExecuted =>
             new TakedownExecuted(RaisedAt, IdempotencyKey) { Subject = Subject },
         _ => throw new InvalidOperationException("The delivery carries no event this library raises."),

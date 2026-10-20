@@ -15,15 +15,14 @@ public sealed class SubjectEventContractTests
 {
     /// <summary>
     /// IDN-LIFE-003a AC2: the event says that an account was erased, that a
-    /// restriction changed, that an export was asked for or that an account was taken
-    /// down, and a second application
+    /// restriction changed or that an account was taken down, and a second application
     /// registers as another subscriber without the library changing at all.
     /// </summary>
     [Fact]
     public void IDN_LIFE_003a_AC2_NoSubjectEventNamesAConsumerOrItsDomain()
     {
         Assert.Equal(
-            ["ErasureRequested", "ExportRequested", "RestrictionChanged", "TakedownExecuted"],
+            ["ErasureRequested", "RestrictionChanged", "TakedownExecuted"],
             Raised().Select(type => type.Name).Order(StringComparer.Ordinal));
 
         Assert.Equal(
@@ -36,12 +35,19 @@ public sealed class SubjectEventContractTests
 
         Assert.Equal(
             ["Actor", "Effective", "IdempotencyKey", "RaisedAt", "Subject"],
-            Carried(typeof(ExportRequested)));
-
-        Assert.Equal(
-            ["Actor", "Effective", "IdempotencyKey", "RaisedAt", "Subject"],
             Carried(typeof(TakedownExecuted)));
     }
+
+    /// <summary>
+    /// PRIV-RIGHT-005b, chapter 10 section 5b: what the host holds reaches an export
+    /// when it is assembled, so <c>ExportRequested</c> is retired and no event is owed
+    /// after an export.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005b_NoEventIsOwedAfterAnExport() =>
+        Assert.DoesNotContain(
+            typeof(DomainEvent).Assembly.GetExportedTypes(),
+            type => type.IsSubclassOf(typeof(DomainEvent)) && type.Name.StartsWith("Export", StringComparison.Ordinal));
 
     /// <summary>
     /// IDN-LIFE-003a AC2: every value an event carries is the library's own or the
