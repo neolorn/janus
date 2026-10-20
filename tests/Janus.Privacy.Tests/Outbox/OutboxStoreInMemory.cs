@@ -281,14 +281,11 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
             _deliveries.Find(held => held.Id == delivery) is Delivery held ? Progress(held) : null);
 
     /// <inheritdoc/>
-    public ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
-        SubjectEventKind kind,
-        CancellationToken cancellationToken) =>
+    public ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<DeliveryProgress>>(
         [
             .. _deliveries
-                .Where(delivery => delivery.Kind == kind
-                    && delivery.Status is not Core.ErasureStatus.Complete)
+                .Where(delivery => delivery.Status is not Core.ErasureStatus.Complete)
                 .OrderBy(delivery => delivery.RaisedAt)
                 .Select(Progress),
         ]);

@@ -680,6 +680,12 @@ Janus.Core.CredentialSuspended.InvalidatesAt.get -> System.DateTimeOffset
 Janus.Core.CredentialSuspended.InvalidatesAt.init -> void
 Janus.Core.CredentialSuspended.Kind.get -> Janus.Core.Factor
 Janus.Core.CredentialSuspended.Kind.init -> void
+Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Consent = 3 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Erasure = 0 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Objection = 4 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Restriction = 2 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Takedown = 1 -> Janus.Core.DeliveryKind
 Janus.Core.DeliveryChange
 Janus.Core.DeliveryChange.Granted = 0 -> Janus.Core.DeliveryChange
 Janus.Core.DeliveryChange.Lifted = 5 -> Janus.Core.DeliveryChange
@@ -948,12 +954,18 @@ Janus.Core.ErasureProgress
 Janus.Core.ErasureProgress.<Clone>$() -> Janus.Core.ErasureProgress!
 Janus.Core.ErasureProgress.Attempts.get -> int
 Janus.Core.ErasureProgress.Attempts.init -> void
-Janus.Core.ErasureProgress.Deconstruct(out Janus.Core.ErasureId Id, out Janus.Core.SubjectId Subject, out Janus.Core.ErasureReason Reason, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.ErasureProgress.Change.get -> Janus.Core.DeliveryChange?
+Janus.Core.ErasureProgress.Change.init -> void
+Janus.Core.ErasureProgress.Deconstruct(out Janus.Core.ErasureId Id, out Janus.Core.DeliveryKind Kind, out Janus.Core.SubjectId Subject, out string? Purpose, out Janus.Core.DeliveryChange? Change, out Janus.Core.ErasureReason? Reason, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.ErasureProgress.Equals(Janus.Core.ErasureProgress? other) -> bool
-Janus.Core.ErasureProgress.ErasureProgress(Janus.Core.ErasureId Id, Janus.Core.SubjectId Subject, Janus.Core.ErasureReason Reason, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.ErasureProgress.ErasureProgress(Janus.Core.ErasureId Id, Janus.Core.DeliveryKind Kind, Janus.Core.SubjectId Subject, string? Purpose, Janus.Core.DeliveryChange? Change, Janus.Core.ErasureReason? Reason, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.ErasureProgress.Id.get -> Janus.Core.ErasureId
 Janus.Core.ErasureProgress.Id.init -> void
-Janus.Core.ErasureProgress.Reason.get -> Janus.Core.ErasureReason
+Janus.Core.ErasureProgress.Kind.get -> Janus.Core.DeliveryKind
+Janus.Core.ErasureProgress.Kind.init -> void
+Janus.Core.ErasureProgress.Purpose.get -> string?
+Janus.Core.ErasureProgress.Purpose.init -> void
+Janus.Core.ErasureProgress.Reason.get -> Janus.Core.ErasureReason?
 Janus.Core.ErasureProgress.Reason.init -> void
 Janus.Core.ErasureProgress.Status.get -> Janus.Core.ErasureStatus
 Janus.Core.ErasureProgress.Status.init -> void

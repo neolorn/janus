@@ -91,12 +91,12 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// IDN-LIFE-003b AC2, chapter 09 section 8a: every erasure whose delivery is
-    /// outstanding, awaiting subscribers or failed, is read in one query with its
-    /// confirmations, and a completed erasure or a delivery of another kind is not.
+    /// IDN-LIFE-003b AC2, IDN-LIFE-003a AC9, chapter 09 section 8a (D-203): every
+    /// delivery that is not complete, awaiting subscribers or failed and of whichever
+    /// kind, is read in one query with its confirmations, and a completed one is not.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_003b_AC2_EveryOutstandingErasureIsReadInOneQueryAsync()
+    public async Task IDN_LIFE_003a_AC9_EveryIncompleteDeliveryOfEveryKindIsReadInOneQueryAsync()
     {
         SubjectId awaiting = await _deployment.AccountAsync(Noon);
         SubjectId failed = await _deployment.AccountAsync(Noon);
@@ -133,7 +133,6 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
         IReadOnlyList<DeliveryProgress> outstanding = await Store(reading, Noon).OutstandingAsync(
-            SubjectEventKind.ErasureRequested,
             TestContext.Current.CancellationToken);
 
         DeliveryProgress first = Assert.Single(outstanding, progress => progress.Delivery.Id == waiting.Id);
@@ -143,7 +142,9 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.Equal(ErasureStatus.Failed, second.Delivery.Status);
         Assert.Equal(ErasureReason.MinorTakedown, second.Delivery.Reason);
         Assert.DoesNotContain(outstanding, progress => progress.Delivery.Id == done.Id);
-        Assert.DoesNotContain(outstanding, progress => progress.Delivery.Kind is not SubjectEventKind.ErasureRequested);
+        Assert.Equal(
+            SubjectEventKind.TakedownExecuted,
+            Assert.Single(outstanding, progress => progress.Delivery.Id == takedown.Id).Delivery.Kind);
     }
 
     /// <summary>

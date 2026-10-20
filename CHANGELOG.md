@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /admin/erasures` lists every incomplete delivery of host-side work, an erasure's,
+  a takedown's, a restriction's, a consent's and an objection's, each with its `kind`,
+  `purpose` and `change`; `GET /admin/erasures/{id}` reads any of them, and
+  `POST /admin/erasures/{id}/complete` closes any that failed. `IErasures` and
+  `ErasureProgress` carry the same, through the new `DeliveryKind` and `DeliveryChange`.
 - `IPurposeHandler` gains `Name`, `ConsentChangedAsync` and `ObjectionChangedAsync`. Each
   consent and objection change is delivered through the outbox to every handler naming
   its purpose, confirmed by the handler's success, retried under `outbox.retry.*` and

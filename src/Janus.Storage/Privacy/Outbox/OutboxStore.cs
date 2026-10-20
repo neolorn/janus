@@ -323,14 +323,12 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
-        SubjectEventKind kind,
-        CancellationToken cancellationToken) =>
+    public async ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(CancellationToken cancellationToken) =>
     [
         .. (await context.Outbox
                 .AsNoTracking()
                 .Include(row => row.Confirmations)
-                .Where(row => row.Kind == kind && row.Status != Core.ErasureStatus.Complete)
+                .Where(row => row.Status != Core.ErasureStatus.Complete)
                 .OrderBy(row => row.RaisedAt)
                 .ThenBy(row => row.Id)
                 .ToListAsync(cancellationToken)

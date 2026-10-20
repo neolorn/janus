@@ -216,6 +216,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
             _outbox,
             new ErasureStoreInMemory(),
             [_records, _newsletter],
+            [],
             ledger: null,
             _audit,
             _work,

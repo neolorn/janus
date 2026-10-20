@@ -85,17 +85,18 @@ public sealed class DeclaredProcessingTests
 
     /// <summary>
     /// PRIV-BASIS-001 AC4: no library source chooses a path by a basis of the default
-    /// declaration, which is what a conditional on one is. Two files carry the words:
-    /// the declaration PRIV-BASIS-001 ships, which is the list itself, and the wire
-    /// name of a capability residual of chapter 10 section 5.20, which is not a basis
-    /// and is asserted to be what it is.
+    /// declaration, which is what a conditional on one is. Three files carry the words:
+    /// the declaration PRIV-BASIS-001 ships, which is the list itself, the wire name of
+    /// a capability residual of chapter 10 section 5.20 and that of a delivery kind of
+    /// section 5.50, neither of which is a basis, each asserted to be what it is.
     /// </summary>
     [Fact]
     public void PRIV_BASIS_001_AC4_NoLibrarySourceNamesABasis()
     {
         Assert.Empty(Branching(DefaultBases));
-        Assert.Equal(["CapabilityResidual.cs", "LawfulBases.cs"], Naming(DefaultBases));
+        Assert.Equal(["CapabilityResidual.cs", "DeliveryKind.cs", "LawfulBases.cs"], Naming(DefaultBases));
         Assert.Equal("consent", Wire(CapabilityResidual.Consent));
+        Assert.Equal("consent", Wire(DeliveryKind.Consent));
         Assert.Equal(DefaultBases, LawfulBases.Default.Select(basis => basis.Key));
     }
 
@@ -334,9 +335,10 @@ public sealed class DeclaredProcessingTests
 
     // The wire name chapter 10 gives a residual, read from where the library declares
     // it rather than from a second copy of the list.
-    private static string Wire(CapabilityResidual residual) =>
-        typeof(CapabilityResidual)
-            .GetField(residual.ToString())!
+    private static string Wire<TVocabulary>(TVocabulary member)
+        where TVocabulary : struct, Enum =>
+        typeof(TVocabulary)
+            .GetField(member.ToString())!
             .GetCustomAttribute<JsonStringEnumMemberNameAttribute>()!
             .Name;
 

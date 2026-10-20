@@ -697,8 +697,11 @@ GET /admin/erasures
   200
     application/json
       [].id: Guid
+      [].kind: DeliveryKind
       [].subject: Guid
-      [].reason: ErasureReason
+      [].purpose: string
+      [].change: DeliveryChange?
+      [].reason: ErasureReason?
       [].status: ErasureStatus
       [].attempts: number
       [].subscribers[].name: string
@@ -710,8 +713,11 @@ GET /admin/erasures/{id}
   200
     application/json
       id: Guid
+      kind: DeliveryKind
       subject: Guid
-      reason: ErasureReason
+      purpose: string
+      change: DeliveryChange?
+      reason: ErasureReason?
       status: ErasureStatus
       attempts: number
       subscribers[].name: string

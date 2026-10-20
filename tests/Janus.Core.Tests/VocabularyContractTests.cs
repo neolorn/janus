@@ -264,6 +264,16 @@ public sealed class VocabularyContractTests
     }
 
     /// <summary>
+    /// IDN-LIFE-003a, chapter 10 section 5.50: the kinds of a delivery of host-side
+    /// work, as the operator's list of incomplete deliveries spells them.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_003a_TheDeliveryKindsAreTheContract() =>
+        Assert.Equal(
+            ["consent", "erasure", "objection", "restriction", "takedown"],
+            WireNames<DeliveryKind>());
+
+    /// <summary>
     /// IDN-LIFE-003a, chapter 10 section 5.50: the change a delivery of host-side work
     /// announces, a consent's spelled as section 5.39 spells it, an objection's and a
     /// restriction's as section 5.50 does.
@@ -349,6 +359,7 @@ public sealed class VocabularyContractTests
             typeof(DeletionOrigin),
             typeof(ErasureStatus),
             typeof(ErasureReason),
+            typeof(DeliveryKind),
             typeof(DeliveryChange),
             typeof(TakedownTrigger),
             typeof(SessionType),
