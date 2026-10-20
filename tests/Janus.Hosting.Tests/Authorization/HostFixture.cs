@@ -301,6 +301,11 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
+                .Capabilities(
+                    HostPermissions.Read.ToString(),
+                    HostPermissions.Edit.ToString(),
+                    HostPermissions.Publish.ToString(),
+                    HostPermissions.Recommend.ToString())
                 .Encrypted(held => held.Notes, held => held.Owner, "history")
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
                 .Purpose("keeping the books", "legal-obligation", data: ["history"], subjects: ["members"])

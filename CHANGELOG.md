@@ -3714,3 +3714,9 @@ against the public contract of LIB-API-001.
   `botdefence.ranges.absent` where no file is held, or under `botdefence.ranges.stale`
   where the one held is older than `abuse.botdefence.ranges.maxage`; the raise where a
   registration is judged stays.
+- `ResourceTypeDeclarationBuilder<T>.Capabilities` declares which permissions are
+  capabilities of a type. A capability the model does not declare fails startup with
+  `model.startup.declarationinvalid` (`declaration` the type, `field` `capabilities`).
+  `IAccessGate.CapabilitiesAsync` answers only for the capabilities its type declares:
+  asking it for any other permission, a declared one included, raises, and a type that
+  declares none answers none.

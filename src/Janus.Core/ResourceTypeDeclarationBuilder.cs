@@ -13,6 +13,7 @@ namespace Janus.Core;
 /// <remarks>Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-003.</remarks>
 public sealed class ResourceTypeDeclarationBuilder<TResource>
 {
+    private readonly List<Permission> _capabilities = [];
     private readonly List<DerivationDeclaration> _derivations = [];
     private readonly List<EncryptedFieldDeclaration> _encrypted = [];
     private readonly List<PurposeDeclaration> _purposes = [];
@@ -164,6 +165,27 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
         return this;
     }
 
+    /// <summary>
+    /// Declares permissions that are capabilities of this type: what a page of its
+    /// records may be asked the caller may do, each a declared permission.
+    /// </summary>
+    /// <param name="permissions">The permissions, each in the form resource:action.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The list is absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well formed.</exception>
+    /// <remarks>Implements BFF-CAP-002 (D-202).</remarks>
+    public ResourceTypeDeclarationBuilder<TResource> Capabilities(params IReadOnlyList<string> permissions)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        foreach (string permission in permissions)
+        {
+            _capabilities.Add(Permission.Parse(permission));
+        }
+
+        return this;
+    }
+
     internal ResourceTypeDeclaration Build() =>
         new(_name,
             typeof(TResource),
@@ -173,5 +195,6 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
             _sensitive,
             _purposes,
             _derivations,
-            _encrypted);
+            _encrypted,
+            _capabilities);
 }

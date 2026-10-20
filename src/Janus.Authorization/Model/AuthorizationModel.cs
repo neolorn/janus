@@ -117,6 +117,7 @@ internal sealed class AuthorizationModel
 
         Dictionary<string, LawfulBasisDeclaration> bases = Bases(declaration);
         Dictionary<ResourceType, ResourceTypeDeclaration> types = Types(declaration);
+        HashSet<Permission> permissions = Permissions(declaration);
         var categories = new HashSet<string>(declaration.SensitiveCategories, StringComparer.Ordinal);
         var entities = new Dictionary<Type, ResourceTypeDeclaration>();
         var relationships = new Dictionary<string, RelationshipDeclaration>(StringComparer.Ordinal);
@@ -141,6 +142,7 @@ internal sealed class AuthorizationModel
         foreach (ResourceTypeDeclaration type in types.Values)
         {
             Check(type, types, relationships, bases, categories, declaration.RetentionFloors);
+            CheckCapabilities(type, permissions);
 
             if (!entities.TryAdd(type.Entity, type))
             {
@@ -155,7 +157,7 @@ internal sealed class AuthorizationModel
             types,
             entities,
             relationships,
-            Permissions(declaration),
+            permissions,
             new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
             declaration.StepUpGates,
             Purposes(declaration, processing),
@@ -816,6 +818,36 @@ internal sealed class AuthorizationModel
         }
     }
 
+    // BFF-CAP-002 (D-202): a capability is a permission a page of the type's records is
+    // asked about, so one no declaration names could never be answered by any rule.
+    private static void CheckCapabilities(ResourceTypeDeclaration type, HashSet<Permission> permissions)
+    {
+        foreach (Permission capability in type.Capabilities)
+        {
+            if (!permissions.Contains(capability))
+            {
+                throw Invalid(
+                    type.Name.ToString(),
+                    "capabilities",
+                    "the type " + type.Name + " declares " + capability
+                    + " as a capability, which the model does not declare");
+            }
+        }
+    }
+
+    // `10` section 1.5: a declaration that is present but malformed names the
+    // declaration and the member of it to change.
+    private static StartupException Invalid(string declaration, string field, string why) =>
+        new(
+            "The authorization model is refused, because " + why + ".",
+            new Error(
+                ErrorCodes.StartupDeclarationInvalid,
+                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                {
+                    ["declaration"] = JsonSerializer.SerializeToElement(declaration),
+                    ["field"] = JsonSerializer.SerializeToElement(field),
+                }));
+
     // What a refusal of the model reads as, wherever it is raised: the value at fault,
     // why it is at fault, and the code of `10` section 1.5 that names the condition.
     internal static StartupException Refused(ErrorCode code, string name, string value, string why) =>
@@ -824,15 +856,10 @@ internal sealed class AuthorizationModel
             Error.From(code, name, JsonSerializer.SerializeToElement(value)));
 
     private static StartupException Unlisted(string field) =>
-        new(
-            "The authorization model is refused, because the lawful basis list names a key twice or a basis with an empty key or label.",
-            new Error(
-                ErrorCodes.StartupDeclarationInvalid,
-                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
-                {
-                    ["declaration"] = JsonSerializer.SerializeToElement("lawfulBases"),
-                    ["field"] = JsonSerializer.SerializeToElement(field),
-                }));
+        Invalid(
+            "lawfulBases",
+            field,
+            "the lawful basis list names a key twice or a basis with an empty key or label");
 
     private static StartupException Malformed(string why) =>
         new("The authorization model is refused, because " + why + ".");

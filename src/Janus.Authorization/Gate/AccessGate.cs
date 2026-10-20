@@ -472,6 +472,7 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
         Declared(permissions);
+        Capable(type, permissions);
 
         if (FollowsFromTheHostsData(type))
         {
@@ -502,6 +503,7 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(sources);
         Declared(type);
         Declared(permissions);
+        Capable(type, permissions);
 
         return await PageAsync(
             context,
@@ -530,6 +532,25 @@ internal sealed class AccessGate(
             throw new InvalidOperationException(string.Create(
                 CultureInfo.InvariantCulture,
                 $"The permission '{permission}' is not declared, so no policy governs it."));
+        }
+    }
+
+    // BFF-CAP-002 (D-202): a page of a type's records answers only for the permissions
+    // the host declared as its capabilities, so asking for any other, a declared one
+    // included, is the calling code's fault (CONV-ERR-001), raised before anything is
+    // read; a type that declares none answers none.
+    private void Capable(ResourceType type, IReadOnlyList<Permission> permissions)
+    {
+        IReadOnlyList<Permission> capabilities = Declared(type).Capabilities;
+
+        foreach (Permission permission in permissions)
+        {
+            if (!capabilities.Contains(permission))
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The permission '{permission}' is not declared as a capability of '{type}'."));
+            }
         }
     }
 
