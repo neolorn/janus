@@ -127,6 +127,7 @@ internal static class ApiStatus
         [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
         [ErrorCodes.MailboxTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.CallbackInProgress] = StatusCodes.Status409Conflict,
+        [ErrorCodes.SubjectErased] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,

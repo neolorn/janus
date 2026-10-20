@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IPersonalFields` encrypts and decrypts a host's own declared encrypted fields under
+  the subject's key: `WithSubjectAsync` lends one subject's `SubjectFields`, and
+  `WithSubjectsAsync` lends a page of them, reading their keys in one statement and
+  unwrapping each once. Each value is bound to its subject, its type and the field's
+  declared name, so `Encrypted` takes a `name` for a member the host renames. Every key
+  is cleared when the use returns. A field of an erased subject answers
+  `privacy.subject.erased` (409), and a subject the deployment holds no key for answers
+  `api.request.invalid` naming `subject`.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
   number, that the credential is still active and the number still the account's before
   it issues the code. Where either changed since the ask read the credential, nothing is

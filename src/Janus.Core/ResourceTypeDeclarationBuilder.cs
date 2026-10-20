@@ -122,19 +122,34 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     /// <param name="field">The encrypted field.</param>
     /// <param name="subject">The field naming the subject.</param>
     /// <param name="category">The data category it holds, as a purpose on this type names it.</param>
+    /// <param name="name">
+    /// The name the field's values are bound to, where it is not the member's own: a
+    /// member the host renames is given its old name here, and its values stay readable
+    /// (PRIV-RIGHT-005a).
+    /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">Either expression is absent.</exception>
     /// <exception cref="ArgumentException">
-    /// Either expression names no member, or the category is absent or blank.
+    /// Either expression names no member, the category is absent or blank, or a name is
+    /// given blank.
     /// </exception>
     public ResourceTypeDeclarationBuilder<TResource> Encrypted(
         Expression<Func<TResource, object?>> field,
         Expression<Func<TResource, object?>> subject,
-        string category)
+        string category,
+        string? name = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(category);
+
+        if (name is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        }
+
+        string member = DeclaredMember.Of(field);
+
         _encrypted.Add(
-            new EncryptedFieldDeclaration(DeclaredMember.Of(field), DeclaredMember.Of(subject), category));
+            new EncryptedFieldDeclaration(member, DeclaredMember.Of(subject), category, name ?? member));
 
         return this;
     }

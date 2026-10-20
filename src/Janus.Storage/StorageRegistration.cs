@@ -158,6 +158,11 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IPersonalFields>(provider => new PersonalFields(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<IKeyRing>(),
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            provider.GetRequiredService<AuthorizationDeclaration>()));
         services.AddScoped<IErasureStore, ErasureStore>();
         services.AddScoped<ISubjectEraser, SubjectEraser>();
         services.AddScoped<Janus.Privacy.Outbox.IOutboxStore, OutboxStore>();

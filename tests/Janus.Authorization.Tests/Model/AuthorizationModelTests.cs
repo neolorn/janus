@@ -81,7 +81,8 @@ public sealed class AuthorizationModelTests
             new EncryptedFieldDeclaration(
                 nameof(HostDomain.Article.Body),
                 nameof(HostDomain.Article.Author),
-                "content"),
+                "content",
+                nameof(HostDomain.Article.Body)),
             article.EncryptedFields.Single());
         Assert.Equal(
             nameof(HostDomain.Folder.Reviewer),
@@ -233,7 +234,7 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup()
     {
         StartupException refused = Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "", "identity"))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "", "identity", "Body"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -250,9 +251,9 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup(string column)
     {
         Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column, "identity"))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column, "identity", "Body"))));
 
-        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity", "Body"))));
     }
 
     /// <summary>
@@ -265,12 +266,12 @@ public sealed class AuthorizationModelTests
     public void PRIV_PRIN_001_AC2_AnEncryptedFieldWhoseCategoryNoPurposeNamesFailsStartup()
     {
         StartupException refused = Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "health"))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "health", "Body"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
         Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
         Assert.Equal("Body", refused.Failure?.Details["field"].GetString());
-        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity", "Body"))));
     }
 
     /// <summary>

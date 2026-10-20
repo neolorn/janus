@@ -1185,6 +1185,14 @@ public static class ErrorCodes
     public static ErrorCode RequestReceivedFuture { get; } = ErrorCode.Parse("privacy.request.receivedfuture");
 
     /// <summary>
+    /// A host's field was to be encrypted or read for a subject whose key has been
+    /// erased. No personal data is written or read for a person who has been erased;
+    /// leave the field as it stands.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-005a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode SubjectErased { get; } = ErrorCode.Parse("privacy.subject.erased");
+
+    /// <summary>
     /// The request could not be read: its body is not the shape the endpoint takes, or
     /// a member it requires is absent. Where the offending member is known,
     /// <c>details.member</c> names it and carries nothing of its value.

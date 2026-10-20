@@ -182,6 +182,7 @@ public sealed class ErrorCodesTests
         "privacy.request.duplicate",
         "privacy.request.notfound",
         "privacy.request.receivedfuture",
+        "privacy.subject.erased",
         "system.fault",
     ];
 

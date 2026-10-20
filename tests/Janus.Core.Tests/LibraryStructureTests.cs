@@ -800,8 +800,9 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC4: the field cipher is reached from a port implementation and
-    /// from nowhere else, so no caller above the port holds a personal field's
+    /// CONV-DESIGN-003 AC4: the field cipher is reached from a port implementation and,
+    /// for a host's own fields, from the implementation of IPersonalFields, and from
+    /// nowhere else, so no caller above the port holds a personal field's
     /// ciphertext and no caller below it holds the plaintext.
     /// </summary>
     [Fact]
@@ -1472,10 +1473,12 @@ public sealed class LibraryStructureTests
         Roots.SelectMany(root =>
             Directory.EnumerateFiles(Path.Combine(Repository.Root, root), "*.csproj", SearchOption.AllDirectories));
 
-    // The cipher itself and the port implementations that run it. A store is named for
-    // what it stores, so the suffix is the whole rule.
+    // The cipher itself, the port implementations that run it, and the implementation of
+    // IPersonalFields that runs it over a host's own fields (D-203). A store is named for
+    // what it stores, so the suffix is the whole rule for the ports.
     private static bool IsCipherOrStore(string file) =>
         Path.GetFileName(file) is "PersonalFieldCipher.cs" or "PersonalFieldLocation.cs"
+            or "PersonalFields.cs" or "LentFields.cs"
             || Path.GetFileNameWithoutExtension(file).EndsWith("Store", StringComparison.Ordinal);
 
     private static IEnumerable<string> SourcesOf(string[] projects) =>
