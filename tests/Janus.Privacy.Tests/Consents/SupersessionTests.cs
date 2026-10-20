@@ -79,6 +79,7 @@ public sealed class SupersessionTests : IAsyncDisposable
             _configuration,
             _audit,
             _alerts,
+            new DeploymentCookiesInMemory(),
             _work,
             _clock);
 

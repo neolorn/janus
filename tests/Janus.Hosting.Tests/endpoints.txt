@@ -1513,6 +1513,10 @@ GET /privacy/notice
       text: string
       translations[].language: string
       translations[].text: string
+      cookies[].name: string
+      cookies[].purpose: string
+      cookies[].lifetime: string
+      cookies[].thirdParty: boolean
   403 auth.session.csrfinvalid
   404 privacy.document.notfound
 GET /privacy/objections

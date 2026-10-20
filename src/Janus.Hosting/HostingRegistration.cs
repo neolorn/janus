@@ -40,6 +40,7 @@ using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
+using Janus.Privacy.Documents;
 using Janus.Privacy.Requests;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
@@ -283,6 +284,7 @@ public static class HostingRegistration
         // the host wrote it and not only as the model rebuilt it.
         services.AddSingleton(declaration);
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        services.AddScoped<IDeploymentCookies, DeploymentCookies>();
         services.AddScoped<ISubjectNotices, SubjectNotices>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one

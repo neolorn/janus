@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A published version of the privacy notice keeps the cookies the deployment then sets:
+  the library's five, at the lifetimes its configuration gives, and every one the host
+  declares. `GET /privacy/notice` answers the version's own list in `cookies`, each
+  with `name`, `purpose`, `lifetime` and `thirdParty`; `DocumentVersion.Cookies` carries
+  the same.
 - `AuthorizationDeclarationBuilder.Cookie(name, lifetime, thirdPartyReadable, purpose)`
   declares each cookie the host sets. A cookie serving a purpose that is not declared or
   does not rest on consent, one named as a cookie the library sets, one whose name is no

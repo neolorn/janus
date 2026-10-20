@@ -1068,6 +1068,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
         _ = services.AddSingleton<Janus.Privacy.Policies.IAdministrativeOrganization>(PrivacyAdministrative);
         _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        _ = services.AddScoped<IDeploymentCookies>(_ => new DeploymentCookies(
+            Configuration,
+            Janus.Authorization.Tests.HostDomain.Declared().Build()));
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
         _ = services.AddSingleton<IConsentStore>(Consents);

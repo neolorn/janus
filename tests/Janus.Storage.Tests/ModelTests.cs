@@ -446,6 +446,12 @@ public sealed class ModelTests
             // Not an account field: the legal documents the deployment publishes, each
             // version binding in the one language it names (PRIV-CONS-005,
             // PRIV-CONS-006).
+            "legal_document_cookies.cookie",
+            "legal_document_cookies.document",
+            "legal_document_cookies.lifetime",
+            "legal_document_cookies.purpose",
+            "legal_document_cookies.third_party",
+            "legal_document_cookies.version",
             "legal_document_translations.document",
             "legal_document_translations.language",
             "legal_document_translations.translated_text",

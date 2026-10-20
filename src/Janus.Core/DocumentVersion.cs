@@ -24,4 +24,12 @@ public sealed record DocumentVersion(
     string GoverningLanguage,
     [property: NeverLogged] string Text,
     IReadOnlyList<DocumentTranslation> Translations,
-    DateTimeOffset PublishedAt);
+    DateTimeOffset PublishedAt)
+{
+    /// <summary>
+    /// The cookies the deployment set when the version was published, which a version
+    /// of the privacy notice alone carries and every other version carries none of
+    /// (PRIV-CONS-006a, D-203).
+    /// </summary>
+    public IReadOnlyList<NoticeCookie> Cookies { get; init; } = [];
+}

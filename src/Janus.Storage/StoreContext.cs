@@ -603,6 +603,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());
+        modelBuilder.ApplyConfiguration(new DocumentCookieConfiguration());
         modelBuilder.ApplyConfiguration(new ConsentConfiguration());
         modelBuilder.ApplyConfiguration(new ObjectionConfiguration());
         modelBuilder.ApplyConfiguration(new DeliveryConfiguration());

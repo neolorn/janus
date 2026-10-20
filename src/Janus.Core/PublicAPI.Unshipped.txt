@@ -855,6 +855,8 @@ Janus.Core.DocumentTranslation.Text.get -> string!
 Janus.Core.DocumentTranslation.Text.init -> void
 Janus.Core.DocumentVersion
 Janus.Core.DocumentVersion.<Clone>$() -> Janus.Core.DocumentVersion!
+Janus.Core.DocumentVersion.Cookies.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.NoticeCookie!>!
+Janus.Core.DocumentVersion.Cookies.init -> void
 Janus.Core.DocumentVersion.Deconstruct(out string! DocumentName, out string! Version, out string! GoverningLanguage, out string! Text, out System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, out System.DateTimeOffset PublishedAt) -> void
 Janus.Core.DocumentVersion.DocumentName.get -> string!
 Janus.Core.DocumentVersion.DocumentName.init -> void
@@ -1840,6 +1842,19 @@ Janus.Core.MessageTemplate.Text.get -> string!
 Janus.Core.MessageTemplate.Text.init -> void
 Janus.Core.NeverLoggedAttribute
 Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
+Janus.Core.NoticeCookie
+Janus.Core.NoticeCookie.<Clone>$() -> Janus.Core.NoticeCookie!
+Janus.Core.NoticeCookie.Deconstruct(out string! Name, out string? Purpose, out System.TimeSpan? Lifetime, out bool ThirdParty) -> void
+Janus.Core.NoticeCookie.Equals(Janus.Core.NoticeCookie? other) -> bool
+Janus.Core.NoticeCookie.Lifetime.get -> System.TimeSpan?
+Janus.Core.NoticeCookie.Lifetime.init -> void
+Janus.Core.NoticeCookie.Name.get -> string!
+Janus.Core.NoticeCookie.Name.init -> void
+Janus.Core.NoticeCookie.NoticeCookie(string! Name, string? Purpose, System.TimeSpan? Lifetime, bool ThirdParty) -> void
+Janus.Core.NoticeCookie.Purpose.get -> string?
+Janus.Core.NoticeCookie.Purpose.init -> void
+Janus.Core.NoticeCookie.ThirdParty.get -> bool
+Janus.Core.NoticeCookie.ThirdParty.init -> void
 Janus.Core.ObjectionChanged
 Janus.Core.ObjectionChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out string! Purpose, out bool Objecting) -> void
 Janus.Core.ObjectionChanged.Equals(Janus.Core.ObjectionChanged? other) -> bool
@@ -3366,6 +3381,9 @@ override Janus.Core.MembershipId.ToString() -> string!
 override Janus.Core.MessageTemplate.Equals(object? obj) -> bool
 override Janus.Core.MessageTemplate.GetHashCode() -> int
 override Janus.Core.MessageTemplate.ToString() -> string!
+override Janus.Core.NoticeCookie.Equals(object? obj) -> bool
+override Janus.Core.NoticeCookie.GetHashCode() -> int
+override Janus.Core.NoticeCookie.ToString() -> string!
 override Janus.Core.ObjectionChanged.<Clone>$() -> Janus.Core.ObjectionChanged!
 override Janus.Core.ObjectionChanged.Equals(object? obj) -> bool
 override Janus.Core.ObjectionChanged.GetHashCode() -> int
@@ -4305,6 +4323,8 @@ static Janus.Core.MembershipId.operator !=(Janus.Core.MembershipId left, Janus.C
 static Janus.Core.MembershipId.operator ==(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool
 static Janus.Core.MessageTemplate.operator !=(Janus.Core.MessageTemplate? left, Janus.Core.MessageTemplate? right) -> bool
 static Janus.Core.MessageTemplate.operator ==(Janus.Core.MessageTemplate? left, Janus.Core.MessageTemplate? right) -> bool
+static Janus.Core.NoticeCookie.operator !=(Janus.Core.NoticeCookie? left, Janus.Core.NoticeCookie? right) -> bool
+static Janus.Core.NoticeCookie.operator ==(Janus.Core.NoticeCookie? left, Janus.Core.NoticeCookie? right) -> bool
 static Janus.Core.ObjectionChanged.operator !=(Janus.Core.ObjectionChanged? left, Janus.Core.ObjectionChanged? right) -> bool
 static Janus.Core.ObjectionChanged.operator ==(Janus.Core.ObjectionChanged? left, Janus.Core.ObjectionChanged? right) -> bool
 static Janus.Core.ObjectionRecord.operator !=(Janus.Core.ObjectionRecord? left, Janus.Core.ObjectionRecord? right) -> bool

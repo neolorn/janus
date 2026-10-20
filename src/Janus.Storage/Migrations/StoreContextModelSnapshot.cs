@@ -3723,6 +3723,45 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("document");
+
+                b.Property<string>("Version")
+                    .HasColumnType("text")
+                    .HasColumnName("version");
+
+                b.Property<string>("Cookie")
+                    .HasColumnType("text")
+                    .HasColumnName("cookie");
+
+                b.Property<TimeSpan?>("Lifetime")
+                    .HasColumnType("interval")
+                    .HasColumnName("lifetime");
+
+                b.Property<string>("Purpose")
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
+
+                b.Property<bool>("ThirdParty")
+                    .HasColumnType("boolean")
+                    .HasColumnName("third_party");
+
+                b.HasKey("Name", "Version", "Cookie")
+                    .HasName("pk_legal_document_cookies");
+
+                b.ToTable("legal_document_cookies", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_legal_document_cookies_cookie", "length(trim(cookie)) > 0");
+
+                        t.HasCheckConstraint("ck_legal_document_cookies_lifetime", "lifetime IS NULL OR lifetime > interval '0'");
+
+                        t.HasCheckConstraint("ck_legal_document_cookies_purpose", "purpose IS NULL OR length(trim(purpose)) > 0");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentTranslationRecord", b =>
             {
                 b.Property<string>("Name")
@@ -4677,6 +4716,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_objections_subject");
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Privacy.Documents.DocumentVersionRecord", null)
+                    .WithMany("Cookies")
+                    .HasForeignKey("Name", "Version")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_legal_document_cookies_version");
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentTranslationRecord", b =>
             {
                 b.HasOne("Janus.Storage.Privacy.Documents.DocumentVersionRecord", null)
@@ -4739,6 +4788,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentVersionRecord", b =>
             {
+                b.Navigation("Cookies");
+
                 b.Navigation("Translations");
             });
 
