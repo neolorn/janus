@@ -419,6 +419,44 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-MODEL-004 AC1 (D-206): a host's encrypted value is bound to its type's
+    /// declared name, so a resource type declared twice under one name, over another
+    /// entity or the same one, stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming the type and <c>name</c>; the
+    /// second declaration under a name of its own builds.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_004_AC1_AResourceTypeDeclaredTwiceUnderOneNameFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Twice("article")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+
+        StartupException again = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(HostDomain.Declared()
+                .Resource<HostDomain.Folder>("folder", folder => folder
+                    .ContainedIn("workspace")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, again.Failure?.Code);
+        Assert.Equal("folder", again.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", again.Failure?.Details["field"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Twice("draft")));
+
+        static AuthorizationDeclaration Twice(string type) =>
+            HostDomain.Declared()
+                .Resource<HostDomain.Draft>(type, draft => draft
+                    .ContainedIn("folder")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build();
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC3: an entity the host queries and never declared has no
     /// policy, which a test enumerating the host's entities reads as a red build.
     /// </summary>

@@ -3838,3 +3838,6 @@ against the public contract of LIB-API-001.
 - A preference declared under a name holding a `.` or a `/`, or named `language` or
   `timeZone`, the names the export gives the account's language and time zone, fails
   startup with `model.startup.preferencedeclaration` naming it.
+- A resource type declared twice under one name fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` the type and
+  `details.field` `name`, since a host's encrypted value is bound to its type's name.

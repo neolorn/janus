@@ -479,9 +479,11 @@ internal sealed class AuthorizationModel
                     "the library reserves the name for the whole organization");
             }
 
+            // PRIV-RIGHT-005a (D-206): a host's encrypted value is bound to its type's
+            // declared name, so two types under one name could swap values unnoticed.
             if (!types.TryAdd(type.Name, type))
             {
-                throw Malformed("the resource type " + type.Name + " is declared twice");
+                throw Invalid(type.Name.ToString(), "name", "the resource type " + type.Name + " is declared twice");
             }
         }
 

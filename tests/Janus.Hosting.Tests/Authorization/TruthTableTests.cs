@@ -68,6 +68,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     [
         ("a grant on the record itself", Decided.Allowed),
         ("a grant on a record whose type declares its encrypted field under a name of its own", Decided.Allowed),
+        ("a grant on a record whose type no other type's declaration shares a name with", Decided.Allowed),
         ("a grant on the container", Decided.Allowed),
         ("a grant two containers above", Decided.Allowed),
         ("a grant on the whole organization", Decided.Allowed),
@@ -1784,6 +1785,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         {
             case "a grant on the record itself":
             case "a grant on a record whose type declares its encrypted field under a name of its own":
+            case "a grant on a record whose type no other type's declaration shares a name with":
             case "a grant whose role does not allow the permission":
             case "a grant on a record whose registration was removed, the record registered again":
                 await deployment.GrantAsync(
