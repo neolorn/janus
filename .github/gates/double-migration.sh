@@ -11,7 +11,7 @@ set -euo pipefail
 host=${PGHOST:-localhost}
 port=${PGPORT:-5432}
 user=${PGUSER:-postgres}
-storage=src/Janus.Storage
+cli=src/Janus.Cli
 
 create() {
   psql --quiet --no-psqlrc --host "$host" --port "$port" --username "$user" \
@@ -19,14 +19,17 @@ create() {
     "CREATE DATABASE $1 TEMPLATE template0 LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'"
 }
 
+# OPS-MIG-001 (D-204): the migrations are applied by `migrate`, the connection piped to
+# it as the only member of its document, as a host's pipeline applies them.
 apply() {
-  dotnet ef database update --project "$1" --connection \
-    "Host=${host};Port=${port};Username=${user};Password=${PGPASSWORD};Database=$2"
+  printf '{"connection": "%s"}' \
+    "Host=${host};Port=${port};Username=${user};Password=${PGPASSWORD};Database=$2" |
+    dotnet run --project "$1" --configuration Release -- migrate
 }
 
 echo "Run one: from empty."
 create migrated_from_empty
-apply "$storage" migrated_from_empty
+apply "$cli" migrated_from_empty
 
 previous=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
 
@@ -36,12 +39,12 @@ create migrated_from_previous
 if [ -n "$previous" ]; then
   release=${RUNNER_TEMP:-/tmp}/release-${previous}
   git worktree add --detach "$release" "$previous"
-  apply "${release}/${storage}" migrated_from_previous
+  apply "${release}/${cli}" migrated_from_previous
   git worktree remove --force "$release"
 else
   echo "No release is tagged yet, so the previous schema is the empty one."
 fi
 
-apply "$storage" migrated_from_previous
+apply "$cli" migrated_from_previous
 
 echo "Both runs applied."

@@ -76,4 +76,10 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("erasure-replay")]
     ErasureReplay = 9,
+
+    /// <summary>
+    /// Applying the library's migrations (OPS-MIG-001, D-204).
+    /// </summary>
+    [JsonStringEnumMemberName("migration")]
+    Migration = 10,
 }

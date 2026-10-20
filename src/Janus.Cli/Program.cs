@@ -10,6 +10,7 @@ using Janus.Cli.Bootstrap;
 using Janus.Cli.Clients;
 using Janus.Cli.Configuration;
 using Janus.Cli.Erasures;
+using Janus.Cli.Migration;
 using Janus.Cli.Rotation;
 using Janus.Core;
 using Janus.Storage;
@@ -20,7 +21,7 @@ namespace Janus.Cli;
 /// Entry point of the command-line application of CONV-LAYOUT-001.
 /// </summary>
 /// <remarks>
-/// Implements OPS-BOOT-001, OPS-SEC-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
+/// Implements OPS-BOOT-001, OPS-MIG-001, OPS-SEC-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
 /// goes to standard output; a refusal goes to standard error as the code and the
 /// structured data the API carries, never as a sentence.
 /// </remarks>
@@ -50,6 +51,7 @@ internal static class Program
             [ConfigureCommand.Name] = ConfigureCommand.RunAsync,
             [ReplayErasuresCommand.Name] = ReplayErasuresCommand.RunAsync,
             [RegisterClientCommand.Name] = RegisterClientCommand.RunAsync,
+            [MigrateCommand.Name] = MigrateCommand.RunAsync,
         };
 
     /// <summary>
@@ -90,7 +92,11 @@ internal static class Program
             .Match(
                 async produced =>
                 {
-                    await terminal.Output.WriteLineAsync(produced).ConfigureAwait(false);
+                    // OPS-MIG-001: a command that produces nothing, as migrate, writes nothing.
+                    if (produced.Length is not 0)
+                    {
+                        await terminal.Output.WriteLineAsync(produced).ConfigureAwait(false);
+                    }
 
                     return SucceededExitCode;
                 },

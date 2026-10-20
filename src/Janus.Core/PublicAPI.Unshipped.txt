@@ -2944,6 +2944,7 @@ Janus.Core.SystemOperation.Delivery = 4 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.ErasureReplay = 9 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.ExpirySweep = 3 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.KeyRotation = 7 -> Janus.Core.SystemOperation
+Janus.Core.SystemOperation.Migration = 10 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Monitoring = 5 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Reconciliation = 0 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.RecordsOfProcessing = 2 -> Janus.Core.SystemOperation

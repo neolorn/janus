@@ -72,6 +72,7 @@ public sealed class CommandTests
     [InlineData("configure")]
     [InlineData("replay-erasures")]
     [InlineData("register-client")]
+    [InlineData("migrate")]
     public async Task OPS_SEC_001_EveryCommandReportsARefusalAsOneLineOnStandardErrorAsync(string command)
     {
         Invocation run = await Invocation.TypedAsync([command]);

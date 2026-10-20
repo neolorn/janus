@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The `migrate` command applies the library's migrations to the database of the
+  connection piped to it as the only member of its document, and reads no key; a run
+  with nothing owed changes nothing. It writes nothing on success; a migration the
+  database refuses exits 1 with `system.fault` on standard error, the migrations
+  before it applied and nothing after. A pipeline runs it before deploying.
 - Where the cookies the deployment sets differ from those the current privacy notice
   lists, by name, purpose, lifetime or readability by a third party, `degradation` is
   raised under `notice.cookies` at each start and with each change of a key that gives
