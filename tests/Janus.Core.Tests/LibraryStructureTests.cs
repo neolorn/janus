@@ -713,6 +713,21 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// LIB-API-002 AC2: the conformance suite's sample takes its configuration through
+    /// the library's operations: it writes nothing into the library-owned settings and
+    /// changes <c>policy.default</c> at <c>PUT /admin/config/{key}</c>, as its first
+    /// administrator (D-206).
+    /// </summary>
+    [Fact]
+    public void LIB_API_002_AC2_TheConformanceSampleChangesPolicyDefaultAtTheConfigurationEndpoint()
+    {
+        string sample = Repository.ReadText(Path.Combine("tests", Sample, "SampleHost.cs"));
+
+        Assert.DoesNotContain("identity.settings", sample, StringComparison.Ordinal);
+        Assert.Contains("\"admin/config/\" + Settings.PolicyDefault.Key", sample, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// CONV-TEST-001 AC2: no project grants its internals to the project that holds
     /// the consumer sample.
     /// </summary>

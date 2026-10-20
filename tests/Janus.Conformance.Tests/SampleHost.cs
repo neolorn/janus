@@ -4,7 +4,9 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -40,8 +42,10 @@ namespace Janus.Conformance.Tests;
 /// written against the public surface alone, as a host outside the repository writes
 /// it. The schema is applied, the deployment bootstrapped and its client registered by
 /// the commands an operator runs, and it is started as a web server starts it, the
-/// checks that run before anything is served included. One container per test class,
-/// torn down with the class.
+/// checks that run before anything is served included. Its first administrator is
+/// enrolled through the link bootstrap printed, and the one runtime key it sets is
+/// changed by that administrator at the management endpoint (D-206). One container per
+/// test class, torn down with the class.
 /// </remarks>
 public sealed class SampleHost : IAsyncLifetime
 {
@@ -392,20 +396,6 @@ public sealed class SampleHost : IAsyncLifetime
                     PRIMARY KEY (binder_id, borrower));
                 CREATE INDEX ix_borrowers_borrower ON sample.borrowers (borrower);
                 """);
-
-            // Chapter 10 section 4.1a: the operator's policy for people in no
-            // organization asks at every gate what the administrative organization's
-            // asks, a phishing-resistant proof among it, so a report that lacks one is
-            // refused at the host's own gate (LIB-HOST-004 AC4).
-            _ = await connection.ExecuteAsync(
-                "INSERT INTO identity.settings (key, value) VALUES (@key, @value) "
-                    + "ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
-                new
-                {
-                    key = Settings.PolicyDefault.Key.ToString(),
-                    value = Settings.PolicyDefault.Write(
-                        Policies.SystemDefault with { Gates = Policies.AdministrativeOrganization.Gates }),
-                });
         }
 
         // AUTH-OIDC-001: this application's own client is registered from the server,
@@ -435,6 +425,21 @@ public sealed class SampleHost : IAsyncLifetime
         // with a software passkey, and signed in with it, as an operator's first person is.
         _people = new TestPeople(Address, Client, Terms, _server.Channel, Mail, Sms, _randomness);
         _administrator = await _people.AdministratorAsync(enrolment, administrator, CancellationToken.None);
+
+        // Chapter 10 section 4.1a: the operator's policy for people in no
+        // organization asks at every gate what the administrative organization's
+        // asks, a phishing-resistant proof among it, so a report that lacks one is
+        // refused at the host's own gate (LIB-HOST-004 AC4). A runtime key changes only
+        // at the management endpoint, by a person, with a reason (OPS-CFG-008, D-206).
+        await ConfiguredAsync(
+            new Uri("admin/config/" + Settings.PolicyDefault.Key, UriKind.Relative),
+            new JsonObject
+            {
+                ["value"] = JsonNode.Parse(Settings.PolicyDefault.Write(
+                    Policies.SystemDefault with { Gates = Policies.AdministrativeOrganization.Gates })),
+                ["reason"] = "Every gate asks what the administrative organization's asks.",
+            },
+            CancellationToken.None);
     }
 
     /// <inheritdoc/>
@@ -564,6 +569,40 @@ public sealed class SampleHost : IAsyncLifetime
         _ = ((IApplicationBuilder)application).UseEndpoints(_ => { });
 
         return application;
+    }
+
+    // OPS-CFG-008: one change of a runtime key by the first administrator, stepped up
+    // once where the endpoint asks for it, as the management application does.
+    private async Task ConfiguredAsync(Uri route, JsonObject change, CancellationToken cancellationToken)
+    {
+        (HttpStatusCode status, string? code) = await ChangedAsync(route, change, cancellationToken);
+
+        if (status is HttpStatusCode.Forbidden && code is "auth.stepup.required")
+        {
+            await Administrator.StepUpAsync(cancellationToken);
+
+            (status, code) = await ChangedAsync(route, change, cancellationToken);
+        }
+
+        if (status is not HttpStatusCode.NoContent)
+        {
+            throw new InvalidOperationException(
+                "PUT " + route + " answered " + (int)status + " " + code + ".");
+        }
+    }
+
+    private async Task<(HttpStatusCode Status, string? Code)> ChangedAsync(
+        Uri route,
+        JsonObject change,
+        CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage answered = await Administrator.PutAsJsonAsync(route, change, cancellationToken);
+
+        string body = await answered.Content.ReadAsStringAsync(cancellationToken);
+
+        return (
+            answered.StatusCode,
+            body.Length is 0 ? null : JsonNode.Parse(body)?["code"]?.GetValue<string>());
     }
 
     // BFF-ORDER-001: the machine profile, then the browser profile, then the endpoints.
