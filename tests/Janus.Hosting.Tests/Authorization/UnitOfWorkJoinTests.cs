@@ -22,6 +22,93 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "integration")]
 public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFixture>
 {
+    private static readonly ResourceType Document = ResourceType.Parse("document");
+    private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC1: a host's own row written through its joined context, and
+    /// the registrations and ancestry written beside it, are all gone once the unit of
+    /// work rolls back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC1_AHostsRowWrittenThroughAJoinedContextIsRolledBackWithTheAncestryAsync()
+    {
+        Case written = await BeginAsync();
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            HostContext context = scope.ServiceProvider.GetRequiredService<HostContext>();
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+            await WriteAsync(scope, context, written);
+            await work.RollbackAsync();
+        }
+
+        Assert.Equal(0, await HostRowsAsync(written.Document));
+        Assert.Equal(0, await RegisteredAsync(written.Document) + await RegisteredAsync(written.Workspace));
+        Assert.Equal(0, await AncestryOfAsync(written.Document) + await AncestryOfAsync(written.Workspace));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC1: a scope that ends its unit of work without a commit leaves
+    /// neither the host's row nor the ancestry, the host's context having been disposed
+    /// before the unit of work ended.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC1_AScopeEndedWithoutACommitLeavesNeitherTheHostsRowNorTheAncestryAsync()
+    {
+        Case written = await BeginAsync();
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            HostContext context = scope.ServiceProvider.GetRequiredService<HostContext>();
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+            await WriteAsync(scope, context, written);
+        }
+
+        Assert.Equal(0, await HostRowsAsync(written.Document));
+        Assert.Equal(0, await AncestryOfAsync(written.Document) + await AncestryOfAsync(written.Workspace));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC1: the same writes committed leave the host's row, the
+    /// registrations and the ancestry together, so what the rollback undid was written in
+    /// the first place, in the one transaction.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC1_AHostsRowAndTheAncestryCommitTogetherAsync()
+    {
+        Case written = await BeginAsync();
+        int seenElsewhere;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            HostContext context = scope.ServiceProvider.GetRequiredService<HostContext>();
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+            await WriteAsync(scope, context, written);
+
+            seenElsewhere = await HostRowsAsync(written.Document);
+
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(0, seenElsewhere);
+        Assert.Equal(1, await HostRowsAsync(written.Document));
+        Assert.Equal(2, await RegisteredAsync(written.Document) + await RegisteredAsync(written.Workspace));
+        Assert.Equal(2, await AncestryOfAsync(written.Document));
+    }
+
     /// <summary>
     /// AUTHZ-INHERIT-002 AC6: a unit of work that has not begun holds nothing to join,
     /// and the call is a fault that leaves the context as it was.
@@ -240,6 +327,45 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
         Assert.Equal(1, await HostRowsAsync(document));
     }
 
+    private static ResourceReference Reference(ResourceType type) =>
+        new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
+
+    private static void Ok(Result outcome) =>
+        outcome.Switch(() => { }, error => Assert.Fail(error.Code.ToString()));
+
+    // The library's registrations and the host's own row, written in one unit of work.
+    private static async Task WriteAsync(AsyncServiceScope scope, HostContext context, Case written)
+    {
+        Ok(await scope.ServiceProvider.GetRequiredService<IResources>().RegisterManyAsync(
+            [
+                new ResourceRegistration(written.Workspace, written.Organization, null, null),
+                new ResourceRegistration(written.Document, written.Organization, written.Workspace, written.Account),
+            ],
+            TestContext.Current.CancellationToken));
+
+        context.Documents.Add(new HostDocument
+        {
+            Id = written.Document.Id.ToString(),
+            Title = "written with its registration",
+            Owner = written.Account,
+        });
+
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task<Case> BeginAsync()
+    {
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([HostPermissions.Read], TestContext.Current.CancellationToken);
+        SubjectId account = await deployment.AccountAsync(TestContext.Current.CancellationToken);
+
+        return new Case(deployment.Organization, account, Reference(Workspace), Reference(Document));
+    }
+
+    private async Task<int> HostRowsAsync(ResourceReference document) =>
+        await HostRowsAsync(document.Id.ToString());
+
     private async Task<int> HostRowsAsync(string document)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
@@ -248,4 +374,30 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
             "SELECT count(*)::int FROM host.documents WHERE id = @id;",
             new { id = document });
     }
+
+    private async Task<int> RegisteredAsync(ResourceReference resource)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>(
+            "SELECT count(*)::int FROM identity.resources WHERE resource_type = @type AND resource_id = @id;",
+            new { type = resource.Type.ToString(), id = resource.Id.ToString() });
+    }
+
+    private async Task<int> AncestryOfAsync(ResourceReference resource)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>(
+            "SELECT count(*)::int FROM identity.ancestry WHERE resource_type = @type AND resource_id = @id;",
+            new { type = resource.Type.ToString(), id = resource.Id.ToString() });
+    }
+
+    // One case's organization, the account the document's subject is, and the two
+    // records registered.
+    private sealed record Case(
+        OrganizationId Organization,
+        SubjectId Account,
+        ResourceReference Workspace,
+        ResourceReference Document);
 }
