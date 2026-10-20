@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Under a policy requiring `aal1` the session cookie and the token cookie beside it last
+  until the session's absolute expiry, so a person stays signed in across a browser's
+  restart; under `aal2` they end with the browser's session, as the pre-authentication
+  cookie and its token always do. A pair issued again at a step-up or a privilege change
+  follows the policy in force then.
 - A host's own endpoint reads who is asking through `IRequestAccess.Current()`: the
   context and the session the library's own endpoints pass for the same request, or
   `auth.session.expired` where the request carries no live sign-in session.

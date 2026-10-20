@@ -265,6 +265,32 @@ public sealed class BrowserCookieTests : IDisposable
         Assert.DoesNotContain("Cookie", Repository.Source("SourceRateLimiting"), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// BFF-SESS-002 AC3: the instant an issue says the browser keeps the pair until is
+    /// written on the session cookie and the token beside it alike, and an issue that
+    /// states none leaves both ending with the browser's session.
+    /// </summary>
+    [Fact]
+    public void BFF_SESS_002_AC3_ThePairLastsUntilTheInstantTheIssueStatesAndOtherwiseEndsWithTheBrowser()
+    {
+        DateTimeOffset until = new(2026, 12, 18, 12, 0, 0, TimeSpan.Zero);
+        string[] lasting = [.. Answering(Issued(until), ApplicationKind.Public).Response.Headers.SetCookie.Select(header => header!)];
+        string[] ending = [.. Answering(Issued(), ApplicationKind.Public).Response.Headers.SetCookie.Select(header => header!)];
+
+        Assert.Equal(2, lasting.Length);
+        Assert.All(
+            lasting,
+            written => Assert.Contains("expires=" + until.ToString("R", System.Globalization.CultureInfo.InvariantCulture), written, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, ending.Length);
+        Assert.All(
+            ending,
+            written =>
+            {
+                Assert.DoesNotContain("expires=", written, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("max-age=", written, StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
 
@@ -277,10 +303,11 @@ public sealed class BrowserCookieTests : IDisposable
         "support",
     ];
 
-    private IssuedSession Issued() => new(
+    private IssuedSession Issued(DateTimeOffset? lasts = null) => new(
         SessionId.New(TimeProvider.System),
         OpaqueToken.Draw(_randomness),
-        OpaqueToken.Draw(_randomness));
+        OpaqueToken.Draw(_randomness),
+        lasts);
 
     private static DefaultHttpContext Answering(IssuedSession issued, ApplicationKind application)
     {

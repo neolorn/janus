@@ -631,6 +631,91 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-SESS-002 AC3: under a policy requiring <c>aal1</c> the pair a session is issued,
+    /// and the pair of a session derived from it, last until the session's absolute
+    /// expiry.
+    /// </summary>
+    [Fact]
+    public async Task BFF_SESS_002_AC3_UnderAnAal1PolicyThePairLastsUntilTheAbsoluteExpiryAsync()
+    {
+        IssuedSession issued = await BegunAsync(Subject(), [Factor.Passkey]);
+        Session session = _sessions.Behind(issued.Secret)!;
+
+        IssuedSession derived = Value(await Service.DeriveAsync(
+            session.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(session.AbsoluteExpiry, issued.Lasts);
+        Assert.Equal(_sessions.Behind(derived.Secret)!.AbsoluteExpiry, derived.Lasts);
+        Assert.Equal(session.AbsoluteExpiry, derived.Lasts);
+    }
+
+    /// <summary>
+    /// BFF-SESS-002 AC3: under a policy requiring <c>aal2</c> neither the pair a session is
+    /// issued nor the pair of a session derived from it states an expiry, so both end
+    /// with the browser's session.
+    /// </summary>
+    [Fact]
+    public async Task BFF_SESS_002_AC3_UnderAnAal2PolicyThePairEndsWithTheBrowserAsync()
+    {
+        IssuedSession issued = await BegunAsync(Staff(), [Factor.Passkey]);
+
+        IssuedSession derived = Value(await Service.DeriveAsync(
+            _sessions.Behind(issued.Secret)!.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(issued.Lasts);
+        Assert.Null(derived.Lasts);
+    }
+
+    /// <summary>
+    /// BFF-SESS-002 AC3: a pair issued again at a rotation follows the policy in force at
+    /// the rotation, not the one the session began under: a step-up and a privilege
+    /// change under a policy since raised to <c>aal2</c> state no expiry, and a privilege
+    /// change once it is back at <c>aal1</c> states the session's absolute expiry again.
+    /// </summary>
+    [Fact]
+    public async Task BFF_SESS_002_AC3_APairIssuedAgainFollowsThePolicyThenInForceAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        SubjectId subject = Subject();
+
+        _memberships.Place(subject, organization);
+
+        IssuedSession issued = await BegunAsync(subject, [Factor.Passkey]);
+        Session session = _sessions.Behind(issued.Secret)!;
+
+        _configuration.Set(Settings.OrganizationPolicy, organization.ToString(), Tightened());
+        _work.Reset();
+
+        IssuedSession steppedUp = Value(await Service.PresentAsync(
+            session,
+            [Factor.Passkey],
+            TestContext.Current.CancellationToken));
+
+        _work.Reset();
+
+        IssuedSession raised = Value(await Service.RotateAsync(session, TestContext.Current.CancellationToken));
+
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            new PolicyOverride(AssuranceLevel.Aal1, null, null, null, null, null, null));
+        _work.Reset();
+
+        IssuedSession relaxed = Value(await Service.RotateAsync(session, TestContext.Current.CancellationToken));
+
+        Assert.Equal(session.AbsoluteExpiry, issued.Lasts);
+        Assert.Null(steppedUp.Lasts);
+        Assert.Null(raised.Lasts);
+        Assert.Equal(session.AbsoluteExpiry, relaxed.Lasts);
+    }
+
+    /// <summary>
     /// AUTH-SESS-006: a privilege change issues a new identifier for the session
     /// without changing what it proved.
     /// </summary>
