@@ -36,4 +36,20 @@
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
 
+  <!-- LIB-PKG-001 AC4, CONV-LAYOUT-001 AC5: the packages are packed from the build this
+       project runs beside, in its configuration. INT-PWD-001 AC3: the main package's
+       identifier is read from its build. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="Configuration" Value="$(Configuration)" />
+  </ItemGroup>
+
+  <Target Name="MainPackageIdentity" BeforeTargets="GetAssemblyAttributes">
+    <MSBuild Projects="..\..\src\Janus.Hosting\Janus.Hosting.csproj" Targets="PackageIdentity">
+      <Output TaskParameter="TargetOutputs" PropertyName="MainPackageIdentifier" />
+    </MSBuild>
+    <ItemGroup>
+      <AssemblyMetadata Include="MainPackageIdentifier" Value="$(MainPackageIdentifier)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

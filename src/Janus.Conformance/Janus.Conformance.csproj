@@ -6,8 +6,14 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- LIB-PKG-001, CONV-LAYOUT-001 (D-205): a package of its own, depending on the main
+       package, which carries the contracts. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
+    <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" PrivateAssets="all" />
     <ProjectReference Include="..\Janus.Hosting\Janus.Hosting.csproj" />
   </ItemGroup>
 
@@ -15,7 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

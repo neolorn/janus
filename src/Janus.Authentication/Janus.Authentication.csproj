@@ -21,7 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <!-- AUTH-FACT-010, AUTH-FACT-012, D-166: the Public Suffix List travels unmodified,

@@ -9,4 +9,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-001 (D-205): only the main package and the four that ship beside it
+       pack; each of the five says so in its own project file. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
 </Project>

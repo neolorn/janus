@@ -1206,7 +1206,8 @@ public sealed class LibraryStructureTests
     /// CONV-DESIGN-008 AC3: the core, relational and design packages carry one version,
     /// the tool manifest gives dotnet-ef that version, and every lockfile resolves each
     /// of the three at it, so no build has two versions of one of their assemblies to
-    /// choose between. Storage alone references the relational package.
+    /// choose between. Storage references the relational package, and Janus.Hosting for the
+    /// main package's dependencies (CONV-LAYOUT-001, D-205).
     /// </summary>
     [Fact]
     public void CONV_DESIGN_008_AC3_TheRelationalAccessPackagesAndTheirToolCarryOneVersion()
@@ -1249,14 +1250,18 @@ public sealed class LibraryStructureTests
             }
         }
 
-        string referencing = Assert.Single(
-            Projects(),
-            project => XDocument
-                .Parse(File.ReadAllText(project))
-                .Descendants("PackageReference")
-                .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.EntityFrameworkCore.Relational"));
+        string[] referencing =
+        [
+            .. Projects()
+                .Where(project => XDocument
+                    .Parse(File.ReadAllText(project))
+                    .Descendants("PackageReference")
+                    .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.EntityFrameworkCore.Relational"))
+                .Select(project => Path.GetFileName(project))
+                .Order(StringComparer.Ordinal),
+        ];
 
-        Assert.Equal("Janus.Storage.csproj", Path.GetFileName(referencing));
+        Assert.Equal(["Janus.Hosting.csproj", "Janus.Storage.csproj"], referencing);
     }
 
     /// <summary>

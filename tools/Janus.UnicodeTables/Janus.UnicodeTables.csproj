@@ -4,7 +4,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Janus.Analyzers\Janus.Analyzers.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library packs as the main package `Janus.Hosting`, which carries the assemblies of
+  every area and declares as its dependencies the packages they reference at run time,
+  beside `Janus.Conformance`, which depends on it at the same version, `Janus.Analyzers`,
+  an analyser no package depends on, and `Janus.Cli`, a .NET tool whose command is
+  `identity`. No other project packs.
 - `IExportContributor` carries what a host holds about a subject into the subject's
   export: `GET /privacy/export` carries each registered contributor's sections after the
   library's, in contributor name order, in both formats. The export is counted only once
