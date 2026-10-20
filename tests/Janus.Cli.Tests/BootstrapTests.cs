@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -27,7 +28,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
     /// <summary>
     /// OPS-BOOT-001: a fresh deployment is stood up by the command, which answers with
-    /// the link and nothing else.
+    /// the link and the organization's identifier and nothing else.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -157,27 +158,66 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     {
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        string[] printed = deployment.First.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] printed = Printed();
 
-        Assert.Single(printed);
+        Assert.Equal(2, printed.Length);
         Assert.StartsWith(Link, printed[0], StringComparison.Ordinal);
+        Assert.True(Guid.TryParse(printed[1], out _));
         Assert.Equal(0, await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM identity.break_glass_credentials"));
         Assert.Equal(1, await connection.ExecuteScalarAsync<long>(
             "SELECT count(*) FROM identity.raised_alerts WHERE condition = 'no-emergency-credential'"));
     }
 
     /// <summary>
-    /// OPS-ENV-001 AC1: a fresh database is made ready for development by the command
-    /// that makes a production one ready, so what it holds is what production holds: an
-    /// administrator the printed link enrols and the reserved account, each a member of
-    /// the administrative organization holding the seeded role, and no grant of a role
-    /// that confers nothing.
+    /// OPS-BOOT-001 AC8 (D-204): standard output holds two lines, the enrolment link and
+    /// then the identifier of the administrative organization the run created, which a
+    /// host keeps in its own configuration.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC8_StandardOutputHoldsTheLinkThenTheOrganizationsIdentifierAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Guid organization = await connection.QuerySingleAsync<Guid>(
+            "SELECT id FROM identity.organizations WHERE administrative");
+
+        string[] printed = Printed();
+
+        Assert.Equal(2, printed.Length);
+        Assert.StartsWith(Link, printed[0], StringComparison.Ordinal);
+        Assert.Equal(organization.ToString("D", System.Globalization.CultureInfo.InvariantCulture), printed[1]);
+    }
+
+    /// <summary>
+    /// OPS-ENV-001 AC1 (D-204): a fresh database is made ready for development as a
+    /// production one is, by <c>migrate</c>, then <c>bootstrap</c>, then
+    /// <c>register-client</c> for the browser application, so what it holds is what
+    /// production holds: an administrator the printed link enrols and the reserved
+    /// account, each a member of the administrative organization holding the seeded role,
+    /// no grant of a role that confers nothing, and the application's client.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_ENV_001_AC1_AFreshDatabaseYieldsAUsablePermissionRealisticDatasetAsync()
     {
-        await using NpgsqlConnection connection = await deployment.OpenAsync();
+        string development = await deployment.CreateDatabaseAsync("development");
+
+        Invocation migrated = await Invocation.PipedAsync(["migrate"], new JsonObject { ["connection"] = development });
+        Invocation bootstrapped = await Invocation.PipedAsync(Invocation.Bootstrap(), Invocation.Keys(development));
+        Invocation registered = await Invocation.PipedAsync(
+            [
+                "register-client",
+                "--client", "console",
+                "--name", "The console",
+                "--kind", "browser-application",
+                "--redirect", Invocation.Origin + "/callback",
+                "--scopes", "openid email offline_access",
+            ],
+            Invocation.Keys(development));
+
+        await using var connection = new NpgsqlConnection(development);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
 
         IReadOnlyList<Guid> granted = [.. await connection.QueryAsync<Guid>(
             "SELECT DISTINCT subject_id FROM identity.grants WHERE NOT deny AND revoked_at IS NULL")];
@@ -193,11 +233,15 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
             held.Add(await RolesAsync(connection, subject));
         }
 
-        Assert.Equal(0, deployment.First.ExitCode);
-        Assert.StartsWith(Link, deployment.First.Output, StringComparison.Ordinal);
+        Reported.Success(migrated);
+        Reported.Success(bootstrapped);
+        Reported.Success(registered);
+        Assert.StartsWith(Link, bootstrapped.Output, StringComparison.Ordinal);
         Assert.Equal(2, held.Count);
         Assert.All(held, roles => Assert.Equal(["system-administrator"], roles));
         Assert.Equal(0, conferringNothing);
+        Assert.Equal(1, await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM identity.oidc_clients WHERE client_id = 'console'"));
     }
 
     /// <summary>
@@ -211,7 +255,7 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     {
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        string token = deployment.First.Output.Trim()[Link.Length..];
+        string token = Printed()[0][Link.Length..];
 
         (Guid subject, string purpose, TimeSpan lifetime) = await connection.QuerySingleAsync<(Guid, string, TimeSpan)>(
             "SELECT subject, purpose, expires_at - issued_at FROM identity.recovery_links WHERE token = @Fingerprint",
@@ -639,6 +683,10 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
 
     // The identity a system principal acts under, which no account holds.
     private static string Unheld => Guid.Empty.ToString();
+
+    // The lines the run that stood the deployment up wrote on standard output.
+    private string[] Printed() =>
+        deployment.First.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static async Task<IReadOnlyList<string>> RolesAsync(NpgsqlConnection connection, Guid subject) =>
         [.. await connection.QueryAsync<string>(

@@ -12,7 +12,7 @@ namespace Janus.Cli.Bootstrap;
 
 /// <summary>
 /// The <c>bootstrap</c> command: stands a fresh deployment up and prints the first
-/// administrator's enrolment link.
+/// administrator's enrolment link and the administrative organization's identifier.
 /// </summary>
 /// <remarks>
 /// Implements OPS-BOOT-001, OPS-SEC-001 and D-028. The command needs only the
@@ -35,7 +35,10 @@ internal static class BootstrapCommand
     /// <param name="arguments">The arguments that follow the command's name.</param>
     /// <param name="terminal">Where the keys are read from.</param>
     /// <param name="cancellationToken">Abandons the command, which then leaves nothing behind.</param>
-    /// <returns>The full <c>/enrol</c> address, or the failure naming what was refused.</returns>
+    /// <returns>
+    /// Two lines, the full <c>/enrol</c> address and the administrative organization's
+    /// identifier (D-204); or the failure naming what was refused.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static async Task<Result<string>> RunAsync(
         IReadOnlyList<string> arguments,
@@ -81,7 +84,9 @@ internal static class BootstrapCommand
         return (await scope.ServiceProvider.GetRequiredService<DeploymentBootstrap>()
                 .RunAsync(request, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(enrolment => Result.Success(enrolment.Address.AbsoluteUri), Result.Failure<string>);
+            .Match(
+                enrolment => Result.Success(enrolment.Address.AbsoluteUri + terminal.Output.NewLine + enrolment.Organization),
+                Result.Failure<string>);
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

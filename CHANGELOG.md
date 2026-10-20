@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `bootstrap` prints a second line after the enrolment address: the identifier of the
+  administrative organization it created, for the host to keep in its own configuration.
 - The `migrate` command applies the library's migrations to the database of the
   connection piped to it as the only member of its document, and reads no key; a run
   with nothing owed changes nothing. It writes nothing on success; a migration the

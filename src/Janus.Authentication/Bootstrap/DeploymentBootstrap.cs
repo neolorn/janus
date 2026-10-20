@@ -390,7 +390,7 @@ internal sealed class DeploymentBootstrap(
             return Result.Failure<BootstrapEnrolment>(notCommitted);
         }
 
-        return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime));
+        return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime, organization));
     }
 
     private static string? Stated(string text) =>
