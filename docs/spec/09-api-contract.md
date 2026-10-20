@@ -783,7 +783,7 @@ D-197).
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191, D-192, D-193, D-197*
+D-191, D-192, D-193, D-197, D-205*
 
 Rotates the session identifier on success.
 
@@ -791,9 +791,10 @@ Rotates the session identifier on success.
 gate on a session of the library belonging to the acting account carries in `details`
 the three gate values and what the subject can do about them. Where no such session
 carries the request (an in-process call without one, or a context the session does not
-belong to), no gate is judged and the refusal carries no `details`. A gate a host binds
-to its own action and judges through its assurance provider (LIB-HOST-004) carries
-`required`, `outcome` `present`, empty `options` and a null `pendingUntil`:
+belong to), no gate is judged against a session and the refusal carries no `details`,
+save one: a gate a host binds to its own action, judged from its assurance provider's
+report (LIB-HOST-004), carries `required`, `outcome` `present`, empty `options` and a null
+`pendingUntil`:
 
 ```json
 {

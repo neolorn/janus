@@ -19,14 +19,28 @@ registers their types and maps its endpoints, handlers, jobs and middleware onto
 internal operation services and asks the internal interfaces `08` CONV-DESIGN-007 names
 (LIB-API-005, `08` CONV-DESIGN-007), and `Janus.Storage`, which implements their ports
 (D-189). The conformance suite (LIB-TEST-001) and the analysers (`08` CONV-CODE-008)
-ship as two further packages, because a host runs the first and the build consumes the
-second; neither carries library behaviour. Two more ship beside them (D-204): `Janus.Cli`,
+ship as two further packages, because a host runs the first and a build that references
+the second loads it; neither carries library behaviour. Two more ship beside them (D-204): `Janus.Cli`,
 as a .NET tool package at the library's version, because a host's pipeline runs its
 `migrate` and a deployment its other commands; and `Janus.Testing`, the stand-ins and
 helpers a host's tests and its development setup use, which registers nothing on its own
 and skips no check (OPS-ENV-001).
 
-*Source: D-005, D-149, D-189, D-204*
+**The main package (D-205).** The main package is packed from `Janus.Hosting` under the
+identifier `Janus.Hosting`, the project whose `AddJanus` a host calls. Its `lib/net10.0`
+holds the assemblies of `Janus.Hosting`, `Janus.Core`, `Janus.Identity`,
+`Janus.Authentication`, `Janus.Authorization`, `Janus.Privacy` and `Janus.Storage`, with
+the documentation files of `Janus.Hosting` and `Janus.Core`; it carries the framework
+reference to `Microsoft.AspNetCore.App`; and it declares as its dependencies exactly the
+packages those seven projects reference at run time (every package reference whose
+assets are not all private, so neither `Microsoft.EntityFrameworkCore.Design`, the
+public surface analysers nor MinVer), at the versions `Directory.Packages.props` gives.
+No area is a package of its own. `Janus.Conformance` and `Janus.Testing` depend on the
+main package at the same version. `Janus.Analyzers` packs as an analyser, and no package
+depends on it: a host whose own code is to answer to its rules references it itself. `08`
+CONV-LAYOUT-001 states how the packages are packed.
+
+*Source: D-149, D-189, D-204, D-205*
 
 Splitting into separate packages up front means maintaining a version matrix between
 packages that only ever ship together. Split when a real second consumer needs one
@@ -39,6 +53,11 @@ part without the others, not before.
    `08` CONV-LAYOUT-002 permits.
 3. A release publishes the main package, `Janus.Conformance`, `Janus.Analyzers`,
    `Janus.Cli` as a .NET tool and `Janus.Testing`, all at one version.
+4. The packed main package is `Janus.Hosting`: its `lib/net10.0` holds the seven
+   assemblies and no other, it carries the framework reference, and the packages it
+   declares as dependencies are exactly those its seven projects reference at run time;
+   `Janus.Conformance` and `Janus.Testing` declare a dependency on it at the same
+   version, and no package declares one on `Janus.Analyzers`.
 
 ---
 
@@ -399,11 +418,12 @@ gate judged from a report asks below `aal1`), the instant phishing resistance wa
 reached (`PhishingResistantAt`, none where never) and the account's reachable assurance
 (`Reachable`), a presentation renewing only what it reaches. The gate is judged from
 that report as AUTH-STEP-002 step 1 judges a session (D-191). Absent one, step-up checks
-SHALL fail closed. Such a host makes its caller's context with
+SHALL fail closed. The provider is `IAssuranceProvider`, whose `AttainedAsync` answers a
+`Result<AttainedAssurance>` carrying that report. Such a host makes its caller's context with
 `AccessContext.Of(SubjectId)`, the one way a person's context is made where no session
 of the library carries the request (AUTHZ-IMP-001, D-202).
 
-*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191, D-192, D-202*
+*Source: D-041, AUTH-STEP-003, D-166, D-183, D-191, D-192, D-202, D-205*
 
 **Acceptance criteria**
 1. Authorization alone compiles and runs.
@@ -625,7 +645,13 @@ carries:
   synchronizer token and `X-Identity-Request` (BFF-CSRF-001, BFF-CSRF-003) on every
   request, with the person's subject, and a step-up with the person's passkey or password.
 
-*Source: D-204*
+A host's project that references the library's packages, a test project using
+`Janus.Testing` among them, carries the framework reference to `Microsoft.AspNetCore.App`
+itself: the reference a package carries prunes nothing in the project that takes it, and
+without its own the project resolves as packages what the shared framework serves (`08`
+CONV-LAYOUT-001, D-205).
+
+*Source: D-204, D-205*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -648,9 +674,10 @@ so that a host can be built on the public surface and stays able to be.
 **Values (D-204).** The sample host lives in the repository outside the library's
 solution, in a solution of its own (`samples/HostSample`, its tests in
 `samples/HostSample.Tests`, `08` CONV-LAYOUT-001), and references only the packages packed
-from the same commit (the main package and `Janus.Testing`, with `Janus.Cli` as its tool),
+from the same commit (the main package, `Janus.Hosting`, and `Janus.Testing`, with `Janus.Cli` as its tool),
 restored from a folder feed the gate fills, never a project of the library's solution. Its
-domain is its own invention, never a real host's. It is a small business application:
+test project carries the framework reference to `Microsoft.AspNetCore.App`, so the
+packages the shared framework serves resolve from it (`08` CONV-LAYOUT-001, D-205). Its domain is its own invention, never a real host's. It is a small business application:
 types of its own with an encrypted personal field, a sensitive type with a consent-based
 purpose, an objectable purpose with its handler, a subject-event subscriber and an export
 contributor, a declared role and a derivation over it, a job, and endpoints of its own
@@ -660,7 +687,7 @@ in building it is a gap in the public surface, raised as a question, never close
 project reference or an internals grant. Every later decision that adds to what a host
 meets adds to the sample.
 
-*Source: D-204*
+*Source: D-204, D-205*
 
 **Acceptance criteria**
 1. Building the sample host and running its tests is a gate of `08` CONV-GATE-001.

@@ -1159,13 +1159,13 @@ carries neither (`10` section 5b, D-187).
 
 **Where a context comes from (D-202).** No public member makes a context whose acting and
 effective identities differ. A host whose requests carry the library's sessions takes a
-person's context from the request their session carries (`17` BFF-HOST-001), so the
-step-up the session proved and a break-glass session's reason come with it, and never
-builds one; `AccessContext.Of(SubjectId)` is for a host that consumes authorization
+person's context from the request their session carries (`17` BFF-HOST-001), so a
+break-glass session's reason comes with it and the step-up the session proved is judged
+against that session (AUTH-STEP-002, D-205), and never builds one; `AccessContext.Of(SubjectId)` is for a host that consumes authorization
 without the library's authentication (LIB-HOST-004), for the conformance suite and for
 tests; `AccessContext.Of(SystemPrincipal)` makes a system principal's.
 
-*Source: D-014, D-166, D-183, D-187, D-202*
+*Source: D-014, D-166, D-183, D-187, D-202, D-205*
 
 Impersonation is out of scope. Two identity fields where one would do is defensible
 on its own terms — it makes "who did this" unambiguous — and retrofitting a second

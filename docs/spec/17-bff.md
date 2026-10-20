@@ -103,11 +103,11 @@ request being served, or the failure `auth.session.expired` where there is none
 (CONV-DESIGN-005). A `RequestAccess` carries `Context`, the `AccessContext` the library's
 own endpoints pass for the same request, its break-glass reason included where the
 session is a break-glass session or one another application opened from it
-(OPS-BOOT-002); `Session`, the `SessionId` the library's own endpoints pass to an operation
-for it; and `Assurance`, an `AttainedAssurance` read from the session record
-(AUTH-SESS-001) as the gate counts it: the instant each assurance level and phishing
-resistance were last reached since the session's last downgrade (AUTH-SESS-009), and the
-account's reachable level (AUTH-STEP-006). There is none where stage 5 left the request
+(OPS-BOOT-002); and `Session`, the `SessionId` the library's own endpoints pass to an
+operation for it. It carries no assurance: a host never judges assurance, and the gate it
+asks reads the session record and the account's reachable assurance when it judges
+(AUTH-STEP-002, AUTHZ-GATE-005), as it does for the library's own endpoints (D-205).
+There is no `RequestAccess` where stage 5 left the request
 without a live sign-in session (none presented, one that has ended, or only a
 pre-authentication, registration or enrolment session), and none outside the browser
 profile or outside a request (the machine profile, a job). It is what stage 5
@@ -119,18 +119,18 @@ person's context from here and never builds one; `AccessContext.Of(SubjectId)` i
 host that consumes authorization without the library's authentication (LIB-HOST-004), for
 the conformance suite and for tests (AUTHZ-IMP-001).
 
-*Source: D-202*
+*Source: D-202, D-205*
 
 The library's own endpoints read the session the pipeline resolved; a host's endpoint is
 the same kind of endpoint and reads the same thing. A context the host built for the
-person itself would carry neither the step-up the session proved nor a break-glass
-session's reason.
+person itself would not carry a break-glass session's reason; the step-up the session
+proved is judged against the session itself, wherever the context's acting subject is
+the session's (AUTHZ-GATE-005).
 
 **Acceptance criteria**
-1. In a request carrying a live sign-in session, `Current()` holds the context, the
-   session identifier and the attained assurance the library's own endpoints use for the
-   same request, and an operation called with them answers as it answers the library's
-   endpoint.
+1. In a request carrying a live sign-in session, `Current()` holds the context and the
+   session identifier the library's own endpoints use for the same request, and an
+   operation called with them answers as it answers the library's endpoint.
 2. `Current()` answers `auth.session.expired` for a request carrying no session, an ended
    one, or only a pre-authentication, registration or enrolment session, and in a job.
 3. In a break-glass session the context carries the break-glass reason, and a record a
@@ -139,8 +139,9 @@ session's reason.
    differ.
 5. After a step-up rotates the session (BFF-SESS-004), the next request's `Current()`
    names the new session identifier.
-6. The attained assurance of a session downgraded since it reached `aal2` reports no
-   `aal2` instant before the downgrade.
+6. A gate asked from a host endpoint judges the session as it judges for the library's
+   own endpoints: a session downgraded since it reached `aal2` does not meet an `aal2`
+   gate on the strength of the instant before the downgrade.
 
 ---
 

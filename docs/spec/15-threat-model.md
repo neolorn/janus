@@ -169,7 +169,7 @@ operator can recompute buys little until a second person holds the anchor.
 
 | Vector | Covered? |
 |---|---|
-| Compromised NuGet dependency | Partial — D-046 covers known advisories |
+| Compromised NuGet dependency | Partial — D-046 covers known advisories; for what the shared framework serves, the runtime's servicing release covers them (CONV-DEP-004, D-205) |
 | Compromised GitHub account | **Partial** — a compromised account can deploy to production |
 | Compromised provider (SMS, mail, or any processor the host declares) | Partial: minimisation limits what each holds |
 | Malicious provider callback | Covered — INT-GEN-003 |
@@ -284,7 +284,11 @@ scanning, or provenance. A compromised package executes with full application
 privilege.
 
 **Resolved — D-046.** Lockfile pinning, automated vulnerability alerting, deliberate
-dependency addition, prompt security updates.
+dependency addition, prompt security updates. A package the ASP.NET Core shared framework
+serves is resolved from the framework and held by no lockfile, so neither the audit nor
+alerting sees an advisory against it; the runtime's servicing release meets it, and what
+brings that release to the pipeline and to a deployment is a known issue carried into
+Milestone 2 (CONV-DEP-004, D-205).
 
 **Honest limit:** covers *known* vulnerabilities. A freshly compromised package with
 no advisory yet is not caught. Minimising dependency count is the only mitigation

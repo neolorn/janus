@@ -797,6 +797,8 @@ drop the part that cannot be acted on.
 
 ## D-017 — Data access: EF Core with Dapper, single boundary
 
+> **Amended.** The package split: the core and the EF Core provider are separate projects (`Janus.Core`, `Janus.Storage`) packed as assemblies of the one main package, `Janus.Hosting`; neither is a package of its own (D-205).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Affects:** D-015
 
 **Decision.** Both EF Core and Dapper from the start, with one unambiguous rule:
@@ -11710,6 +11712,8 @@ already pushed.
 
 > **Amended.** Item 2: a host encrypts its declared fields through `IPersonalFields`, the public field cipher D-203 adds, and erasure reaches them through it.
 
+> **Amended.** Item 1: the package's identifier is `Janus.Hosting`, the main package's, settled in round H1 rather than with the feed (D-205).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-068 (the application's step on erasure) · **Extends:** D-082, D-163, D-166 (item 114)
 
 **TL;DR.** Two questions stopped the corrections-4 run. The user agent D-166 item 114 and
@@ -12917,6 +12921,8 @@ rules and the stop conditions, the report); `08` the preamble, CONV-VCS-001, CON
 
 > **Amended.** Question 36: at a sign-in a second step presented before any first factor is refused `auth.factor.notpermitted` before it is verified and before anything of the account is read, counting and recording nothing (D-197).
 
+> **Amended.** Record `211b1d42`: `Janus.Hosting` also references the packages the projects packed inside the main package reference at run time, for the package's dependencies alone (D-205).
+
 **Date:** 2026-10-01 · **Status:** accepted · **Amends:** D-108 (the sensitive-data categories are no seeded table), D-166 (the items, rules and sections its D-183 note lists), D-171 (item 1, where the key ring is registered), D-176 (where the key ring and the mail server in use are registered)
 
 **TL;DR.** The answers to the 45 questions the corrections-4 run parked under D-182, and
@@ -13306,6 +13312,8 @@ REG-SESS-001, REG-SESS-003, REG-SESS-005, REG-SESS-007, REG-IDENT-007, REG-DOM-0
 > **Amended.** The analyser-authoring packages: `Microsoft.CodeAnalysis.CSharp` at 5.0.0, the compiler of SDK 10.0.100, and `Microsoft.CodeAnalysis.Analyzers` at 5.6.0 (D-197).
 
 > **Amended.** The sample host keeps its own package versions and tool manifest: the `Janus.*` packages and the `identity` tool at the version the gate passes it, restored unlocked from the gate's folder feed (D-204).
+
+> **Amended.** Item 67: `Janus.Hosting` references `Microsoft.EntityFrameworkCore.Relational` too, for the main package's dependencies, so a host resolves it at EF Core's version (D-205).
 
 **Date:** 2026-10-03 · **Status:** accepted · **Amends:** D-149 (item 9, the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`), D-046 and D-110 (two kinds of update are not taken one by one as they arrive) · **Extends:** D-149 (item 1, the SDK in `global.json` and the tool manifest)
 
@@ -16135,6 +16143,8 @@ the frontends' server side, the known issues carried).
 
 ## D-202 — A host builds on the public surface: who is asking, its own endpoints, its own jobs
 
+> **Amended.** Rule 1: `RequestAccess` carries `Context` and `Session` alone; the gate a host asks reads the session record and the account's reachable assurance when it judges. Rule 2: what comes with the context is the break-glass reason; the step-up the session proved is judged against the session (D-205).
+
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-201 (Milestone 1 closed), a host's review of the public surface · **Extends:** D-106 (the operations contract) · **Amends:** D-079b (system principals; `Janus.Hosting` beyond mounting), D-138 (what the reserved account refuses), D-162 (section B item 4, the capability query)
 
 **TL;DR.** Milestone 1 was built and tested from the inside. The library's own endpoints
@@ -16692,6 +16702,128 @@ the pipeline's credential, the commands' document); `implementation-plan.md` (se
 
 ---
 
+## D-205 — Round H1 questions 1 to 3: test projects take the shared framework, the main package is `Janus.Hosting`, a host's request carries no assurance
+
+**Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202, D-204 · **Amends:** D-202 (rule 1, what `RequestAccess` carries; rule 2, what comes with a context), D-017 (the package split), D-168 item 1 (the package's identifier), D-183 (record `211b1d42`) and D-184 item 67 (`Janus.Hosting` references the relational layer) · **Extends:** D-149 (the project layout), D-204 (the packages a host restores)
+
+**TL;DR.** Round H1 stopped at its first commit with three questions. (1) Advisories
+published on 2026-10-13 against `System.Security.Cryptography.Xml` and
+`System.Security.Cryptography.Pkcs` 10.0.11 fail the restore of two test projects, which
+take those packages as package copies through OpenIddict while the shipped projects take
+them from the shared framework. Every project that takes the library, test projects
+included, now carries the framework reference to `Microsoft.AspNetCore.App` itself, so
+tests run on what the library runs on; no package is added, and an advisory against what
+the framework serves is met by the runtime's servicing release. (2) No chapter said which
+project is the main package. It is `Janus.Hosting`, under that identifier, carrying the
+area assemblies inside it; the packing is stated in `08`. (3) `RequestAccess` carried an
+assurance whose reachable level stage 5 never reads. It now carries the context and the
+session only: the gate reads assurance itself when it judges, for a host's endpoint as for
+the library's.
+
+**The questions.** Questions 1 to 3 of round H1, raised at once before the round's
+report: questions 1 and 2 are Tier 2, and question 3, which touches what a host's request
+exposes of assurance, is Tier 3 by the working guide's section 3 and is answered as one.
+Each answer names its question; the chapters carry the full rule.
+
+1. **The shared framework in every project.** The shipped projects carry the framework
+   reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and NuGet prunes the
+   packages that framework serves from their graphs, so no `src/` lockfile holds the two
+   advisories' packages. `Janus.Hosting.Tests` and `Janus.Conformance.Tests` carry no
+   framework reference of their own, so they resolve the 10.0.11 copies
+   `OpenIddict.AspNetCore` 7.7.1 brings through `Microsoft.AspNetCore.DataProtection`, and
+   the audit's warnings, treated as errors, fail their restore and every commit's fast
+   checks. A reference a referenced project or package carries prunes nothing in the
+   project that takes it. At run time the library loads those assemblies from the shared
+   framework; a test project that resolves package copies tests the library on assemblies
+   it never runs with. Every project of the library's solution and of the sample host's
+   that targets `net10.0` and takes, directly or through another project, a project
+   carrying the framework reference carries it itself, test projects included
+   (CONV-LAYOUT-001), and a host's own project that references the library's packages, a
+   test project using `Janus.Testing` among them, does the same (LIB-TEST-003): a package
+   the shared framework serves resolves from the framework, never as a package. The
+   reference is no package (CONV-DESIGN-008), and the lockfiles lose the pruned entries.
+   With them goes the audit's and the platform's view of those packages: neither reports
+   an advisory against what the framework serves, and the two test projects' restore was
+   the one detector that saw these. Such an advisory is met by the runtime's servicing
+   release, taken as a security update (CONV-DEP-004); the advisories of 2026-10-13 are
+   closed where the shared framework carries both assemblies at 10.0.13 or later. What
+   brings each servicing release to the library's pipeline and to a deployment, since no
+   alert does, is not settled here: a deployment is built from a host's repository, not
+   the library's, and a trigger such as the platform's version updates on `global.json`
+   also has to meet the commit-format gate (CONV-VCS-003). It is carried into Milestone 2
+   as a known issue, decided before section 4's step 1. The platform's
+   alerting, on since phase 0 (the working guide, section 5), raised nothing here; the
+   restore's audit is what refused. *Rejected:* pinning both packages at 10.0.13 (two
+   packages outside CONV-DESIGN-008, a pin to remove once OpenIddict moves, and tests
+   still run on copies the library never loads); suppressing the audit's warnings (it
+   would hide the next advisory against a package that is not the framework's).
+2. **The main package.** LIB-PKG-001 ships the library as one package and names it
+   nowhere, and D-168 left its identifier to the package feed. The main package is packed
+   from `Janus.Hosting` under the identifier `Janus.Hosting`: the project whose `AddJanus`
+   a host calls, and the project the range API's user agent is generated in, whose
+   package identifier it names (INT-PWD-001, CONV-CODE-004). Its `lib/net10.0` holds the
+   assemblies of `Janus.Hosting`, `Janus.Core`, `Janus.Identity`, `Janus.Authentication`,
+   `Janus.Authorization`, `Janus.Privacy` and `Janus.Storage`, with the documentation
+   files of `Janus.Hosting` and `Janus.Core`; it carries the framework reference to
+   `Microsoft.AspNetCore.App`; and it declares as its dependencies exactly the packages
+   those seven projects reference at run time (every package reference whose assets are
+   not all private, so neither `Microsoft.EntityFrameworkCore.Design`, the public surface
+   analysers nor MinVer), at the versions `Directory.Packages.props` gives. No area is a
+   package of its own. The packing (CONV-LAYOUT-001): only `Janus.Hosting`,
+   `Janus.Conformance`, `Janus.Analyzers`, `Janus.Cli` and `Janus.Testing` are packable;
+   `Janus.Hosting`'s project references to the six other projects are private assets, a
+   target of `Janus.Hosting` hooked through `TargetsForTfmSpecificBuildOutput` adds their
+   build output to the package, and `Janus.Hosting` references every package they
+   reference at run time, for no purpose but the package's dependencies, a row of
+   CONV-DESIGN-008 naming a project alone not barring it, which a test holds equal to
+   their union. `Microsoft.EntityFrameworkCore.Relational`, which D-184 kept to
+   `Janus.Storage`, is so referenced by `Janus.Hosting` too, so a host resolves it at EF
+   Core's version as the library's own projects do. In `Janus.Conformance` and
+   `Janus.Testing` a project reference to `Janus.Core` is a private asset and the one to
+   `Janus.Hosting` is not, so each package depends on the main package at the same
+   version. The reference to `Janus.Analyzers` is a private asset in every project, so no
+   package depends on it; it packs as an analyser (its assembly under
+   `analyzers/dotnet/cs`, nothing under `lib`), and a host whose own code is to answer to
+   its rules references it itself, which D-197's reason for its compiler pin still serves.
+   `Janus.Cli` packs as a tool, carrying what it runs. *Rejected:* a project of its own
+   that only packs, under the identifier `Janus` (a project with no code, and a bare
+   product name CONV-NAME-001 criterion 2 does not admit in the files it scans); a
+   package per area, as D-017 once split the core from its EF Core provider (LIB-PKG-001:
+   one package, no version matrix); making the main package depend on `Janus.Analyzers`
+   (its rules, every class sealed and every asynchronous method taking a token among
+   them, are the library's conventions, not a host's).
+3. **What a host's request carries.** D-202 rule 1 gave `RequestAccess` an `Assurance`,
+   the session's instants and the account's reachable assurance. Stage 5 reads the
+   session record and never the account's reachable assurance, and `Current()` answers
+   what stage 5 established, synchronously. `RequestAccess` now carries `Context` and
+   `Session` alone. A host never judges assurance: step-up stays on the permission (D-202
+   rule 3), and the gate the host asks reads the session record and the account's
+   reachable assurance when it judges (AUTH-STEP-002, AUTHZ-GATE-005), as it does for the
+   library's own endpoints, which hold no assurance either. A copy made at stage 5 would
+   be a second reading that could disagree with the gate's, and reading the account
+   there would add a read to every request for a value no host needs to act correctly.
+   What comes with a context from `IRequestAccess` is the break-glass reason; the step-up
+   the session proved is judged against the session wherever the context's acting subject
+   is the session's (D-202 rule 2). `AttainedAssurance` stays the report of LIB-HOST-004's
+   assurance provider (`IAssuranceProvider.AttainedAsync`). *Rejected:* reading the
+   reachable assurance at stage 5; an asynchronous `CurrentAsync` that reads it on demand
+   (a second answer to the gate's question, and one more public member).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `07` LIB-PKG-001 (body, the main package, criterion 4), LIB-HOST-004
+(the provider's contract), LIB-TEST-003 (a host's projects), LIB-TEST-004 (the main
+package, the sample's test project); `08` CONV-LAYOUT-001 (the shared framework, the
+packing, criteria 4 and 5), CONV-DESIGN-008 (`Janus.Hosting`'s references for the
+package's dependencies, the relational access row), CONV-CODE-004 (the identifier),
+CONV-DEP-004 (the shared framework), CONV-TEST-001 (the references the packing requires);
+`03` AUTHZ-IMP-001 (where a context comes from); `05` INT-PWD-001 (the identifier,
+criterion 3); `09` `POST /auth/step-up` (a host's gate); `13` R-M20; `15` sections 3.7 and
+6.3; `17` BFF-HOST-001 (values, rationale, criteria 1 and 6); `implementation-plan.md`
+(sections 3a and 4, the known issue).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -16906,6 +17038,7 @@ the pipeline's credential, the commands' document); `implementation-plan.md` (se
 | A host builds on the public surface: who is asking, its own endpoints, its own jobs | D-202 |
 | The host's privacy duties: its own fields, its transaction, its part of an export | D-203 |
 | A host is set up, migrated and tested from the packages, and a sample host proves it | D-204 |
+| Round H1 questions 1 to 3: test projects take the shared framework, the main package is `Janus.Hosting`, a host's request carries no assurance | D-205 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

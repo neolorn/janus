@@ -891,19 +891,21 @@ password SHALL NEVER leave the system.
 SHA-1 of the UTF-8 password; the remaining 35 are matched locally against the range
 returned (D-041). Every range request SHALL send a user agent naming the library and its
 version, since the provider's acceptable use asks callers to identify themselves. The
-agent is `<package identifier>/<package version>` of the library's package, both taken
+agent is `<package identifier>/<package version>` of the library's package, `Janus.Hosting`
+(LIB-PKG-001), both taken
 from the constants of CONV-CODE-004: the identifier names the library as a host installed
 it, and the version carries no build metadata, so no commit identifier leaves the
 deployment (D-168).
 
-*Source: D-011, D-166, D-168*
+*Source: D-011, D-166, D-168, D-205*
 
 **Acceptance criteria**
 1. Outbound requests contain a prefix only.
 2. A test asserts the request contains no full hash.
 3. A test asserts every range request carries a user agent naming the library and its
-   version, that the version equals the version constant of CONV-CODE-004, and that it
-   contains no `+`.
+   version, that the identifier equals the main package's, `Janus.Hosting`'s `PackageId`,
+   read from the build and never spelled in committed source, that the version equals the
+   version constant of CONV-CODE-004, and that it contains no `+`.
 
 ---
 

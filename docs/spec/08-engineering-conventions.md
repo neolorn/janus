@@ -64,8 +64,36 @@ credential source of AUTH-KEY-001, with its stores in `Janus.Storage`.
 `Janus.Authentication` references `OpenIddict.Server` for the credential objects that
 source holds (CONV-CODE-007).
 
+**The shared framework in every project (D-205).** Every project of the library's
+solution and of the sample host's that targets `net10.0` and references, directly or
+through another project, a project carrying the framework reference to
+`Microsoft.AspNetCore.App` carries that reference itself, test projects included: a
+package the ASP.NET Core shared framework serves resolves from the framework in every
+project, never as a package, so tests run on the assemblies the library runs on. A
+reference carried by a referenced project or package prunes nothing in the project that
+takes it. `Janus.Analyzers` (`netstandard2.0`) and the `tools` projects reference no such
+project.
+
+**Packing (D-205).** Only `Janus.Hosting`, `Janus.Conformance`, `Janus.Analyzers`,
+`Janus.Cli` and `Janus.Testing` are packable. `Janus.Hosting` packs as the main package
+(`07` LIB-PKG-001): its project references to `Janus.Core`, `Janus.Identity`,
+`Janus.Authentication`, `Janus.Authorization`, `Janus.Privacy` and `Janus.Storage` are
+private assets; a target of `Janus.Hosting`, hooked through
+`TargetsForTfmSpecificBuildOutput`, adds their build output to the package; and
+`Janus.Hosting` references every package those projects reference at run time, so the
+package declares each as a dependency (CONV-DESIGN-008). A reference at run time is a
+package reference whose assets are not all private: `Microsoft.EntityFrameworkCore.Design`,
+`Microsoft.CodeAnalysis.PublicApiAnalyzers` and MinVer are none. A project that used one of
+those six projects through another project's private reference references it itself. In `Janus.Conformance` and
+`Janus.Testing` the project reference to `Janus.Core` is a private asset and the one to
+`Janus.Hosting` is not, so each depends on the main package. The reference to
+`Janus.Analyzers` is a private asset in every project, so no package depends on it; it
+packs as an analyser, its assembly under `analyzers/dotnet/cs` and nothing under `lib`,
+for a build that references it. `Janus.Cli` packs as a tool
+(`PackAsTool`, `ToolCommandName` `identity`), carrying what it runs.
+
 *Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176, D-181,
-D-183, D-187, D-189, D-197, D-204*
+D-183, D-187, D-189, D-197, D-204, D-205*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -77,6 +105,11 @@ does for free.
    and CONV-LAYOUT-002 allow `Janus.Storage`, `Janus.Hosting` and `Janus.Cli`.
 2. `Janus.Core` compiles with no database dependency.
 3. A dependency pointing outward fails the build.
+4. Every project the shared-framework rule names carries the framework reference to
+   `Microsoft.AspNetCore.App`, and none of them resolves as a package one the ASP.NET
+   Core shared framework serves.
+5. The packages the main package declares as dependencies equal the packages its seven
+   projects reference at run time, and only the five packable projects pack.
 
 ---
 
@@ -848,11 +881,13 @@ packages permitted, and a package outside this table needs a decision-log entry 
 it is referenced. The base class library is preferred wherever it suffices. Each package
 is referenced only for the purpose its row names, and only by the projects its row names
 where it names any; within those bounds, the project whose items need a package
-references it.
+references it. `Janus.Hosting` also references every package the projects packed inside
+the main package reference at run time, for no purpose but the package's dependencies
+(CONV-LAYOUT-001, D-205); a row naming a project alone does not bar it.
 
 | Purpose | Package | Why this one |
 |---|---|---|
-| Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage only, at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for writing the migrations and their script), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage` resolves it at EF Core's version, not at the lower floor the provider declares |
+| Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage, and `Janus.Hosting` for the main package's dependencies, CONV-LAYOUT-001; at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for writing the migrations and their script), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage`, and every host through the main package, resolves it at EF Core's version, not at the lower floor the provider declares |
 | Password hashing | `Konscious.Security.Cryptography.Argon2` | Argon2id is absent from the base class library; managed implementation, MIT licence (package listing inspected 2026-09-18) |
 | WebAuthn | `Fido2` (Fido2NetLib), which brings, among others, `Fido2.Models`, `System.Formats.Cbor` and `NSec.Cryptography` (which verifies EdDSA), none referenced directly (D-197), save `System.Formats.Cbor`, which `Janus.Testing` references for the software passkey's attestation object and authenticator data (LIB-TEST-003, D-204) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
 | TOTP | `Otp.NET` | RFC 6238 defaults; small |
@@ -877,7 +912,7 @@ shared framework of .NET is not a package: a project takes the container's abstr
 through the reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and their package
 is never referenced.
 
-*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197, D-204*
+*Source: CONV-DEP-003, D-149, D-166, D-183, D-184, D-197, D-204, D-205*
 
 **Acceptance criteria**
 1. The set of direct package references, read from `Directory.Packages.props`, equals
@@ -1003,13 +1038,14 @@ Collections SHALL never be exposed as mutable types.
 where a type, a generic or a source generator serves. `dynamic` SHALL NOT be used.
 Partial classes SHALL exist only where a source generator requires them.
 
-*Source: D-149, D-168*
+*Source: D-149, D-168, D-205*
 
 **The library's identity in code** is a pair of constants the build generates, not
 values read by reflection. A target declared in `Directory.Build.props` runs after MinVer
 has derived the version (CONV-VCS-005) and writes, into the intermediate output of the
 project that needs them, `internal` constants holding the identifier of the library's
-package and its package version without build metadata. The generated file carries the
+package, the main package's `Janus.Hosting` (`07` LIB-PKG-001, D-205), and its package
+version without build metadata. The generated file carries the
 `<auto-generated/>` header, so the analysers treat it as generated code, declares the
 project's root namespace, and is never committed. Nothing reads the version or the name
 from an assembly attribute, and no committed source spells the package identifier as a
@@ -1236,14 +1272,15 @@ carries what that work leaves.
 
 **CONV-TEST-001** — One test project per source project, mirroring its layout. A test
 project MAY reference another test project to use its fakes and helpers, and MAY
-reference a shipped project other than its own where a criterion reads it. A test that
+reference a shipped project other than its own where a criterion reads it or where
+CONV-LAYOUT-001's packing requires it (D-205). A test that
 reads every shipped assembly (LIB-API-002 AC1, CONV-DESIGN-002 AC1, CONV-DESIGN-006 AC1,
 CONV-DESIGN-007 AC6 to AC8) SHALL live in `Janus.Hosting.Tests`, which references every
 shipped project. The conformance suite's consumer sample (LIB-API-002 AC2) SHALL live in
 `Janus.Conformance.Tests`, and the sample host of LIB-TEST-004 in `samples/HostSample`
 and `samples/HostSample.Tests` (CONV-LAYOUT-001, D-204).
 
-*Source: D-156, D-166, D-180, D-183, D-204*
+*Source: D-156, D-166, D-180, D-183, D-204, D-205*
 
 **Acceptance criteria**
 1. A test's location identifies what it covers without reading it.
@@ -1707,7 +1744,7 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110, D-184*
+*Source: D-046, D-110, D-184, D-205*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
@@ -1719,6 +1756,14 @@ Two kinds of update are not taken one by one as they arrive: the packages and th
 CONV-DESIGN-008 holds at one version move together in one change, and the
 analyser-authoring packages move only by a decision-log entry, since the analysers must
 load in the compiler of every build that uses them.
+
+**The shared framework (D-205).** A package the ASP.NET Core shared framework serves is
+resolved from the framework in every project (CONV-LAYOUT-001), so no lockfile holds it,
+and neither the restore's audit nor the platform's alerting reports an advisory against
+it. Such an advisory is met by the runtime's servicing release, taken as a security
+update. What brings each servicing release to the library's pipeline and to a deployment,
+since no alert does, is a known issue carried into Milestone 2
+(`implementation-plan.md` section 4, D-205).
 
 **Acceptance criteria**
 1. Security alerts are actioned rather than accumulating.
