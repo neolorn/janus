@@ -8,6 +8,7 @@ using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Tests.Consents;
+using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Documents;
@@ -54,7 +55,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         new LegalDocumentService(
             _store,
             new AdministrativeScope(_gate, _administrative),
-            new Supersession(_consents, Declaration.Processing, _events),
+            new Supersession(_consents, Declaration.Processing, _events, new OutboxStoreInMemory()),
             _configuration,
             _audit,
             _alerts,

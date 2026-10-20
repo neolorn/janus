@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Consents;
+using Janus.Privacy.Outbox;
 using Janus.Privacy.Tests.Documents;
+using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Consents;
@@ -36,6 +38,7 @@ public sealed class ConsentTests : IAsyncDisposable
     private readonly ConsentStoreInMemory _consents = new();
     private readonly LegalDocumentStoreInMemory _documents = new();
     private readonly EventsInMemory _events = new();
+    private readonly OutboxStoreInMemory _outbox = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -52,6 +55,7 @@ public sealed class ConsentTests : IAsyncDisposable
             _documents,
             Declaration.Processing,
             _events,
+            _outbox,
             _audit,
             _work,
             _clock);
@@ -204,6 +208,33 @@ public sealed class ConsentTests : IAsyncDisposable
         Assert.Equal(ConsentChange.Withdrawn, announced.Change);
         Assert.Equal(Recommendations, announced.Purpose);
         Assert.Equal(Ahmed, announced.Subject);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-008 AC4, IDN-LIFE-003a AC1: a grant and its withdrawal are each owed to
+    /// the handlers naming the purpose, which erase on the withdrawal what was held
+    /// solely for it, written in the transaction that records the change; a plain
+    /// consumer still receives each as an event.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC4_AConsentChangeIsOwedToItsPurposesHandlersAsync()
+    {
+        _outbox.Work = _work;
+
+        await GrantAsync(Recommendations);
+        await WithdrawAsync(Recommendations);
+
+        Assert.Equal(_outbox.Deliveries, _outbox.AddedInTransaction);
+        Assert.Equal(
+            [
+                (Ahmed, SubjectEventKind.ConsentChanged, Recommendations, DeliveryChange.Granted),
+                (Ahmed, SubjectEventKind.ConsentChanged, Recommendations, DeliveryChange.Withdrawn),
+            ],
+            _outbox.Deliveries.Select(owed => (owed.Subject, owed.Kind, owed.Purpose, owed.Change)));
+        Assert.Equal(
+            [ConsentChange.Granted, ConsentChange.Withdrawn],
+            _events.Of<ConsentChanged>().Select(raised => raised.Change));
     }
 
     /// <summary>
@@ -374,6 +405,31 @@ public sealed class ConsentTests : IAsyncDisposable
         Assert.True(held.Standing);
         Assert.True(announced.Objecting);
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC2, AC3, IDN-LIFE-003a AC1: an objection and its withdrawal are
+    /// each owed to the handlers naming the purpose, written in the transaction that
+    /// records the change, and a plain consumer still receives each as an event.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AnObjectionChangeIsOwedToItsPurposesHandlersAsync()
+    {
+        _outbox.Work = _work;
+
+        Assert.True(await ObjectAsync(Security));
+        Assert.True((await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None))
+            .Match(() => true, _ => false));
+
+        Assert.Equal(_outbox.Deliveries, _outbox.AddedInTransaction);
+        Assert.Equal(
+            [
+                (Ahmed, SubjectEventKind.ObjectionChanged, Security, DeliveryChange.Recorded),
+                (Ahmed, SubjectEventKind.ObjectionChanged, Security, DeliveryChange.Withdrawn),
+            ],
+            _outbox.Deliveries.Select(owed => (owed.Subject, owed.Kind, owed.Purpose, owed.Change)));
+        Assert.Equal([true, false], _events.Of<ObjectionChanged>().Select(raised => raised.Objecting));
     }
 
     /// <summary>
@@ -570,6 +626,7 @@ public sealed class ConsentTests : IAsyncDisposable
             new LegalDocumentStoreInMemory(),
             Declaration.Processing,
             _events,
+            _outbox,
             _audit,
             _work,
             _clock);
@@ -599,6 +656,7 @@ public sealed class ConsentTests : IAsyncDisposable
         Assert.Empty(await HeldAsync());
         Assert.Empty(_events.Of<ConsentChanged>());
         Assert.Empty(_audit.Entries);
+        Assert.Empty(_outbox.Deliveries);
         Assert.Equal(0, _work.Committed);
     }
 
@@ -616,6 +674,7 @@ public sealed class ConsentTests : IAsyncDisposable
             new LegalDocumentStoreInMemory(),
             Declaration.Processing,
             _events,
+            _outbox,
             _audit,
             _work,
             _clock);
@@ -968,6 +1027,7 @@ public sealed class ConsentTests : IAsyncDisposable
 
         Assert.Equal(standing, Assert.Single(await ObjectionsAsync()));
         Assert.Single(_events.Of<ObjectionChanged>());
+        Assert.Single(_outbox.Deliveries);
         Assert.Single(_audit.Entries);
         Assert.Equal(0, _work.Opened);
     }

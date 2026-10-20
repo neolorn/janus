@@ -680,6 +680,13 @@ Janus.Core.CredentialSuspended.InvalidatesAt.get -> System.DateTimeOffset
 Janus.Core.CredentialSuspended.InvalidatesAt.init -> void
 Janus.Core.CredentialSuspended.Kind.get -> Janus.Core.Factor
 Janus.Core.CredentialSuspended.Kind.init -> void
+Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Granted = 0 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Lifted = 5 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Recorded = 3 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Set = 4 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Superseded = 2 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Withdrawn = 1 -> Janus.Core.DeliveryChange
 Janus.Core.DeclaredProcessing
 Janus.Core.DeclaredProcessing.Find(string! purpose) -> Janus.Core.DeclaredPurpose?
 Janus.Core.DeclaredProcessing.Purposes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DeclaredPurpose!>!
@@ -1395,6 +1402,9 @@ Janus.Core.IProcessingRecords.GenerateAsync(Janus.Core.AccessContext! context, S
 Janus.Core.IProviderProbes
 Janus.Core.IProviderProbes.RunAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Error!>!>>
 Janus.Core.IPurposeHandler
+Janus.Core.IPurposeHandler.ConsentChangedAsync(Janus.Core.ConsentChanged! changed, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IPurposeHandler.Name.get -> string!
+Janus.Core.IPurposeHandler.ObjectionChangedAsync(Janus.Core.ObjectionChanged! changed, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPurposeHandler.Purposes.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.IReadVolume
 Janus.Core.IReadVolume.ReturnedAsync(Janus.Core.AccessContext! context, int records, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>

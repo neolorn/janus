@@ -9,14 +9,16 @@ namespace Janus.Privacy;
 
 /// <summary>
 /// What the deployment declared read against what it registered: every subject-event
-/// subscriber answers to a name of its own, every sensitive resource type has one that
-/// covers it, and every objectable purpose has a handler that names it.
+/// subscriber and purpose handler answers to a name of its own, every sensitive resource
+/// type has a subscriber that covers it, and every purpose resting on consent or on an
+/// objectable basis has a handler that names it.
 /// </summary>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="handlers">The purpose handlers the host registered.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, IDN-LIFE-003a, DR-016 and LIB-HOST-001.
+/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, PRIV-CONS-008, IDN-LIFE-003a, DR-016 and
+/// LIB-HOST-001.
 /// Adding a subscriber requires no library change; leaving one out stops the
 /// deployment rather than the erasure that would half happen.
 /// </remarks>
@@ -31,19 +33,21 @@ internal sealed class HandlerCoverage(
     /// <returns>Nothing, or the first omission, named.</returns>
     public Result Validate()
     {
-        // A confirmation is recorded under the subscriber's name, so two subscribers
-        // under one name, or one under the erasure ledger's, would each read the
-        // other's confirmation as its own and an erasure would close half done.
+        // A confirmation is recorded under the subscriber's or the handler's name, so two
+        // under one name, or one under the erasure ledger's, would each read the other's
+        // confirmation as its own and a delivery would close half done (D-203).
         var names = new HashSet<string>([ErasureLedgerSubscriber.Called], StringComparer.Ordinal);
 
-        foreach (ISubjectEventSubscriber subscriber in subscribers)
+        foreach (string name in subscribers
+            .Select(subscriber => subscriber.Name)
+            .Concat(handlers.Select(handler => handler.Name)))
         {
-            if (!names.Add(subscriber.Name))
+            if (!names.Add(name))
             {
                 return Result.Failure(Error.From(
                     ErrorCodes.StartupSubscriberName,
                     "handler",
-                    JsonSerializer.SerializeToElement(subscriber.Name)));
+                    JsonSerializer.SerializeToElement(name)));
             }
         }
 
@@ -62,7 +66,7 @@ internal sealed class HandlerCoverage(
             handlers.SelectMany(handler => handler.Purposes),
             StringComparer.Ordinal);
 
-        foreach (string purpose in Objectable())
+        foreach (string purpose in Handled())
         {
             if (!named.Contains(purpose))
             {
@@ -86,11 +90,14 @@ internal sealed class HandlerCoverage(
             .Where(type => type.SensitiveCategories.Count > 0)
             .OrderBy(type => type.Name.ToString(), StringComparer.Ordinal);
 
-    private IEnumerable<string> Objectable()
+    // PRIV-RIGHT-001a AC3, D-203: a purpose resting on consent has a handler as one on
+    // an objectable basis does, since a withdrawal erases what the host held solely for
+    // it.
+    private IEnumerable<string> Handled()
     {
         var bases = new HashSet<string>(
             declaration.LawfulBases
-                .Where(basis => basis.IsObjectable)
+                .Where(basis => basis.IsConsent || basis.IsObjectable)
                 .Select(basis => basis.Key),
             StringComparer.Ordinal);
 

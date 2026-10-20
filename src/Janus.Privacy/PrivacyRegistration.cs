@@ -77,6 +77,7 @@ internal static class PrivacyRegistration
             provider.GetRequiredService<IOutboxStore>(),
             provider.GetRequiredService<IErasureStore>(),
             provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetServices<IPurposeHandler>(),
             provider.GetService<IErasureLedger>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IPrivacyAlerts>(),

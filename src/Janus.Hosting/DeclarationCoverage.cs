@@ -49,6 +49,7 @@ namespace Janus.Hosting;
 /// <param name="sources">The relationship sources the host registered.</param>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
+/// <param name="handlers">The purpose handlers the host registered.</param>
 /// <param name="clients">The clients registered with the provider.</param>
 /// <param name="configuration">
 /// Where the stored policies that show photos, and the domains each lists, are read.
@@ -73,16 +74,16 @@ namespace Janus.Hosting;
 /// the HTTPS address of its document and at least one client, since a declaration short
 /// of that would verify none of the events it was declared for; one that is malformed is
 /// refused as invalid rather than missing, naming the provider and the member at fault
-/// (D-175). A governing document's name and a subscriber's fill a message place
-/// measured at the width the name rule bounds, so one declared outside the rule is
-/// refused here rather than carried into a text longer than the width it was measured
-/// at. A landing origin is an application of this deployment, so one that no registered
-/// browser client returns to, or an authentication origin that is not where the sign-in
-/// address is, would send every link somewhere the deployment does not serve. A
-/// relationship a derivation follows from is read by the view of who can access a record
-/// and by the drift check through the source the host declares for it, so one with no
-/// source, or a source that does not fit its relationship or names a context the
-/// library cannot read through, stops the deployment here (D-166, D-183).
+/// (D-175). A governing document's name and a subscriber's or a purpose handler's fill
+/// a message place measured at the width the name rule bounds, so one declared outside
+/// the rule is refused here rather than carried into a text longer than the width it
+/// was measured at. A landing origin is an application of this deployment, so one that
+/// no registered browser client returns to, or an authentication origin that is not
+/// where the sign-in address is, would send every link somewhere the deployment does
+/// not serve. A relationship a derivation follows from is read by the view of who can
+/// access a record and by the drift check through the source the host declares for it,
+/// so one with no source, or a source that does not fit its relationship or names a
+/// context the library cannot read through, stops the deployment here (D-166, D-183).
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -97,6 +98,7 @@ internal sealed class DeclarationCoverage(
     IEnumerable<RelationshipSource> sources,
     AuthorizationDeclaration declaration,
     IEnumerable<ISubjectEventSubscriber> subscribers,
+    IEnumerable<IPurposeHandler> handlers,
     IOidcClientStore clients,
     IConfigurationStore configuration,
     IServiceProvider scope)
@@ -317,8 +319,9 @@ internal sealed class DeclarationCoverage(
     }
 
     // INT-SMS-003: the governing document a purpose names, as the purpose it is
-    // declared on, and the subscriber whose name breaks the rule of a message place,
-    // as the name it is registered under, or nothing where every one keeps it.
+    // declared on, and the subscriber or purpose handler whose name breaks the rule of a
+    // message place, as the name it is registered under, or nothing where every one keeps
+    // it (D-203).
     private (string Declaration, string Field)? Unruled()
     {
         foreach (PurposeDeclaration purpose in declaration.ResourceTypes.SelectMany(type => type.Purposes))
@@ -334,6 +337,14 @@ internal sealed class DeclarationCoverage(
             if (!PlaceName.Holds(subscriber.Name))
             {
                 return (subscriber.Name, "name");
+            }
+        }
+
+        foreach (IPurposeHandler handler in handlers)
+        {
+            if (!PlaceName.Holds(handler.Name))
+            {
+                return (handler.Name, "name");
             }
         }
 

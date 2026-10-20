@@ -297,6 +297,98 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3, D-203: a purpose handler's name fills the <c>outstanding</c>
+    /// place as a subscriber's does, so one registered under a name outside the rule
+    /// stops the deployment as it starts, naming it and its member; one inside the rule
+    /// starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AC3_APurposeHandlerNamedOutsideTheRuleIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IPurposeHandler>(new HandlerNamed("Host Purposes"));
+                Declared(services);
+            })
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("Host Purposes", refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IPurposeHandler>(new HandlerNamed("host.purposes_2"));
+                Declared(services);
+            })
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC7, D-203: a purpose handler's confirmation is recorded under its
+    /// name as a subscriber's is, so one registered under a subscriber's name stops the
+    /// deployment as it starts, naming it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC7_APurposeHandlerUnderASubscribersNameIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IPurposeHandler>(new HandlerNamed("host"));
+                Declared(services);
+            })
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupSubscriberName, refused.Failure?.Code);
+        Assert.Equal("host", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3, D-203: the deployment declares its recommendations on
+    /// consent and registers no purpose handler naming them, so it does not start, and
+    /// the failure names the purpose.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AConsentBasedPurposeWithoutAHandlerStopsStartupAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+                Declared(services, handlers: false);
+            })
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("recommendations", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
     /// INT-SMS-003 AC3: a governing document's name fills the <c>document</c> place, so
     /// a purpose that names one outside the rule stops the deployment as it starts,
     /// naming the purpose and its member; one inside the rule starts.
@@ -1776,6 +1868,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (handlers)
         {
             services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+            services.AddSingleton<IPurposeHandler>(new HostPurposes());
         }
 
         if (addresses)
@@ -1963,6 +2056,21 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         public IReadOnlyCollection<ResourceType> Covers { get; } = [];
 
         public ValueTask<Result> HandleAsync(SubjectEvent raised, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
+    }
+
+    // A purpose handler of the host's own under the name given, naming its
+    // recommendations.
+    private sealed class HandlerNamed(string name) : IPurposeHandler
+    {
+        public string Name => name;
+
+        public IReadOnlyCollection<string> Purposes { get; } = ["recommendations"];
+
+        public ValueTask<Result> ConsentChangedAsync(ConsentChanged changed, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
+
+        public ValueTask<Result> ObjectionChangedAsync(ObjectionChanged changed, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Result.Success());
     }
 

@@ -264,6 +264,17 @@ public sealed class VocabularyContractTests
     }
 
     /// <summary>
+    /// IDN-LIFE-003a, chapter 10 section 5.50: the change a delivery of host-side work
+    /// announces, a consent's spelled as section 5.39 spells it, an objection's and a
+    /// restriction's as section 5.50 does.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_003a_TheDeliveryChangesAreTheContract() =>
+        Assert.Equal(
+            ["granted", "lifted", "recorded", "set", "superseded", "withdrawn"],
+            WireNames<DeliveryChange>());
+
+    /// <summary>
     /// REG-PREF-001: the four types a host declares a preference key with, spelled as
     /// the item spells them, because a host writes the declaration in those words.
     /// </summary>
@@ -338,6 +349,7 @@ public sealed class VocabularyContractTests
             typeof(DeletionOrigin),
             typeof(ErasureStatus),
             typeof(ErasureReason),
+            typeof(DeliveryChange),
             typeof(TakedownTrigger),
             typeof(SessionType),
             typeof(AuthenticatorState),

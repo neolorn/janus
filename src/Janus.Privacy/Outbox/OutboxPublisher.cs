@@ -18,7 +18,8 @@ namespace Janus.Privacy.Outbox;
 /// </summary>
 /// <param name="outbox">Where the deliveries are.</param>
 /// <param name="erasures">Where an erasure's own row is carried in step with its delivery.</param>
-/// <param name="subscribers">Who the host registered.</param>
+/// <param name="subscribers">The subject-event subscribers the host registered.</param>
+/// <param name="handlers">The purpose handlers the host registered.</param>
 /// <param name="ledger">Where an erasure is written down off the host, if the deployment registered one.</param>
 /// <param name="configuration">Where the retry schedule and the claim's timeout are read.</param>
 /// <param name="alerts">Where a spent retry budget is raised.</param>
@@ -26,7 +27,10 @@ namespace Janus.Privacy.Outbox;
 /// <param name="time">The clock the schedule is computed against.</param>
 /// <param name="randomness">Where the full jitter of each delay comes from.</param>
 /// <remarks>
-/// Implements IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-003, INF-BG-001 and DR-016.
+/// Implements IDN-LIFE-003a, PRIV-RIGHT-005b, PRIV-RIGHT-001a, PRIV-CONS-008,
+/// CONV-DESIGN-003, INF-BG-001 and DR-016. A consent or an objection change is offered to
+/// every purpose handler naming its purpose, each required, as a subject event is to the
+/// subscribers.
 /// Delivery is at least once: a subscriber that confirmed is not offered the event
 /// again, and one that did not is, until the budget is spent. A subscriber that throws
 /// is a subscriber that did not confirm, and the delivery outlives the process either
@@ -40,6 +44,7 @@ internal sealed class OutboxPublisher(
     IOutboxStore outbox,
     IErasureStore erasures,
     IEnumerable<ISubjectEventSubscriber> subscribers,
+    IEnumerable<IPurposeHandler> handlers,
     IErasureLedger? ledger,
     IConfigurationStore configuration,
     IPrivacyAlerts alerts,
@@ -81,14 +86,14 @@ internal sealed class OutboxPublisher(
                 nameof(context));
 
     private static IReadOnlyList<string> Required(
-        IReadOnlyList<ISubjectEventSubscriber> registered) =>
+        IReadOnlyList<DeliveryRecipient> registered) =>
     [
         .. registered.Where(subscriber => subscriber.Required).Select(subscriber => subscriber.Name),
     ];
 
     private static Dictionary<string, JsonElement> Exhausted(
         Delivery delivery,
-        IReadOnlyList<ISubjectEventSubscriber> registered) =>
+        IReadOnlyList<DeliveryRecipient> registered) =>
         new Dictionary<string, JsonElement>(capacity: 4, StringComparer.Ordinal)
         {
             ["delivery"] = JsonSerializer.SerializeToElement(delivery.Id.ToString()),
@@ -152,7 +157,7 @@ internal sealed class OutboxPublisher(
         }
 
         bool appended = (await outbox.ProgressAsync(id, cancellationToken).ConfigureAwait(false))?.Delivery is Delivery delivery
-            && (await HandledAsync(line, delivery.Raised(), timeout, cancellationToken).ConfigureAwait(false))
+            && (await HandledAsync(DeliveryRecipient.Subscribing(line), delivery, timeout, cancellationToken).ConfigureAwait(false))
                 .Match(() => true, _ => false);
 
         return await InUnitAsync(
@@ -183,12 +188,12 @@ internal sealed class OutboxPublisher(
 
         Schedule schedule = await ScheduleAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<ISubjectEventSubscriber> registered = [.. subscribers];
-        IReadOnlyList<ISubjectEventSubscriber> erasing = ErasureLedgerSubscriber.Joined(registered, ledger);
+        IReadOnlyList<IPurposeHandler> handling = [.. handlers];
         int closed = 0;
 
         foreach (DeliveryId id in due)
         {
-            if (await DeliveredAsync(id, registered, erasing, schedule, cancellationToken).ConfigureAwait(false))
+            if (await DeliveredAsync(id, registered, handling, schedule, cancellationToken).ConfigureAwait(false))
             {
                 closed++;
             }
@@ -203,8 +208,8 @@ internal sealed class OutboxPublisher(
     // the attempt uncounted, so the delivery would be offered again at every poll, never
     // back off and never spend its budget.
     private async ValueTask<Result> HandledAsync(
-        ISubjectEventSubscriber subscriber,
-        SubjectEvent raised,
+        DeliveryRecipient subscriber,
+        Delivery delivery,
         TimeSpan claimTimeout,
         CancellationToken cancellationToken)
     {
@@ -213,7 +218,7 @@ internal sealed class OutboxPublisher(
 
         try
         {
-            return await subscriber.HandleAsync(raised, either.Token).ConfigureAwait(false);
+            return await subscriber.HandleAsync(delivery, either.Token).ConfigureAwait(false);
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -231,7 +236,7 @@ internal sealed class OutboxPublisher(
     private async ValueTask<bool> DeliveredAsync(
         DeliveryId id,
         IReadOnlyList<ISubjectEventSubscriber> registered,
-        IReadOnlyList<ISubjectEventSubscriber> erasing,
+        IReadOnlyList<IPurposeHandler> handling,
         Schedule schedule,
         CancellationToken cancellationToken)
     {
@@ -249,11 +254,10 @@ internal sealed class OutboxPublisher(
             return false;
         }
 
-        IReadOnlyList<ISubjectEventSubscriber> waitedFor =
-            delivery.Kind is SubjectEventKind.ErasureRequested ? erasing : registered;
-        SubjectEvent raised = delivery.Raised();
+        IReadOnlyList<DeliveryRecipient> waitedFor =
+            DeliveryRecipient.Of(delivery, registered, handling, ledger);
 
-        foreach (ISubjectEventSubscriber subscriber in waitedFor)
+        foreach (DeliveryRecipient subscriber in waitedFor)
         {
             if (delivery.Confirmed.Contains(subscriber.Name))
             {
@@ -274,7 +278,7 @@ internal sealed class OutboxPublisher(
 
             claim = renewed.Value;
 
-            if (!(await HandledAsync(subscriber, raised, schedule.ClaimTimeout, cancellationToken).ConfigureAwait(false))
+            if (!(await HandledAsync(subscriber, delivery, schedule.ClaimTimeout, cancellationToken).ConfigureAwait(false))
                 .Match(() => true, _ => false))
             {
                 continue;
@@ -304,7 +308,7 @@ internal sealed class OutboxPublisher(
     private async ValueTask<bool> SettledAsync(
         Delivery delivery,
         DeliveryClaim claim,
-        IReadOnlyList<ISubjectEventSubscriber> waitedFor,
+        IReadOnlyList<DeliveryRecipient> waitedFor,
         Schedule schedule,
         CancellationToken cancellationToken)
     {

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Outbox;
 
 namespace Janus.Privacy.Consents;
 
@@ -17,19 +18,23 @@ namespace Janus.Privacy.Consents;
 /// <param name="documents">Where the version a record is given against is read.</param>
 /// <param name="processing">What the deployment declared it processes and on what basis.</param>
 /// <param name="events">Where the change is announced.</param>
+/// <param name="outbox">Where the change is delivered to the purpose handlers naming its purpose.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements LIB-API-005, PRIV-CONS-001, PRIV-CONS-002, PRIV-CONS-008,
-/// PRIV-CONS-011 and PRIV-RIGHT-001a. One purpose a record: nothing here takes a list,
-/// so no record can reference two purposes and no one control can grant for two.
+/// PRIV-CONS-011, PRIV-RIGHT-001a and IDN-LIFE-003a. A change is announced as an event and
+/// written to the outbox for the purpose handlers in the transaction that makes it true.
+/// One purpose a record: nothing here takes a list, so no record can reference two
+/// purposes and no one control can grant for two.
 /// </remarks>
 internal sealed class ConsentService(
     IConsentStore consents,
     ILegalDocumentStore documents,
     DeclaredProcessing processing,
     IEvents events,
+    IOutboxStore outbox,
     IPrivacyAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IConsents
@@ -545,13 +550,20 @@ internal sealed class ConsentService(
         (await documents.CurrentAsync(document ?? Notice, cancellationToken).ConfigureAwait(false))
         ?.Version;
 
+    // PRIV-CONS-008, D-203: the handlers naming the purpose are owed the change through
+    // the outbox, and a plain consumer of the event still receives it as an event.
     private async ValueTask<Error?> AnnouncedAsync(
         SubjectId subject,
         string purpose,
         ConsentChange change,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
-        (await events
+        CancellationToken cancellationToken)
+    {
+        await outbox
+            .AddAsync(Delivery.OfConsent(subject, purpose, change, at), cancellationToken)
+            .ConfigureAwait(false);
+
+        return (await events
                 .PublishAsync(
                     new ConsentChanged(at, Key(subject, purpose, change.ToString(), at), purpose, change)
                     {
@@ -560,14 +572,22 @@ internal sealed class ConsentService(
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
+    }
 
+    // PRIV-RIGHT-001a, D-203: as a consent change, an objection change is owed to the
+    // handlers naming the purpose through the outbox.
     private async ValueTask<Error?> ObjectedAsync(
         SubjectId subject,
         string purpose,
         bool objecting,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
-        (await events
+        CancellationToken cancellationToken)
+    {
+        await outbox
+            .AddAsync(Delivery.OfObjection(subject, purpose, objecting, at), cancellationToken)
+            .ConfigureAwait(false);
+
+        return (await events
                 .PublishAsync(
                     new ObjectionChanged(
                         at,
@@ -580,4 +600,5 @@ internal sealed class ConsentService(
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
+    }
 }

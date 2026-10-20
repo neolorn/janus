@@ -3892,6 +3892,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
 
+                b.Property<string>("Change")
+                    .HasColumnType("text")
+                    .HasColumnName("change");
+
                 b.Property<DateTimeOffset?>("ClaimedUntil")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("claimed_until");
@@ -3904,6 +3908,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("NextAttemptAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("next_attempt_at");
+
+                b.Property<string>("Purpose")
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
 
                 b.Property<DateTimeOffset>("RaisedAt")
                     .HasColumnType("timestamp with time zone")
@@ -3941,7 +3949,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'restriction-changed', 'takedown-executed')");
+                        t.HasCheckConstraint("ck_outbox_change", "change IN ('granted', 'lifted', 'recorded', 'set', 'superseded', 'withdrawn')");
+
+                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('consent-changed', 'erasure-requested', 'objection-changed', 'restriction-changed', 'takedown-executed')");
+
+                        t.HasCheckConstraint("ck_outbox_purpose", "(kind IN ('consent-changed', 'objection-changed') AND purpose IS NOT NULL AND length(trim(purpose)) > 0 AND change IS NOT NULL) OR (kind NOT IN ('consent-changed', 'objection-changed') AND purpose IS NULL AND change IS NULL)");
 
                         t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 

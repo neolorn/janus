@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Privacy.Outbox;
 using Janus.Storage.Privacy.Outbox;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -422,6 +424,76 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.Equal(
             ErasureStatus.Complete,
             (await Store(reading, Noon).FindAsync(delivery.Id, TestContext.Current.CancellationToken))?.Status);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3, PRIV-CONS-008: a consent and an objection change are held on
+    /// the outbox with the purpose and the change their handlers are offered, and read
+    /// back as written.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AConsentAndAnObjectionChangeKeepTheirPurposeAndChangeAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var consent = Delivery.OfConsent(subject, "marketing", ConsentChange.Superseded, Noon);
+        var objection = Delivery.OfObjection(subject, "security", objecting: true, Noon);
+
+        await AddedAsync(consent);
+        await AddedAsync(objection);
+
+        await using StoreContext reading = database.Context();
+        OutboxStore outbox = Store(reading, Noon);
+
+        Delivery consented = Assert.IsType<Delivery>(
+            await outbox.FindAsync(consent.Id, TestContext.Current.CancellationToken));
+        Delivery objected = Assert.IsType<Delivery>(
+            await outbox.FindAsync(objection.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (SubjectEventKind.ConsentChanged, "marketing", DeliveryChange.Superseded),
+            (consented.Kind, consented.Purpose, consented.Change));
+        Assert.Equal(
+            (SubjectEventKind.ObjectionChanged, "security", DeliveryChange.Recorded),
+            (objected.Kind, objected.Purpose, objected.Change));
+        Assert.Equal(ConsentChange.Superseded, consented.RaisedConsent().Change);
+        Assert.True(objected.RaisedObjection().Objecting);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a, CONV-ENUM-001: a consent or an objection change names its
+    /// purpose and its change and no other fact names either, so a row that breaks
+    /// that is refused by the database.
+    /// </summary>
+    /// <param name="kind">The fact the row carries.</param>
+    /// <param name="purpose">The purpose it names.</param>
+    /// <param name="change">The change it names.</param>
+    [Theory]
+    [InlineData("consent-changed", null, "granted")]
+    [InlineData("objection-changed", "security", null)]
+    [InlineData("consent-changed", " ", "granted")]
+    [InlineData("restriction-changed", "security", null)]
+    [InlineData("erasure-requested", null, "withdrawn")]
+    public async Task PRIV_RIGHT_001a_ADeliveryNamingThePurposeOrChangeOfAnotherFactIsRefusedAsync(
+        string kind,
+        string? purpose,
+        string? change)
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO identity.outbox
+                    (id, subject, kind, raised_at, restricted, reason, status, attempts, next_attempt_at, purpose, change)
+                VALUES
+                    (gen_random_uuid(), @subject, @kind, now(), false, 'erasure-request', 'awaiting-subscribers', 0, now(), @purpose, @change);
+                """,
+                new { subject = subject.Value, kind, purpose, change }));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+        Assert.Equal("ck_outbox_purpose", refused.ConstraintName);
     }
 
     private static OutboxStore Store(StoreContext context, DateTimeOffset now) =>

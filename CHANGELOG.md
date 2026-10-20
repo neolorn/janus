@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IPurposeHandler` gains `Name`, `ConsentChangedAsync` and `ObjectionChangedAsync`. Each
+  consent and objection change is delivered through the outbox to every handler naming
+  its purpose, confirmed by the handler's success, retried under `outbox.retry.*` and
+  failed with `erasure-delivery-exhausted` once its attempts are spent; a plain event
+  consumer still receives both events. A handler's name follows the message-place rule
+  and is distinct among the handlers and the subject-event subscribers, and a
+  deployment declaring a purpose on consent that no handler names no longer starts, as
+  one declaring an objectable purpose already did.
 - `ExportRequested` is retired: an assembled export writes no delivery and owes the
   subject-event subscribers nothing after it.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's

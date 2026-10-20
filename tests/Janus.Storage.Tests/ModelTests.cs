@@ -609,12 +609,16 @@ public sealed class ModelTests
             "organizations.name",
 
             // Not an account field: one fact about a subject the host has its own half
-            // of, and each subscriber's confirmation of it (IDN-LIFE-003a).
+            // of, the purpose and the change of a consent or an objection change, and
+            // each subscriber's or purpose handler's confirmation of it (IDN-LIFE-003a,
+            // PRIV-RIGHT-001a).
             "outbox.attempts",
+            "outbox.change",
             "outbox.claimed_until",
             "outbox.id",
             "outbox.kind",
             "outbox.next_attempt_at",
+            "outbox.purpose",
             "outbox.raised_at",
             "outbox.reason",
             "outbox.restricted",

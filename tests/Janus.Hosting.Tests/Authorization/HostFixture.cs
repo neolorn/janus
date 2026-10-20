@@ -177,6 +177,10 @@ public sealed class HostFixture : IAsyncLifetime
         // registers what does the host-side work for them.
         services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
 
+        // PRIV-RIGHT-001a: and its recommendations rest on consent, so it registers what
+        // does the host-side work of a consent change for them.
+        services.AddSingleton<IPurposeHandler>(new HostPurposes());
+
         _services = Started(services.BuildServiceProvider());
     }
 
