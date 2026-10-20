@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.Callbacks;
 using Janus.Core;
 using Janus.Hosting.Bff;
@@ -52,8 +53,8 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
         TimeProvider time = context.RequestServices.GetRequiredService<TimeProvider>();
         ILogger log = context.RequestServices.GetRequiredService<ILogger<SignedCallbackGuard>>();
 
-        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback.Name, callback.Sources, admission, work, log, cancellationToken)
