@@ -26,6 +26,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="scopes">Where the scope a refusal is recorded and counted in comes from.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
+/// <param name="sessions">Whether a request is served on the calling flow, which a host's job is refused in.</param>
 /// <param name="exports">What an export operation asks beyond what the grants allow.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="lookup">Who can access a record, for the view that asks.</param>
@@ -35,7 +36,8 @@ namespace Janus.Authorization.Gate;
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
 /// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-004,
-/// AUTHZ-DERIVE-007, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006 and LIB-SEAM-001.
+/// AUTHZ-DERIVE-007, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006, IDN-PRIN-001 and
+/// LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -49,6 +51,7 @@ internal sealed class AccessGate(
     IServiceScopeFactory scopes,
     SubjectSets subjects,
     StepUpGates gates,
+    ISessionGates sessions,
     ExportOperations exports,
     Derivations derived,
     ReverseLookup lookup,
@@ -91,6 +94,12 @@ internal sealed class AccessGate(
             return Result.Failure(Error.From(ErrorCodes.DerivationSourcesMissing));
         }
 
+        if (ServesRequestToAJob(context))
+        {
+            return await RefusedInRequestAsync(context, permission, resource, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.Restricted));
@@ -128,6 +137,12 @@ internal sealed class AccessGate(
         // is the calling code's fault, raised before anything is read or recorded.
         Declared(resource.Type);
         Declared(permission);
+
+        if (ServesRequestToAJob(context))
+        {
+            return await RefusedInRequestAsync(context, permission, resource, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -188,6 +203,17 @@ internal sealed class AccessGate(
         CancellationToken cancellationToken)
     {
         Declared(permission);
+
+        if (ServesRequestToAJob(context))
+        {
+            return await RefusedAsync(
+                context,
+                permission,
+                OrganizationWide,
+                organization,
+                grant: null,
+                cancellationToken).ConfigureAwait(false);
+        }
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -399,6 +425,15 @@ internal sealed class AccessGate(
         Declared(type);
         Declared(permission);
 
+        // AUTHZ-TEST-001 AC2: a job's list asked while a request is served is refused
+        // with the code its check answers, rather than handed a rule that matches nothing.
+        if (ServesRequestToAJob(context))
+        {
+            return Result.Failure<Expression<Func<TResource, bool>>>(
+                await RecordedAsync(context, permission, type, organization, grant: null, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
@@ -438,6 +473,13 @@ internal sealed class AccessGate(
         // is the calling code's fault, raised before anything is read or recorded.
         Declared(type);
         Declared(permission);
+
+        if (ServesRequestToAJob(context))
+        {
+            return Result.Failure<SqlFilter>(
+                await RecordedAsync(context, permission, type, organization, grant: null, cancellationToken)
+                    .ConfigureAwait(false));
+        }
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -1245,6 +1287,38 @@ internal sealed class AccessGate(
         CancellationToken cancellationToken) =>
         Result.Failure(await RecordedAsync(context, permission, type, organization, grant, cancellationToken)
             .ConfigureAwait(false));
+
+    // IDN-PRIN-001, CONV-DESIGN-007 (D-206): an organization-scoped principal is a host's
+    // job, and a job is background work, so its context asked while a request is served
+    // on the calling flow is refused, whoever built it and whatever it names; a webhook
+    // that needs a host permission records what arrived and hands the work to a job.
+    private bool ServesRequestToAJob(AccessContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Principal is { IsDeploymentScoped: false } && sessions.ServesRequest;
+    }
+
+    // The refusal is recorded against the organization owning the record, as every
+    // refusal of a record is, and against none where the library holds no row of it.
+    private async ValueTask<Result> RefusedInRequestAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        CancellationToken cancellationToken)
+    {
+        RegisteredResource? registered = await records
+            .FindAsync(resource, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await RefusedAsync(
+            context,
+            permission,
+            resource.Type,
+            registered?.Organization,
+            grant: null,
+            cancellationToken).ConfigureAwait(false);
+    }
 
     private async ValueTask<Error> RecordedAsync(
         AccessContext context,
