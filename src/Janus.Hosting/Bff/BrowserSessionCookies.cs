@@ -22,7 +22,8 @@ internal sealed class BrowserSessionCookies(ApplicationKind application)
 {
     /// <summary>
     /// Writes the pair a newly issued session answers to, replacing whatever the
-    /// browser carried before.
+    /// browser carried before. Both last until the instant the issue states, where it
+    /// states one, and otherwise end with the browser's session (BFF-SESS-002).
     /// </summary>
     /// <param name="response">The response the browser receives.</param>
     /// <param name="issued">The session just issued.</param>
@@ -35,12 +36,12 @@ internal sealed class BrowserSessionCookies(ApplicationKind application)
         response.Cookies.Append(
             BrowserCookies.Session,
             issued.Secret.Value,
-            BrowserCookies.Options(application, readableByScript: false));
+            Kept(BrowserCookies.Options(application, readableByScript: false), issued));
 
         response.Cookies.Append(
             BrowserCookies.Csrf,
             issued.CsrfToken.Value,
-            BrowserCookies.Options(application, readableByScript: true));
+            Kept(BrowserCookies.Options(application, readableByScript: true), issued));
     }
 
     /// <summary>
@@ -133,5 +134,13 @@ internal sealed class BrowserSessionCookies(ApplicationKind application)
         response.Cookies.Delete(
             BrowserCookies.Csrf,
             BrowserCookies.Options(application, readableByScript: true));
+    }
+
+    // The expiry the issue states, on the attributes every cookie of the pair carries.
+    private static CookieOptions Kept(CookieOptions options, IssuedSession issued)
+    {
+        options.Expires = issued.Lasts;
+
+        return options;
     }
 }

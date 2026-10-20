@@ -1654,7 +1654,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     public async Task AUTHZ_IMP_001_AC5_AConfirmedEnrolmentCarriesBothIdentitiesOfItsContextAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
-        var context = AccessContext.Of(SubjectId.New(_randomness), subject);
+        var context = AccessContext.Of(subject);
         var authority = CredentialAuthority.Of(context, session);
 
         _events.Published.Clear();
@@ -1685,7 +1685,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     public async Task AUTHZ_IMP_001_AC5_ALinkedProviderCarriesBothIdentitiesOfItsContextAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
-        var context = AccessContext.Of(SubjectId.New(_randomness), subject);
+        var context = AccessContext.Of(subject);
 
         _events.Published.Clear();
 

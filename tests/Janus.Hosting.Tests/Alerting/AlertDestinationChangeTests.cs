@@ -422,7 +422,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     [Fact]
     public async Task AUTHZ_IMP_001_AC5_ADestinationChangeCarriesBothIdentitiesOfItsContextAsync()
     {
-        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+        var context = AccessContext.Of(SubjectId.New(_randomness));
 
         (await Change.ChangeAsync(
             SendKind.Email,

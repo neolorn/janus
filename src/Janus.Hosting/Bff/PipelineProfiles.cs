@@ -173,6 +173,26 @@ public static class PipelineProfiles
             });
     }
 
+    /// <summary>
+    /// Marks one of the host's endpoints mounted after <see cref="UseBrowserProfile"/> as
+    /// one that answers anyone. Every other endpoint mounted there needs a live sign-in
+    /// session, and a request that reaches it without one is refused before it runs.
+    /// </summary>
+    /// <remarks>
+    /// A marked endpoint still passes every stage that establishes what the browser
+    /// carries: a request that reaches it carrying no session is issued the
+    /// pre-authentication session, and a state-changing request to it carries that
+    /// session's synchronizer token or is refused. Step-up is never marked here: it is
+    /// bound to the permission the endpoint asks the gate for.
+    /// </remarks>
+    /// <typeparam name="TBuilder">The kind of convention builder.</typeparam>
+    /// <param name="builder">The endpoint, as the host maps it.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">The builder is absent.</exception>
+    public static TBuilder AllowNoSession<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder =>
+        SessionRequired.Off(builder);
+
     // The stages of the browser profile, in the order the contract fixes.
     private static void Browser(IApplicationBuilder application)
     {

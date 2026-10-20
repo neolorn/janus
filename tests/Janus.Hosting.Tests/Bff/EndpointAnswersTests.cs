@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
@@ -221,13 +222,21 @@ public sealed class EndpointAnswersTests : IAsyncDisposable
     /// <inheritdoc/>
     public ValueTask DisposeAsync() => _deployment.DisposeAsync();
 
-    private static RouteEndpoint Mounted(string pattern, EndpointDeclaration declaration) =>
-        new(
-            _ => Task.CompletedTask,
-            RoutePatternFactory.Parse(pattern),
-            order: 0,
-            new EndpointMetadataCollection(declaration, new HttpMethodMetadata(["POST"])),
-            pattern);
+    // An endpoint as the library mounts it: one that answers anyone unless it is marked
+    // as needing a session (BFF-HOST-002).
+    private static RouteEndpoint Mounted(string pattern, EndpointDeclaration declaration)
+    {
+        var endpoint = new RouteEndpointBuilder(_ => Task.CompletedTask, RoutePatternFactory.Parse(pattern), order: 0)
+        {
+            DisplayName = pattern,
+        };
+
+        endpoint.Metadata.Add(declaration);
+        endpoint.Metadata.Add(new HttpMethodMetadata(["POST"]));
+        _ = SessionRequired.Off(new Conventions(endpoint));
+
+        return (RouteEndpoint)endpoint.Build();
+    }
 
     private static DefaultHttpContext Answered(RouteEndpoint endpoint, ErrorCode code)
     {
@@ -252,5 +261,11 @@ public sealed class EndpointAnswersTests : IAsyncDisposable
         context.Response.Headers.Location = location;
 
         return context;
+    }
+
+    // What applies a mark to the one endpoint being built, as mapping it would.
+    private sealed class Conventions(EndpointBuilder endpoint) : IEndpointConventionBuilder
+    {
+        public void Add(Action<EndpointBuilder> convention) => convention(endpoint);
     }
 }

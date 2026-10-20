@@ -1,9 +1,11 @@
 #nullable enable
 Janus.Hosting.AuthorizationTables
+Janus.Hosting.Bff.Answers
 Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Management = 0 -> Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Public = 1 -> Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.PipelineProfiles
+Janus.Hosting.Bff.RequestSource
 Janus.Hosting.Callbacks.CallbackDelivery
 Janus.Hosting.Callbacks.CallbackDelivery.<Clone>$() -> Janus.Hosting.Callbacks.CallbackDelivery!
 Janus.Hosting.Callbacks.CallbackDelivery.Body.get -> System.ReadOnlyMemory<byte>
@@ -54,10 +56,15 @@ Janus.Hosting.Callbacks.IUnsignedCallback.Sources.get -> System.Collections.Gene
 Janus.Hosting.HostingRegistration
 Janus.Hosting.IdentityEndpoints
 static Janus.Hosting.AuthorizationTables.MapAuthorizationTables(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+static Janus.Hosting.Bff.Answers.Of(Janus.Core.Result outcome, Microsoft.AspNetCore.Http.IResult! answered) -> Microsoft.AspNetCore.Http.IResult!
+static Janus.Hosting.Bff.Answers.Of<TValue>(Janus.Core.Result<TValue> outcome, System.Func<TValue, Microsoft.AspNetCore.Http.IResult!>! answered) -> Microsoft.AspNetCore.Http.IResult!
+static Janus.Hosting.Bff.Answers.Refused(Janus.Core.Error! error) -> Microsoft.AspNetCore.Http.IResult!
+static Janus.Hosting.Bff.PipelineProfiles.AllowNoSession<TBuilder>(this TBuilder builder) -> TBuilder
 static Janus.Hosting.Bff.PipelineProfiles.UseBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.ISignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.IUnsignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseMachineProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.Bff.RequestSource.Of(Microsoft.AspNetCore.Http.HttpRequest! request) -> string!
 static Janus.Hosting.Callbacks.CallbackDelivery.operator !=(Janus.Hosting.Callbacks.CallbackDelivery? left, Janus.Hosting.Callbacks.CallbackDelivery? right) -> bool
 static Janus.Hosting.Callbacks.CallbackDelivery.operator ==(Janus.Hosting.Callbacks.CallbackDelivery? left, Janus.Hosting.Callbacks.CallbackDelivery? right) -> bool
 static Janus.Hosting.Callbacks.CallbackSecrets.operator !=(Janus.Hosting.Callbacks.CallbackSecrets? left, Janus.Hosting.Callbacks.CallbackSecrets? right) -> bool

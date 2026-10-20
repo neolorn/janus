@@ -10,6 +10,25 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Under a policy requiring `aal1` the session cookie and the token cookie beside it last
+  until the session's absolute expiry, so a person stays signed in across a browser's
+  restart; under `aal2` they end with the browser's session, as the pre-authentication
+  cookie and its token always do. A pair issued again at a step-up or a privilege change
+  follows the policy in force then.
+- A host's own endpoint reads who is asking through `IRequestAccess.Current()`: the
+  context and the session the library's own endpoints pass for the same request, or
+  `auth.session.expired` where the request carries no live sign-in session.
+- `Answers` answers a host endpoint's `Result` or `Result<T>`, and `Answers.Refused` an
+  `Error`, in the library's wire format; a code the library does not list is answered
+  500 `system.fault`. `RequestSource.Of` gives the source an operation takes for the
+  request, keyed as the library keys it.
+- Every endpoint a host maps after the browser profile needs a live sign-in session:
+  a request that reaches one without it is answered 401 `auth.session.expired` before
+  the endpoint runs. `AllowNoSession()` on an endpoint marks one that answers anyone,
+  which is still issued the pre-authentication session and held to its token.
+- No public member makes an `AccessContext` whose acting and effective identities
+  differ: `AccessContext.Of(SubjectId, SubjectId)` is no longer public, and a person's
+  context is made with `AccessContext.Of(SubjectId)`, one identity standing for both.
 - The library packs as the main package `Janus.Hosting`, which carries the assemblies of
   every area and declares as its dependencies the packages they reference at run time,
   beside `Janus.Conformance`, which depends on it at the same version, `Janus.Analyzers`,

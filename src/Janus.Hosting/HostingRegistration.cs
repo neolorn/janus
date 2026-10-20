@@ -131,6 +131,10 @@ public static class HostingRegistration
         services.AddSingleton<SourceAdmissions>();
         services.AddScoped<SourceRateLimiting>();
         services.AddScoped<RequestSession>();
+
+        // BFF-HOST-001: a host's own endpoint reads what stage 5 established for the
+        // request, the one record the library's own endpoints read.
+        services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();

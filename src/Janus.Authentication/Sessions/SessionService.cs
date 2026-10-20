@@ -287,6 +287,18 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRequired));
         }
 
+        // BFF-SESS-002: the values issued again follow the policy in force now.
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(session.Subject, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IssuedSession>(failure);
+        }
+
         DateTimeOffset now = time.GetUtcNow();
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
@@ -319,7 +331,7 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notCommitted);
         }
 
-        return Result.Success(new IssuedSession(session.Id, secret, token));
+        return Result.Success(new IssuedSession(session.Id, secret, token, Lasting(policy, session)));
     }
 
     /// <summary>
@@ -433,7 +445,7 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notCommitted);
         }
 
-        return Result.Success(new IssuedSession(session.Id, restored, restoredToken));
+        return Result.Success(new IssuedSession(session.Id, restored, restoredToken, Lasting(policy, session)));
     }
 
     /// <summary>
@@ -449,6 +461,18 @@ internal sealed class SessionService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+
+        // BFF-SESS-002: the values issued again follow the policy in force now.
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(session.Subject, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IssuedSession>(failure);
+        }
 
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
@@ -469,7 +493,7 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notCommitted);
         }
 
-        return Result.Success(new IssuedSession(session.Id, secret, token));
+        return Result.Success(new IssuedSession(session.Id, secret, token, Lasting(policy, session)));
     }
 
     /// <summary>
@@ -561,7 +585,7 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notCommitted);
         }
 
-        return Result.Success(new IssuedSession(derived.Id, secret, token));
+        return Result.Success(new IssuedSession(derived.Id, secret, token, Lasting(policy, derived)));
     }
 
     /// <inheritdoc/>
@@ -872,6 +896,14 @@ internal sealed class SessionService(
         Exempt,
     }
 
+    // BFF-SESS-002: the browser keeps a session's values until the session's absolute
+    // expiry where the policy requires aal1, so a customer stays signed in across a
+    // browser's restart, and for the browser's session alone where it requires more, so
+    // a staff session ends when its browser closes. The session record's own lifetimes
+    // still decide whether the values are honoured (AUTH-SESS-005).
+    private static DateTimeOffset? Lasting(Policy policy, Session session) =>
+        policy.RequiredAssurance is AssuranceLevel.Aal1 ? session.AbsoluteExpiry : null;
+
     private static Error Expiry(ReauthenticationKind asked) =>
         Error.From(
             ErrorCodes.SessionExpired,
@@ -1063,7 +1095,7 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notCommitted);
         }
 
-        return Result.Success(new IssuedSession(session.Id, secret, token));
+        return Result.Success(new IssuedSession(session.Id, secret, token, Lasting(policy, session)));
     }
 
     // IDN-LIFE-012a: a credential a provider's event held stands again once the person
