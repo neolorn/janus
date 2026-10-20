@@ -4,6 +4,12 @@
     <ProjectReference Include="..\..\src\Janus.Testing\Janus.Testing.csproj" />
   </ItemGroup>
 
+  <!-- LIB-TEST-003, CONV-TEST-001: the people and their sessions are proven against the
+       conformance suite's sample host, a host built on the public surface. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Conformance.Tests\Janus.Conformance.Tests.csproj" />
+  </ItemGroup>
+
   <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
        framework, never as a package. -->
   <ItemGroup>

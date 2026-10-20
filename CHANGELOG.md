@@ -26,6 +26,19 @@ against the public contract of LIB-API-001.
   deployment raises no degradation for those seams; and `SoftwarePasskey`, an ES256
   authenticator in memory that answers the library's creation and request options.
   A project using it carries its own framework reference to `Microsoft.AspNetCore.App`.
+- `Janus.Testing` adds `TestPeople`, which signs people in over a running host through
+  the library's own endpoints: a customer registered with the links the in-memory
+  transports hold, the first administrator enrolled with a software passkey through
+  the enrolment link, and a staff member invited with the roles a test names; and
+  `TestSession`, the client each is signed in on, which carries the session cookie, the
+  synchronizer token and `X-Identity-Request` on every request to the application's
+  origin, with the person's subject and a step-up with the person's passkey or password.
+- `Janus.Testing` adds `TestDeployment`, which prepares an empty database through the
+  installed `identity` tool as a production one is prepared: `migrate`, then
+  `bootstrap`, then `register-client` for the host's browser application, its return
+  address the `auth/signon/return` route of the address the test serves the
+  application at (`https`, or `http` on a loopback IP literal); it keeps the enrolment
+  link and the administrative organization `bootstrap` printed.
 - `bootstrap` prints a second line after the enrolment address: the identifier of the
   administrative organization it created, for the host to keep in its own configuration.
 - The `migrate` command applies the library's migrations to the database of the

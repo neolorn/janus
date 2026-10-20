@@ -4,7 +4,9 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -16,6 +18,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting;
 using Janus.Hosting.Bff;
+using Janus.Testing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
@@ -39,8 +42,10 @@ namespace Janus.Conformance.Tests;
 /// written against the public surface alone, as a host outside the repository writes
 /// it. The schema is applied, the deployment bootstrapped and its client registered by
 /// the commands an operator runs, and it is started as a web server starts it, the
-/// checks that run before anything is served included. One container per test class,
-/// torn down with the class.
+/// checks that run before anything is served included. Its first administrator is
+/// enrolled through the link bootstrap printed, and the one runtime key it sets is
+/// changed by that administrator at the management endpoint (D-206). One container per
+/// test class, torn down with the class.
 /// </remarks>
 public sealed class SampleHost : IAsyncLifetime
 {
@@ -85,6 +90,9 @@ public sealed class SampleHost : IAsyncLifetime
     // The named client the application's back channel is made on (BFF-SESS-006).
     private const string SignOnChannel = "identity-signon";
 
+    // The first administrator's address, which bootstrap names.
+    private const string FirstAdministrator = "administrator@sample.example.test";
+
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
     private readonly ServerInMemory _server = new();
 
@@ -93,9 +101,16 @@ public sealed class SampleHost : IAsyncLifetime
     private readonly byte[] _encryption = RandomNumberGenerator.GetBytes(32);
     private readonly byte[] _fingerprint = RandomNumberGenerator.GetBytes(FingerprintKeys.MinimumLength);
 
+    // Where each software passkey's credential is drawn from.
+    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
     private string _connectionString = string.Empty;
 
     private WebApplication? _application;
+
+    private TestPeople? _people;
+
+    private TestSession? _administrator;
 
     /// <summary>
     /// The origin the host answers at.
@@ -149,14 +164,53 @@ public sealed class SampleHost : IAsyncLifetime
         ?? throw new InvalidOperationException("The host has not started.");
 
     /// <summary>
+    /// The address the application is served at: its origin and the path the library is
+    /// mounted under.
+    /// </summary>
+    public static Uri Address { get; } = new(Origin, Prefix);
+
+    /// <summary>
+    /// Which client of the provider this application is.
+    /// </summary>
+    public static SignOnClient Client { get; } = new(Application);
+
+    /// <summary>
+    /// The legal document the host publishes as its terms of service.
+    /// </summary>
+    public static DocumentName Terms { get; } = DocumentName.Parse("terms");
+
+    /// <summary>
     /// What went out by mail.
     /// </summary>
-    internal MailTransportInMemory Mail { get; } = new();
+    public InMemoryMailTransport Mail { get; } = new();
 
     /// <summary>
     /// What went out by SMS.
     /// </summary>
-    internal SmsTransportInMemory Sms { get; } = new();
+    public InMemorySmsTransport Sms { get; } = new();
+
+    /// <summary>
+    /// The people of the deployment, signed in through the library's own endpoints.
+    /// </summary>
+    public TestPeople People => _people
+        ?? throw new InvalidOperationException("The host has not started.");
+
+    /// <summary>
+    /// The first administrator, enrolled through the link <c>bootstrap</c> printed.
+    /// </summary>
+    public TestSession Administrator => _administrator
+        ?? throw new InvalidOperationException("The host has not started.");
+
+    /// <summary>
+    /// The administrative organization <c>bootstrap</c> created.
+    /// </summary>
+    public OrganizationId AdministrativeOrganization { get; private set; }
+
+    /// <summary>
+    /// A handler whose requests the application takes, as a browser's connection to it.
+    /// </summary>
+    /// <returns>The handler.</returns>
+    public HttpMessageHandler Channel() => _server.Channel();
 
     /// <summary>
     /// What the host declares about its own domain.
@@ -299,11 +353,16 @@ public sealed class SampleHost : IAsyncLifetime
         // OPS-MIG-001: the pipeline applies the library's migrations before the
         // deployment first starts, the migration connection the only member of the
         // document.
-        await RunAsync(["migrate"], new JsonObject { ["connection"] = _connectionString }, CancellationToken.None);
+        _ = await RunAsync(["migrate"], new JsonObject { ["connection"] = _connectionString }, CancellationToken.None);
 
         // OPS-BOOT-001: the operator stands the deployment up once, naming the values
-        // that name it, before the application first starts.
-        await RunAsync(Bootstrapped(), Keys(), CancellationToken.None);
+        // that name it, before the application first starts; it prints the enrolment
+        // link, then the administrative organization's identifier (D-204).
+        string[] printed = (await RunAsync(Bootstrapped(), Keys(), CancellationToken.None))
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var enrolment = new Uri(printed[0]);
+
+        AdministrativeOrganization = OrganizationId.Parse(printed[1], provider: null);
 
         await using (DbConnection connection = await ConnectAsync(CancellationToken.None))
         {
@@ -337,25 +396,11 @@ public sealed class SampleHost : IAsyncLifetime
                     PRIMARY KEY (binder_id, borrower));
                 CREATE INDEX ix_borrowers_borrower ON sample.borrowers (borrower);
                 """);
-
-            // Chapter 10 section 4.1a: the operator's policy for people in no
-            // organization asks at every gate what the administrative organization's
-            // asks, a phishing-resistant proof among it, so a report that lacks one is
-            // refused at the host's own gate (LIB-HOST-004 AC4).
-            _ = await connection.ExecuteAsync(
-                "INSERT INTO identity.settings (key, value) VALUES (@key, @value) "
-                    + "ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
-                new
-                {
-                    key = Settings.PolicyDefault.Key.ToString(),
-                    value = Settings.PolicyDefault.Write(
-                        Policies.SystemDefault with { Gates = Policies.AdministrativeOrganization.Gates }),
-                });
         }
 
         // AUTH-OIDC-001: this application's own client is registered from the server,
         // and the library draws its secret; no other client is registered.
-        await RunAsync(
+        _ = await RunAsync(
             [
                 "register-client",
                 "--client", Application,
@@ -370,11 +415,38 @@ public sealed class SampleHost : IAsyncLifetime
         _application = Built(_server, Issuer, _server.Channel, assurance: null);
 
         await _application.StartAsync(CancellationToken.None);
+
+        if (!EmailAddress.TryParse(FirstAdministrator, out EmailAddress administrator))
+        {
+            throw new InvalidOperationException("The first administrator's address does not read as one.");
+        }
+
+        // D-206: the first administrator is enrolled through the link bootstrap printed,
+        // with a software passkey, and signed in with it, as an operator's first person is.
+        _people = new TestPeople(Address, Client, Terms, _server.Channel, Mail, Sms, _randomness);
+        _administrator = await _people.AdministratorAsync(enrolment, administrator, CancellationToken.None);
+
+        // Chapter 10 section 4.1a: the operator's policy for people in no
+        // organization asks at every gate what the administrative organization's
+        // asks, a phishing-resistant proof among it, so a report that lacks one is
+        // refused at the host's own gate (LIB-HOST-004 AC4). A runtime key changes only
+        // at the management endpoint, by a person, with a reason (OPS-CFG-008, D-206).
+        await ConfiguredAsync(
+            new Uri("admin/config/" + Settings.PolicyDefault.Key, UriKind.Relative),
+            new JsonObject
+            {
+                ["value"] = JsonNode.Parse(Settings.PolicyDefault.Write(
+                    Policies.SystemDefault with { Gates = Policies.AdministrativeOrganization.Gates })),
+                ["reason"] = "Every gate asks what the administrative organization's asks.",
+            },
+            CancellationToken.None);
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        _administrator?.Dispose();
+
         if (_application is not null)
         {
             await _application.StopAsync(CancellationToken.None);
@@ -387,6 +459,7 @@ public sealed class SampleHost : IAsyncLifetime
 
         CryptographicOperations.ZeroMemory(_encryption);
         CryptographicOperations.ZeroMemory(_fingerprint);
+        _randomness.Dispose();
 
         GC.SuppressFinalize(this);
     }
@@ -498,6 +571,40 @@ public sealed class SampleHost : IAsyncLifetime
         return application;
     }
 
+    // OPS-CFG-008: one change of a runtime key by the first administrator, stepped up
+    // once where the endpoint asks for it, as the management application does.
+    private async Task ConfiguredAsync(Uri route, JsonObject change, CancellationToken cancellationToken)
+    {
+        (HttpStatusCode status, string? code) = await ChangedAsync(route, change, cancellationToken);
+
+        if (status is HttpStatusCode.Forbidden && code is "auth.stepup.required")
+        {
+            await Administrator.StepUpAsync(cancellationToken);
+
+            (status, code) = await ChangedAsync(route, change, cancellationToken);
+        }
+
+        if (status is not HttpStatusCode.NoContent)
+        {
+            throw new InvalidOperationException(
+                "PUT " + route + " answered " + (int)status + " " + code + ".");
+        }
+    }
+
+    private async Task<(HttpStatusCode Status, string? Code)> ChangedAsync(
+        Uri route,
+        JsonObject change,
+        CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage answered = await Administrator.PutAsJsonAsync(route, change, cancellationToken);
+
+        string body = await answered.Content.ReadAsStringAsync(cancellationToken);
+
+        return (
+            answered.StatusCode,
+            body.Length is 0 ? null : JsonNode.Parse(body)?["code"]?.GetValue<string>());
+    }
+
     // BFF-ORDER-001: the machine profile, then the browser profile, then the endpoints.
     private static void Mounted(IApplicationBuilder mount)
     {
@@ -514,7 +621,7 @@ public sealed class SampleHost : IAsyncLifetime
         [
             "bootstrap",
             "--organization", "Sample administration",
-            "--email", "administrator@sample.example.test",
+            "--email", FirstAdministrator,
             "--phone", "+201000000003",
             "--dateofbirth", "1990-01-01",
         ];
@@ -578,8 +685,8 @@ public sealed class SampleHost : IAsyncLifetime
         };
 
     // One run of the command-line application at the server, the key document piped
-    // to it.
-    private static async Task RunAsync(
+    // to it, answering what it printed.
+    private static async Task<string> RunAsync(
         List<string> arguments,
         JsonObject keys,
         CancellationToken cancellationToken)
@@ -611,11 +718,13 @@ public sealed class SampleHost : IAsyncLifetime
 
         await run.WaitForExitAsync(cancellationToken);
 
-        _ = await output;
+        string printed = await output;
 
         if (run.ExitCode != 0)
         {
             throw new InvalidOperationException(arguments[0] + " was refused: " + await error);
         }
+
+        return printed;
     }
 }
