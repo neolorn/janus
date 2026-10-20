@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `Janus.Testing` package for a host's tests and development setup, depending on the
+  main package: `InMemoryMailTransport` and `InMemorySmsTransport`, which keep each
+  message by destination and fail a delivery only where the test says so;
+  `FixedSecretSource`, whose keys are drawn per instance and which writes the key
+  document the commands read; `FixedClockReference`, `SucceededCertificateRenewal`,
+  `EmptyLocationSource` and `EmptyDatacenterRangeSource`, under which a development
+  deployment raises no degradation for those seams; and `SoftwarePasskey`, an ES256
+  authenticator in memory that answers the library's creation and request options.
+  A project using it carries its own framework reference to `Microsoft.AspNetCore.App`.
 - `bootstrap` prints a second line after the enrolment address: the identifier of the
   administrative organization it created, for the host to keep in its own configuration.
 - The `migrate` command applies the library's migrations to the database of the

@@ -666,6 +666,12 @@
           "xunit.v3": "[4.0.1, )"
         }
       },
+      "janus.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Janus.Hosting": "[1.0.0, )"
+        }
+      },
       "Dapper": {
         "type": "CentralTransitive",
         "requested": "[2.1.89, )",

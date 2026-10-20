@@ -78,16 +78,20 @@ public sealed class PackageTests(PackedLibrary packed) : IClassFixture<PackedLib
             packed.Packages[Main].Dependencies.Keys.Order(StringComparer.Ordinal));
 
     /// <summary>
-    /// LIB-PKG-001 AC4: the conformance suite depends on the main package at its own
-    /// version, and no package declares a dependency on the analysers.
+    /// LIB-PKG-001 AC4: the conformance suite and the testing package each depend on the
+    /// main package at their own version, and no package declares a dependency on the
+    /// analysers.
     /// </summary>
     [Fact]
     public void LIB_PKG_001_AC4_TheCompanionsDependOnTheMainPackageAndNoneOnTheAnalysers()
     {
-        PackedPackage conformance = packed.Packages["Janus.Conformance"];
-
-        Assert.Equal(conformance.Version, conformance.Dependencies[Main]);
-        Assert.Equal(packed.Packages[Main].Version, conformance.Version);
+        Assert.All(
+            [packed.Packages["Janus.Conformance"], packed.Packages["Janus.Testing"]],
+            companion =>
+            {
+                Assert.Equal(companion.Version, companion.Dependencies[Main]);
+                Assert.Equal(packed.Packages[Main].Version, companion.Version);
+            });
         Assert.All(
             packed.Packages.Values,
             package => Assert.DoesNotContain("Janus.Analyzers", package.Dependencies.Keys));
@@ -102,7 +106,7 @@ public sealed class PackageTests(PackedLibrary packed) : IClassFixture<PackedLib
     public void CONV_LAYOUT_001_AC5_OnlyThePackableProjectsPack()
     {
         Assert.Equal(
-            ["Janus.Analyzers", "Janus.Cli", "Janus.Conformance", Main],
+            ["Janus.Analyzers", "Janus.Cli", "Janus.Conformance", Main, "Janus.Testing"],
             packed.Packages.Keys.Order(StringComparer.Ordinal));
 
         Assert.Equal(

@@ -4,7 +4,7 @@
 
   <!-- CONV-SETUP-003: the public surface is tracked on every source project and on no
        test project, so a public member anywhere in the shipped code outside
-       Janus.Core, Janus.Hosting and Janus.Conformance is a build error. -->
+       Janus.Core, Janus.Hosting, Janus.Conformance and Janus.Testing is a build error. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>

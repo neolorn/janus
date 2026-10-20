@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- CONV-DESIGN-007: the container's abstractions are the shared framework's, taken
+       by a reference and never as a package (CONV-DESIGN-008). LIB-TEST-003: the
+       software passkey writes its attestation object with the framework's CBOR writer. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- LIB-TEST-003, CONV-LAYOUT-001 (D-205): a package of its own, built only on the
+       public surface and depending on the main package, which carries the contracts. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Janus.Hosting\Janus.Hosting.csproj" />
+  </ItemGroup>
+
+  <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

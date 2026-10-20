@@ -56,6 +56,7 @@ public sealed class LibraryStructureTests
         ["Janus.Storage"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy"],
         ["Janus.Hosting"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
         ["Janus.Conformance"] = ["Janus.Core", "Janus.Hosting"],
+        ["Janus.Testing"] = ["Janus.Core", "Janus.Hosting"],
         ["Janus.Analyzers"] = [],
         ["Janus.UnicodeTables"] = [],
         ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
@@ -1102,7 +1103,7 @@ public sealed class LibraryStructureTests
             [
                 "*.cs CA1062 none",
                 "src/**.cs CA1812 none",
-                "src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**.cs CA1515 none",
+                "src/{Janus.Core,Janus.Hosting,Janus.Conformance,Janus.Testing}/**.cs CA1515 none",
                 "{tests,src/Janus.Hosting,src/Janus.Cli}/**.cs CA2007 none",
                 "tests/**.cs CA1707 none",
                 "tests/**.cs CA1515 none",
@@ -1941,10 +1942,12 @@ public sealed class LibraryStructureTests
         // The generator of CONV-LAYOUT-001 is not a source project: it lives outside the
         // package and the gate that regenerates its output is what covers it. The
         // conformance package's test project holds the sample host, which reads no
-        // internal type (LIB-API-002 AC2), so that one grant is not made.
+        // internal type (LIB-API-002 AC2), and the testing package is built only on the
+        // public surface (LIB-TEST-003 AC2), so neither of those grants is made.
         if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal)
             && IsLibrary(project)
-            && !string.Equals(project + ".Tests", Sample, StringComparison.Ordinal))
+            && !string.Equals(project + ".Tests", Sample, StringComparison.Ordinal)
+            && !string.Equals(project, "Janus.Testing", StringComparison.Ordinal))
         {
             permitted.Add(project + ".Tests");
         }

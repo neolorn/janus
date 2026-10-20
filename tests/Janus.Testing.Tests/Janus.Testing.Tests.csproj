@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Testing\Janus.Testing.csproj" />
+  </ItemGroup>
+
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- CONV-LAYOUT-001 (D-205): the contracts the stand-ins answer travel in the main
+       package, whose reference to them is private, so they are referenced here. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Core\Janus.Core.csproj" />
+  </ItemGroup>
+
+</Project>

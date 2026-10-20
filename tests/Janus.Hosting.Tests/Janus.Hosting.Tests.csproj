@@ -32,6 +32,12 @@
     <ProjectReference Include="..\..\src\Janus.Conformance\Janus.Conformance.csproj" />
   </ItemGroup>
 
+  <!-- LIB-TEST-003: the testing package is driven through the library a host runs, as
+       a host's test drives it. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Testing\Janus.Testing.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>

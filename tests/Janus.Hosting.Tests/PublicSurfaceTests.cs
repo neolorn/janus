@@ -58,7 +58,7 @@ public sealed class PublicSurfaceTests
         "Janus.Storage",
     ];
 
-    // CONV-LAYOUT-001: every project the two packages ship. The analysers run inside
+    // CONV-LAYOUT-001: every project the three packages ship. The analysers run inside
     // the compiler, not in a host.
     private static readonly string[] Shipped =
     [
@@ -66,6 +66,7 @@ public sealed class PublicSurfaceTests
         "Janus.Conformance",
         "Janus.Core",
         "Janus.Hosting",
+        "Janus.Testing",
     ];
 
     // CONV-DESIGN-002 AC1: the interfaces of the core that are not service contracts,

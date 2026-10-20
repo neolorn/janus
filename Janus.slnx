@@ -10,6 +10,7 @@
     <Project Path="src/Janus.Identity/Janus.Identity.csproj" />
     <Project Path="src/Janus.Privacy/Janus.Privacy.csproj" />
     <Project Path="src/Janus.Storage/Janus.Storage.csproj" />
+    <Project Path="src/Janus.Testing/Janus.Testing.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Janus.UnicodeTables/Janus.UnicodeTables.csproj" />
@@ -25,5 +26,6 @@
     <Project Path="tests/Janus.Identity.Tests/Janus.Identity.Tests.csproj" />
     <Project Path="tests/Janus.Privacy.Tests/Janus.Privacy.Tests.csproj" />
     <Project Path="tests/Janus.Storage.Tests/Janus.Storage.Tests.csproj" />
+    <Project Path="tests/Janus.Testing.Tests/Janus.Testing.Tests.csproj" />
   </Folder>
 </Solution>
