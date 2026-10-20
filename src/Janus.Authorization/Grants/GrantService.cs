@@ -25,6 +25,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="groups">Where a group a grant is given to is read.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
 /// <param name="emergency">Which account is granted nothing further.</param>
+/// <param name="audit">Where each grant written or revoked is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -44,6 +45,7 @@ internal sealed class GrantService(
     IGroupStore groups,
     IResourceStore resources,
     IEmergencyAccount emergency,
+    IGrantAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IGrants
 {
@@ -251,6 +253,7 @@ internal sealed class GrantService(
         held = standing!;
 
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        await audit.RevokedAsync(held, context.BreakGlassReason, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -455,6 +458,11 @@ internal sealed class GrantService(
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GRANT-003 AC6 (D-197, D-206): in the transaction that writes it.
+        await audit
+            .CreatedAsync(grant, grant.GrantedBy, context.BreakGlassReason, cancellationToken)
+            .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

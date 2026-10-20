@@ -238,7 +238,7 @@ internal sealed class ResourceService(
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             await grants.RecordAsync(named, cancellationToken).ConfigureAwait(false);
-            await audit.RevokedAsync(named, cancellationToken).ConfigureAwait(false);
+            await audit.RevokedAsync(named, breakGlassReason: null, cancellationToken).ConfigureAwait(false);
         }
 
         await resources.RemoveAsync(resource, cancellationToken).ConfigureAwait(false);

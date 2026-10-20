@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A grant written by a person, an acknowledged invitation or bootstrap is recorded as
+  `authz.grant.created`, and a grant a person revokes as `authz.grant.revoked`, each with
+  its reason, in the transaction that writes it. Every record of a grant written,
+  revoked, materialised or retracted names the grant's holder as its `subject` where the
+  holder is an account, and none where it is a group, whoever acted.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
   number, that the credential is still active and the number still the account's before
   it issues the code. Where either changed since the ask read the credential, nothing is

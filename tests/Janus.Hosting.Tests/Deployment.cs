@@ -636,6 +636,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authorization.Tests.Groups.GroupAuditInMemory GroupChanges { get; } = new();
 
     /// <summary>
+    /// The grants the deployment recorded as written or revoked.
+    /// </summary>
+    public Janus.Authorization.Tests.Grants.GrantAuditInMemory GrantChanges { get; } = new();
+
+    /// <summary>
     /// The organizations the deployment holds, their members those placed in
     /// <see cref="Memberships"/>.
     /// </summary>
@@ -1141,6 +1146,7 @@ internal sealed class Deployment : IAsyncDisposable
             Janus.Authorization.Tests.HostDomain.Declared().Build()));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleAudit>(RoleChanges);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupAudit>(GroupChanges);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IGrantAudit>(GrantChanges);
         _ = services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IUnscopedRefusal, Janus.Authorization.Tests.Gate.UnscopedRefusalInMemory>();
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();

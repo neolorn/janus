@@ -560,6 +560,37 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-003 AC6: each grant bootstrap makes is recorded once as
+    /// <c>authz.grant.created</c> under bootstrap's principal, naming its holder as
+    /// subject, its role and the reason <c>OPS-BOOT-001</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC6_EachGrantBootstrapMakesIsRecordedCreatedNamingItsHolderAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        int written = await connection.QuerySingleAsync<int>("SELECT count(*)::int FROM identity.grants");
+        List<(string Holder, string? Subject, string? Principal, string? Reason)> recorded = [.. await connection
+            .QueryAsync<(string Holder, string? Subject, string? Principal, string? Reason)>(
+                """
+                SELECT g.subject_id::text, r.subject::text, r.principal, r.details->>'reason'
+                FROM identity.grants g
+                JOIN identity.audit_records r
+                  ON r.action = 'authz.grant.created' AND r.details->>'grant' = g.id::text
+                WHERE r.details->>'role' = g.role
+                """)];
+
+        Assert.NotEqual(0, written);
+        Assert.Equal(written, recorded.Count);
+        Assert.All(
+            recorded,
+            record => Assert.Equal(
+                (record.Holder, "bootstrap", "OPS-BOOT-001"),
+                (record.Subject, record.Principal, record.Reason)));
+    }
+
+    /// <summary>
     /// OPS-BOOT-001 AC7: bootstrap makes two <c>system-administrator</c> grants, the
     /// administrator's and the reserved account's, each naming the nil subject as granter
     /// and <c>OPS-BOOT-001</c> as reason, and no grant it makes names its holder as

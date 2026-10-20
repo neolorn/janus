@@ -3683,6 +3683,7 @@ static Janus.Core.AuditActions.DocumentTranslated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ErasureCompleted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GrantCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantMaterialised.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantRetracted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantRevoked.get -> Janus.Core.AuditAction

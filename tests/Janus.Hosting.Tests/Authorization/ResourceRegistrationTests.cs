@@ -353,13 +353,14 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
     }
 
     /// <summary>
-    /// AUTHZ-INHERIT-002 AC5, AUTHZ-GRANT-003 (D-203): a record that holds a registered
-    /// record is refused with <c>authz.resource.inuse</c>, and one not registered with
-    /// <c>api.request.invalid</c> naming <c>resource</c>, each changing nothing. A
-    /// removal leaves no row and no ancestry row of the record, and revokes every live
-    /// grant naming it with the nil subject as revoker and the reason
-    /// <c>AUTHZ-INHERIT-002</c>, each recorded <c>authz.grant.revoked</c>; a grant on
-    /// its container stands, and the record registered again inherits nothing it held.
+    /// AUTHZ-INHERIT-002 AC5, AUTHZ-GRANT-003 AC6 (D-203, D-206): a record that holds a
+    /// registered record is refused with <c>authz.resource.inuse</c>, and one not
+    /// registered with <c>api.request.invalid</c> naming <c>resource</c>, each changing
+    /// nothing. A removal leaves no row and no ancestry row of the record, and revokes
+    /// every live grant naming it with the nil subject as revoker and the reason
+    /// <c>AUTHZ-INHERIT-002</c>, each recorded <c>authz.grant.revoked</c> naming its
+    /// holder as subject; a grant on its container stands, and the record registered
+    /// again inherits nothing it held.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -398,8 +399,8 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         Assert.Equal(1, await RevokedAsync(allowed));
         Assert.Equal(1, await RevokedAsync(denied));
         Assert.Equal(0, await RevokedAsync(onContainer));
-        Assert.Equal(1, await RevocationsRecordedAsync(allowed));
-        Assert.Equal(1, await RevocationsRecordedAsync(denied));
+        Assert.Equal(1, await RevocationsRecordedAsync(allowed, other));
+        Assert.Equal(1, await RevocationsRecordedAsync(denied, written.Account));
 
         Ok(await RegisteredAsync(new ResourceRegistration(document, written.Organization, workspace, written.Account)));
 
@@ -488,7 +489,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
             new { id = grant.Value });
     }
 
-    private async Task<int> RevocationsRecordedAsync(GrantId grant)
+    private async Task<int> RevocationsRecordedAsync(GrantId grant, SubjectId holder)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -500,9 +501,10 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
               AND principal IS NULL
               AND details ->> 'grant' = CAST(@id AS text)
               AND details ->> 'reason' = 'AUTHZ-INHERIT-002'
-              AND details ->> 'role' IS NOT NULL;
+              AND details ->> 'role' IS NOT NULL
+              AND subject = @holder;
             """,
-            new { id = grant.Value });
+            new { id = grant.Value, holder = holder.Value });
     }
 
     private async Task<int> AncestorRowsOfAsync(ResourceReference resource)

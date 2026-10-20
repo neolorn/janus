@@ -260,6 +260,7 @@ internal sealed class InvitationAcknowledgement(
                     invitation.Roles,
                     invitation.Inviter,
                     Reason(invitation.Id),
+                    context,
                     multiple,
                     now,
                     cancellationToken)

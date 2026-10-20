@@ -129,6 +129,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a group created, by a caller restricted since the gate step", Decided.Restricted),
         ("a member a group already holds added again, by a caller managing groups", Decided.Allowed),
         ("a member a group does not hold taken out, by a caller managing groups", Decided.Allowed),
+        ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
@@ -1010,6 +1011,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a member a group already holds added again, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: true);
 
+            case "a grant written and then revoked, by a caller managing grants":
+                return await GrantedAndRevokedAsync(deployment, role, caller);
+
             case "a member a group does not hold taken out, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: false);
 
@@ -1381,6 +1385,50 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(held ? 1 : 0, members);
 
         return decided;
+    }
+
+    // AUTHZ-GRANT-001, AUTHZ-GRANT-003 AC6 (D-206): a grant across the organization to
+    // another account, written and revoked by a caller managing grants there on a session
+    // that meets the gate. Recording each in the trail decides nothing, so the row
+    // restates the decision the two operations make.
+    private async Task<Decided> GrantedAndRevokedAsync(Deployment deployment, RoleName role, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGrants grants = services.GetRequiredService<IGrants>();
+
+        Result<GrantId> written = await grants.GrantAsync(
+            context,
+            session,
+            new GrantRequest(
+                GrantSubject.Of(account),
+                role,
+                new ResourceReference(
+                    ResourceType.Parse("organization"),
+                    ResourceId.Parse(deployment.Organization.ToString())),
+                Deny: false,
+                ExpiresAt: null,
+                "The reason the grant was asked for."),
+            cancellationToken);
+
+        if (written.Match<Error?>(_ => null, error => error) is Error refused)
+        {
+            return Refused(refused);
+        }
+
+        return (await grants.RevokeAsync(
+                context,
+                session,
+                written.Match(grant => grant, _ => default),
+                "No longer needed.",
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
