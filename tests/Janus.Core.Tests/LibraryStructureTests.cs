@@ -66,6 +66,10 @@ public sealed class LibraryStructureTests
     // outside the package. Both are held to the same conventions.
     private static readonly string[] Roots = ["src", "tools"];
 
+    // CONV-SETUP-002: the folders the project files of both solutions are under, the
+    // library's tests and the sample host's solution beside the library itself.
+    private static readonly string[] ProjectRoots = [.. Roots, "tests", "samples"];
+
     private static readonly string[] RawSql =
     [
         "FromSqlRaw",
@@ -1086,12 +1090,24 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-SETUP-002 AC1: no project file carries a package version.
+    /// CONV-SETUP-002 AC1: no project file of either solution carries a package version:
+    /// the library's, its tests and generators included, and the sample host's.
     /// </summary>
     [Fact]
     public void CONV_SETUP_002_AC1_NoProjectFileCarriesAPackageVersion()
     {
-        foreach (string project in Projects())
+        string[] projects =
+        [
+            .. ProjectRoots
+                .Select(root => Path.Combine(Repository.Root, root))
+                .Where(Directory.Exists)
+                .SelectMany(root => Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories))
+                .Where(file => !IsBuildOutput(file)),
+        ];
+
+        Assert.Contains(projects, project => project.Contains(Path.DirectorySeparatorChar + "tests" + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+
+        foreach (string project in projects)
         {
             Assert.DoesNotContain(
                 XDocument.Parse(File.ReadAllText(project)).Descendants("PackageReference"),
