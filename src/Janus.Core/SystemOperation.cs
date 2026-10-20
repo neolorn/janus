@@ -78,15 +78,9 @@ public enum SystemOperation
     ErasureReplay = 9,
 
     /// <summary>
-    /// Applying the library's migrations (OPS-MIG-001, D-204).
-    /// </summary>
-    [JsonStringEnumMemberName("migration")]
-    Migration = 10,
-
-    /// <summary>
     /// Defining a host's declared roles at a start, inside the start step alone
     /// (AUTHZ-GRANT-004, D-204).
     /// </summary>
     [JsonStringEnumMemberName("role-seeding")]
-    RoleSeeding = 11,
+    RoleSeeding = 10,
 }

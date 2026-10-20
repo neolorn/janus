@@ -26,6 +26,7 @@ against the public contract of LIB-API-001.
   with nothing owed changes nothing. It writes nothing on success; a migration the
   database refuses exits 1 with `system.fault` on standard error, the migrations
   before it applied and nothing after. A pipeline runs it before deploying.
+  It runs as no system principal: it asks no gate and writes no audit record.
 - Where the cookies the deployment sets differ from those the current privacy notice
   lists, by name, purpose, lifetime or readability by a third party, `degradation` is
   raised under `notice.cookies` at each start and with each change of a key that gives
