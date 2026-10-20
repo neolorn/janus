@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Sending;
@@ -57,6 +57,7 @@ internal static class RestrictionEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.ConfigurationValueNotAllowed,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<RestrictionName>("name"))
+            .Accepts<RestrictionBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapDelete("/{name}", DeleteAsync))
             .Declares(EndpointDeclaration
@@ -65,6 +66,7 @@ internal static class RestrictionEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.RestrictionNotFound,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<RestrictionName>("name"))
+            .Accepts<RestrictionDeletionBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/{name}/grant", GrantAsync))
             .Declares(EndpointDeclaration
@@ -74,6 +76,7 @@ internal static class RestrictionEndpoints
                     ErrorCodes.ConfigurationChangeReasonRequired,
                     ErrorCodes.ConfigurationValueNotAllowed)
                 .Binding<RestrictionName>("name"))
+            .Accepts<RestrictionGrantBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -119,15 +122,19 @@ internal static class RestrictionEndpoints
     }
 
     private static async Task<IResult> EditAsync(
-        RestrictionBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
         RestrictionName name,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RestrictionBody body = await JsonBody
+            .ReadAsync<RestrictionBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         (Restriction? replacement, string member) = body.Read(name);
 
@@ -156,15 +163,19 @@ internal static class RestrictionEndpoints
     // A deletion is a loosening and carries its reason, which is free text and goes
     // in the body rather than in an address a log keeps.
     private static async Task<IResult> DeleteAsync(
-        [FromBody] RestrictionDeletionBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
         RestrictionName name,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RestrictionDeletionBody body = await JsonBody
+            .ReadAsync<RestrictionDeletionBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Overlong(body.Reason))
         {
@@ -184,15 +195,19 @@ internal static class RestrictionEndpoints
     }
 
     private static async Task<IResult> GrantAsync(
-        RestrictionGrantBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
         RestrictionName name,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        RestrictionGrantBody body = await JsonBody
+            .ReadAsync<RestrictionGrantBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(body.KeyValue))
         {

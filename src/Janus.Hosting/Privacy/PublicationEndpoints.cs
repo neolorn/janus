@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -41,6 +42,7 @@ internal static class PublicationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.NoticeGoverningTextMissing))
+            .Accepts<PublicationBody>(MediaTypeNames.Application.Json)
             .Produces<DocumentVersionView>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/documents/{document}/versions", PublishAsync))
             .Declares(EndpointDeclaration
@@ -48,6 +50,7 @@ internal static class PublicationEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.NoticeGoverningTextMissing)
                 .Binding<DocumentName>("document"))
+            .Accepts<PublicationBody>(MediaTypeNames.Application.Json)
             .Produces<DocumentVersionView>();
         _ = SessionRequired.On(endpoints.MapPut(
             "/admin/documents/{document}/versions/{version}/translations/{language}",
@@ -57,28 +60,33 @@ internal static class PublicationEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.DocumentNotFound)
                 .Binding<DocumentName>("document"))
+            .Accepts<TranslationBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
 
     private static Task<IResult> PublishNoticeAsync(
-        PublicationBody body,
         ILegalDocuments documents,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken) =>
-        PublishAsync(body, documents, browser, Notice, cancellationToken);
+        PublishAsync(documents, browser, Notice, context, cancellationToken);
 
     private static async Task<IResult> PublishAsync(
-        PublicationBody body,
         ILegalDocuments documents,
         RequestSession browser,
         DocumentName document,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PublicationBody body = await JsonBody
+            .ReadAsync<PublicationBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Material is not bool material)
         {
@@ -108,17 +116,21 @@ internal static class PublicationEndpoints
     }
 
     private static async Task<IResult> TranslateAsync(
-        TranslationBody body,
         ILegalDocuments documents,
         RequestSession browser,
         DocumentName document,
         string version,
         string language,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        TranslationBody body = await JsonBody
+            .ReadAsync<TranslationBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Text is not { } text || string.IsNullOrWhiteSpace(text))
         {

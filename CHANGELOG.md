@@ -3841,7 +3841,8 @@ against the public contract of LIB-API-001.
   `model.startup.declarationinvalid` (`declaration` the type, `field` `capabilities`).
   `IAccessGate.CapabilitiesAsync` answers only for the capabilities its type declares:
   asking it for any other permission, a declared one included, raises, and a type that
-  declares none answers none.
+  declares none answers none. A type declaring as capabilities two permissions of one
+  action fails startup the same way, since the browser reads a capability by its action.
 - Ending the reserved `emergency` account's membership of the administrative
   organization (`DELETE /admin/organizations/{id}/memberships/{subject}`) is refused
   with 403 `authz.denied`, for anyone, before the step-up, and the membership stays
@@ -3898,3 +3899,20 @@ against the public contract of LIB-API-001.
   under a name another contributor holds, fails startup with
   `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>` and
   `details.field` `name`.
+- A sign-in that completes on `POST /auth/factor`, `POST /auth/device/verify` or a sign-in
+  link, and presenting the break-glass credential, end the pre-authentication session the
+  browser carried: its token resolves nothing afterwards, where before only its cookie was
+  cleared. A step-up keeps the session's record and its identifier and rotates only the
+  token its cookie carries.
+- `AddJanus` no longer changes the application's HTTP JSON options, so a host's own
+  endpoint types serialize as the host configures them. Every library endpoint reads its
+  JSON body with the library's own serializer settings, whatever the host sets for its
+  endpoints: a member is read only under the name the contract spells, case-sensitively,
+  and a number only as a JSON number, and a body that does not read is 400
+  `api.request.malformed` naming the member it stopped at.
+- `POST /auth/begin` answers the assertion challenge under `webauthn`, as the contract and
+  every other sign-in answer spell it, where it was `webAuthn`.
+- `CapabilityFields.Of(Capability)` gives a host's record the `can` list and `requires`
+  map of API-CAP-001: each capability by its action, never its permission name, the
+  residuals under their contract names, all in ordinal order, and a capability with
+  nothing outstanding left out of `requires`.

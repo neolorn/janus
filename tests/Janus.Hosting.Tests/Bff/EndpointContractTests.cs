@@ -4,11 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -32,15 +29,11 @@ public sealed class EndpointContractTests : IAsyncDisposable
     [Fact]
     public void LIB_API_001_AC2_TheEndpointsAreTheContract()
     {
-        using AsyncServiceScope scope = _deployment.Scope();
-
         Assert.Equal(
             File.ReadAllText(Path.Combine(Repository.Root(), "tests", "Janus.Hosting.Tests", "endpoints.txt"))
                 .ReplaceLineEndings("\n")
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries),
-            EndpointContract.Lines(
-                _deployment.Endpoints,
-                scope.ServiceProvider.GetRequiredService<IOptions<JsonOptions>>().Value.SerializerOptions));
+            EndpointContract.Lines(_deployment.Endpoints));
     }
 
     /// <summary>

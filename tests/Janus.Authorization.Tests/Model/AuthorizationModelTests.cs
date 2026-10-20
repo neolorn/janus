@@ -324,6 +324,24 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC4 (D-206): a type declaring as capabilities two permissions of one
+    /// action stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// the type and <c>capabilities</c>, since the browser reads a capability by its
+    /// action alone; one permission named twice is still one capability.
+    /// </summary>
+    [Fact]
+    public void BFF_CAP_002_AC4_TwoCapabilitiesOfOneActionFailStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Capable("article:read", "folder:read")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("draft", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("capabilities", refused.Failure?.Details["field"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Capable("article:read", "article:read", "article:edit")));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-004 AC7 (D-204): a declared role named as a role chapter 10 section 3
     /// seeds stops the deployment with <c>model.startup.declarationinvalid</c>, naming
     /// <c>role.&lt;name&gt;</c> and <c>name</c>.
@@ -808,6 +826,7 @@ public sealed class AuthorizationModelTests
     // does not, which is what the startup check is there for.
     private static AuthorizationDeclaration Capable(params string[] capabilities) =>
         HostDomain.Declared()
+            .Permission("folder:read")
             .Resource<HostDomain.Draft>("draft", draft => draft
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity"])

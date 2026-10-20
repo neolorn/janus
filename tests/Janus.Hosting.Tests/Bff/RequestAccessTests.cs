@@ -145,6 +145,38 @@ public sealed class RequestAccessTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-HOST-001 AC5 (D-206): a step-up rotates the identifier the session's cookie
+    /// carries and keeps the record, so the next request's access names the same
+    /// session, and a request carrying the cookie from before the rotation has none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_HOST_001_AC5_AStepUpKeepsTheSessionAndLeavesTheCookieBeforeItNoAccessAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _ = await browser.SendAsync("GET", HostEndpoints.Visitor);
+
+        string before = browser.Cookies[BrowserCookies.Session];
+        Answer stepped = await SteppedUpAsync(browser);
+
+        _ = await browser.SendAsync("GET", HostEndpoints.Visitor);
+
+        var planted = new Browser(_deployment);
+
+        planted.Hold(BrowserCookies.Session, before);
+
+        Answer carried = await planted.SendAsync("GET", HostEndpoints.Visitor);
+
+        Assert.Equal(StatusCodes.Status200OK, stepped.Status);
+        Assert.NotEqual(before, browser.Cookies[BrowserCookies.Session]);
+        Assert.Equal(2, _host.Read.Count);
+        Assert.Equal(_host.Read[0].Session, _host.Read[1].Session);
+        Assert.Equal(StatusCodes.Status401Unauthorized, carried.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), carried.Text("code"));
+    }
+
+    /// <summary>
     /// BFF-HOST-003 AC1: a failure a host endpoint answers through <c>Answers</c> carries
     /// the code, its details, the status the reference gives it and the request's own
     /// correlation identifier, and is byte for byte what the library's own endpoint
@@ -265,6 +297,22 @@ public sealed class RequestAccessTests : IAsyncDisposable
 
     // A browser holding a break-glass session for the person, as the session store holds
     // one and the browser carries it.
+    // A step-up with the password the flow set, on a challenge the browser opens for the
+    // address the flow registered (09 POST /auth/step-up).
+    private static async Task<Answer> SteppedUpAsync(Browser browser)
+    {
+        Answer began = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+
+        Assert.Equal(StatusCodes.Status200OK, began.Status);
+
+        return await browser.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "password"),
+            ("value", Flow.Password));
+    }
+
     private async Task<Browser> BrokenAsync(SubjectId person)
     {
         var secret = OpaqueToken.Draw(_randomness);

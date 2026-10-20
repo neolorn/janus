@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -44,6 +45,7 @@ internal static class AppPasswordEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.MailboxNotFound, ErrorCodes.CredentialLabelInvalid))
+            .Accepts<AppPasswordRequest>(MediaTypeNames.Application.Json)
             .Produces<IssuedAppPasswordView>();
         _ = SessionRequired.On(group.MapDelete("/{id}", RevokeAsync))
             .Declares(EndpointDeclaration
@@ -76,16 +78,18 @@ internal static class AppPasswordEndpoints
     }
 
     private static async Task<IResult> CreateAsync(
-        AppPasswordRequest request,
         IAppPasswords passwords,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(passwords);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        AppPasswordRequest request = await JsonBody
+            .ReadAsync<AppPasswordRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // No secret or hash of it is kept anywhere on the way out, the shared caches a
         // proxy keeps included (INT-MAIL-010 AC4).
