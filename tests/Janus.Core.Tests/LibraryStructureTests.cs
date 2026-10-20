@@ -675,6 +675,39 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// LIB-API-002 AC2: the conformance suite's sample takes its schema from
+    /// <c>migrate</c>. It references the conformance package and the command-line
+    /// application it runs, no test project's fixture, and nothing in it applies a
+    /// migration itself.
+    /// </summary>
+    [Fact]
+    public void LIB_API_002_AC2_TheConformanceSampleTakesItsSchemaFromMigrate()
+    {
+        string folder = Path.Combine("tests", Sample);
+
+        Assert.Equal(
+            ["Janus.Cli", "Janus.Conformance"],
+            XDocument
+                .Parse(Repository.ReadText(Path.Combine(folder, Sample + ".csproj")))
+                .Descendants("ProjectReference")
+                .Where(reference => reference.Attribute("OutputItemType") is null)
+                .Select(reference => Referenced(reference.Attribute("Include")!.Value))
+                .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(
+            Directory.EnumerateFiles(Path.Combine(Repository.Root, folder), "*.cs", SearchOption.AllDirectories)
+                .Where(file => !IsBuildOutput(file)),
+            file => Regex.IsMatch(
+                File.ReadAllText(file),
+                @"\b(DatabaseFixture|MigrateAsync|IMigrator)\b|\.Database\.Migrate\b",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5)));
+        Assert.Contains(
+            "await RunAsync([\"migrate\"]",
+            Repository.ReadText(Path.Combine(folder, "SampleHost.cs")),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// CONV-TEST-001 AC2: no project grants its internals to the project that holds
     /// the consumer sample.
     /// </summary>

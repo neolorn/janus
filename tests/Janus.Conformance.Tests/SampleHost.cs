@@ -16,7 +16,6 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting;
 using Janus.Hosting.Bff;
-using Janus.Storage.Tests;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
@@ -24,6 +23,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Janus.Conformance.Tests;
@@ -37,10 +37,10 @@ namespace Janus.Conformance.Tests;
 /// <remarks>
 /// Implements LIB-TEST-001, LIB-API-002 AC2 and LIB-HOST-001. Everything here is
 /// written against the public surface alone, as a host outside the repository writes
-/// it. The deployment is bootstrapped and its client registered by the commands an
-/// operator runs, and it is started as a web server starts it, the checks that run
-/// before anything is served included. One container per test class, torn down with
-/// the class.
+/// it. The schema is applied, the deployment bootstrapped and its client registered by
+/// the commands an operator runs, and it is started as a web server starts it, the
+/// checks that run before anything is served included. One container per test class,
+/// torn down with the class.
 /// </remarks>
 public sealed class SampleHost : IAsyncLifetime
 {
@@ -85,13 +85,15 @@ public sealed class SampleHost : IAsyncLifetime
     // The named client the application's back channel is made on (BFF-SESS-006).
     private const string SignOnChannel = "identity-signon";
 
-    private readonly DatabaseFixture _database = new();
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
     private readonly ServerInMemory _server = new();
 
     // The deployment's keys, as a secrets manager holds them; cleared when the
     // deployment stops.
     private readonly byte[] _encryption = RandomNumberGenerator.GetBytes(32);
     private readonly byte[] _fingerprint = RandomNumberGenerator.GetBytes(FingerprintKeys.MinimumLength);
+
+    private string _connectionString = string.Empty;
 
     private WebApplication? _application;
 
@@ -223,7 +225,7 @@ public sealed class SampleHost : IAsyncLifetime
     /// <returns>The open connection.</returns>
     public async ValueTask<DbConnection> ConnectAsync(CancellationToken cancellationToken)
     {
-        var connection = new NpgsqlConnection(_database.ConnectionString);
+        var connection = new NpgsqlConnection(_connectionString);
 
         await connection.OpenAsync(cancellationToken);
 
@@ -267,19 +269,37 @@ public sealed class SampleHost : IAsyncLifetime
     /// </summary>
     /// <returns>The context.</returns>
     internal SampleContext Context() =>
-        new(new DbContextOptionsBuilder<SampleContext>().UseNpgsql(_database.ConnectionString).Options);
+        new(new DbContextOptionsBuilder<SampleContext>().UseNpgsql(_connectionString).Options);
 
     /// <summary>
     /// Opens the host's context with an entity mapped that nothing declares.
     /// </summary>
     /// <returns>The context.</returns>
     internal StrayContext Stray() =>
-        new(new DbContextOptionsBuilder<StrayContext>().UseNpgsql(_database.ConnectionString).Options);
+        new(new DbContextOptionsBuilder<StrayContext>().UseNpgsql(_connectionString).Options);
 
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
-        await _database.InitializeAsync();
+        await _container.StartAsync(CancellationToken.None);
+
+        // OPS-DB-001: the locale belongs to the database, so the operator creates it under
+        // ICU before the first migration runs.
+        await using (var server = new NpgsqlConnection(_container.GetConnectionString()))
+        {
+            await server.OpenAsync(CancellationToken.None);
+            _ = await server.ExecuteAsync(
+                "CREATE DATABASE sample TEMPLATE template0 "
+                    + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'");
+        }
+
+        _connectionString = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = "sample" }
+            .ConnectionString;
+
+        // OPS-MIG-001: the pipeline applies the library's migrations before the
+        // deployment first starts, the migration connection the only member of the
+        // document.
+        await RunAsync(["migrate"], new JsonObject { ["connection"] = _connectionString }, CancellationToken.None);
 
         // OPS-BOOT-001: the operator stands the deployment up once, naming the values
         // that name it, before the application first starts.
@@ -363,7 +383,7 @@ public sealed class SampleHost : IAsyncLifetime
 
         _server.Dispose();
 
-        await _database.DisposeAsync();
+        await _container.DisposeAsync();
 
         CryptographicOperations.ZeroMemory(_encryption);
         CryptographicOperations.ZeroMemory(_fingerprint);
@@ -450,7 +470,7 @@ public sealed class SampleHost : IAsyncLifetime
             new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _fingerprint }),
             Encoding.UTF8.GetBytes(Maintenance())));
 
-        builder.Services.AddJanus(_database.ConnectionString, Declaration(), ApplicationKind.Public);
+        builder.Services.AddJanus(_connectionString, Declaration(), ApplicationKind.Public);
 
         // LIB-HOST-001: the host's own context, given in a scope, and the source of each
         // relationship its derivations are over, answered from that context.
@@ -537,14 +557,14 @@ public sealed class SampleHost : IAsyncLifetime
     // OPS-MIG-003a: the credential the scheduled maintenance runs under, holding the
     // maintenance role's rights and no path to the application's.
     private string Maintenance() =>
-        new NpgsqlConnectionStringBuilder(_database.ConnectionString) { Options = "-c role=identity_maintenance" }
+        new NpgsqlConnectionStringBuilder(_connectionString) { Options = "-c role=identity_maintenance" }
             .ConnectionString;
 
     // The document the operator pipes from the secrets manager.
     private JsonObject Keys() =>
         new()
         {
-            ["connection"] = _database.ConnectionString,
+            ["connection"] = _connectionString,
             ["keyEncryptionKeys"] = new JsonObject
             {
                 ["current"] = 1,

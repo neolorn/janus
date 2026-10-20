@@ -637,14 +637,6 @@
           "OpenIddict.Server": "[7.7.1, )"
         }
       },
-      "janus.storage.tests": {
-        "type": "Project",
-        "dependencies": {
-          "Janus.Storage": "[1.0.0, )",
-          "Testcontainers.PostgreSql": "[4.15.0, )",
-          "xunit.v3": "[4.0.1, )"
-        }
-      },
       "Dapper": {
         "type": "CentralTransitive",
         "requested": "[2.1.89, )",
