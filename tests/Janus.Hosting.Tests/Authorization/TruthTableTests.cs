@@ -12,6 +12,7 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -132,6 +133,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
         ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
+        ("a role defined with the context of the start principal role-declaration", Decided.Denied),
     ];
 
     // An action bound to a step-up gate, judged from what a host's assurance provider
@@ -1030,6 +1032,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             [HostPermissions.Export],
                             cancellationToken))
                     .Match(_ => Decided.Allowed, Refused));
+
+            // AUTHZ-GRANT-004 AC7 (D-204): a declared role is defined by the start step
+            // alone, and IRoles admits no system principal, the start's own included.
+            case "a role defined with the context of the start principal role-declaration":
+                return (await scope.ServiceProvider.GetRequiredService<IRoles>()
+                        .DefineAsync(
+                            AccessContext.Of(DeclaredRoleSeed.Principal),
+                            SessionId.New(TimeProvider.System),
+                            new DefinedRole(RoleName.Parse("declared"), [HostPermissions.Read]),
+                            "Seeded at the start.",
+                            cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");

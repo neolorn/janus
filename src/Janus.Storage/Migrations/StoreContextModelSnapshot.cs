@@ -2939,6 +2939,18 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("roles", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.SeededRoleRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("name");
+
+                b.HasKey("Name")
+                    .HasName("pk_seeded_roles");
+
+                b.ToTable("seeded_roles", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
             {
                 b.Property<Guid>("Subject")

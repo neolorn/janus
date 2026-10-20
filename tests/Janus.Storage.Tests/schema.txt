@@ -1019,6 +1019,9 @@ table role_permissions
 table roles
   column name text not null
   constraint pk_roles PRIMARY KEY (name)
+table seeded_roles
+  column name text not null
+  constraint pk_seeded_roles PRIMARY KEY (name)
 table send_counters
   column key bytea not null
   column sent_at timestamp with time zone[] not null

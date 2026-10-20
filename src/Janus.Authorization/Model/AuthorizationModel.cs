@@ -46,6 +46,10 @@ internal sealed class AuthorizationModel
     // no host type may take.
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
+    // AUTHZ-GRANT-004 (D-204): the roles bootstrap seeds (chapter 10 section 3), which
+    // no declared role may take, since a role is seeded once and these are seeded first.
+    private static readonly string[] Administrative = ["system-administrator", "auditor", "support"];
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
@@ -57,6 +61,7 @@ internal sealed class AuthorizationModel
     private readonly IReadOnlyDictionary<Permission, string> _stepUpGates;
     private readonly IReadOnlyDictionary<Permission, string> _actionPurposes;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
+    private readonly IReadOnlyList<DefinedRole> _declaredRoles;
 
     private AuthorizationModel(
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
@@ -68,7 +73,8 @@ internal sealed class AuthorizationModel
         IReadOnlyDictionary<Permission, string> actionPurposes,
         Dictionary<string, LawfulBasisDeclaration> bases,
         IReadOnlyList<string> sensitiveCategories,
-        DeclaredProcessing processing)
+        DeclaredProcessing processing,
+        IReadOnlyList<DefinedRole> declaredRoles)
     {
         _types = types;
         _entities = entities;
@@ -86,6 +92,7 @@ internal sealed class AuthorizationModel
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
         _processing = processing;
+        _declaredRoles = declaredRoles;
     }
 
     /// <summary>
@@ -102,6 +109,12 @@ internal sealed class AuthorizationModel
     /// Every relationship a derivation may follow from.
     /// </summary>
     public IReadOnlyCollection<RelationshipDeclaration> Relationships => _relationships.Values;
+
+    /// <summary>
+    /// The roles the deployment starts with, in the order declared, each seeded once at
+    /// a start (AUTHZ-GRANT-004, D-204).
+    /// </summary>
+    public IReadOnlyList<DefinedRole> DeclaredRoles => _declaredRoles;
 
     /// <summary>
     /// Builds the model from what the host declared, refusing a declaration that
@@ -163,7 +176,8 @@ internal sealed class AuthorizationModel
             Purposes(declaration, processing),
             bases,
             declaration.SensitiveCategories,
-            processing);
+            processing,
+            Roles(declaration, permissions));
     }
 
     /// <summary>
@@ -833,6 +847,53 @@ internal sealed class AuthorizationModel
                     + " as a capability, which the model does not declare");
             }
         }
+    }
+
+    // AUTHZ-GRANT-004 (D-204): a declared role is defined as POST /admin/roles would
+    // define it, so its name keeps that rule and takes no role bootstrap seeds, and it
+    // grants what the model declares short of system administration (OPS-CFG-007).
+    private static List<DefinedRole> Roles(
+        AuthorizationDeclaration declaration,
+        HashSet<Permission> permissions)
+    {
+        var declared = new List<DefinedRole>(declaration.Roles.Count);
+        var names = new HashSet<RoleName>();
+
+        foreach (RoleDeclaration role in declaration.Roles)
+        {
+            string at = "role." + role.Name;
+
+            if (!RoleName.TryParse(role.Name, out RoleName name))
+            {
+                throw Invalid(at, "name", "the declared role " + role.Name + " is not a role name");
+            }
+
+            if (Administrative.Contains(role.Name, StringComparer.Ordinal))
+            {
+                throw Invalid(at, "name", "the declared role " + role.Name + " is a role bootstrap seeds");
+            }
+
+            if (!names.Add(name))
+            {
+                throw Invalid(at, "name", "the role " + role.Name + " is declared twice");
+            }
+
+            foreach (Permission permission in role.Permissions)
+            {
+                if (!permissions.Contains(permission) || permission == Core.Permissions.SystemAdminister)
+                {
+                    throw Invalid(
+                        at,
+                        "permissions",
+                        "the declared role " + role.Name + " grants " + permission
+                        + ", which is not declared or is system administration");
+                }
+            }
+
+            declared.Add(new DefinedRole(name, [.. role.Permissions.Distinct()]));
+        }
+
+        return declared;
     }
 
     // `10` section 1.5: a declaration that is present but malformed names the

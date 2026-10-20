@@ -295,6 +295,85 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-004 AC7 (D-204): a declared role named as a role chapter 10 section 3
+    /// seeds stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>role.&lt;name&gt;</c> and <c>name</c>.
+    /// </summary>
+    /// <param name="name">The administrative role's name.</param>
+    [Theory]
+    [InlineData("system-administrator")]
+    [InlineData("auditor")]
+    [InlineData("support")]
+    public void AUTHZ_GRANT_004_AC7_ADeclaredRoleNamedAsAnAdministrativeRoleFailsStartup(string name)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(HostDomain.Declared().Role(name, "article:read").Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("role." + name, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004, AUTHZ-MODEL-004 (D-204): a declared role naming a permission the
+    /// model does not declare, or <c>system:administer</c>, is refused naming
+    /// <c>permissions</c>; one whose name breaks the rule of <c>POST /admin/roles</c>, or
+    /// declared twice, naming <c>name</c>; each with <c>role.&lt;name&gt;</c>.
+    /// </summary>
+    /// <param name="first">The first role's name.</param>
+    /// <param name="permission">The permission it grants.</param>
+    /// <param name="second">A second role's name, or nothing where there is none.</param>
+    /// <param name="field">The field the refusal names.</param>
+    [Theory]
+    [InlineData("editor", "ledger:close", null, "permissions")]
+    [InlineData("editor", "system:administer", null, "permissions")]
+    [InlineData("Editor", "article:read", null, "name")]
+    [InlineData("editor--chief", "article:read", null, "name")]
+    [InlineData("editor", "article:read", "editor", "name")]
+    public void AUTHZ_GRANT_004_ADeclaredRoleOutsideItsRuleFailsStartup(
+        string first,
+        string permission,
+        string? second,
+        string field)
+    {
+        AuthorizationDeclarationBuilder declared = HostDomain.Declared().Role(first, "article:edit", permission);
+
+        if (second is not null)
+        {
+            declared.Role(second, "article:read");
+        }
+
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(declared.Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("role." + (second ?? first), refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(field, refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 (D-204): a declared role may grant the host's permissions and the
+    /// library's own short of system administration, and the model keeps the declared
+    /// roles in the order declared.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GRANT_004_TheModelKeepsTheDeclaredRolesInOrder()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Role("writer", "article:read", "article:edit", "article:edit")
+            .Role("reviewer", "article:read", Permissions.AuditRead.ToString())
+            .Build());
+
+        Assert.Equal(
+            [
+                (RoleName.Parse("writer"), "article:edit article:read"),
+                (RoleName.Parse("reviewer"), "article:read audit:read"),
+            ],
+            model.DeclaredRoles.Select(role => (
+                role.Name,
+                string.Join(' ', role.Permissions.Select(held => held.ToString()).Order(StringComparer.Ordinal)))));
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC1: each condition the chapter lists produces its own named
     /// error, identifying the declaration that has to change.
     /// </summary>

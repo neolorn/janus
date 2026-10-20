@@ -11,6 +11,7 @@ using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Roles;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -632,6 +633,53 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
         Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("reader"), CancellationToken.None));
         Assert.Equal(recorded, _deployment.RoleChanges.Changes.Count);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC7 (D-204): reading, defining and removing a role with a system
+    /// principal's context is refused with <c>authz.denied</c>, the start principal
+    /// <c>role-declaration</c> included, and changes nothing: a declared role is defined
+    /// by the start step alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC7_AnIRolesCallWithASystemPrincipalsContextIsRefusedAsync()
+    {
+        SystemPrincipal[] principals =
+        [
+            DeclaredRoleSeed.Principal,
+            SystemPrincipal.ForDeployment("bootstrap", "OPS-BOOT-001", SystemOperation.Bootstrap),
+            SystemPrincipal.ForOrganization("ledger-close", "LIB-HOST-001", Administration),
+        ];
+        var session = SessionId.New(_deployment.Clock);
+        var refusals = new List<Error?>();
+
+        foreach (SystemPrincipal principal in principals)
+        {
+            var context = AccessContext.Of(principal);
+
+            await using AsyncServiceScope scope = _deployment.Scope();
+            IRoles roles = scope.ServiceProvider.GetRequiredService<IRoles>();
+
+            refusals.Add((await roles.AllAsync(context, CancellationToken.None))
+                .Match<Error?>(_ => null, error => error));
+            refusals.Add((await roles.DefineAsync(
+                    context,
+                    session,
+                    new DefinedRole(Editor, [Permission.Parse("article:read")]),
+                    "Seeded at the start.",
+                    CancellationToken.None))
+                .Match<Error?>(_ => null, error => error));
+            refusals.Add((await roles.RemoveAsync(context, session, SystemAdministrator, "Not needed.", CancellationToken.None))
+                .Match<Error?>(() => null, error => error));
+        }
+
+        Assert.Equal(9, refusals.Count);
+        Assert.All(refusals, refused => Assert.Equal(ErrorCodes.Denied, refused?.Code));
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.NotNull(await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+        Assert.Empty(_deployment.RoleChanges.Principals);
     }
 
     private static string Member(Answer answer)

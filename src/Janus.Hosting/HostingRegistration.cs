@@ -362,10 +362,14 @@ public static class HostingRegistration
         // before the server serves.
         services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
 
+        // AUTHZ-GRANT-004 (D-204): each declared role not yet seeded is defined once the
+        // model and the stored roles have been checked, and before the server serves.
+        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, DeclaredRoleStartService>());
+
         // BFF-LOG-002 (D-197): what the host's logging makes of the server's per-request
         // entries is read once the host has written every rule it will, and before the
         // server serves.
-        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
+        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

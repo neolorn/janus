@@ -3733,3 +3733,13 @@ against the public contract of LIB-API-001.
   `authz.resource.inuse`. A registration, a move and a grant on a record judge the
   container or the record again with the organization's tree held, so none lands on a
   record removed meanwhile.
+- `AuthorizationDeclarationBuilder.Role(name, permissions)` declares a role the
+  deployment starts with. At each start, before a request is served, every declared role
+  not yet seeded is defined where no role of its name exists, recorded
+  `authz.role.defined` under the start principal `role-declaration` (operation
+  `role-seeding`) with the reason `AUTHZ-GRANT-004`, and its name kept as seeded, so a
+  later change or removal by an administrator stands. A declared role named as a role
+  bootstrap seeds, outside the role name rule, declared twice, or granting a permission
+  not declared or `system:administer` stops the deployment with
+  `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
+  principal with `authz.denied`.

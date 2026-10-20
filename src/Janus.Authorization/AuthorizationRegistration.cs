@@ -82,6 +82,7 @@ internal static class AuthorizationRegistration
         services.AddScoped<IUnscopedRefusal>(provider => provider.GetRequiredService<AccessGate>());
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IRoles, RoleService>();
+        services.AddScoped<DeclaredRoleSeed>();
         services.AddScoped<IGroups, GroupService>();
 
         return services;
