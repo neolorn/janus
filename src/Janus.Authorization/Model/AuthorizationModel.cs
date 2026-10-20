@@ -833,9 +833,13 @@ internal sealed class AuthorizationModel
     }
 
     // BFF-CAP-002 (D-202): a capability is a permission a page of the type's records is
-    // asked about, so one no declaration names could never be answered by any rule.
+    // asked about, so one no declaration names could never be answered by any rule. A
+    // capability reaches the browser as its action alone (D-206), so two permissions of
+    // one action could not be told apart there.
     private static void CheckCapabilities(ResourceTypeDeclaration type, HashSet<Permission> permissions)
     {
+        var actions = new Dictionary<string, Permission>(StringComparer.Ordinal);
+
         foreach (Permission capability in type.Capabilities)
         {
             if (!permissions.Contains(capability))
@@ -846,6 +850,17 @@ internal sealed class AuthorizationModel
                     "the type " + type.Name + " declares " + capability
                     + " as a capability, which the model does not declare");
             }
+
+            if (actions.TryGetValue(capability.Action, out Permission held) && held != capability)
+            {
+                throw Invalid(
+                    type.Name.ToString(),
+                    "capabilities",
+                    "the type " + type.Name + " declares " + held + " and " + capability
+                    + " as capabilities, two of the action " + capability.Action);
+            }
+
+            actions[capability.Action] = capability;
         }
     }
 

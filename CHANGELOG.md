@@ -3811,7 +3811,8 @@ against the public contract of LIB-API-001.
   `model.startup.declarationinvalid` (`declaration` the type, `field` `capabilities`).
   `IAccessGate.CapabilitiesAsync` answers only for the capabilities its type declares:
   asking it for any other permission, a declared one included, raises, and a type that
-  declares none answers none.
+  declares none answers none. A type declaring as capabilities two permissions of one
+  action fails startup the same way, since the browser reads a capability by its action.
 - Ending the reserved `emergency` account's membership of the administrative
   organization (`DELETE /admin/organizations/{id}/memberships/{subject}`) is refused
   with 403 `authz.denied`, for anyone, before the step-up, and the membership stays

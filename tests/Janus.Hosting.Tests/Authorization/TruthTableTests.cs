@@ -12,6 +12,7 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Model;
 using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Gate;
 using Janus.Core;
@@ -135,6 +136,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
         ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
+        ("a type declaring as capabilities two permissions of one action", Decided.Raised),
         ("a role defined with the context of the start principal role-declaration", Decided.Denied),
     ];
 
@@ -666,6 +668,37 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
     }
 
+    // BFF-CAP-002 AC4: a declaration the model refuses at the start is the declaring
+    // code's fault, raised before any question is asked of it; the model's other
+    // refusals are no decision the table states, and fail the case that met them.
+    private static Decided Started(AuthorizationDeclaration declaration)
+    {
+        try
+        {
+            _ = AuthorizationModel.Of(declaration);
+
+            return Decided.Allowed;
+        }
+        catch (StartupException refused) when (refused.Failure?.Code == ErrorCodes.StartupDeclarationInvalid
+            && refused.Failure.Details["field"].GetString() == "capabilities")
+        {
+            return Decided.Raised;
+        }
+    }
+
+    // The host's declaration, its document type naming as a capability beside reading a
+    // document the reading of a note, which is a second permission of the action read.
+    private static AuthorizationDeclaration Doubled(AuthorizationDeclaration declared) =>
+        declared with
+        {
+            ResourceTypes =
+            [
+                .. declared.ResourceTypes.Select(type => type.Name == Document
+                    ? type with { Capabilities = [HostPermissions.Read, HostPermissions.ReadNote] }
+                    : type),
+            ],
+        };
+
     // What the host supplies from its own context, the same object every path on a type
     // with a derivation takes (D-161).
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
@@ -1037,6 +1070,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             [HostPermissions.Export],
                             cancellationToken))
                     .Match(_ => Decided.Allowed, Refused));
+
+            // BFF-CAP-002 AC4 (D-206): the browser reads a capability by its action, so a
+            // model whose type declares two capabilities of one action never starts to
+            // answer a page of it.
+            case "a type declaring as capabilities two permissions of one action":
+                return Started(Doubled(HostFixture.Declaration()));
 
             // AUTHZ-GRANT-004 AC7 (D-204): a declared role is defined by the start step
             // alone, and IRoles admits no system principal, the start's own included.
