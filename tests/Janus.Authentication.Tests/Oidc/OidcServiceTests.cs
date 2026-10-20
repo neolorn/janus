@@ -205,6 +205,33 @@ public sealed class OidcServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a reuse, whose revocation stands
+    /// whatever follows, called inside a unit of work another opened is a fault of the
+    /// calling code: it ends the level it joined before it writes anything, so nothing
+    /// of the outer unit of work commits and the record stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AReuseInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SessionId session = await SignedInAsync();
+        SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
+
+        _work.Reset();
+        _ = await _work.BeginAsync(Cancellation);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Service.ReuseAsync(subject, session, Protocol, Cancellation));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(Cancellation));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Null(_sessions.All.Single(live => live.Id == session).EndedAt);
+        Assert.Empty(_audit.Reuses);
+    }
+
+    /// <summary>
     /// Chapter 09 section 9 (D-153): each scope names what it gives, and nothing
     /// outside those lists leaves the library.
     /// </summary>

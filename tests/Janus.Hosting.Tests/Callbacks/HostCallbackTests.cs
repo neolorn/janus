@@ -567,6 +567,32 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a callback, whose rejection keeps its
+    /// counts, its record and its raise, taken inside a unit of work another opened is a
+    /// fault of the calling code, signed, unsigned or carrying a session cookie, and is
+    /// answered as every fault is (BFF-ERR-002): the guard ends the level it joined
+    /// before it counts anything, so nothing of the outer unit of work commits and the
+    /// host's route is not reached.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ACallbackInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        string reference = await IssuedAsync();
+
+        await InsideAsync(() => SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret)));
+        await InsideAsync(() => SentAsync(Status, "{}", headers: [], query: "?reference=" + reference));
+        await InsideAsync(() => SentAsync(
+            Events,
+            Body,
+            [.. SignedHostCallback.Signing(Body, Noon, Secret), ("Cookie", BrowserCookies.Session + "=stale")]));
+
+        Assert.Empty(_callbacks.Counted);
+        Assert.Equal(0, _claims.Held);
+        Assert.Equal(0, _reached);
+    }
+
+    /// <summary>
     /// INT-GEN-003 AC4 and BFF-MACH-001 AC2: the rate limit is answered first, so a
     /// callback carrying a session cookie from a source past
     /// <c>integration.callback.ratelimit</c> is answered 429 with the interval and is
@@ -655,6 +681,25 @@ public sealed class HostCallbackTests : IAsyncDisposable
         await _pipeline(context);
 
         return context;
+    }
+
+    // CONV-DESIGN-003 AC8: a request taken inside a unit of work the test opened faults,
+    // answered as every fault is (BFF-ERR-002), and ends it, so the test's own commit
+    // commits nothing and faults too.
+    private async Task InsideAsync(Func<Task<HttpContext>> sent)
+    {
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        HttpContext answered = await sent();
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Response.StatusCode);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), Code(answered));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
     }
 
     // The code a refusal carries.

@@ -110,6 +110,48 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-002 AC1, CONV-DESIGN-003 AC8: an operation whose refusal keeps a
+    /// write, here a factor presented against a handle that opens nothing, called inside
+    /// the host's unit of work joined with <c>UseUnitOfWorkAsync</c> is a fault of the
+    /// host's code: it ends the unit of work, so the host's row written beside it is not
+    /// committed, and neither is anything the refusal would have kept.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC1_AnOperationWhoseRefusalKeepsAWriteFaultsInsideAJoinedUnitOfWorkAsync()
+    {
+        string document = Guid.NewGuid().ToString();
+        int counted = await CountersAsync();
+        int recorded = await AuditRecordsAsync();
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            HostContext context = scope.ServiceProvider.GetRequiredService<HostContext>();
+            IAuthentication authentication = scope.ServiceProvider.GetRequiredService<IAuthentication>();
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+
+            context.Documents.Add(new HostDocument { Id = document, Title = "written before the fault" });
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await authentication.PresentAsync(
+                "a-handle-nothing-opened",
+                new FactorPresentation(Factor.Password) { Value = "not the password" },
+                new DeviceDescription("Firefox", "Fedora"),
+                "198.51.100.7",
+                TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await work.CommitAsync(TestContext.Current.CancellationToken));
+        }
+
+        Assert.Equal(0, await HostRowsAsync(document));
+        Assert.Equal(counted, await CountersAsync());
+        Assert.Equal(recorded, await AuditRecordsAsync());
+    }
+
+    /// <summary>
     /// AUTHZ-INHERIT-002 AC6: a unit of work that has not begun holds nothing to join,
     /// and the call is a fault that leaves the context as it was.
     /// </summary>
@@ -373,6 +415,20 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
         return await connection.QuerySingleAsync<int>(
             "SELECT count(*)::int FROM host.documents WHERE id = @id;",
             new { id = document });
+    }
+
+    private async Task<int> CountersAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>("SELECT count(*)::int FROM identity.throttle_counters;");
+    }
+
+    private async Task<int> AuditRecordsAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>("SELECT count(*)::int FROM identity.audit_records;");
     }
 
     private async Task<int> RegisteredAsync(ResourceReference resource)

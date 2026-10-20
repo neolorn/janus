@@ -3916,3 +3916,15 @@ against the public contract of LIB-API-001.
   map of API-CAP-001: each capability by its action, never its permission name, the
   residuals under their contract names, all in ordinal order, and a capability with
   nothing outstanding left out of `requires`.
+- An operation whose refusal keeps a write (a sign-in, step-up or new-device factor,
+  the ask for a second step's text code, a registration's begin, age, code, link or
+  terms, an identifier's code or link, a text-code enrolment's confirm, a break-glass
+  code, a refresh token's reuse, the bot defence at registration and a delivery
+  report) called inside a unit of work already open, the host's own joined with
+  `UseUnitOfWorkAsync` included, ends that unit of work and throws
+  `InvalidOperationException` before it reads or writes anything else, so nothing of
+  the outer unit of work commits.
+- A provider's security event, and a callback on the machine profile, signed, unsigned
+  or carrying a session cookie, taken inside a unit of work already open is a fault the
+  same way: the request is answered `system.fault` and nothing of the outer unit of
+  work commits.
