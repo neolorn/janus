@@ -32,6 +32,25 @@ internal static class RotateFingerprintKeyCommand
     public const string Name = "rotate-fingerprint-key";
 
     /// <summary>
+    /// What the command declares (LIB-API-001): its arguments, the key document, the
+    /// escrow copy and the pass's report, or with the seal the retirement's report, and
+    /// the codes a refusal carries.
+    /// </summary>
+    public static CommandContract Contract { get; } = new(
+        Name,
+        RotationArguments.Declared,
+        KeyDocument.Members,
+        [
+            new("application/json", ["fingerprintKeys.current: number", "fingerprintKeys.versions{}: string"]),
+            new("application/json", ["version: number", "processed: number"]),
+            new(
+                "application/json",
+                ["version: number", "processed: number", "retired[]: number", "keepUntil: DateTime"],
+                RotationArguments.Sealed),
+        ],
+        [ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.RotationNotReady, ErrorCodes.StartupSecretUnavailable]);
+
+    /// <summary>
     /// Runs the command.
     /// </summary>
     /// <param name="arguments">The arguments that follow the command's name.</param>

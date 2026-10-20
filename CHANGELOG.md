@@ -34,6 +34,16 @@ against the public contract of LIB-API-001.
   database refuses exits 1 with `system.fault` on standard error, the migrations
   before it applied and nothing after. A pipeline runs it before deploying.
   It runs as no system principal: it asks no gate and writes no audit record.
+- `migrate --report` applies nothing and writes the destructive-operation report of the
+  migrations pending on its target: one JSON line for each statement the scan matches,
+  in the order they apply, with `migration`, the statement itself and `destructive`, and
+  nothing where none matches. It exits 0 whatever it found, so a host's pipeline decides
+  whether a destructive statement stops its deploy.
+- The commands of the command-line application are part of the versioned contract:
+  each command's name, its arguments with whether each is required and the form of its
+  value, the members it reads on standard input, what it writes on standard output and
+  the codes its refusal carries. A release that takes one away or changes it raises the
+  major version, and one that adds to them raises at least the minor version.
 - Where the cookies the deployment sets differ from those the current privacy notice
   lists, by name, purpose, lifetime or readability by a third party, `degradation` is
   raised under `notice.cookies` at each start and with each change of a key that gives

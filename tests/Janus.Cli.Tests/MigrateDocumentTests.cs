@@ -113,6 +113,41 @@ public sealed class MigrateDocumentTests
     }
 
     /// <summary>
+    /// OPS-MIG-001 AC5: the report takes <c>--report</c> once and nothing beside it, and
+    /// an argument beside it is refused by name before anything is read.
+    /// </summary>
+    /// <param name="refused">The argument given beside <c>--report</c>, which is refused by name.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("--report")]
+    [InlineData("--force")]
+    public async Task OPS_MIG_001_AC5_AnArgumentBesideTheReportIsRefusedByNameAsync(string refused)
+    {
+        Invocation run = await Invocation.TypedAsync([Migrate, "--report", refused]);
+
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Reported.Refusal(run));
+        Assert.Equal(refused, Detail(run, "member"));
+    }
+
+    /// <summary>
+    /// OPS-MIG-001 AC5, OPS-SEC-001 AC4: the report reads its document as the run does,
+    /// so it is refused at a terminal, and refused as malformed naming the input where
+    /// the document carries a key, each a refusal that exits 1.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_MIG_001_AC5_TheReportIsRefusedAsTheRunIsAsync()
+    {
+        Invocation typed = await Invocation.TypedAsync([Migrate, "--report"]);
+        Invocation keyed = await Invocation.PipedAsync([Migrate, "--report"], Invocation.Keys(Nowhere));
+
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Reported.Refusal(typed));
+        Assert.Equal("input", Detail(typed, "key"));
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Reported.Refusal(keyed));
+        Assert.Equal("input", Detail(keyed, "member"));
+    }
+
+    /// <summary>
     /// OPS-MIG-001 AC4, CONV-DESIGN-007: what the command runs over registers no key
     /// ring, so nothing of it can be filled.
     /// </summary>

@@ -32,6 +32,16 @@ internal static class RotationArguments
     public const string Retention = "--retention";
 
     /// <summary>
+    /// The arguments both commands take (LIB-API-001): none to rotate, or the seal, with
+    /// the retention only beside it.
+    /// </summary>
+    public static IReadOnlyList<CommandArgument> Declared { get; } =
+    [
+        new(Sealed, Required: false, "flag"),
+        new(Retention, Required: false, "duration requires=" + Sealed),
+    ];
+
+    /// <summary>
     /// Reads the arguments that follow the command's name.
     /// </summary>
     /// <param name="arguments">The arguments.</param>
