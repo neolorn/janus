@@ -134,11 +134,13 @@ public sealed class LibraryStructureTests
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
-
-    private static readonly string[] AllowedPackages =
+    // CONV-DESIGN-008: every package identifier the table names, those it names only as
+    // ones another package brings among them.
+    private static readonly string[] TablePackages =
     [
         "Dapper",
         "Fido2",
+        "Fido2.Models",
         "Konscious.Security.Cryptography.Argon2",
         "Microsoft.CodeAnalysis.Analyzers",
         "Microsoft.CodeAnalysis.CSharp",
@@ -146,15 +148,30 @@ public sealed class LibraryStructureTests
         "Microsoft.EntityFrameworkCore",
         "Microsoft.EntityFrameworkCore.Design",
         "Microsoft.EntityFrameworkCore.Relational",
+        "Microsoft.IdentityModel.JsonWebTokens",
+        "Microsoft.IdentityModel.Protocols",
         "Microsoft.Testing.Platform",
         "MinVer",
+        "NSec.Cryptography",
         "Npgsql.EntityFrameworkCore.PostgreSQL",
         "OpenIddict.AspNetCore",
         "OpenIddict.Server",
         "OpenIddict.Validation",
         "Otp.NET",
+        "System.Formats.Cbor",
         "Testcontainers.PostgreSql",
         "xunit.v3",
+    ];
+
+    // CONV-DESIGN-008 AC1 (D-206): the packages the table names only as ones another
+    // package brings, none referenced directly.
+    private static readonly string[] BroughtPackages =
+    [
+        "Fido2.Models",
+        "Microsoft.IdentityModel.JsonWebTokens",
+        "Microsoft.IdentityModel.Protocols",
+        "NSec.Cryptography",
+        "System.Formats.Cbor",
     ];
 
     // CONV-DESIGN-008 AC3: the packages that carry one version and move together.
@@ -1216,8 +1233,9 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-008 AC1: the set of package identifiers the build may resolve is
-    /// exactly the table's.
+    /// CONV-DESIGN-008 AC1: the set of direct package references is exactly the table's
+    /// identifiers, less the packages it names only as ones another package brings
+    /// (D-206).
     /// </summary>
     [Fact]
     public void CONV_DESIGN_008_AC1_ThePackageSetIsExactlyTheAllowList()
@@ -1229,7 +1247,57 @@ public sealed class LibraryStructureTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(AllowedPackages, declared);
+        Assert.Subset(TablePackages.ToHashSet(StringComparer.Ordinal), BroughtPackages.ToHashSet(StringComparer.Ordinal));
+        Assert.Equal(TablePackages.Except(BroughtPackages, StringComparer.Ordinal).Order(StringComparer.Ordinal), declared);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-008 AC1 (D-206): the testing package references no package for
+    /// <c>System.Formats.Cbor</c>, which the ASP.NET Core shared framework serves, and
+    /// takes it from that framework through its framework reference, so no lockfile holds
+    /// it and no project references a package the table names only as one another brings.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_008_AC1_TheTestingPackageTakesCborFromTheSharedFramework()
+    {
+        const string cbor = "System.Formats.Cbor";
+
+        string[] roots = [.. Roots, "tests"];
+        var served = Directory
+            .EnumerateFiles(Path.GetDirectoryName(typeof(HttpContext).Assembly.Location)!, "*.dll")
+            .Select(Path.GetFileNameWithoutExtension)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(cbor, served);
+        Assert.Contains(
+            XDocument.Parse(File.ReadAllText(Project("Janus.Testing"))).Descendants("FrameworkReference"),
+            reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.AspNetCore.App", StringComparison.Ordinal));
+        Assert.All(
+            roots
+                .SelectMany(root => Directory.EnumerateFiles(
+                    Path.Combine(Repository.Root, root),
+                    "*.csproj",
+                    SearchOption.AllDirectories))
+                .Where(file => !IsBuildOutput(file)),
+            project => Assert.Empty(XDocument
+                .Parse(File.ReadAllText(project))
+                .Descendants("PackageReference")
+                .Select(reference => reference.Attribute("Include")!.Value)
+                .Intersect(BroughtPackages, StringComparer.Ordinal)));
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            Assert.All(
+                locked.RootElement.GetProperty("dependencies").EnumerateObject(),
+                framework => Assert.DoesNotContain(
+                    framework.Value.EnumerateObject(),
+                    package => string.Equals(package.Name, cbor, StringComparison.OrdinalIgnoreCase)));
+        }
     }
 
     /// <summary>
