@@ -93,9 +93,10 @@ internal sealed class OidcService(
 
         // AUTH-OIDC-003 AC1 and AC2: a token presented twice means a copy is in
         // someone's hands and there is no telling whose, so everything derived from the
-        // record goes and the whole of it is recorded.
-        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        // record goes and the whole of it is recorded, in the outermost unit of work, so
+        // the revocation stands whatever a caller does after it (CONV-DESIGN-003).
+        (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await sessions.EndSpineAsync(session, now, cancellationToken).ConfigureAwait(false);
         await audit.ReusedAsync(subject, clientId, session, now, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))

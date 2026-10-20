@@ -1981,6 +1981,38 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a confirm code, whose wrong try keeps its
+    /// count, presented inside a unit of work another opened is a fault of the calling
+    /// code: it ends the level it joined before it reads or writes anything else, so
+    /// nothing of the outer unit of work commits and no try is counted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AConfirmCodeInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        Accepted(await BegunAsync(subject, session, number));
+
+        string code = Assert.Single(_notifications.Texts).Values["code"];
+        string wrong = code == "000000" ? "111111" : "000000";
+
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await ConfirmedAsync(subject, session, wrong));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(0, Assert.Single(_enrolments.All).WrongAttempts);
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 and AUTH-FACT-004: a wrong confirm code is refused
     /// <c>auth.code.invalid</c> and counts against the code's own
     /// <c>code.signin.attempts</c> and nothing else: the count is committed, no delay is

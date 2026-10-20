@@ -250,6 +250,36 @@ public sealed class BreakGlassServiceTests : IAsyncDisposable
         Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a presentation, whose refusal keeps a
+    /// write, called inside a unit of work another opened is a fault of the calling
+    /// code: it ends the level it joined before it reads or writes anything else, so
+    /// nothing of the outer unit of work commits and no attempt is counted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_APresentationInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await IssuedAsync();
+
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Service.PresentAsync(
+                BreakGlassCode.Draw(_randomness),
+                Reason,
+                Somewhere,
+                TestContext.Current.CancellationToken));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_store.Attempts);
+        Assert.Empty(_audit.Failed);
+    }
+
     private BreakGlassService Service =>
         new(
             _store,

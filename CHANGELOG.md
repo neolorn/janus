@@ -3854,3 +3854,11 @@ against the public contract of LIB-API-001.
   context: a check and both renderings of the filter alike, each refusal recorded with
   its correlation identifier. A host's webhook that needs a host permission hands the
   work to a declared job. `AddJanus` registers the framework's `IHttpContextAccessor`.
+- An operation whose refusal keeps a write (a sign-in, step-up or new-device factor,
+  the ask for a second step's text code, a registration's begin, age, code, link or
+  terms, an identifier's code or link, a text-code enrolment's confirm, a break-glass
+  code, a refresh token's reuse, the bot defence at registration and a delivery
+  report) called inside a unit of work already open, the host's own joined with
+  `UseUnitOfWorkAsync` included, ends that unit of work and throws
+  `InvalidOperationException` before it reads or writes anything else, so nothing of
+  the outer unit of work commits.
