@@ -275,6 +275,34 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a AC22 (D-206): a host's value is bound to its type's and its field's
+    /// declared names, so two encrypted fields of one type under one declared name, the
+    /// name one is given or the member's own another is given, stop the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming the type and the name; the same
+    /// fields under names of their own build.
+    /// </summary>
+    /// <param name="first">The name the first field is bound to: its member's own, or one it is given.</param>
+    /// <param name="given">The name the second field is given.</param>
+    [Theory]
+    [InlineData("notes", "notes")]
+    [InlineData("Body", "Body")]
+    public void PRIV_RIGHT_005a_AC22_TwoEncryptedFieldsOfOneTypeUnderOneNameFailStartup(string first, string given)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(
+                new EncryptedFieldDeclaration("Body", "Author", "identity", first),
+                new EncryptedFieldDeclaration("FolderId", "Author", "identity", given))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(given, refused.Failure?.Details["field"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(
+            new EncryptedFieldDeclaration("Body", "Author", "identity", first),
+            new EncryptedFieldDeclaration("FolderId", "Author", "identity", "FolderId"))));
+    }
+
+    /// <summary>
     /// BFF-CAP-002 AC4 (D-202): a type declaring as a capability a permission the model
     /// does not declare stops the deployment with <c>model.startup.declarationinvalid</c>,
     /// naming the type and <c>capabilities</c>, and one whose capabilities are declared
@@ -668,7 +696,7 @@ public sealed class AuthorizationModelTests
                 .Capabilities(capabilities))
             .Build();
 
-    private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
+    private static AuthorizationDeclaration Encrypting(params EncryptedFieldDeclaration[] fields)
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
@@ -680,7 +708,7 @@ public sealed class AuthorizationModelTests
 
         return declared with
         {
-            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = [field] }],
+            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = fields }],
         };
     }
 

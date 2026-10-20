@@ -3841,3 +3841,6 @@ against the public contract of LIB-API-001.
 - A resource type declared twice under one name fails startup with
   `model.startup.declarationinvalid`, `details.declaration` the type and
   `details.field` `name`, since a host's encrypted value is bound to its type's name.
+- A resource type declaring two encrypted fields under one name, a member's own or
+  the one `Encrypted` gives it, fails startup with `model.startup.declarationinvalid`,
+  `details.declaration` the type and `details.field` the name.
