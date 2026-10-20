@@ -3849,3 +3849,7 @@ against the public contract of LIB-API-001.
   `api.request.malformed` naming the member it stopped at.
 - `POST /auth/begin` answers the assertion challenge under `webauthn`, as the contract and
   every other sign-in answer spell it, where it was `webAuthn`.
+- `CapabilityFields.Of(Capability)` gives a host's record the `can` list and `requires`
+  map of API-CAP-001: each capability by its action, never its permission name, the
+  residuals under their contract names, all in ordinal order, and a capability with
+  nothing outstanding left out of `requires`.
