@@ -18,8 +18,8 @@ namespace Janus.Core.Tests;
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
 /// CONV-SETUP-004, CONV-DESIGN-001, CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-007,
 /// CONV-DESIGN-008, CONV-CODE-007, CONV-CODE-008, CONV-ERR-001, CONV-ERR-003,
-/// CONV-TEST-002, CONV-VCS-005, LIB-API-002, LIB-PKG-001, LIB-PKG-002, OPS-DATA-001,
-/// OPS-DATA-002, OPS-DATA-003).
+/// CONV-TEST-002, CONV-VCS-005, LIB-API-002, LIB-PKG-001, LIB-PKG-002, LIB-TEST-004,
+/// OPS-DATA-001, OPS-DATA-002, OPS-DATA-003).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
@@ -745,6 +745,42 @@ public sealed class LibraryStructureTests
 
         Assert.DoesNotContain("identity.settings", sample, StringComparison.Ordinal);
         Assert.Contains("\"admin/config/\" + Settings.PolicyDefault.Key", sample, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// LIB-TEST-004 AC3: the sample host is a solution of its own beside the library's,
+    /// and no project of it references a project of the library's solution: each
+    /// reference it holds is to a project of its own solution, under its own folder, and
+    /// the library reaches it only as packages.
+    /// </summary>
+    [Fact]
+    public void LIB_TEST_004_AC3_TheSampleHostReferencesNoProjectOfTheLibrarysSolution()
+    {
+        string samples = Path.Combine(Repository.Root, "samples") + Path.DirectorySeparatorChar;
+        string[] library = SolutionProjects("Janus.slnx");
+        string[] sample = SolutionProjects(Path.Combine("samples", "HostSample.slnx"));
+
+        Assert.Equal(
+            ["HostSample", "HostSample.Tests"],
+            sample.Select(Path.GetFileNameWithoutExtension).Order(StringComparer.Ordinal));
+        Assert.Empty(sample.Intersect(library, StringComparer.Ordinal));
+
+        foreach (string project in sample)
+        {
+            string[] referenced =
+            [
+                .. XDocument
+                    .Parse(File.ReadAllText(project))
+                    .Descendants("ProjectReference")
+                    .Select(reference => Path.GetFullPath(Path.Combine(
+                        Path.GetDirectoryName(project)!,
+                        reference.Attribute("Include")!.Value.Replace('\\', '/')))),
+            ];
+
+            Assert.All(referenced, reference => Assert.StartsWith(samples, reference, StringComparison.Ordinal));
+            Assert.All(referenced, reference => Assert.Contains(reference, sample));
+            Assert.Empty(referenced.Intersect(library, StringComparer.Ordinal));
+        }
     }
 
     /// <summary>
@@ -1603,6 +1639,21 @@ public sealed class LibraryStructureTests
             name => tools.Any(tool =>
                 string.Equals(name, tool, StringComparison.Ordinal)
                 || name.StartsWith(tool + ".", StringComparison.Ordinal)));
+    }
+
+    // LIB-TEST-004 AC3: the full path of each project a solution file names, read
+    // against the folder the solution file is in.
+    private static string[] SolutionProjects(string solution)
+    {
+        string folder = Path.GetDirectoryName(Path.Combine(Repository.Root, solution))!;
+
+        return
+        [
+            .. XDocument
+                .Parse(Repository.ReadText(solution))
+                .Descendants("Project")
+                .Select(project => Path.GetFullPath(Path.Combine(folder, project.Attribute("Path")!.Value))),
+        ];
     }
 
     /// <summary>
