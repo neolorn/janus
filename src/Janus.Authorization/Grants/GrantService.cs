@@ -25,6 +25,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="groups">Where a group a grant is given to is read.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
 /// <param name="emergency">Which account is granted nothing further.</param>
+/// <param name="audit">Where each grant written or revoked is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -44,6 +45,7 @@ internal sealed class GrantService(
     IGroupStore groups,
     IResourceStore resources,
     IEmergencyAccount emergency,
+    IGrantAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IGrants
 {
@@ -251,6 +253,7 @@ internal sealed class GrantService(
         held = standing!;
 
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        await audit.RevokedAsync(held, context.BreakGlassReason, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -415,6 +418,23 @@ internal sealed class GrantService(
             standing = await HolderAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false);
         }
 
+        // AUTHZ-INHERIT-002 (D-203): a grant on a record is written with its organization's
+        // tree held, which a removal holds too, so the record still stands and a removal
+        // finds the grant to revoke. One removed since is answered as a record no
+        // registration names is (AUTHZ-SCOPE-001).
+        if (grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id)
+        {
+            await resources.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
+
+            if (await resources.FindAsync(new ResourceReference(type, id), cancellationToken).ConfigureAwait(false)
+                is null)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
+            }
+        }
+
         // D-166 X3: the role is read under its row's lock, which a definition and a
         // removal hold too, so OPS-CFG-007 is judged on what the role allows as
         // committed; and two grants of one role at once are written one after the other,
@@ -438,6 +458,11 @@ internal sealed class GrantService(
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GRANT-003 AC6 (D-197, D-206): in the transaction that writes it.
+        await audit
+            .CreatedAsync(grant, grant.GrantedBy, context.BreakGlassReason, cancellationToken)
+            .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

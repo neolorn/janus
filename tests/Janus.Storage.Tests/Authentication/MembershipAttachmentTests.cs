@@ -7,10 +7,12 @@ using Dapper;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Core;
+using Janus.Identity.Audit;
 using Janus.Identity.Organizations;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Roles;
+using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Organizations;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -85,6 +87,42 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         Assert.Equal((inviter, Noon, "invitation:reason"), (grant.GrantedBy, grant.GrantedAt, grant.Reason));
         Assert.Null(grant.ResourceType);
         Assert.Null(grant.ExpiresAt);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC6: each grant an acknowledgement writes is recorded once as
+    /// <c>authz.grant.created</c> in its transaction, naming the person acknowledging as
+    /// actor and the holder as subject, with the grant, its role and the reason.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC6_EachGrantAnAcknowledgementWritesIsRecordedCreatedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        await RoleAsync();
+
+        _ = await AttachAsync(subject, organization, [], [Clerk, Clerk], inviter, multiple: false);
+
+        await using StoreContext reading = database.Context();
+
+        Grant grant = Assert.Single(await new GrantStore(reading, new DataConnections(reading)).HeldByAsync(
+            [GrantSubject.Of(subject)],
+            organization,
+            Noon,
+            TestContext.Current.CancellationToken));
+        AuditRecord read = Assert.Single(
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
+                .FindNamingAsync(subject, TestContext.Current.CancellationToken),
+            record => record.Action == AuditActions.GrantCreated);
+
+        Assert.Equal((subject, subject), (read.ActingSubject, read.Subject));
+        Assert.Equal(organization, read.Organization);
+        Assert.Equal(grant.Id.ToString(), read.Details["grant"].GetString());
+        Assert.Equal("clerk", read.Details["role"].GetString());
+        Assert.Equal("invitation:reason", read.Details["reason"].GetString());
     }
 
     /// <summary>
@@ -171,6 +209,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
             [],
             subject,
             "invitation:reason",
+            AccessContext.Of(subject),
             multiple: false,
             Noon,
             TestContext.Current.CancellationToken);
@@ -214,6 +253,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
             [],
             subject,
             "invitation:reason",
+            AccessContext.Of(subject),
             multiple: false,
             Noon,
             cancellationToken);
@@ -226,6 +266,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
                 [],
                 subject,
                 "invitation:reason",
+                AccessContext.Of(subject),
                 multiple: false,
                 Noon,
                 cancellationToken)
@@ -328,10 +369,13 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static MembershipAttachment Attachment(StoreContext context) =>
+    private MembershipAttachment Attachment(StoreContext context) =>
         new(
             new MembershipStore(context),
             new GrantStore(context, new DataConnections(context)),
+            new GrantAudit(
+                new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness),
+                TimeProvider.System),
             new DataConnections(context),
             TimeProvider.System);
 
@@ -377,6 +421,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
                 roles,
                 inviter,
                 "invitation:reason",
+                AccessContext.Of(subject),
                 multiple,
                 Noon,
                 TestContext.Current.CancellationToken))

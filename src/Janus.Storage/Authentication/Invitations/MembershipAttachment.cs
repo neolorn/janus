@@ -17,6 +17,7 @@ namespace Janus.Storage.Authentication.Invitations;
 /// </summary>
 /// <param name="memberships">Where the account's memberships are read and the new one written.</param>
 /// <param name="grants">Where the grants are written.</param>
+/// <param name="audit">Where each grant written is written down.</param>
 /// <param name="connections">The connection and transaction the operation holds.</param>
 /// <param name="time">The clock the identifiers are drawn from.</param>
 /// <remarks>
@@ -24,11 +25,13 @@ namespace Janus.Storage.Authentication.Invitations;
 /// the account may hold another membership is the membership's own rule, decided under
 /// a lock on the account's row so two attachments made together decide one after the
 /// other; the database holds one current membership of an organization per account
-/// whatever writes it. Each grant is made as any stored grant is.
+/// whatever writes it. Each grant is made, and recorded, as any stored grant is
+/// (AUTHZ-GRANT-003, D-206).
 /// </remarks>
 internal sealed class MembershipAttachment(
     IMembershipStore memberships,
     IGrantStore grants,
+    IGrantAudit audit,
     DataConnections connections,
     TimeProvider time) : IMembershipAttachment
 {
@@ -51,6 +54,7 @@ internal sealed class MembershipAttachment(
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <exception cref="ArgumentException">Who acted names neither a person nor a principal.</exception>
     /// <exception cref="InvalidOperationException">No transaction is running.</exception>
     public async ValueTask<Result<MembershipId>> AttachAsync(
         SubjectId subject,
@@ -59,6 +63,7 @@ internal sealed class MembershipAttachment(
         IReadOnlyList<RoleName> roles,
         SubjectId grantedBy,
         string reason,
+        AccessContext acting,
         bool multiple,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -66,6 +71,12 @@ internal sealed class MembershipAttachment(
         ArgumentNullException.ThrowIfNull(acknowledged);
         ArgumentNullException.ThrowIfNull(roles);
         ArgumentNullException.ThrowIfNull(reason);
+        ArgumentNullException.ThrowIfNull(acting);
+
+        if (acting is { Principal: null, Acting: null })
+        {
+            throw new ArgumentException("A grant is recorded with who acted.", nameof(acting));
+        }
 
         // IDN-MEM-002, X3 of D-166: the memberships are read, and the new one decided,
         // under the account's row lock, so a second attachment waits for this one to
@@ -143,11 +154,19 @@ internal sealed class MembershipAttachment(
                 && held.ExpiresAt is null))
             {
                 await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
+                await RecordedAsync(grant, acting, cancellationToken).ConfigureAwait(false);
             }
         }
 
         return Result.Success(membership.Id);
     }
+
+    // AUTHZ-GRANT-003 AC6 (D-197, D-206): bootstrap's grants are recorded under its
+    // principal, an acknowledgement's under the person acknowledging.
+    private ValueTask RecordedAsync(Grant grant, AccessContext acting, CancellationToken cancellationToken) =>
+        acting.Principal is SystemPrincipal principal
+            ? audit.CreatedAsync(grant, principal, cancellationToken)
+            : audit.CreatedAsync(grant, acting.Acting.GetValueOrDefault(), acting.BreakGlassReason, cancellationToken);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

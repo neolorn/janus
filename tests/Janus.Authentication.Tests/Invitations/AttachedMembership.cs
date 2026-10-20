@@ -14,6 +14,7 @@ namespace Janus.Authentication.Tests.Invitations;
 /// <param name="Roles">The roles granted across the organization, each once.</param>
 /// <param name="GrantedBy">Who granted them.</param>
 /// <param name="Reason">Why.</param>
+/// <param name="Acting">Who acted, as the grants are recorded.</param>
 /// <param name="At">When.</param>
 internal sealed record AttachedMembership(
     MembershipId Id,
@@ -23,4 +24,5 @@ internal sealed record AttachedMembership(
     IReadOnlyList<RoleName> Roles,
     SubjectId GrantedBy,
     string Reason,
+    AccessContext Acting,
     DateTimeOffset At);

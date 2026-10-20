@@ -188,6 +188,19 @@ internal sealed class GrantsInMemory : IGrantStore
         ]);
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Grant>> NamingForUpdateAsync(
+        ResourceReference reference,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Grant>>(
+        [
+            .. _grants.Values.Where(grant =>
+                grant.IsLive(at)
+                && grant.ResourceType == reference.Type
+                && grant.ResourceId == reference.Id),
+        ]);
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Grant>> OnAsync(
         ResourceReference reference,
         OrganizationId organization,

@@ -327,6 +327,7 @@ internal sealed class DerivationMaterialiser(
                     AuditRecordId.New(time),
                     principal,
                     grant.Organization,
+                    grant.Subject,
                     grant.Id,
                     grant.Role,
                     retracted,

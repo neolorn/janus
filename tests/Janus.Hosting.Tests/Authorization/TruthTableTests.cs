@@ -12,6 +12,7 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -88,6 +89,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data on a container above", Decided.Allowed),
         ("a grant on the container the record was moved into", Decided.Allowed),
         ("a grant on the container the record was moved out of", Decided.Denied),
+        ("a grant on a record whose registration was removed, the record registered again", Decided.Denied),
         ("a record of a type the model does not declare", Decided.Raised),
         ("a permission the model does not declare", Decided.Raised),
     ];
@@ -128,10 +130,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a group created, by a caller restricted since the gate step", Decided.Restricted),
         ("a member a group already holds added again, by a caller managing groups", Decided.Allowed),
         ("a member a group does not hold taken out, by a caller managing groups", Decided.Allowed),
+        ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
         ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
+        ("a role defined with the context of the start principal role-declaration", Decided.Denied),
     ];
 
     // An action bound to a step-up gate, judged from what a host's assurance provider
@@ -809,6 +813,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling, elsewhere);
         await ReviewAsync(deployment, scenario, account, inner, outer);
         await MovedAsync(scenario, record, elsewhere);
+        await RemovedAsync(deployment, scenario, record, inner);
 
         // CONV-ERR-001, AUTHZ-PRIN-003: a permission no rule governs is asked of a record
         // the whole organization's grant would otherwise admit.
@@ -836,6 +841,41 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             .MoveAsync(record, elsewhere, TestContext.Current.CancellationToken);
 
         Assert.True(moved.Match(() => true, _ => false));
+    }
+
+    // AUTHZ-INHERIT-002 AC5 (D-203): the record's registration is removed by the library,
+    // which revokes the grant naming it, and the same identifier is registered again
+    // where it sat, so what the case decides by is whether a revoked grant comes back.
+    private async Task RemovedAsync(
+        Deployment deployment,
+        string scenario,
+        ResourceReference record,
+        ResourceReference inner)
+    {
+        if (scenario != "a grant on a record whose registration was removed, the record registered again")
+        {
+            return;
+        }
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result removed = await scope.ServiceProvider.GetRequiredService<IResources>()
+                .RemoveAsync(record, TestContext.Current.CancellationToken);
+
+            Assert.True(removed.Match(() => true, _ => false));
+        }
+
+        // The host deletes its own row with the record, and writes it again with the
+        // record created again.
+        await using (NpgsqlConnection connection = await host.OpenAsync())
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM host.documents WHERE id = @id;",
+                new { id = record.Id.ToString() },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await deployment.RegisterAsync(record, inner, TestContext.Current.CancellationToken);
     }
 
     // Each operation case in a deployment of its own, its caller holding the reading and
@@ -972,6 +1012,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a member a group already holds added again, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: true);
 
+            case "a grant written and then revoked, by a caller managing grants":
+                return await GrantedAndRevokedAsync(deployment, role, caller);
+
             case "a member a group does not hold taken out, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: false);
 
@@ -994,6 +1037,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             [HostPermissions.Export],
                             cancellationToken))
                     .Match(_ => Decided.Allowed, Refused));
+
+            // AUTHZ-GRANT-004 AC7 (D-204): a declared role is defined by the start step
+            // alone, and IRoles admits no system principal, the start's own included.
+            case "a role defined with the context of the start principal role-declaration":
+                return (await scope.ServiceProvider.GetRequiredService<IRoles>()
+                        .DefineAsync(
+                            AccessContext.Of(DeclaredRoleSeed.Principal),
+                            SessionId.New(TimeProvider.System),
+                            new DefinedRole(RoleName.Parse("declared"), [HostPermissions.Read]),
+                            "Seeded at the start.",
+                            cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
@@ -1331,6 +1386,50 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(held ? 1 : 0, members);
 
         return decided;
+    }
+
+    // AUTHZ-GRANT-001, AUTHZ-GRANT-003 AC6 (D-206): a grant across the organization to
+    // another account, written and revoked by a caller managing grants there on a session
+    // that meets the gate. Recording each in the trail decides nothing, so the row
+    // restates the decision the two operations make.
+    private async Task<Decided> GrantedAndRevokedAsync(Deployment deployment, RoleName role, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGrants grants = services.GetRequiredService<IGrants>();
+
+        Result<GrantId> written = await grants.GrantAsync(
+            context,
+            session,
+            new GrantRequest(
+                GrantSubject.Of(account),
+                role,
+                new ResourceReference(
+                    ResourceType.Parse("organization"),
+                    ResourceId.Parse(deployment.Organization.ToString())),
+                Deny: false,
+                ExpiresAt: null,
+                "The reason the grant was asked for."),
+            cancellationToken);
+
+        if (written.Match<Error?>(_ => null, error => error) is Error refused)
+        {
+            return Refused(refused);
+        }
+
+        return (await grants.RevokeAsync(
+                context,
+                session,
+                written.Match(grant => grant, _ => default),
+                "No longer needed.",
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
@@ -1686,6 +1785,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a grant on the record itself":
             case "a grant on a record whose type declares its encrypted field under a name of its own":
             case "a grant whose role does not allow the permission":
+            case "a grant on a record whose registration was removed, the record registered again":
                 await deployment.GrantAsync(
                     holder, role, record, false, null, null, cancellationToken);
                 break;

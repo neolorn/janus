@@ -52,6 +52,13 @@ internal sealed class RoleService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // AUTHZ-GRANT-004 (D-204): roles are a person's to manage; a system principal,
+        // the start step's included, reaches them through none of these operations.
+        if (context.Acting is null)
+        {
+            return Result.Failure<IReadOnlyList<DefinedRole>>(Error.From(ErrorCodes.Denied));
+        }
+
         if (await scope.RefusedAsync(context, Permissions.RoleManage, cancellationToken).ConfigureAwait(false)
             is Error refused)
         {

@@ -96,6 +96,11 @@ against the public contract of LIB-API-001.
   is cleared when the use returns. A field of an erased subject answers
   `privacy.subject.erased` (409), and a subject the deployment holds no key for answers
   `api.request.invalid` naming `subject`.
+- A grant written by a person, an acknowledged invitation or bootstrap is recorded as
+  `authz.grant.created`, and a grant a person revokes as `authz.grant.revoked`, each with
+  its reason, in the transaction that writes it. Every record of a grant written,
+  revoked, materialised or retracted names the grant's holder as its `subject` where the
+  holder is an account, and none where it is a group, whoever acted.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
   number, that the credential is still active and the number still the account's before
   it issues the code. Where either changed since the ask read the credential, nothing is
@@ -3810,3 +3815,22 @@ against the public contract of LIB-API-001.
   organization (`DELETE /admin/organizations/{id}/memberships/{subject}`) is refused
   with 403 `authz.denied`, for anyone, before the step-up, and the membership stays
   current; its membership of another organization ends as anyone's does.
+- `IResources.RemoveAsync` removes a record's registration and its ancestry in the unit
+  of work, for a record the host removes from its own table, and revokes every live
+  grant naming the record, each with the nil subject as revoker and the reason
+  `AUTHZ-INHERIT-002`, recorded `authz.grant.revoked`; a later registration of the same
+  identifier inherits none of them. A record not registered is refused with
+  `api.request.invalid` naming `resource`, and one holding a registered record with 409
+  `authz.resource.inuse`. A registration, a move and a grant on a record judge the
+  container or the record again with the organization's tree held, so none lands on a
+  record removed meanwhile.
+- `AuthorizationDeclarationBuilder.Role(name, permissions)` declares a role the
+  deployment starts with. At each start, before a request is served, every declared role
+  not yet seeded is defined where no role of its name exists, recorded
+  `authz.role.defined` under the start principal `role-declaration` (operation
+  `role-seeding`) with the reason `AUTHZ-GRANT-004`, and its name kept as seeded, so a
+  later change or removal by an administrator stands. A declared role named as a role
+  bootstrap seeds, outside the role name rule, declared twice, or granting a permission
+  not declared or `system:administer` stops the deployment with
+  `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
+  principal with `authz.denied`.

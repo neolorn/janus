@@ -486,7 +486,17 @@ internal sealed class DeploymentBootstrap(
         Error? failure = null;
 
         MembershipId membership = (await memberships
-                .AttachAsync(subject, organization, [], roles, Ungranted, Reason, multiple: false, at, cancellationToken)
+                .AttachAsync(
+                    subject,
+                    organization,
+                    [],
+                    roles,
+                    Ungranted,
+                    Reason,
+                    AccessContext.Of(Principal),
+                    multiple: false,
+                    at,
+                    cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<MembershipId>(error, ref failure));
 

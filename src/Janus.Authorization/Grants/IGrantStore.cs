@@ -158,6 +158,21 @@ internal interface IGrantStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The live grants that name one record itself, whoever holds them and whatever
+    /// wrote them, each under a lock on its row held until the operation's transaction
+    /// ends (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="reference">The record.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants as committed when the locks were taken.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<Grant>> NamingForUpdateAsync(
+        ResourceReference reference,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The live grants on one record, on anything containing it, or on the whole
     /// organization, whoever holds them, as the effective grants view confers them: none
     /// while the organization's deletion is requested, and none of a role that allows

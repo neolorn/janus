@@ -982,6 +982,13 @@ public static class ErrorCodes
     public static ErrorCode PolicyUnregistered { get; } = ErrorCode.Parse("authz.policy.unregistered");
 
     /// <summary>
+    /// A record is registered inside the one whose registration is being removed.
+    /// Remove its contents first.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-INHERIT-002 (D-203), chapter 10 section 1.3.</remarks>
+    public static ErrorCode ResourceInUse { get; } = ErrorCode.Parse("authz.resource.inuse");
+
+    /// <summary>
     /// No such record, or one the caller may not see on a type that conceals its
     /// records; the answer is the same for both. Name a record that exists and that
     /// the caller holds a permission on.

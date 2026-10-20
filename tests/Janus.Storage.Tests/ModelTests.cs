@@ -821,6 +821,10 @@ public sealed class ModelTests
             "role_permissions.role",
             "roles.name",
 
+            // Not an account field: the names of the declared roles a start has seeded,
+            // so none is seeded again (AUTHZ-GRANT-004, D-204).
+            "seeded_roles.name",
+
             // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
             // restriction key with the times counted against it, a destination's apart
             // from every other key's, and the credit support kept apart from them.

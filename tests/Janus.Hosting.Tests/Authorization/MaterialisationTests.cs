@@ -509,6 +509,29 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-003 AC6: the record of a grant the drift check writes or takes back
+    /// names the grant's holder, an account, as its subject.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC6_TheDriftChecksRecordsNameTheGrantsHolderAsTheirSubjectAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed unsupported = await ReviewedAsync();
+        Reviewed unwritten = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        _ = await RefreshAsync(deployment, unsupported);
+        await unsupported.Deployment.UnreviewAsync(unsupported.Workspace, unsupported.Account, cancellationToken);
+
+        await DriftCheckedAsync(deployment);
+
+        Assert.Equal([(Guid?)unsupported.Account.Value], await CorrectedSubjectsAsync(unsupported));
+        Assert.Equal([(Guid?)unwritten.Account.Value], await CorrectedSubjectsAsync(unwritten));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003 AC5: the record is written in the transaction that corrects the
     /// drift, so a correction that does not commit leaves neither the grant nor its
     /// record.
@@ -757,6 +780,24 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
               ON recorded.details->>'grant' = CAST(written.id AS text)
             WHERE written.kind = 'materialised' AND written.subject_id = @account
               AND recorded.action LIKE 'authz.grant.%'
+            ORDER BY recorded.occurred_at, recorded.id;
+            """,
+            new { account = reviewed.Account.Value },
+            cancellationToken: TestContext.Current.CancellationToken))];
+    }
+
+    private async Task<IReadOnlyList<Guid?>> CorrectedSubjectsAsync(Reviewed reviewed)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<Guid?>(new CommandDefinition(
+            """
+            SELECT recorded.subject
+            FROM identity.grants AS written
+            JOIN identity.audit_records AS recorded
+              ON recorded.details->>'grant' = CAST(written.id AS text)
+            WHERE written.kind = 'materialised' AND written.subject_id = @account
+              AND recorded.action IN ('authz.grant.materialised', 'authz.grant.retracted')
             ORDER BY recorded.occurred_at, recorded.id;
             """,
             new { account = reviewed.Account.Value },
