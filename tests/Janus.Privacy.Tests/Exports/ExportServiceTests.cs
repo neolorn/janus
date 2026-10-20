@@ -427,6 +427,26 @@ public sealed class ExportServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): a section's name is distinct from every other section
+    /// of the export, so a contributor answering two sections under one name is a fault
+    /// as one answering a library section's name is, and fails the export uncounted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC7_TwoSectionsOfOneAnswerUnderOneNameFailTheExportAsync()
+    {
+        _contributors.Add(Contributor("orders", "orders"));
+        _contributors.Add(Contributor("tickets", "support-tickets", "support-tickets"));
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "tickets");
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-003 AC5: of exports asked at once past the limit, the one counted while
     /// this one's contributors answered is counted against it, so this one is refused as
     /// it would be had it been asked after, and returns nothing.

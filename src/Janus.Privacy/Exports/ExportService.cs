@@ -208,6 +208,23 @@ internal sealed class ExportService(
         }
     }
 
+    // PRIV-RIGHT-003 (D-206): whether a contributor's answer may be taken, judged whole
+    // before any of it is. A section under a name already taken, the library's, another
+    // contributor's or another of the same answer, would be read as that one by the
+    // frontend's labels and by the reader. The names of the answer join those taken.
+    private static bool Kept(IReadOnlyList<ExportSection> answered, HashSet<string> taken)
+    {
+        foreach (ExportSection section in answered)
+        {
+            if (section is null || !taken.Add(section.Name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // PRIV-RIGHT-003 (D-203): the library's sections, then each contributor's in the
     // order of the contributors' names, asked outside any unit of work.
     private async ValueTask<Result<IReadOnlyList<ExportSection>>> SectionsAsync(
@@ -237,14 +254,11 @@ internal sealed class ExportService(
                     .ConfigureAwait(false))
                 .Match<IReadOnlyList<ExportSection>?>(held => held, _ => null);
 
-            // A section under a name already taken would be read as the library's or
-            // as another contributor's, by the frontend's labels and by the reader.
-            if (answered is null || answered.Any(section => section is null || taken.Contains(section.Name)))
+            if (answered is null || !Kept(answered, taken))
             {
                 return Result.Failure<IReadOnlyList<ExportSection>>(Faulted(contributor));
             }
 
-            taken.UnionWith(answered.Select(section => section.Name));
             sections.AddRange(answered);
         }
 

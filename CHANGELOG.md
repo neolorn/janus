@@ -3844,3 +3844,6 @@ against the public contract of LIB-API-001.
 - A resource type declaring two encrypted fields under one name, a member's own or
   the one `Encrypted` gives it, fails startup with `model.startup.declarationinvalid`,
   `details.declaration` the type and `details.field` the name.
+- An export contributor answering two sections under one name fails the export as one
+  answering a section under a library section's name does: 500 `system.fault`, the
+  contributor named in the log, and the export not counted.
