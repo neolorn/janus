@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -548,6 +549,71 @@ public sealed class LibraryStructureTests
     [Fact]
     public void CONV_LAYOUT_001_AC2_CoreCarriesNoPackage() =>
         Assert.Empty(PackageReferences("Janus.Core"));
+
+    /// <summary>
+    /// CONV-LAYOUT-001 AC4: every project that targets the solution's framework and takes,
+    /// directly or through another project, a project carrying the framework reference to
+    /// the ASP.NET Core shared framework carries it itself, test projects included, and no
+    /// lockfile resolves as a package an assembly that framework serves.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_001_AC4_EveryProjectTakingTheSharedFrameworkCarriesIt()
+    {
+        string[] roots = [.. Roots, "tests"];
+        var projects = roots
+            .SelectMany(root => Directory.EnumerateFiles(
+                Path.Combine(Repository.Root, root),
+                "*.csproj",
+                SearchOption.AllDirectories))
+            .Where(file => !IsBuildOutput(file))
+            .ToDictionary(
+                file => Path.GetFileNameWithoutExtension(file),
+                file => XDocument.Parse(File.ReadAllText(file)),
+                StringComparer.Ordinal);
+
+        bool Carries(string project) => projects[project]
+            .Descendants("FrameworkReference")
+            .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.AspNetCore.App");
+
+        bool Takes(string project) => projects[project]
+            .Descendants("ProjectReference")
+            .Where(reference => reference.Attribute("OutputItemType") is null)
+            .Select(reference => Referenced(reference.Attribute("Include")!.Value))
+            .Any(referenced => Carries(referenced) || Takes(referenced));
+
+        string[] taking =
+        [
+            .. projects.Keys
+                .Where(project => !projects[project].Descendants("TargetFramework").Any())
+                .Where(Takes)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Contains("Janus.Core.Tests", taking);
+        Assert.All(taking, project => Assert.True(Carries(project), project));
+
+        var served = Directory
+            .EnumerateFiles(Path.GetDirectoryName(typeof(HttpContext).Assembly.Location)!, "*.dll")
+            .Select(Path.GetFileNameWithoutExtension)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("System.Security.Cryptography.Xml", served);
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            foreach (JsonProperty framework in locked.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                Assert.All(
+                    framework.Value.EnumerateObject(),
+                    package => Assert.DoesNotContain(package.Name, served));
+            }
+        }
+    }
 
     /// <summary>
     /// LIB-PKG-001 AC2: no area reaches into another area.

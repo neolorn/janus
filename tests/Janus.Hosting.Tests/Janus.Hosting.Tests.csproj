@@ -4,6 +4,12 @@
     <ProjectReference Include="..\..\src\Janus.Hosting\Janus.Hosting.csproj" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <!-- CONV-TEST-002: the library's own schema is what a host maps against, and the
        fixture that raises it belongs to the project that owns the schema. -->
   <ItemGroup>

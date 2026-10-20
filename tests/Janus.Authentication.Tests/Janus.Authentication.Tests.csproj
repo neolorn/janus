@@ -4,6 +4,12 @@
     <ProjectReference Include="..\..\src\Janus.Authentication\Janus.Authentication.csproj" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <!-- CONV-TEST-002: the browser boundary is tested against the same fakes the area
        is, rather than against a second copy of them. -->
   <ItemGroup>
