@@ -72,6 +72,7 @@ using Janus.Privacy.Tests.Requests;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -157,6 +158,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// The host's own endpoints, mapped after the browser profile beside the library's;
     /// none, unless it says otherwise.
     /// </param>
+    /// <param name="json">
+    /// How the host sets the application's JSON options for its own endpoints; as the
+    /// framework sets them, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -170,7 +175,8 @@ internal sealed class Deployment : IAsyncDisposable
         bool resolver = true,
         PhoneSignalProvider? signals = null,
         ChallengeVerifier? verifier = null,
-        Action<IEndpointRouteBuilder>? host = null)
+        Action<IEndpointRouteBuilder>? host = null,
+        Action<JsonOptions>? json = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -229,6 +235,11 @@ internal sealed class Deployment : IAsyncDisposable
         if (verifier is not null)
         {
             _ = builder.Services.AddSingleton(verifier);
+        }
+
+        if (json is not null)
+        {
+            _ = builder.Services.ConfigureHttpJsonOptions(json);
         }
 
         _application = builder.Build();
@@ -1264,8 +1275,6 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<MachineProfile>();
 
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
-
-        _ = services.ConfigureHttpJsonOptions(HostingRegistration.ReadThroughContexts);
     }
 
     /// <inheritdoc/>

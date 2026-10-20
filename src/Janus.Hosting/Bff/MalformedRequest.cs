@@ -10,8 +10,9 @@ namespace Janus.Hosting.Bff;
 
 /// <summary>
 /// The answer to a request the framework could not bind to what the endpoint takes, a
-/// route or query value that does not read as its type or a body the reader could not
-/// turn into the endpoint's, which never reaches the endpoint to be refused there.
+/// route or query value that does not read as its type, which never reaches the
+/// endpoint to be refused there, or a body the library's reader could not turn into the
+/// endpoint's (<see cref="JsonBody"/>), which the endpoint reads before anything else.
 /// </summary>
 /// <remarks>
 /// Implements API-CONV-002, API-CONV-003, CONV-DESIGN-006 and BFF-ORDER-001 stage 11.

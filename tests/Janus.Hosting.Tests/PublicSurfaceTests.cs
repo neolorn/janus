@@ -294,6 +294,7 @@ public sealed class PublicSurfaceTests
             typeof(HostingRegistration),
             typeof(IdentityEndpoints),
             typeof(Answers),
+            typeof(CapabilityFields),
             typeof(RequestSource),
             typeof(UnitOfWorkJoin),
         ];

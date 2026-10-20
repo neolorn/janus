@@ -1,4 +1,5 @@
 using System;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
@@ -42,17 +43,20 @@ internal static class RecoveryEndpoints
 
         _ = group.MapPost("/begin", BeginAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Accepts<RecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/complete", CompleteAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired))
+            .Accepts<CompleteRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.CredentialNotFound, ErrorCodes.LossReportNotPermitted,
                     ErrorCodes.LossReportPending))
+            .Accepts<ReportLossRequest>(MediaTypeNames.Application.Json)
             .Produces<LossReportedView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
             .Declares(EndpointDeclaration
@@ -61,6 +65,7 @@ internal static class RecoveryEndpoints
                     ErrorCodes.LossReportNotPermitted,
                     ErrorCodes.LossReportPending)
                 .Binding<AuthenticatorId>("id"))
+            .Accepts<CancelLossRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync))
@@ -70,11 +75,13 @@ internal static class RecoveryEndpoints
                     ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
                     ErrorCodes.RecoverySelfApproval, ErrorCodes.SmsBalanceFloor, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded))
+            .Accepts<ApproveRecoveryRequest>(MediaTypeNames.Application.Json)
             .Produces<ApprovedRecoveryView>();
         _ = endpoints.MapPost("/enrol/begin", EnrolAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid))
+            .Accepts<EnrolmentRequest>(MediaTypeNames.Application.Json)
             .Produces<EnrolmentSessionView>();
 
         return endpoints;
@@ -83,14 +90,16 @@ internal static class RecoveryEndpoints
     // AUTH-ABUSE-003: accepted whether or not an account holds the identifier, and
     // the address that holds none is told so.
     private static async Task<IResult> BeginAsync(
-        RecoveryRequest request,
         IRecovery recovery,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(context);
+
+        RecoveryRequest request = await JsonBody
+            .ReadAsync<RecoveryRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.Identifier is not { Length: > 0 } identifier
             ? Answers.Malformed("identifier")
@@ -108,14 +117,16 @@ internal static class RecoveryEndpoints
     // AUTH-RECOV-005, D-147: the self-service link reaches the password and nothing
     // else, and no enrolled second factor is removed by it.
     private static async Task<IResult> CompleteAsync(
-        CompleteRecoveryRequest request,
         IRecovery recovery,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(context);
+
+        CompleteRecoveryRequest request = await JsonBody
+            .ReadAsync<CompleteRecoveryRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.Token is not { Length: > 0 } token)
         {
@@ -142,16 +153,18 @@ internal static class RecoveryEndpoints
     // step-up is asked for, because the person reporting has lost the factor a gate
     // would ask them for.
     private static async Task<IResult> ReportLossAsync(
-        ReportLossRequest request,
         IRecovery recovery,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        ReportLossRequest request = await JsonBody
+            .ReadAsync<ReportLossRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -176,14 +189,18 @@ internal static class RecoveryEndpoints
     // every notice carried, which is what somebody locked out is holding.
     private static async Task<IResult> CancelLossAsync(
         AuthenticatorId id,
-        CancelLossRequest request,
         IRecovery recovery,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        CancelLossRequest request = await JsonBody
+            .ReadAsync<CancelLossRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return Answers.Of(
             await recovery
@@ -199,16 +216,18 @@ internal static class RecoveryEndpoints
     // AUTH-RECOV-003: the channel is one the account already holds and never one the
     // request supplied; the link goes to that channel and never to this answer.
     private static async Task<IResult> ApproveAsync(
-        ApproveRecoveryRequest request,
         IRecovery recovery,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        ApproveRecoveryRequest request = await JsonBody
+            .ReadAsync<ApproveRecoveryRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext approver = Asking(browser);
 
@@ -259,16 +278,20 @@ internal static class RecoveryEndpoints
     // registration is (BFF-CSRF-005b), so nothing but the browser that opened the
     // link reaches the endpoints that session may call.
     private static async Task<IResult> EnrolAsync(
-        EnrolmentRequest request,
         IRecovery recovery,
         RequestSession browser,
         PreAuthenticationService contacts,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(contacts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        EnrolmentRequest request = await JsonBody
+            .ReadAsync<EnrolmentRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.Token is not { Length: > 0 } token)
         {

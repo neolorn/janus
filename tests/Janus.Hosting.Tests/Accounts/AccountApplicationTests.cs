@@ -649,7 +649,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     /// BFF-SESS-004 AC1 and AC2, IDN-LIFE-008: removing a sign-in identifier is a
     /// privilege change, so the session that made it is given a new secret beside a
     /// new synchronizer token, the secret it held before resolves nothing, and the
-    /// browser carries on under the new one.
+    /// browser carries on under the new one, the record and its identifier kept (D-206).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -661,11 +661,19 @@ public sealed class AccountApplicationTests : IAsyncDisposable
 
         string before = browser.Cookies[BrowserCookies.Session];
         string token = browser.Cookies[BrowserCookies.Csrf];
+        SessionId held = (await _deployment.Sessions.FindByFingerprintAsync(
+            OpaqueToken.Of(before).Fingerprint(),
+            TestContext.Current.CancellationToken))!.Id;
 
         Answer removed = await browser.SendAsync("DELETE", "/account/identifiers/" + going);
 
         Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
         Assert.NotEqual(before, browser.Cookies[BrowserCookies.Session]);
+        Assert.Equal(
+            held,
+            (await _deployment.Sessions.FindByFingerprintAsync(
+                OpaqueToken.Of(browser.Cookies[BrowserCookies.Session]).Fingerprint(),
+                TestContext.Current.CancellationToken))?.Id);
         Assert.NotEqual(token, browser.Cookies[BrowserCookies.Csrf]);
         Assert.Null(await _deployment.Sessions.FindByFingerprintAsync(
             OpaqueToken.Of(before).Fingerprint(),

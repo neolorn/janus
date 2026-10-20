@@ -1066,6 +1066,46 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC3: the capabilities the gate reads for a host's record, written
+    /// through <see cref="CapabilityFields"/>, carry <c>can</c> and <c>requires</c> as
+    /// API-CAP-001 writes them: the actions in ordinal order, and only the gated one
+    /// with what it still requires.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC3_CapabilitiesReadForAHostsRecordCarryCanAndRequiresAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        var fields = CapabilityFields.Of(Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, HostPermissions.Publish],
+                    Sources(reading),
+                    cancellationToken))));
+
+        Assert.Equal(["publish", "read"], fields.Can);
+        Assert.Equal(["publish"], fields.Requires.Keys);
+        Assert.Equal(["stepup"], fields.Requires["publish"]);
+    }
+
+    /// <summary>
     /// BFF-CAP-002 AC2, AUTHZ-PRIN-003 AC1: a permission the model does not declare,
     /// asked for beside one it does, is no capability of any response: the page raises
     /// even where a stored role allows it, and answers nothing.

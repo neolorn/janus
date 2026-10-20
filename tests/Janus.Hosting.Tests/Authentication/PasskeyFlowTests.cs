@@ -297,7 +297,7 @@ public sealed class PasskeyFlowTests : IAsyncDisposable
 
         return (
             began.Text("challengeId"),
-            began.Json().GetProperty("webAuthn").GetProperty("challenge").GetString()!);
+            began.Json().GetProperty("webauthn").GetProperty("challenge").GetString()!);
     }
 
     // An account registered with the authenticator's passkey and nothing else, the

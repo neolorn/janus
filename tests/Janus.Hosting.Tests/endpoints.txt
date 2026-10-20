@@ -1221,8 +1221,8 @@ POST /auth/begin
     application/json
       challengeId: string
       available[]: Factor
-      webAuthn.relyingPartyId: string
-      webAuthn.challenge: string
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
 POST /auth/break-glass

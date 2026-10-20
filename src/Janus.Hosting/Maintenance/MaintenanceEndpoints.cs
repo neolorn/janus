@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Maintenance;
@@ -41,6 +41,7 @@ internal static class MaintenanceEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+.Accepts<IReadOnlyList<LicenceBody>>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapGet("/admin/compliance/maintenance", LogAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied))
@@ -49,6 +50,7 @@ internal static class MaintenanceEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Accepts<MaintenanceEntryBody>(MediaTypeNames.Application.Json)
             .Produces<MaintenanceEntryView>(StatusCodes.Status201Created);
 
         return endpoints;
@@ -75,14 +77,18 @@ internal static class MaintenanceEndpoints
 
     // 09 section 8a: the body is the list of records itself.
     private static async Task<IResult> ReplaceAsync(
-        [FromBody] IReadOnlyList<LicenceBody?> body,
         IMaintenanceRecords records,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        IReadOnlyList<LicenceBody?> body = await JsonBody
+            .ReadAsync<IReadOnlyList<LicenceBody?>>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         (IReadOnlyList<Licence>? licences, string member) = LicenceBody.Read(body);
 
@@ -118,14 +124,18 @@ internal static class MaintenanceEndpoints
     }
 
     private static async Task<IResult> RecordAsync(
-        MaintenanceEntryBody body,
         IMaintenanceRecords records,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        MaintenanceEntryBody body = await JsonBody
+            .ReadAsync<MaintenanceEntryBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Performed(body.Task) is not MaintenanceTask task)
         {

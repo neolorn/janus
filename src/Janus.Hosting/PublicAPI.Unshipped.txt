@@ -4,6 +4,11 @@ Janus.Hosting.Bff.Answers
 Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Management = 0 -> Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Public = 1 -> Janus.Hosting.Bff.ApplicationKind
+Janus.Hosting.Bff.CapabilityFields
+Janus.Hosting.Bff.CapabilityFields.<Clone>$() -> Janus.Hosting.Bff.CapabilityFields!
+Janus.Hosting.Bff.CapabilityFields.Can.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Hosting.Bff.CapabilityFields.Equals(Janus.Hosting.Bff.CapabilityFields? other) -> bool
+Janus.Hosting.Bff.CapabilityFields.Requires.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Collections.Generic.IReadOnlyList<string!>!>!
 Janus.Hosting.Bff.PipelineProfiles
 Janus.Hosting.Bff.RequestSource
 Janus.Hosting.Callbacks.CallbackDelivery
@@ -60,6 +65,9 @@ static Janus.Hosting.AuthorizationTables.MapAuthorizationTables(this Microsoft.E
 static Janus.Hosting.Bff.Answers.Of(Janus.Core.Result outcome, Microsoft.AspNetCore.Http.IResult! answered) -> Microsoft.AspNetCore.Http.IResult!
 static Janus.Hosting.Bff.Answers.Of<TValue>(Janus.Core.Result<TValue> outcome, System.Func<TValue, Microsoft.AspNetCore.Http.IResult!>! answered) -> Microsoft.AspNetCore.Http.IResult!
 static Janus.Hosting.Bff.Answers.Refused(Janus.Core.Error! error) -> Microsoft.AspNetCore.Http.IResult!
+static Janus.Hosting.Bff.CapabilityFields.Of(Janus.Core.Capability! capability) -> Janus.Hosting.Bff.CapabilityFields!
+static Janus.Hosting.Bff.CapabilityFields.operator !=(Janus.Hosting.Bff.CapabilityFields? left, Janus.Hosting.Bff.CapabilityFields? right) -> bool
+static Janus.Hosting.Bff.CapabilityFields.operator ==(Janus.Hosting.Bff.CapabilityFields? left, Janus.Hosting.Bff.CapabilityFields? right) -> bool
 static Janus.Hosting.Bff.PipelineProfiles.AllowNoSession<TBuilder>(this TBuilder builder) -> TBuilder
 static Janus.Hosting.Bff.PipelineProfiles.UseBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.ISignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
@@ -76,6 +84,9 @@ static Janus.Hosting.HostingRegistration.AddJanus(this Microsoft.Extensions.Depe
 static Janus.Hosting.IdentityEndpoints.MapIdentityEndpoints(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
 static Janus.Hosting.IdentityEndpoints.MapIdentityWellKnown(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
 static Janus.Hosting.UnitOfWorkJoin.UseUnitOfWorkAsync(this Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade! database, Janus.Core.IUnitOfWork! work, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+override Janus.Hosting.Bff.CapabilityFields.Equals(object? obj) -> bool
+override Janus.Hosting.Bff.CapabilityFields.GetHashCode() -> int
+override Janus.Hosting.Bff.CapabilityFields.ToString() -> string!
 override Janus.Hosting.Callbacks.CallbackDelivery.Equals(object? obj) -> bool
 override Janus.Hosting.Callbacks.CallbackDelivery.GetHashCode() -> int
 override Janus.Hosting.Callbacks.CallbackDelivery.ToString() -> string!
