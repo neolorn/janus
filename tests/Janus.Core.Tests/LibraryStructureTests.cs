@@ -680,9 +680,10 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// LIB-API-002 AC2: the conformance suite's sample takes its schema from
-    /// <c>migrate</c>. It references the conformance package and the command-line
-    /// application it runs, no test project's fixture, and nothing in it applies a
-    /// migration itself.
+    /// <c>migrate</c>. It references the conformance package, the command-line
+    /// application it runs and the testing package whose software passkey enrols its
+    /// first administrator (D-206), no test project's fixture, and nothing in it
+    /// applies a migration itself.
     /// </summary>
     [Fact]
     public void LIB_API_002_AC2_TheConformanceSampleTakesItsSchemaFromMigrate()
@@ -690,7 +691,7 @@ public sealed class LibraryStructureTests
         string folder = Path.Combine("tests", Sample);
 
         Assert.Equal(
-            ["Janus.Cli", "Janus.Conformance"],
+            ["Janus.Cli", "Janus.Conformance", "Janus.Testing"],
             XDocument
                 .Parse(Repository.ReadText(Path.Combine(folder, Sample + ".csproj")))
                 .Descendants("ProjectReference")

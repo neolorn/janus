@@ -44,3 +44,11 @@ Janus.Testing.SoftwarePasskey.SoftwarePasskey(System.Uri! origin, System.Securit
 Janus.Testing.SucceededCertificateRenewal
 Janus.Testing.SucceededCertificateRenewal.LastFailureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.DateTimeOffset?>>
 Janus.Testing.SucceededCertificateRenewal.SucceededCertificateRenewal() -> void
+Janus.Testing.TestPeople
+Janus.Testing.TestPeople.AdministratorAsync(System.Uri! enrolment, Janus.Core.EmailAddress email, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
+Janus.Testing.TestPeople.CustomerAsync(Janus.Core.EmailAddress email, Janus.Core.PhoneNumber? phone, string! password, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
+Janus.Testing.TestPeople.StaffMemberAsync(Janus.Testing.TestSession! administrator, Janus.Core.OrganizationId organization, Janus.Core.EmailAddress email, Janus.Core.PhoneNumber? phone, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! roles, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
+Janus.Testing.TestPeople.TestPeople(System.Uri! address, Janus.Core.SignOnClient! client, Janus.Core.DocumentName terms, System.Func<System.Net.Http.HttpMessageHandler!>! channel, Janus.Testing.InMemoryMailTransport! mail, Janus.Testing.InMemorySmsTransport! sms, System.Security.Cryptography.RandomNumberGenerator! randomness) -> void
+Janus.Testing.TestSession
+Janus.Testing.TestSession.StepUpAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Janus.Testing.TestSession.Subject.get -> Janus.Core.SubjectId

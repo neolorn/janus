@@ -4,6 +4,13 @@
     <ProjectReference Include="..\..\src\Janus.Conformance\Janus.Conformance.csproj" />
   </ItemGroup>
 
+  <!-- LIB-API-002 AC2 (D-206): the first administrator is enrolled with the testing
+       package's software passkey, and the mail and SMS the deployment sends are taken
+       by its transports. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Testing\Janus.Testing.csproj" />
+  </ItemGroup>
+
   <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
        framework, never as a package. -->
   <ItemGroup>
