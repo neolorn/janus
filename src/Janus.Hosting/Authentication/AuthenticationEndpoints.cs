@@ -145,6 +145,7 @@ internal static class AuthenticationEndpoints
         PresentFactorRequest request,
         AuthenticationService authentication,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
@@ -183,6 +184,7 @@ internal static class AuthenticationEndpoints
                             cancellationToken)
                         .ConfigureAwait(false),
                     cookies,
+                    contacts,
                     configuration,
                     time,
                     context,
@@ -222,6 +224,7 @@ internal static class AuthenticationEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 cookies,
+                contacts,
                 configuration,
                 time,
                 context,
@@ -233,6 +236,7 @@ internal static class AuthenticationEndpoints
         VerifyDeviceRequest request,
         AuthenticationService authentication,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
@@ -261,6 +265,7 @@ internal static class AuthenticationEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 cookies,
+                contacts,
                 configuration,
                 time,
                 context,
@@ -273,6 +278,7 @@ internal static class AuthenticationEndpoints
         AuthenticationService authentication,
         RequestSession browser,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
@@ -322,6 +328,7 @@ internal static class AuthenticationEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 cookies,
+                contacts,
                 configuration,
                 time,
                 context,
@@ -494,6 +501,7 @@ internal static class AuthenticationEndpoints
     private static async Task<IResult> LandedAsync(
         Result<LandedSignIn> outcome,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
@@ -517,7 +525,7 @@ internal static class AuthenticationEndpoints
                 StatusCodes.Status200OK);
         }
 
-        return await CarriedAsync(signedIn, cookies, configuration, time, context, cancellationToken)
+        return await CarriedAsync(signedIn, cookies, contacts, configuration, time, context, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -535,6 +543,7 @@ internal static class AuthenticationEndpoints
     private static async Task<IResult> ReachedAsync(
         Result<SignInOutcome> outcome,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
@@ -549,27 +558,36 @@ internal static class AuthenticationEndpoints
             return Answers.Refused(failure);
         }
 
-        return await CarriedAsync(reached, cookies, configuration, time, context, cancellationToken)
+        return await CarriedAsync(reached, cookies, contacts, configuration, time, context, cancellationToken)
             .ConfigureAwait(false);
     }
 
     // AUTH-SESS-006, AUTH-FACT-015, AUTH-FACT-016: the session pair is written again
     // by every step that issued one, which is what rotation looks like at the
     // boundary, and each lasting cookie is written only where the step produced one.
+    // BFF-CSRF-005a AC3 (D-206): the first contact the browser carried is ended where
+    // a session is issued, rather than left beside it until its expiry.
     private static async Task<IResult> CarriedAsync(
         SignInOutcome outcome,
         BrowserSessionCookies cookies,
+        PreAuthenticationService contacts,
         IConfigurationStore configuration,
         TimeProvider time,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(cookies);
+        ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(time);
 
         if (outcome.Session is IssuedSession issued)
         {
+            if (Carried(context.Request, BrowserCookies.PreAuthentication) is string first)
+            {
+                await contacts.RotateAsync(OpaqueToken.Of(first), cancellationToken).ConfigureAwait(false);
+            }
+
             cookies.Write(context.Response, issued);
             cookies.ClearFirstContact(context.Response);
         }

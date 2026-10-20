@@ -3836,3 +3836,8 @@ against the public contract of LIB-API-001.
   not declared or `system:administer` stops the deployment with
   `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
   principal with `authz.denied`.
+- A sign-in that completes on `POST /auth/factor`, `POST /auth/device/verify` or a sign-in
+  link, and presenting the break-glass credential, end the pre-authentication session the
+  browser carried: its token resolves nothing afterwards, where before only its cookie was
+  cleared. A step-up keeps the session's record and its identifier and rotates only the
+  token its cookie carries.
