@@ -59,7 +59,7 @@ namespace Janus.Hosting;
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
 /// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005,
-/// AUTHZ-DERIVE-007 and PRIV-CONS-006a.
+/// AUTHZ-DERIVE-007, PRIV-CONS-006a and IDN-PRIN-001.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -78,7 +78,7 @@ namespace Janus.Hosting;
 /// (D-175). A governing document's name and a subscriber's or a purpose handler's fill
 /// a message place measured at the width the name rule bounds, so one declared outside
 /// the rule is refused here rather than carried into a text longer than the width it
-/// was measured at. A landing origin is an application of this deployment, so one that
+/// was measured at; a host job's name is held to the same rule (IDN-PRIN-001, D-206). A landing origin is an application of this deployment, so one that
 /// no registered browser client returns to, or an authentication origin that is not
 /// where the sign-in address is, would send every link somewhere the deployment does
 /// not serve. A relationship a derivation follows from is read by the view of who can
@@ -129,6 +129,8 @@ internal sealed class DeclarationCoverage(
     private const string Source = "relationshipSource";
 
     private const string Cookie = "cookie";
+
+    private const string Job = "job";
 
     // RFC 2616 section 2.2: the characters a token never holds, space and tab aside,
     // which fall outside the visible range.
@@ -335,9 +337,9 @@ internal sealed class DeclarationCoverage(
     }
 
     // INT-SMS-003: the governing document a purpose names, as the purpose it is
-    // declared on, and the subscriber or purpose handler whose name breaks the rule of a
-    // message place, as the name it is registered under, or nothing where every one keeps
-    // it (D-203).
+    // declared on, the subscriber or purpose handler whose name breaks the rule of a
+    // message place, as the name it is registered under, and the job whose name breaks
+    // it, as the job it declares; or nothing where every one keeps it (D-203, D-206).
     private (string Declaration, string Field)? Unruled()
     {
         foreach (PurposeDeclaration purpose in declaration.ResourceTypes.SelectMany(type => type.Purposes))
@@ -361,6 +363,14 @@ internal sealed class DeclarationCoverage(
             if (!PlaceName.Holds(handler.Name))
             {
                 return (handler.Name, "name");
+            }
+        }
+
+        foreach (JobDeclaration job in declaration.Jobs)
+        {
+            if (!PlaceName.Holds(job.Name))
+            {
+                return (Job + "." + job.Name, "name");
             }
         }
 

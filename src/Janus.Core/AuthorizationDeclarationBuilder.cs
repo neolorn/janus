@@ -31,6 +31,7 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly Dictionary<string, TimeSpan> _retentionFloors = new(StringComparer.Ordinal);
     private readonly List<CookieDeclaration> _cookies = [];
     private readonly List<RoleDeclaration> _roles = [];
+    private readonly List<JobDeclaration> _jobs = [];
 
     /// <summary>
     /// Declares one of the host's kinds of thing.
@@ -347,6 +348,45 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Declares one of the host's background jobs. Its principal is
+    /// <see cref="SystemPrincipal.ForOrganization"/> naming it, which acts for one
+    /// organization.
+    /// </summary>
+    /// <param name="name">
+    /// The job's name, under the rule of INT-SMS-003, distinct from every other job's,
+    /// from every principal chapter 10 section 5.29 names and from <c>migrate</c>.
+    /// </param>
+    /// <param name="permissions">
+    /// The host permissions it exercises, each as <c>resource:action</c>: permissions the
+    /// host declares, none bound to a step-up gate and none whose action is
+    /// <c>export</c>.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The name or the permissions are absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well-formed.</exception>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 and LIB-HOST-001 (D-202, D-206). A name outside the rule,
+    /// given twice or reserved, or a permission the job may not exercise, is refused as
+    /// the deployment starts.
+    /// </remarks>
+    public AuthorizationDeclarationBuilder Job(string name, params IReadOnlyList<string> permissions)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        var parsed = new List<Permission>(permissions.Count);
+
+        foreach (string permission in permissions)
+        {
+            parsed.Add(Core.Permission.Parse(permission));
+        }
+
+        _jobs.Add(new JobDeclaration(name, parsed));
+
+        return this;
+    }
+
+    /// <summary>
     /// Closes the declaration.
     /// </summary>
     /// <returns>What the host declared.</returns>
@@ -363,5 +403,6 @@ public sealed class AuthorizationDeclarationBuilder
             [.. _recipients],
             new Dictionary<string, TimeSpan>(_retentionFloors, StringComparer.Ordinal),
             [.. _cookies],
-            [.. _roles]);
+            [.. _roles],
+            [.. _jobs]);
 }

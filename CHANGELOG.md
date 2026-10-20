@@ -3835,3 +3835,9 @@ against the public contract of LIB-API-001.
   not declared or `system:administer` stops the deployment with
   `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
   principal with `authz.denied`.
+- `AuthorizationDeclarationBuilder.Job(name, permissions)` declares one of the host's
+  background jobs and the host permissions it exercises. A job declared with a
+  permission not declared, one of the library's own, one bound to a step-up gate or one
+  whose action is `export`, or under a name outside the rule of a message place, given
+  twice, taken by one of the library's principals or `migrate`, stops the deployment
+  with `model.startup.declarationinvalid` naming `job.<name>`.

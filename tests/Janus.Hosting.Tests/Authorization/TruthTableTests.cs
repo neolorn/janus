@@ -118,6 +118,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, to a member of it", Decided.Allowed),
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
         ("a check by background work, which holds no grant", Decided.Denied),
+        ("a host permission asked by background work under a principal naming no declared job", Decided.Denied),
         ("a check refused inside work the caller rolls back", Decided.Denied),
         ("a modifying check asked again inside the caller's unit of work", Decided.Allowed),
         (
@@ -990,6 +991,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             cancellationToken))
                     .Match(() => Decided.Allowed, Refused);
 
+            // IDN-PRIN-001 (D-202): a principal naming no job the host declared is
+            // refused every host permission, on its own organization's records too.
+            case "a host permission asked by background work under a principal naming no declared job":
+                return await JobCheckedAsync(deployment, "import");
+
             case "a check refused inside work the caller rolls back":
                 return await RolledBackAsync(caller, deployment.Organization);
 
@@ -1053,6 +1059,30 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // IDN-PRIN-001: a host permission asked of a record of the organization, under the
+    // context of an organization-scoped principal naming the job given.
+    private async Task<Decided> JobCheckedAsync(Deployment deployment, string job)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(SystemPrincipal.ForOrganization(job, "the nightly digest", deployment.Organization)),
+                    HostPermissions.Read,
+                    record,
+                    Sources(reading),
+                    cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
     }
 
     // AUTHZ-DERIVE-007, LIB-HOST-001: the view of who can access a record a fact in the

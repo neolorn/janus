@@ -42,6 +42,11 @@ namespace Janus.Core;
 /// The roles the deployment starts with, in the order declared, each seeded once at a
 /// start (AUTHZ-GRANT-004, D-204).
 /// </param>
+/// <param name="Jobs">
+/// The host's background jobs, each with the host permissions it exercises, which the
+/// gate admits an organization-scoped principal naming the job for (IDN-PRIN-001,
+/// D-202).
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-006. It is what
 /// <see cref="AuthorizationDeclarationBuilder"/> produces and what the model is built
@@ -59,4 +64,5 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyList<RecipientDeclaration> Recipients,
     IReadOnlyDictionary<string, TimeSpan> RetentionFloors,
     IReadOnlyList<CookieDeclaration> Cookies,
-    IReadOnlyList<RoleDeclaration> Roles);
+    IReadOnlyList<RoleDeclaration> Roles,
+    IReadOnlyList<JobDeclaration> Jobs);
