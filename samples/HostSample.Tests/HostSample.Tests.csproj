@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- CONV-TEST-007: xunit.v3 on Microsoft.Testing.Platform. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+
+  <!-- LIB-TEST-004, LIB-TEST-003 (D-205): the sample host's tests take the testing
+       package, and what the shared framework serves from the framework. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HostSample\HostSample.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Janus.Testing" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+</Project>
