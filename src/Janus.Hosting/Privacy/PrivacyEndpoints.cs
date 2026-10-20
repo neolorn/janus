@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -76,6 +77,7 @@ internal static class PrivacyEndpoints
 
         _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync))
             .Declares(EndpointDeclaration.Answering())
+            .Accepts<PrivacyRequestBody>(MediaTypeNames.Application.Json)
             .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(group.MapGet("/export", ExportAsync))
             .Declares(EndpointDeclaration
@@ -94,6 +96,7 @@ internal static class PrivacyEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted))
+            .Accepts<AssessmentsRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
@@ -106,6 +109,7 @@ internal static class PrivacyEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.RequestReceivedFuture, ErrorCodes.RequestInvalid))
+            .Accepts<PrivacyEntryBody>(MediaTypeNames.Application.Json)
             .Produces<PrivacyReceiptView>(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(queue.MapPost("/{request}/fulfil", FulfilAsync))
             .Declares(EndpointDeclaration
@@ -120,6 +124,7 @@ internal static class PrivacyEndpoints
                     ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestNotFound,
                     ErrorCodes.RequestDecided)
                 .Binding<PrivacyRequestId>("request"))
+            .Accepts<PrivacyDecisionBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -223,13 +228,17 @@ internal static class PrivacyEndpoints
     // PRIV-RIGHT-001: the subject asks for themselves, and the receipt tells them
     // when the decision is due, which is the one thing the statute gives them.
     private static async Task<IResult> SubmitAsync(
-        PrivacyRequestBody body,
         IPrivacyRequests requests,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PrivacyRequestBody body = await JsonBody
+            .ReadAsync<PrivacyRequestBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // 09 section 7: erasure is not a request type on this endpoint, so a body naming
         // it is not the shape the endpoint takes (API-CONV-003).
@@ -347,13 +356,17 @@ internal static class PrivacyEndpoints
     }
 
     private static async Task<IResult> AssessmentsAsync(
-        AssessmentsRequest request,
         IProcessingRecords records,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AssessmentsRequest request = await JsonBody
+            .ReadAsync<AssessmentsRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // 09 section 8a, API-CONV-002 (D-183): the two statements are free text, so one
         // given is trimmed and refused blank or past the bound; one omitted is cleared.
@@ -410,13 +423,17 @@ internal static class PrivacyEndpoints
     // 09 section 8a, D-113: the human entering it records the channel, what they did
     // to confirm the requester is the subject, and the date it reached the company.
     private static async Task<IResult> EnterAsync(
-        PrivacyEntryBody body,
         IPrivacyRequests requests,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PrivacyEntryBody body = await JsonBody
+            .ReadAsync<PrivacyEntryBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Asked(body.Type) is not PrivacyRequestType type)
         {
@@ -498,14 +515,18 @@ internal static class PrivacyEndpoints
     }
 
     private static async Task<IResult> RefuseAsync(
-        PrivacyDecisionBody body,
         IPrivacyRequests requests,
         RequestSession browser,
         PrivacyRequestId request,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PrivacyDecisionBody body = await JsonBody
+            .ReadAsync<PrivacyDecisionBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {

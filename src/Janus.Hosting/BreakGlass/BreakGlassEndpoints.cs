@@ -1,4 +1,5 @@
 using System;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -41,6 +42,7 @@ internal static class BreakGlassEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.BreakGlassConsumed,
                     ErrorCodes.BreakGlassInvalid, ErrorCodes.Throttled))
+            .Accepts<PresentBreakGlassRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status200OK);
         _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync))
             .Declares(EndpointDeclaration
@@ -55,18 +57,20 @@ internal static class BreakGlassEndpoints
     }
 
     private static async Task<IResult> PresentAsync(
-        PresentBreakGlassRequest request,
         BreakGlassService breakGlass,
         BrowserSessionCookies cookies,
         PreAuthenticationService contacts,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(breakGlass);
         ArgumentNullException.ThrowIfNull(cookies);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
+
+        PresentBreakGlassRequest request = await JsonBody
+            .ReadAsync<PresentBreakGlassRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.Credential is not { Length: > 0 } credential)
         {

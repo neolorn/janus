@@ -1,4 +1,5 @@
 using System;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -40,6 +41,7 @@ internal static class TakedownEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.AccountNotFound, ErrorCodes.TakedownActive,
                     ErrorCodes.AccountStateConflict)
                 .Binding<SubjectId>("subject"))
+            .Accepts<TakedownBody>(MediaTypeNames.Application.Json)
             .Produces<ExecutedTakedownView>(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(group.MapGet("/", ReadAsync))
             .Declares(EndpointDeclaration
@@ -54,21 +56,26 @@ internal static class TakedownEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.TakedownNotFound, ErrorCodes.AccountNotFound,
                     ErrorCodes.TakedownWindowElapsed)
                 .Binding<SubjectId>("subject"))
+            .Accepts<TakedownReversalBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
     }
 
     private static async Task<IResult> ExecuteAsync(
-        TakedownBody body,
         ITakedowns takedowns,
         RequestSession browser,
         SubjectId subject,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(takedowns);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        TakedownBody body = await JsonBody
+            .ReadAsync<TakedownBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Trigger is not TakedownTrigger trigger)
         {
@@ -123,15 +130,19 @@ internal static class TakedownEndpoints
     }
 
     private static async Task<IResult> ReverseAsync(
-        TakedownReversalBody body,
         ITakedowns takedowns,
         RequestSession browser,
         SubjectId subject,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(takedowns);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        TakedownReversalBody body = await JsonBody
+            .ReadAsync<TakedownReversalBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming,
         // refused here before the service is asked.

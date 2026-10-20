@@ -3841,3 +3841,9 @@ against the public contract of LIB-API-001.
   browser carried: its token resolves nothing afterwards, where before only its cookie was
   cleared. A step-up keeps the session's record and its identifier and rotates only the
   token its cookie carries.
+- `AddJanus` no longer changes the application's HTTP JSON options, so a host's own
+  endpoint types serialize as the host configures them. Every library endpoint reads its
+  JSON body with the library's own serializer settings, whatever the host sets for its
+  endpoints: a member is read only under the name the contract spells, case-sensitively,
+  and a number only as a JSON number, and a body that does not read is 400
+  `api.request.malformed` naming the member it stopped at.

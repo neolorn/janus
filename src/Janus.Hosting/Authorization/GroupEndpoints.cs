@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Authorization;
@@ -46,6 +46,7 @@ internal static class GroupEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted))
+            .Accepts<GroupBody>(MediaTypeNames.Application.Json)
             .Produces<CreatedGroupView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}", RemoveAsync))
             .Declares(EndpointDeclaration
@@ -53,6 +54,7 @@ internal static class GroupEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.GroupInUse)
                 .Binding<GroupId>("id"))
+            .Accepts<GroupRemovalBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id}/members", AddMemberAsync))
             .Declares(EndpointDeclaration
@@ -60,6 +62,7 @@ internal static class GroupEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
                 .Binding<GroupId>("id"))
+            .Accepts<MemberBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}/members", RemoveMemberAsync))
             .Declares(EndpointDeclaration
@@ -67,6 +70,7 @@ internal static class GroupEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
                 .Binding<GroupId>("id"))
+            .Accepts<MemberBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -96,14 +100,18 @@ internal static class GroupEndpoints
     }
 
     private static async Task<IResult> CreateAsync(
-        GroupBody body,
         IGroups groups,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        GroupBody body = await JsonBody
+            .ReadAsync<GroupBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Organization is not Guid organization)
         {
@@ -141,15 +149,19 @@ internal static class GroupEndpoints
     // A removal carries its reason, which is free text and goes in the body rather
     // than in an address a log keeps.
     private static async Task<IResult> RemoveAsync(
-        [FromBody] GroupRemovalBody body,
         IGroups groups,
         RequestSession browser,
         GroupId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        GroupRemovalBody body = await JsonBody
+            .ReadAsync<GroupRemovalBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
@@ -168,15 +180,19 @@ internal static class GroupEndpoints
     }
 
     private static async Task<IResult> AddMemberAsync(
-        MemberBody body,
         IGroups groups,
         RequestSession browser,
         GroupId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        MemberBody body = await JsonBody
+            .ReadAsync<MemberBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         (GrantSubject? subject, string member) = body.Read();
 
@@ -206,15 +222,19 @@ internal static class GroupEndpoints
     // The member leaving is named in the body, as the one joining is, so the one
     // address serves both.
     private static async Task<IResult> RemoveMemberAsync(
-        [FromBody] MemberBody body,
         IGroups groups,
         RequestSession browser,
         GroupId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        MemberBody body = await JsonBody
+            .ReadAsync<MemberBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         (GrantSubject? subject, string member) = body.Read();
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,7 +10,6 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Organizations;
@@ -47,6 +47,7 @@ internal static class OrganizationEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.IdentifierMixedScript))
+            .Accepts<OrganizationBody>(MediaTypeNames.Application.Json)
             .Produces<CreatedOrganizationView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete", RequestDeletionAsync))
             .Declares(EndpointDeclaration
@@ -55,6 +56,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.OrganizationProtected)
                 .Binding<OrganizationId>("id"))
+            .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete/cancel", CancelDeletionAsync))
             .Declares(EndpointDeclaration
@@ -63,6 +65,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.OrganizationProtected, ErrorCodes.DeletionWindowElapsed)
                 .Binding<OrganizationId>("id"))
+            .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/policy", PolicyAsync))
             .Declares(EndpointDeclaration
@@ -79,6 +82,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.ConfigurationPolicyBelowSystem, ErrorCodes.ConfigurationValueBelowFloor,
                     ErrorCodes.ConfigurationValueNotAllowed)
                 .Binding<OrganizationId>("id"))
+            .Accepts<JsonElement>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/domains", DomainsAsync))
             .Declares(EndpointDeclaration
@@ -94,6 +98,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.ConfigurationChangeReasonRequired,
                     ErrorCodes.ConfigurationValueNotAllowed)
                 .Binding<OrganizationId>("id"))
+            .Accepts<OrganizationDomainBody>(MediaTypeNames.Application.Json)
             .Produces<OrganizationDomainView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapPost(
             "/admin/organizations/{id}/domains/{domain}/verify",
@@ -105,6 +110,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.DomainNotFound, ErrorCodes.DomainUnverified,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<OrganizationId>("id"))
+            .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
             .Produces<OrganizationDomainView>();
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id}/domains/{domain}",
@@ -115,6 +121,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.OrganizationNotFound, ErrorCodes.StepUpRequired,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<OrganizationId>("id"))
+            .Accepts<OrganizationReasonBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/invitations", InviteAsync))
             .Declares(EndpointDeclaration
@@ -127,6 +134,7 @@ internal static class OrganizationEndpoints
                     ErrorCodes.GrantUnresolved, ErrorCodes.RequestInvalid,
                     ErrorCodes.RestrictionExceeded)
                 .Binding<OrganizationId>("id"))
+            .Accepts<InvitationBody>(MediaTypeNames.Application.Json)
             .Produces<IssuedInvitationView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id}/invitations/{invitationId}",
@@ -153,14 +161,18 @@ internal static class OrganizationEndpoints
     }
 
     private static async Task<IResult> CreateAsync(
-        OrganizationBody body,
         IOrganizations organizations,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationBody body = await JsonBody
+            .ReadAsync<OrganizationBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // API-CONV-002, X4: free text is 1 to 1024 characters after trimming, refused
         // before the service is called (CONV-CODE-006 AC2).
@@ -190,15 +202,19 @@ internal static class OrganizationEndpoints
     }
 
     private static async Task<IResult> RequestDeletionAsync(
-        OrganizationReasonBody body,
         IOrganizations organizations,
         RequestSession browser,
         OrganizationId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationReasonBody body = await JsonBody
+            .ReadAsync<OrganizationReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
@@ -218,15 +234,19 @@ internal static class OrganizationEndpoints
     }
 
     private static async Task<IResult> CancelDeletionAsync(
-        OrganizationReasonBody body,
         IOrganizations organizations,
         RequestSession browser,
         OrganizationId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationReasonBody body = await JsonBody
+            .ReadAsync<OrganizationReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
@@ -266,14 +286,19 @@ internal static class OrganizationEndpoints
     }
 
     private static async Task<IResult> ReplacePolicyAsync(
-        JsonElement body,
         IOrganizations organizations,
         RequestSession browser,
         OrganizationId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        JsonElement body = await JsonBody
+            .ReadAsync<JsonElement>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         Error? failure = null;
         (PolicyOverride replacement, string reason) = OrganizationPolicyBody
@@ -326,15 +351,19 @@ internal static class OrganizationEndpoints
     // The response names the record that proves the domain, which is what the
     // administrator publishes before asking for it to be verified.
     private static async Task<IResult> AddDomainAsync(
-        OrganizationDomainBody body,
         IOrganizationDomains domains,
         RequestSession browser,
         OrganizationId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationDomainBody body = await JsonBody
+            .ReadAsync<OrganizationDomainBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Domain is not { Length: > 0 } domain)
         {
@@ -364,16 +393,20 @@ internal static class OrganizationEndpoints
     }
 
     private static async Task<IResult> VerifyDomainAsync(
-        OrganizationReasonBody body,
         IOrganizationDomains domains,
         RequestSession browser,
         OrganizationId id,
         string domain,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationReasonBody body = await JsonBody
+            .ReadAsync<OrganizationReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Unexplained(id, body.Reason) is IResult unexplained)
         {
@@ -400,16 +433,20 @@ internal static class OrganizationEndpoints
     // A removal carries its reason, which is free text and goes in the body rather
     // than in an address a log keeps.
     private static async Task<IResult> RemoveDomainAsync(
-        [FromBody] OrganizationReasonBody body,
         IOrganizationDomains domains,
         RequestSession browser,
         OrganizationId id,
         string domain,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        OrganizationReasonBody body = await JsonBody
+            .ReadAsync<OrganizationReasonBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Unexplained(id, body.Reason) is IResult unexplained)
         {
@@ -430,17 +467,19 @@ internal static class OrganizationEndpoints
     }
 
     private static async Task<IResult> InviteAsync(
-        InvitationBody body,
         IInvitations invitations,
         RequestSession browser,
         HttpContext context,
         OrganizationId id,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(invitations);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        InvitationBody body = await JsonBody
+            .ReadAsync<InvitationBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         (InvitationRequest? request, string member) = body.Read();
 

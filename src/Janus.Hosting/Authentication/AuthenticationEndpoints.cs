@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -46,6 +47,7 @@ internal static class AuthenticationEndpoints
 
         _ = group.MapPost("/begin", BeginAsync)
             .Declares(EndpointDeclaration.Answering())
+            .Accepts<SignInRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInChallengeView>();
         _ = group.MapPost("/factor", PresentAsync)
             .Declares(EndpointDeclaration
@@ -57,6 +59,7 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
                     ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
                     ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces<SignInLandingView>()
             .Produces(StatusCodes.Status202Accepted);
@@ -64,6 +67,7 @@ internal static class AuthenticationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded))
+            .Accepts<VerifyDeviceRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>();
         _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync))
             .Declares(EndpointDeclaration
@@ -75,16 +79,20 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.WebAuthnCounterMismatch, ErrorCodes.WebAuthnRelyingPartyChanged,
                     ErrorCodes.WebAuthnUserVerificationRequired, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Accepts<PresentFactorRequest>(MediaTypeNames.Application.Json)
             .Produces<SignInProgressView>()
             .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/link", LinkAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Accepts<SignInRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/link/abandon", AbandonLinkAsync)
             .Declares(EndpointDeclaration.Answering())
+            .Accepts<AbandonLinkRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = group.MapPost("/email-otp", CodeAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded))
+            .Accepts<SignInRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = SessionRequired.On(group.MapPost("/logout", LogoutAsync))
             .Declares(EndpointDeclaration.Answering())
@@ -111,14 +119,16 @@ internal static class AuthenticationEndpoints
     // AUTH-ABUSE-001 AC5: the browser's own tokens travel with the sign-in it opens, so
     // a browser the account knows is not held by an attack on the account.
     private static async Task<IResult> BeginAsync(
-        SignInRequest request,
         IAuthentication authentication,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(context);
+
+        SignInRequest request = await JsonBody
+            .ReadAsync<SignInRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.Identifier is not { Length: > 0 } identifier
             ? Answers.Malformed("identifier")
@@ -142,7 +152,6 @@ internal static class AuthenticationEndpoints
     // and on a press; the same call from anywhere else changes nothing and carries
     // back the code to type where the sign-in began.
     private static async Task<IResult> PresentAsync(
-        PresentFactorRequest request,
         AuthenticationService authentication,
         BrowserSessionCookies cookies,
         PreAuthenticationService contacts,
@@ -151,9 +160,12 @@ internal static class AuthenticationEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(context);
+
+        PresentFactorRequest request = await JsonBody
+            .ReadAsync<PresentFactorRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.ChallengeId is not { Length: > 0 } challenge)
         {
@@ -233,7 +245,6 @@ internal static class AuthenticationEndpoints
     }
 
     private static async Task<IResult> VerifyDeviceAsync(
-        VerifyDeviceRequest request,
         AuthenticationService authentication,
         BrowserSessionCookies cookies,
         PreAuthenticationService contacts,
@@ -242,9 +253,12 @@ internal static class AuthenticationEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(context);
+
+        VerifyDeviceRequest request = await JsonBody
+            .ReadAsync<VerifyDeviceRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.ChallengeId is not { Length: > 0 } challenge)
         {
@@ -274,7 +288,6 @@ internal static class AuthenticationEndpoints
     }
 
     private static async Task<IResult> StepUpAsync(
-        PresentFactorRequest request,
         AuthenticationService authentication,
         RequestSession browser,
         BrowserSessionCookies cookies,
@@ -284,10 +297,13 @@ internal static class AuthenticationEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        PresentFactorRequest request = await JsonBody
+            .ReadAsync<PresentFactorRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -339,14 +355,16 @@ internal static class AuthenticationEndpoints
     // AUTH-ABUSE-003: accepted whether or not the identifier belongs to an account
     // and whether or not the policy enables the entry the link would be.
     private static async Task<IResult> LinkAsync(
-        SignInRequest request,
         IAuthentication authentication,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(context);
+
+        SignInRequest request = await JsonBody
+            .ReadAsync<SignInRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.Identifier is not { Length: > 0 } identifier
             ? Answers.Malformed("identifier")
@@ -363,14 +381,16 @@ internal static class AuthenticationEndpoints
     }
 
     private static async Task<IResult> CodeAsync(
-        SignInRequest request,
         IAuthentication authentication,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(context);
+
+        SignInRequest request = await JsonBody
+            .ReadAsync<SignInRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.Identifier is not { Length: > 0 } identifier
             ? Answers.Malformed("identifier")
@@ -388,12 +408,16 @@ internal static class AuthenticationEndpoints
     // REG-SESS-003: a token that resolves to no pending link is answered identically,
     // so the answer says nothing about whether one stood.
     private static async Task<IResult> AbandonLinkAsync(
-        AbandonLinkRequest request,
         IAuthentication authentication,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AbandonLinkRequest request = await JsonBody
+            .ReadAsync<AbandonLinkRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.LinkToken is not { Length: > 0 } token
             ? Answers.Malformed("linkToken")

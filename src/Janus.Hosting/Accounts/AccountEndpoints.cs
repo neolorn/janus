@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
@@ -56,6 +57,7 @@ internal static class AccountEndpoints
                     ErrorCodes.UsernameTaken, ErrorCodes.UsernameReserved,
                     ErrorCodes.UsernameCoolingOff, ErrorCodes.IdentifierMixedScript,
                     ErrorCodes.ProfileInvalid, ErrorCodes.ProfileNotAccepted))
+            .Accepts<ProfileEditRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.PhotoNotFound))
@@ -78,6 +80,7 @@ internal static class AccountEndpoints
                     ErrorCodes.Restricted, ErrorCodes.PreferenceUndeclared,
                     ErrorCodes.PreferenceWrongType, ErrorCodes.PreferenceTooLarge,
                     ErrorCodes.PreferenceAdministratorOnly))
+            .Accepts<PreferencesRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapPost("/identifiers", AddIdentifierAsync))
@@ -87,6 +90,7 @@ internal static class AccountEndpoints
                     ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierMixedScript,
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.IdentifierInvalid,
                     ErrorCodes.SmsBalanceFloor, ErrorCodes.RestrictionExceeded))
+            .Accepts<AddIdentifierToAccountRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = EnrolmentRoute.On(group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync))
             .Declares(EndpointDeclaration
@@ -94,6 +98,7 @@ internal static class AccountEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.IdentifierMaximum,
                     ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled)
                 .Binding<IdentifierId>("id"))
+            .Accepts<VerifyIdentifierRequest>(MediaTypeNames.Application.Json)
             .Produces<IdentifierLandingView>()
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/identifiers/{id}/primary", MakePrimaryAsync))
@@ -104,6 +109,7 @@ internal static class AccountEndpoints
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPut("/identifiers/backup", SetBackupAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.IdentifierUnverified))
+            .Accepts<BackupRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapDelete("/identifiers/{id}", RemoveIdentifierAsync))
             .Declares(EndpointDeclaration
@@ -117,6 +123,7 @@ internal static class AccountEndpoints
                 .Answering(
                     ErrorCodes.IdentifierMaximum, ErrorCodes.ChangeWindowElapsed)
                 .Binding<IdentifierId>("id"))
+            .Accepts<LinkTokenRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = EnrolmentRoute.On(group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync))
             .Declares(EndpointDeclaration
@@ -126,9 +133,11 @@ internal static class AccountEndpoints
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.SmsBalanceFloor,
                     ErrorCodes.RestrictionExceeded)
                 .Binding<IdentifierId>("id"))
+            .Accepts<ReplaceIdentifierRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status202Accepted);
         _ = group.MapPost("/identifiers/{id}/abandon", AbandonIdentifierAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted).Binding<IdentifierId>("id"))
+            .Accepts<LinkTokenRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapGet("/credentials", ListCredentialsAsync))
@@ -140,9 +149,11 @@ internal static class AccountEndpoints
                     ErrorCodes.Restricted, ErrorCodes.CredentialNotFound,
                     ErrorCodes.CredentialLabelInvalid)
                 .Binding<AuthenticatorId>("id"))
+            .Accepts<LabelRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPut("/secondstep/preferred", PreferSecondStepAsync))
             .Declares(EndpointDeclaration.Answering(ErrorCodes.Restricted, ErrorCodes.RequestInvalid))
+            .Accepts<PreferredSecondStepRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapGet("/sessions", ListSessionsAsync))
@@ -162,6 +173,7 @@ internal static class AccountEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.AccountAdministrativelySuspended,
                     ErrorCodes.ReactivationTokenInvalid))
+            .Accepts<LinkTokenRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(group.MapPost("/delete", DeleteAsync))
             .Declares(EndpointDeclaration
@@ -172,6 +184,7 @@ internal static class AccountEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed))
+            .Accepts<LinkTokenRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         _ = SessionRequired.On(group.MapGet("/invitation", ReadInvitationAsync))
@@ -184,6 +197,7 @@ internal static class AccountEndpoints
                     ErrorCodes.InvitationNotFound, ErrorCodes.MembershipLimitReached,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.InvitationExpired,
                     ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.IdentifierDomainNotAllowed))
+            .Accepts<AcknowledgeInvitationRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -208,13 +222,17 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> EditProfileAsync(
-        ProfileEditRequest request,
         IAccount accounts,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        ProfileEditRequest request = await JsonBody
+            .ReadAsync<ProfileEditRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -306,15 +324,17 @@ internal static class AccountEndpoints
     // The invitation is named because what is acknowledged is what the membership
     // step showed, and never one attached after it was read.
     private static async Task<IResult> AcknowledgeInvitationAsync(
-        AcknowledgeInvitationRequest request,
         IInvitations invitations,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(invitations);
         ArgumentNullException.ThrowIfNull(context);
+
+        AcknowledgeInvitationRequest request = await JsonBody
+            .ReadAsync<AcknowledgeInvitationRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -350,13 +370,17 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> SetPreferencesAsync(
-        PreferencesRequest request,
         IAccount accounts,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PreferencesRequest request = await JsonBody
+            .ReadAsync<PreferencesRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -375,15 +399,17 @@ internal static class AccountEndpoints
     // API-CONV-005: accepted whether or not the identifier belongs to another
     // account, and the answer is the same either way.
     private static async Task<IResult> AddIdentifierAsync(
-        AddIdentifierToAccountRequest request,
         IIdentifiers identifiers,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
+
+        AddIdentifierToAccountRequest request = await JsonBody
+            .ReadAsync<AddIdentifierToAccountRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -404,7 +430,6 @@ internal static class AccountEndpoints
 
     private static async Task<IResult> VerifyIdentifierAsync(
         IdentifierId id,
-        VerifyIdentifierRequest request,
         IIdentifiers identifiers,
         SessionService sessions,
         BrowserSessionCookies cookies,
@@ -412,10 +437,13 @@ internal static class AccountEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
+
+        VerifyIdentifierRequest request = await JsonBody
+            .ReadAsync<VerifyIdentifierRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         string source = RequestOrigin.Source(context.Request);
 
@@ -493,15 +521,17 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> SetBackupAsync(
-        BackupRequest request,
         IIdentifiers identifiers,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
+
+        BackupRequest request = await JsonBody
+            .ReadAsync<BackupRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -548,12 +578,16 @@ internal static class AccountEndpoints
     // IDN-LIFE-013: link-borne, because a suspended account cannot sign in and so has
     // no session that could reach this on its own.
     private static async Task<IResult> ReactivateAsync(
-        LinkTokenRequest request,
         IAccount account,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(context);
+
+        LinkTokenRequest request = await JsonBody
+            .ReadAsync<LinkTokenRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.LinkToken is not { Length: > 0 } token
             ? Answers.Malformed("linkToken")
@@ -581,20 +615,26 @@ internal static class AccountEndpoints
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),
-            erasesAt => TypedResults.Accepted(
-                (string?)null,
-                new DeletionView(erasesAt)));
+            erasesAt => TypedResults.Json(
+                new DeletionView(erasesAt),
+                AccountJson.Default.DeletionView,
+                contentType: null,
+                StatusCodes.Status202Accepted));
     }
 
     // IDN-LIFE-014: the deletion notice carries the link, because a deleting account
     // cannot sign in either.
     private static async Task<IResult> CancelDeletionAsync(
-        LinkTokenRequest request,
         IAccount account,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(context);
+
+        LinkTokenRequest request = await JsonBody
+            .ReadAsync<LinkTokenRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.LinkToken is not { Length: > 0 } token
             ? Answers.Malformed("linkToken")
@@ -657,14 +697,16 @@ internal static class AccountEndpoints
     // session that could reach this on its own.
     private static async Task<IResult> UndoIdentifierAsync(
         IdentifierId id,
-        LinkTokenRequest request,
         IIdentifiers identifiers,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
+
+        LinkTokenRequest request = await JsonBody
+            .ReadAsync<LinkTokenRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.LinkToken is not { Length: > 0 } token
             ? Answers.Malformed("linkToken")
@@ -677,15 +719,17 @@ internal static class AccountEndpoints
 
     private static async Task<IResult> ReplaceIdentifierAsync(
         IdentifierId id,
-        ReplaceIdentifierRequest request,
         IIdentifiers identifiers,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
+
+        ReplaceIdentifierRequest request = await JsonBody
+            .ReadAsync<ReplaceIdentifierRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (request.Value is not { Length: > 0 } value)
         {
@@ -729,12 +773,16 @@ internal static class AccountEndpoints
     // needs no session and answers the same way whatever the token resolves to.
     private static async Task<IResult> AbandonIdentifierAsync(
         IdentifierId id,
-        LinkTokenRequest request,
         IIdentifiers identifiers,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(identifiers);
+        ArgumentNullException.ThrowIfNull(context);
+
+        LinkTokenRequest request = await JsonBody
+            .ReadAsync<LinkTokenRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return request.LinkToken is not { Length: > 0 } token
             ? Answers.Malformed("linkToken")
@@ -763,13 +811,17 @@ internal static class AccountEndpoints
 
     private static async Task<IResult> LabelCredentialAsync(
         AuthenticatorId id,
-        LabelRequest request,
         IAccount accounts,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        LabelRequest request = await JsonBody
+            .ReadAsync<LabelRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
@@ -783,13 +835,17 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> PreferSecondStepAsync(
-        PreferredSecondStepRequest request,
         IAccount accounts,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        PreferredSecondStepRequest request = await JsonBody
+            .ReadAsync<PreferredSecondStepRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         AccessContext holder = Asking(browser);
 
