@@ -3835,3 +3835,6 @@ against the public contract of LIB-API-001.
   not declared or `system:administer` stops the deployment with
   `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
   principal with `authz.denied`.
+- A preference declared under a name holding a `.` or a `/`, or named `language` or
+  `timeZone`, the names the export gives the account's language and time zone, fails
+  startup with `model.startup.preferencedeclaration` naming it.
