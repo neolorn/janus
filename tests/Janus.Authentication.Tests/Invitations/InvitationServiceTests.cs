@@ -14,6 +14,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Mailboxes;
@@ -81,6 +82,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly MailServerInMemory _server = new();
     private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly EmergencyAccountInMemory _emergency = new();
     private readonly OrganizationAuditInMemory _audit = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly EventsInMemory _events = new();
@@ -2055,6 +2057,34 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-MEM-001 AC6, OPS-BOOT-002 AC7 (D-202): the reserved account's membership of
+    /// the administrative organization is what its grant confers through, so ending it
+    /// is refused with <c>authz.denied</c> for a caller holding <c>membership:manage</c>
+    /// there, before the step-up is judged, with no transaction begun and the membership
+    /// current; its membership of another organization ends as anyone's does.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC6_TheReservedAccountsMembershipOfTheAdministrativeOrganizationIsNotEndedAsync()
+    {
+        SubjectId reserved = Holder();
+
+        _emergency.Account = reserved;
+        _memberships.Place(reserved, Staff);
+        _memberships.Place(reserved, Customer);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.Denied, Failure(await EndAsync(Staff, reserved, Stale())).Code);
+        Assert.Equal(ErrorCodes.Denied, Failure(await EndAsync(Staff, reserved, Stepped())).Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Equal(0, _work.Opened);
+        Assert.Contains(Staff, await _memberships.OfAsync(reserved, TestContext.Current.CancellationToken));
+
+        Accepted(await EndAsync(Customer, reserved, Stepped()));
+
+        Assert.Equal((reserved, Customer), (Assert.Single(_ending.Ended).Subject, _ending.Ended[0].Organization));
+    }
+
+    /// <summary>
     /// IDN-MEM-001: ending a membership asks <c>membership:manage</c> in the
     /// organization and a person to ask it, and only a current membership is ended;
     /// anything else is refused with nothing written.
@@ -2185,6 +2215,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 stepUp,
                 _organizations,
                 _ending,
+                _emergency,
                 _identifiers,
                 _mailboxes,
                 _notifications,

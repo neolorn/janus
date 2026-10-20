@@ -3720,3 +3720,7 @@ against the public contract of LIB-API-001.
   `IAccessGate.CapabilitiesAsync` answers only for the capabilities its type declares:
   asking it for any other permission, a declared one included, raises, and a type that
   declares none answers none.
+- Ending the reserved `emergency` account's membership of the administrative
+  organization (`DELETE /admin/organizations/{id}/memberships/{subject}`) is refused
+  with 403 `authz.denied`, for anyone, before the step-up, and the membership stays
+  current; its membership of another organization ends as anyone's does.
