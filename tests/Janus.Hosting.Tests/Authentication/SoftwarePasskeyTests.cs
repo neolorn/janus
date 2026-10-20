@@ -81,7 +81,7 @@ public sealed class SoftwarePasskeyTests : IAsyncDisposable
             {
                 ["challengeId"] = began.Text("challengeId"),
                 ["factor"] = "passkey",
-                ["value"] = passkey.Get(began.Json().GetProperty("webAuthn")),
+                ["value"] = passkey.Get(began.Json().GetProperty("webauthn")),
             }.ToJsonString());
 
         Assert.Equal(StatusCodes.Status200OK, created.Status);

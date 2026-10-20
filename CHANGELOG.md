@@ -3847,3 +3847,5 @@ against the public contract of LIB-API-001.
   endpoints: a member is read only under the name the contract spells, case-sensitively,
   and a number only as a JSON number, and a body that does not read is 400
   `api.request.malformed` naming the member it stopped at.
+- `POST /auth/begin` answers the assertion challenge under `webauthn`, as the contract and
+  every other sign-in answer spell it, where it was `webAuthn`.
