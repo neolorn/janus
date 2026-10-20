@@ -278,6 +278,7 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetServices<ISubjectEventSubscriber>(),
             provider.GetServices<IPurposeHandler>(),
+            provider.GetServices<IExportContributor>(),
             provider.GetRequiredService<IOidcClientStore>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider));

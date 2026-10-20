@@ -3852,3 +3852,7 @@ against the public contract of LIB-API-001.
   `<section>.<index>.<value>` of the machine format coincide; an answer naming one
   outside the rule fails the export with 500 `system.fault`, the contributor named in
   the log, and the export is not counted.
+- An export contributor registered under a name outside the rule of a message place, or
+  under a name another contributor holds, fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>` and
+  `details.field` `name`.
