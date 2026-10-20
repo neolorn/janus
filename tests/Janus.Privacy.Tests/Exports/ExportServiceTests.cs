@@ -7,17 +7,14 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Exports;
-using Janus.Privacy.Outbox;
 using Janus.Privacy.Tests.Consents;
-using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Exports;
 
 /// <summary>
 /// The one export routine: what it asks of the session before it assembles anything,
-/// what it counts against the rate limit, and what it puts on the outbox
-/// (PRIV-RIGHT-003).
+/// and what it counts against the rate limit (PRIV-RIGHT-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ExportServiceTests : IAsyncDisposable
@@ -34,7 +31,6 @@ public sealed class ExportServiceTests : IAsyncDisposable
     private readonly ExportLedgerInMemory _ledger = new();
     private readonly ConsentStoreInMemory _consents = new();
     private readonly StepUpGateInMemory _stepUp = new();
-    private readonly OutboxStoreInMemory _outbox = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -50,7 +46,6 @@ public sealed class ExportServiceTests : IAsyncDisposable
         _ledger,
         _consents,
         _stepUp,
-        _outbox,
         _audit,
         _configuration,
         _work,
@@ -145,29 +140,6 @@ public sealed class ExportServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005b: the host holds the half the library cannot produce, so every
-    /// assembled export tells the subscribers to produce it.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task PRIV_RIGHT_003_EveryAssembledExportTellsTheSubscribersAsync()
-    {
-        _ = Assembled(await Exports.AssembleAsync(
-            AccessContext.Of(Ahmed),
-            Browser,
-            TestContext.Current.CancellationToken));
-
-        Delivery raised = Assert.Single(_outbox.Deliveries);
-
-        Assert.Equal(Ahmed, raised.Subject);
-        Assert.Equal(SubjectEventKind.ExportRequested, raised.Kind);
-        Assert.Equal(Noon, raised.RaisedAt);
-
-        Assert.Equal((Ahmed, Noon), Assert.Single(_ledger.Taken));
-        Assert.Equal(1, _work.Committed);
-    }
-
-    /// <summary>
     /// D-086: the rate limit is what stands between a borrowed session and a complete
     /// copy of a person's data, so the export after the last one allowed is refused.
     /// </summary>
@@ -221,7 +193,6 @@ public sealed class ExportServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Throttled, refused.Code);
         Assert.Single(_ledger.Taken);
-        Assert.Empty(_outbox.Deliveries);
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
         Assert.Equal(1, _work.RolledBack);

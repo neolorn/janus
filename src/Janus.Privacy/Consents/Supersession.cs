@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Privacy.Outbox;
 
 namespace Janus.Privacy.Consents;
 
@@ -15,6 +16,7 @@ namespace Janus.Privacy.Consents;
 /// <param name="consents">Where the records are.</param>
 /// <param name="processing">What the deployment declared, which names the governing document.</param>
 /// <param name="events">Where each ended consent is announced.</param>
+/// <param name="outbox">Where each ended consent is owed to its purpose's handlers (PRIV-CONS-008).</param>
 /// <remarks>
 /// Implements PRIV-CONS-007. Whether a version is material is the answer of the
 /// person publishing it and never a judgement of the code's: a text edit that
@@ -25,7 +27,8 @@ namespace Janus.Privacy.Consents;
 internal sealed class Supersession(
     IConsentStore consents,
     DeclaredProcessing processing,
-    IEvents events)
+    IEvents events,
+    IOutboxStore outbox)
 {
     /// <summary>
     /// Ends every live consent on the purposes the published document governs that
@@ -78,6 +81,12 @@ internal sealed class Supersession(
             }
 
             ended++;
+
+            await outbox
+                .AddAsync(
+                    Delivery.OfConsent(one.Subject, one.Consent.Purpose, ConsentChange.Superseded, at),
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             Result published = await events
                 .PublishAsync(

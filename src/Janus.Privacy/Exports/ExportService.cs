@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Consents;
-using Janus.Privacy.Outbox;
 
 namespace Janus.Privacy.Exports;
 
@@ -22,7 +21,6 @@ namespace Janus.Privacy.Exports;
 /// <param name="ledger">Where the exports already taken are counted.</param>
 /// <param name="consents">Where the consent and objection records are.</param>
 /// <param name="stepUp">The gate the account's own assurance is asked at.</param>
-/// <param name="outbox">Where the hosts are told to assemble their own half.</param>
 /// <param name="audit">Where the export is written down.</param>
 /// <param name="configuration">Where the rate limit is read.</param>
 /// <param name="work">The one transaction the export is counted in.</param>
@@ -38,7 +36,6 @@ internal sealed class ExportService(
     IExportLedger ledger,
     IConsentStore consents,
     IStepUpGate stepUp,
-    IOutboxStore outbox,
     IPrivacyAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -113,14 +110,6 @@ internal sealed class ExportService(
         }
 
         await ledger.RecordAsync(subject, now, cancellationToken).ConfigureAwait(false);
-
-        // PRIV-RIGHT-005b: the host holds the half the library cannot produce, and is
-        // told in the transaction that counted the export against the rate limit.
-        await outbox
-            .AddAsync(
-                Delivery.Of(subject, SubjectEventKind.ExportRequested, now),
-                cancellationToken)
-            .ConfigureAwait(false);
 
         await audit
             .RecordedAsync(Assembled, subject, context.BreakGlassReason, subject, now, Named(export), cancellationToken)

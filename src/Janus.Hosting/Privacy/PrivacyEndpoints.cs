@@ -42,7 +42,7 @@ internal static class PrivacyEndpoints
 
         _ = group.MapGet("/notice", NoticeAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.DocumentNotFound))
-            .Produces<DocumentVersionView>();
+            .Produces<NoticeVersionView>();
         _ = group.MapGet("/documents/{document}", DocumentAsync)
             .Declares(EndpointDeclaration
                 .Answering(
@@ -564,11 +564,18 @@ internal static class PrivacyEndpoints
             contentType: null,
             StatusCodes.Status200OK);
 
-    private static Task<IResult> NoticeAsync(
+    // PRIV-CONS-006a (D-203): the notice alone carries the cookies its version lists.
+    private static async Task<IResult> NoticeAsync(
         ILegalDocuments documents,
         string? version,
-        CancellationToken cancellationToken) =>
-        ReadAsync(documents, Notice, version, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        return Answers.Of(
+            await documents.ReadAsync(Notice, version, cancellationToken).ConfigureAwait(false),
+            Noticed);
+    }
 
     private static Task<IResult> DocumentAsync(
         ILegalDocuments documents,
@@ -594,6 +601,13 @@ internal static class PrivacyEndpoints
         TypedResults.Json(
             DocumentVersionView.Of(version),
             PrivacyJson.Default.DocumentVersionView,
+            contentType: null,
+            StatusCodes.Status200OK);
+
+    private static IResult Noticed(DocumentVersion version) =>
+        TypedResults.Json(
+            NoticeVersionView.Of(version),
+            PrivacyJson.Default.NoticeVersionView,
             contentType: null,
             StatusCodes.Status200OK);
 

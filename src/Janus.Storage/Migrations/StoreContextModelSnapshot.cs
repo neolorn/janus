@@ -3723,6 +3723,45 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("document");
+
+                b.Property<string>("Version")
+                    .HasColumnType("text")
+                    .HasColumnName("version");
+
+                b.Property<string>("Cookie")
+                    .HasColumnType("text")
+                    .HasColumnName("cookie");
+
+                b.Property<TimeSpan?>("Lifetime")
+                    .HasColumnType("interval")
+                    .HasColumnName("lifetime");
+
+                b.Property<string>("Purpose")
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
+
+                b.Property<bool>("ThirdParty")
+                    .HasColumnType("boolean")
+                    .HasColumnName("third_party");
+
+                b.HasKey("Name", "Version", "Cookie")
+                    .HasName("pk_legal_document_cookies");
+
+                b.ToTable("legal_document_cookies", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_legal_document_cookies_cookie", "length(trim(cookie)) > 0");
+
+                        t.HasCheckConstraint("ck_legal_document_cookies_lifetime", "lifetime IS NULL OR lifetime > interval '0'");
+
+                        t.HasCheckConstraint("ck_legal_document_cookies_purpose", "purpose IS NULL OR length(trim(purpose)) > 0");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentTranslationRecord", b =>
             {
                 b.Property<string>("Name")
@@ -3892,6 +3931,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
 
+                b.Property<string>("Change")
+                    .HasColumnType("text")
+                    .HasColumnName("change");
+
                 b.Property<DateTimeOffset?>("ClaimedUntil")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("claimed_until");
@@ -3904,6 +3947,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("NextAttemptAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("next_attempt_at");
+
+                b.Property<string>("Purpose")
+                    .HasColumnType("text")
+                    .HasColumnName("purpose");
 
                 b.Property<DateTimeOffset>("RaisedAt")
                     .HasColumnType("timestamp with time zone")
@@ -3941,7 +3988,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
+                        t.HasCheckConstraint("ck_outbox_change", "change IN ('granted', 'lifted', 'recorded', 'set', 'superseded', 'withdrawn')");
+
+                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('consent-changed', 'erasure-requested', 'objection-changed', 'restriction-changed', 'takedown-executed')");
+
+                        t.HasCheckConstraint("ck_outbox_purpose", "(kind IN ('consent-changed', 'objection-changed') AND purpose IS NOT NULL AND length(trim(purpose)) > 0 AND change IS NOT NULL) OR (kind NOT IN ('consent-changed', 'objection-changed') AND purpose IS NULL AND change IS NULL)");
 
                         t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
@@ -4665,6 +4716,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_objections_subject");
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentCookieRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Privacy.Documents.DocumentVersionRecord", null)
+                    .WithMany("Cookies")
+                    .HasForeignKey("Name", "Version")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_legal_document_cookies_version");
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentTranslationRecord", b =>
             {
                 b.HasOne("Janus.Storage.Privacy.Documents.DocumentVersionRecord", null)
@@ -4727,6 +4788,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentVersionRecord", b =>
             {
+                b.Navigation("Cookies");
+
                 b.Navigation("Translations");
             });
 

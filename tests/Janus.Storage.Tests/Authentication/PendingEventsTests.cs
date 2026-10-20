@@ -341,7 +341,6 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             Noon.AddDays(7)),
         new DeviceVerified(Noon, "device", new DeviceId(Guid.CreateVersion7(Noon))) { Subject = Subject },
         new ErasureRequested(Noon, "erasure", ErasureReason.MinorTakedown) { Subject = Subject },
-        new ExportRequested(Noon, "export") { Subject = Subject },
         new IdentifierAdded(Noon, "identifier-added", new IdentifierId(Guid.CreateVersion7(Noon)), IdentifierKind.Phone),
         new IdentifierPrimaryChanged(
             Noon,

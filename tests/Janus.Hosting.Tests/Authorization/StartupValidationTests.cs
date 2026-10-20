@@ -318,6 +318,218 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// PRIV-CONS-006a AC3, D-203: a declared cookie serving a purpose not declared or not
+    /// resting on consent, named as a cookie the library sets, under a name that is no
+    /// cookie name, or declared twice stops the deployment as it starts, naming the
+    /// cookie and its member at fault.
+    /// </summary>
+    /// <param name="name">The name the cookie is declared under.</param>
+    /// <param name="purpose">The purpose it is declared to serve, or nothing.</param>
+    /// <param name="twice">Whether it is declared twice.</param>
+    /// <param name="field">The member the refusal names.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("host-theme", "running the host", false, "purpose")]
+    [InlineData("host-theme", "advertising", false, "purpose")]
+    [InlineData("__Host-identity-session", null, false, "name")]
+    [InlineData("__Host-identity-device", null, false, "name")]
+    [InlineData("host theme", null, false, "name")]
+    [InlineData("host;theme", null, false, "name")]
+    [InlineData("", null, false, "name")]
+    [InlineData("host-theme", null, true, "name")]
+    public async Task PRIV_CONS_006a_AC3_ACookieDeclaredOutsideItsRuleIsRefusedAsync(
+        string name,
+        string? purpose,
+        bool twice,
+        string field)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        AuthorizationDeclarationBuilder cookies = new AuthorizationDeclarationBuilder()
+            .Cookie(name, TimeSpan.FromDays(30), thirdPartyReadable: false, purpose);
+
+        if (twice)
+        {
+            _ = cookies.Cookie(name, lifetime: null, thirdPartyReadable: false, purpose: null);
+        }
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(services, cookies: cookies.Build().Cookies))
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("cookie." + name, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(field, refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a, D-203: a strictly necessary cookie naming no purpose, one that ends
+    /// with the browser's session, and one serving a purpose that rests on consent start.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_CookiesDeclaredWithinTheirRuleStartAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IReadOnlyList<CookieDeclaration> cookies = new AuthorizationDeclarationBuilder()
+            .Cookie("host-cart", TimeSpan.FromDays(7), thirdPartyReadable: false, purpose: null)
+            .Cookie("host-tab", lifetime: null, thirdPartyReadable: false, purpose: null)
+            .Cookie("host-picks", TimeSpan.FromDays(90), thirdPartyReadable: true, "recommendations")
+            .Build()
+            .Cookies;
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services => Declared(services, cookies: cookies))
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC4 (D-203): a start whose cookies are those the current notice
+    /// version lists raises nothing under <c>notice.cookies</c>, and a start whose host
+    /// declares a cookie the version does not list raises <c>degradation</c> under it,
+    /// naming the cookie as added.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC4_AStartWhoseCookiesTheNoticeDoesNotListRaisesADegradationAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IReadOnlyList<CookieDeclaration> cookies = new AuthorizationDeclarationBuilder()
+            .Cookie("host-tab", lifetime: null, thirdPartyReadable: false, purpose: null)
+            .Build()
+            .Cookies;
+
+        await NoticedAsync(cancellationToken);
+
+        try
+        {
+            using (IHost listed = new HostBuilder()
+                .ConfigureServices(services => Declared(services))
+                .Build())
+            {
+                await listed.StartAsync(cancellationToken);
+                await listed.StopAsync(cancellationToken);
+            }
+
+            IReadOnlyList<(string?, string?, string?, string?)> quiet = await StaleAsync();
+
+            using (IHost declaring = new HostBuilder()
+                .ConfigureServices(services => Declared(services, cookies: cookies))
+                .Build())
+            {
+                await declaring.StartAsync(cancellationToken);
+                await declaring.StopAsync(cancellationToken);
+            }
+
+            Assert.Empty(quiet);
+            Assert.Equal([("degradation", "[\"host-tab\"]", "[]", "[]")], await StaleAsync());
+        }
+        finally
+        {
+            await WriteAsync(
+                "DELETE FROM identity.legal_document_versions WHERE document = 'privacy-notice';",
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3, D-203: a purpose handler's name fills the <c>outstanding</c>
+    /// place as a subscriber's does, so one registered under a name outside the rule
+    /// stops the deployment as it starts, naming it and its member; one inside the rule
+    /// starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AC3_APurposeHandlerNamedOutsideTheRuleIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IPurposeHandler>(new HandlerNamed("Host Purposes"));
+                Declared(services);
+            })
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("Host Purposes", refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IPurposeHandler>(new HandlerNamed("host.purposes_2"));
+                Declared(services);
+            })
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC7, D-203: a purpose handler's confirmation is recorded under its
+    /// name as a subscriber's is, so one registered under a subscriber's name stops the
+    /// deployment as it starts, naming it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC7_APurposeHandlerUnderASubscribersNameIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<IPurposeHandler>(new HandlerNamed("host"));
+                Declared(services);
+            })
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupSubscriberName, refused.Failure?.Code);
+        Assert.Equal("host", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3, D-203: the deployment declares its recommendations on
+    /// consent and registers no purpose handler naming them, so it does not start, and
+    /// the failure names the purpose.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AC3_AConsentBasedPurposeWithoutAHandlerStopsStartupAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+                Declared(services, handlers: false);
+            })
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("recommendations", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
     /// INT-SMS-003 AC3: a governing document's name fills the <c>document</c> place, so
     /// a purpose that names one outside the rule stops the deployment as it starts,
     /// naming the purpose and its member; one inside the rule starts.
@@ -1758,7 +1970,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         LandingOrigins? landing = null,
         bool landed = true,
         string source = "whole",
-        bool materialised = false)
+        bool materialised = false,
+        IReadOnlyList<CookieDeclaration>? cookies = null)
     {
         Sourced(services, connection ?? host.ConnectionString, source);
 
@@ -1800,6 +2013,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (handlers)
         {
             services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+            services.AddSingleton<IPurposeHandler>(new HostPurposes());
         }
 
         if (contributors)
@@ -1844,7 +2058,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         return services.AddJanus(
             connection ?? host.ConnectionString,
-            HostFixture.Declaration(materialised, document),
+            HostFixture.Declaration(materialised, document) with { Cookies = cookies ?? [] },
             ApplicationKind.Public);
     }
 
@@ -1973,6 +2187,53 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 new { key = subject + ":recommendations:Superseded@%" }));
     }
 
+    // A version of the privacy notice listing the library's five cookies at the
+    // lifetimes the defaults give, as a deployment that changed none publishes it
+    // (PRIV-CONS-006a).
+    private async Task NoticedAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.legal_document_versions
+                (document, version, governing_language, governing_text, published_at)
+            VALUES ('privacy-notice', '1', 'en', 'The notice', @at);
+            INSERT INTO identity.legal_document_cookies
+                (document, version, cookie, purpose, lifetime, third_party)
+            VALUES
+                ('privacy-notice', '1', '__Host-identity-browser', NULL, @browser, FALSE),
+                ('privacy-notice', '1', '__Host-identity-csrf', NULL, @session, FALSE),
+                ('privacy-notice', '1', '__Host-identity-device', NULL, @device, FALSE),
+                ('privacy-notice', '1', '__Host-identity-preauth', NULL, NULL, FALSE),
+                ('privacy-notice', '1', '__Host-identity-session', NULL, @session, FALSE);
+            """,
+            new
+            {
+                at = Deployment.Noon,
+                browser = Settings.DeviceVerificationLifetime.Default,
+                session = Settings.SessionDefaultAbsolute.Default,
+                device = Settings.FactorTrustedDeviceLifetime.Default,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    // The degradations raised under notice.cookies, each with the cookies its details
+    // name as added, removed and changed, as the rows of the events table.
+    private async Task<IReadOnlyList<(string?, string?, string?, string?)>> StaleAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<(string?, string?, string?, string?)>(
+            """
+            SELECT payload->>'Condition', payload->'Details'->>'added',
+                   payload->'Details'->>'removed', payload->'Details'->>'changed'
+            FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->>'Scope' = 'notice.cookies'
+            ORDER BY id
+            """)];
+    }
+
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
@@ -1992,6 +2253,21 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         public IReadOnlyCollection<ResourceType> Covers { get; } = [];
 
         public ValueTask<Result> HandleAsync(SubjectEvent raised, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
+    }
+
+    // A purpose handler of the host's own under the name given, naming its
+    // recommendations.
+    private sealed class HandlerNamed(string name) : IPurposeHandler
+    {
+        public string Name => name;
+
+        public IReadOnlyCollection<string> Purposes { get; } = ["recommendations"];
+
+        public ValueTask<Result> ConsentChangedAsync(ConsentChanged changed, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
+
+        public ValueTask<Result> ObjectionChangedAsync(ObjectionChanged changed, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Result.Success());
     }
 

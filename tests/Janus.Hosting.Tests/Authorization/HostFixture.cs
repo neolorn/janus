@@ -180,6 +180,10 @@ public sealed class HostFixture : IAsyncLifetime
         // PRIV-RIGHT-003: and what carries what it holds about a person into their export.
         services.AddSingleton<IExportContributor>(new HostExportContributor());
 
+        // PRIV-RIGHT-001a: and its recommendations rest on consent, so it registers what
+        // does the host-side work of a consent change for them.
+        services.AddSingleton<IPurposeHandler>(new HostPurposes());
+
         _services = Started(services.BuildServiceProvider());
     }
 

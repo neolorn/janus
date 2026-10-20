@@ -42,7 +42,6 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
         EventJson.Default.CredentialSuspended,
         EventJson.Default.DeviceVerified,
         EventJson.Default.ErasureRequested,
-        EventJson.Default.ExportRequested,
         EventJson.Default.IdentifierAdded,
         EventJson.Default.IdentifierPrimaryChanged,
         EventJson.Default.IdentifierRemoved,

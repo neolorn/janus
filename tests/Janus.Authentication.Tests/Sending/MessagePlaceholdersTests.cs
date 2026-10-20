@@ -19,7 +19,7 @@ namespace Janus.Authentication.Tests.Sending;
 [Trait("kind", "unit")]
 public sealed class MessagePlaceholdersTests
 {
-    private static readonly MessagePlaceholders Places = new([], [], Landing.Origins);
+    private static readonly MessagePlaceholders Places = new([], [], [], Landing.Origins);
 
     /// <summary>
     /// INT-SMS-003 AC1: a place is filled to exactly the width it is defined at, and
@@ -76,7 +76,7 @@ public sealed class MessagePlaceholdersTests
     public void INT_SMS_003_TheLinkIsMeasuredAtItsComposedWidth()
     {
         var landing = new LandingOrigins("https://a.example.test", "https://a-much-longer-origin.example.test");
-        int width = new MessagePlaceholders([], [], landing).Widths["link"];
+        int width = new MessagePlaceholders([], [], [], landing).Widths["link"];
 
         Assert.Equal(
             landing.Account.Length + "/link#".Length + "identifier-confirm".Length + ".".Length + OpaqueToken.Width,
@@ -95,7 +95,7 @@ public sealed class MessagePlaceholdersTests
         string organization = Guid.Empty.ToString("D", CultureInfo.InvariantCulture);
         string category = new('c', 80);
         int undeclared = Places.Widths["key"];
-        int declared = new MessagePlaceholders([], ["identity", category], Landing.Origins).Widths["key"];
+        int declared = new MessagePlaceholders([], [], ["identity", category], Landing.Origins).Widths["key"];
 
         Assert.All(Settings.All, setting => Assert.True(setting.Key.ToString().Length <= undeclared));
         Assert.All(
@@ -134,5 +134,25 @@ public sealed class MessagePlaceholdersTests
     {
         Assert.Equal("rectification".Length, Places.Widths["type"]);
         Assert.Equal("deemed-refused-by-lapse".Length, Places.Widths["status"]);
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3: <c>outstanding</c> is measured at the joined width of the
+    /// registered required subscribers' names or of the registered purpose handlers'
+    /// names, whichever is wider, since a consent or an objection change waits for the
+    /// handlers as an erasure waits for the subscribers.
+    /// </summary>
+    [Fact]
+    public void INT_SMS_003_AC3_OutstandingIsTheWiderOfTheSubscribersAndTheHandlers()
+    {
+        string[] subscribers = ["host", "warehouse"];
+        string[] handlers = ["marketing-mail", "recommendations"];
+
+        Assert.Equal(
+            "[\"marketing-mail\",\"recommendations\"]".Length,
+            new MessagePlaceholders(subscribers, handlers, [], Landing.Origins).Widths["outstanding"]);
+        Assert.Equal(
+            "[\"host\",\"warehouse\"]".Length,
+            new MessagePlaceholders(subscribers, ["ads"], [], Landing.Origins).Widths["outstanding"]);
     }
 }

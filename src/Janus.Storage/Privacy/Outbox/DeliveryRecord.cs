@@ -46,6 +46,18 @@ internal sealed class DeliveryRecord
     public ErasureReason Reason { get; set; }
 
     /// <summary>
+    /// The <c>purpose</c> column, held where the fact is a consent or an objection
+    /// change.
+    /// </summary>
+    public string? Purpose { get; set; }
+
+    /// <summary>
+    /// The <c>change</c> column, held where the fact is a consent or an objection
+    /// change.
+    /// </summary>
+    public DeliveryChange? Change { get; set; }
+
+    /// <summary>
     /// The <c>status</c> column: how far the subscribers have got.
     /// </summary>
     public ErasureStatus Status { get; set; }

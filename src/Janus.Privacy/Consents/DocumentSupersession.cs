@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Privacy.Outbox;
 
 namespace Janus.Privacy.Consents;
 
@@ -14,6 +15,7 @@ namespace Janus.Privacy.Consents;
 /// <param name="consents">Where the records are.</param>
 /// <param name="processing">What the deployment declared, which names the governing document.</param>
 /// <param name="events">Where each ended consent is announced.</param>
+/// <param name="outbox">Where each ended consent is owed to its purpose's handlers (PRIV-CONS-008).</param>
 /// <param name="work">The one transaction the stamp and the announcements run in.</param>
 /// <param name="time">The clock the stamp is read from.</param>
 /// <remarks>
@@ -28,6 +30,7 @@ internal sealed class DocumentSupersession(
     IConsentStore consents,
     DeclaredProcessing processing,
     IEvents events,
+    IOutboxStore outbox,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -71,6 +74,10 @@ internal sealed class DocumentSupersession(
 
         foreach (EndedConsent one in ended)
         {
+            await outbox
+                .AddAsync(Delivery.OfConsent(one.Subject, one.Purpose, ConsentChange.Superseded, at), cancellationToken)
+                .ConfigureAwait(false);
+
             Result published = await events
                 .PublishAsync(
                     new ConsentChanged(

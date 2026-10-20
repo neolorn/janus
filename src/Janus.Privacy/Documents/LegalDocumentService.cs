@@ -22,12 +22,15 @@ namespace Janus.Privacy.Documents;
 /// <param name="configuration">Where the default governing language is read.</param>
 /// <param name="audit">Where a publication is written down.</param>
 /// <param name="alerts">Where a refused publication is raised.</param>
+/// <param name="cookies">The cookies the deployment sets, which a version of the privacy notice keeps.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, PRIV-CONS-005 and PRIV-CONS-006. The version follows the
-/// governing text: a translation attaches to a published version and corrects it
-/// without making another, because what was shown as authoritative did not change.
+/// Implements LIB-API-005, PRIV-CONS-005, PRIV-CONS-006 and PRIV-CONS-006a. The version
+/// follows the governing text: a translation attaches to a published version and
+/// corrects it without making another, because what was shown as authoritative did not
+/// change. A version of the privacy notice keeps the cookies the deployment set when it
+/// was published, so a reader of an old version sees what it listed (D-203).
 /// </remarks>
 internal sealed class LegalDocumentService(
     ILegalDocumentStore store,
@@ -36,6 +39,7 @@ internal sealed class LegalDocumentService(
     IConfigurationStore configuration,
     IPrivacyAudit audit,
     IPrivacyAlerts alerts,
+    IDeploymentCookies cookies,
     IUnitOfWork work,
     TimeProvider time) : ILegalDocuments
 {
@@ -218,6 +222,15 @@ internal sealed class LegalDocumentService(
     {
         string named = publication.DocumentName.ToString();
 
+        Result<IReadOnlyList<NoticeCookie>> kept = named == ConsentService.Notice
+            ? await cookies.ReadAsync(cancellationToken).ConfigureAwait(false)
+            : Result.Success<IReadOnlyList<NoticeCookie>>([]);
+
+        if (kept.Match(_ => (Error?)null, error => error) is Error unread)
+        {
+            return Result.Failure<DocumentVersion>(unread);
+        }
+
         int published = await store
             .CountAsync(named, cancellationToken)
             .ConfigureAwait(false);
@@ -228,7 +241,10 @@ internal sealed class LegalDocumentService(
             governing,
             publication.Text,
             [.. publication.Translations],
-            time.GetUtcNow());
+            time.GetUtcNow())
+        {
+            Cookies = kept.Match(set => set, _ => []),
+        };
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)

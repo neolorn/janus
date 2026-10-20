@@ -153,23 +153,19 @@ public sealed class ExportEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005b: the host holds the half the library cannot produce, so an
-    /// assembled export puts the fact on the outbox for the subscribers.
+    /// PRIV-RIGHT-005b, chapter 10 section 5b: <c>ExportRequested</c> is retired, so an
+    /// assembled export is counted and owes the subscribers nothing after it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_RIGHT_003_AnAssembledExportReachesTheSubscribersAsync()
+    public async Task PRIV_RIGHT_005b_AnAssembledExportOwesTheSubscribersNothingAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
         _ = await browser.SendAsync("GET", "/privacy/export?format=machine");
 
-        Delivery raised = Assert.Single(
-            _deployment.Outbox.Deliveries,
-            delivery => delivery.Kind is SubjectEventKind.ExportRequested);
-
-        Assert.Equal(Subject(), raised.Subject);
         Assert.Equal(Subject(), Assert.Single(_deployment.ExportLedger.Taken).Subject);
+        Assert.DoesNotContain(_deployment.Outbox.Deliveries, delivery => delivery.Subject == Subject());
     }
 
     /// <summary>

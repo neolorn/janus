@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -6,6 +7,7 @@ using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Documents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -847,6 +849,56 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
 
         Assert.Equal(inactivity, await InForceAsync(Settings.SessionAal2Inactivity));
         Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC4, chapter 10 section 5.23 (D-203): a change of
+    /// <c>factor.trusteddevice.lifetime</c> the current notice does not list raises
+    /// <c>degradation</c> under <c>notice.cookies</c> naming the trusted-device cookie
+    /// as changed, and a change of a key that gives no cookie's lifetime raises nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_006a_AC4_ATrustedDeviceLifetimeTheNoticeDoesNotListRaisesADegradationAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        await using (AsyncServiceScope scope = _deployment.Scope())
+        {
+            IReadOnlyList<NoticeCookie> set = (await scope.ServiceProvider
+                    .GetRequiredService<IDeploymentCookies>()
+                    .ReadAsync(TestContext.Current.CancellationToken))
+                .Match(cookies => cookies, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+            _deployment.Documents.Hold(
+                new DocumentVersion("privacy-notice", "1", "en", "The notice", [], _deployment.Clock.GetUtcNow())
+                {
+                    Cookies = set,
+                });
+        }
+
+        Answer unrelated = await TightenedAsync(administrator);
+        Answer trusted = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/factor.trusteddevice.lifetime",
+            ("value", "P14D"),
+            ("reason", "a shorter trust"));
+
+        Assert.Equal(StatusCodes.Status204NoContent, unrelated.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, trusted.Status);
+
+        AlertRaised raised = Assert.Single(
+            _deployment.Events.Of<AlertRaised>(),
+            alert => alert.Scope == "notice.cookies");
+
+        Assert.Equal(AlertCondition.Degradation, raised.Condition);
+        Assert.Empty(raised.Details["added"].EnumerateArray());
+        Assert.Empty(raised.Details["removed"].EnumerateArray());
+        Assert.Equal(
+            ["__Host-identity-device"],
+            raised.Details["changed"].EnumerateArray().Select(name => name.GetString()));
     }
 
     private static Task<Answer> RetainedAsync(Browser browser, string period, string category = "statement") =>

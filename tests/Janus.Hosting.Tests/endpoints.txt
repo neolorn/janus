@@ -697,8 +697,11 @@ GET /admin/erasures
   200
     application/json
       [].id: Guid
+      [].kind: DeliveryKind
       [].subject: Guid
-      [].reason: ErasureReason
+      [].purpose: string
+      [].change: DeliveryChange?
+      [].reason: ErasureReason?
       [].status: ErasureStatus
       [].attempts: number
       [].subscribers[].name: string
@@ -710,8 +713,11 @@ GET /admin/erasures/{id}
   200
     application/json
       id: Guid
+      kind: DeliveryKind
       subject: Guid
-      reason: ErasureReason
+      purpose: string
+      change: DeliveryChange?
+      reason: ErasureReason?
       status: ErasureStatus
       attempts: number
       subscribers[].name: string
@@ -1508,6 +1514,10 @@ GET /privacy/notice
       text: string
       translations[].language: string
       translations[].text: string
+      cookies[].name: string
+      cookies[].purpose: string
+      cookies[].lifetime: string
+      cookies[].thirdParty: boolean
   403 auth.session.csrfinvalid
   404 privacy.document.notfound
 GET /privacy/objections

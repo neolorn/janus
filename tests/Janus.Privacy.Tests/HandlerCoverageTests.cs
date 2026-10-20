@@ -10,8 +10,9 @@ namespace Janus.Privacy.Tests;
 /// <summary>
 /// What a deployment has to have registered before it starts: a subject-event
 /// subscriber for every sensitive type, an export contributor for every type holding
-/// personal data, and a handler for every objectable purpose (PRIV-RIGHT-005b,
-/// PRIV-RIGHT-003, PRIV-RIGHT-001a, LIB-HOST-001).
+/// personal data, a purpose handler for every purpose resting on consent or on an
+/// objectable basis, and a name of its own for each (PRIV-RIGHT-005b, PRIV-RIGHT-003,
+/// PRIV-RIGHT-001a, IDN-LIFE-003a, LIB-HOST-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class HandlerCoverageTests
@@ -26,7 +27,7 @@ public sealed class HandlerCoverageTests
     [Fact]
     public void PRIV_RIGHT_005b_AC3_ASensitiveTypeWithNoRegisteredHandlerFailsStartup()
     {
-        Result outcome = Coverage([], [new PurposeHandlerInMemory("security")]).Validate();
+        Result outcome = Coverage([], [Handling()]).Validate();
 
         Assert.Equal(
             ErrorCodes.StartupDeclarationMissing,
@@ -45,16 +46,14 @@ public sealed class HandlerCoverageTests
     [Fact]
     public void PRIV_RIGHT_005b_AC3_ASensitiveTypeASubscriberCoversStarts()
     {
-        Result outcome = Coverage(
-            [Covering(Statement)],
-            [new PurposeHandlerInMemory("security")]).Validate();
+        Result outcome = Coverage([Covering(Statement)], [Handling()]).Validate();
 
         Assert.True(outcome.Match(() => true, _ => false));
     }
 
     /// <summary>
     /// PRIV-RIGHT-005b AC3: sensitivity is what the requirement turns on, so a type
-    /// declared without a category needs no handler and holds no deployment up.
+    /// declared without a category needs no subscriber and holds no deployment up.
     /// </summary>
     [Fact]
     public void PRIV_RIGHT_005b_AC3_ATypeThatIsNotSensitiveNeedsNoHandler()
@@ -68,7 +67,8 @@ public sealed class HandlerCoverageTests
                 .Purpose("marketing", "agreement", data: ["identity"], subjects: ["customers"]))
             .Build();
 
-        Result outcome = new HandlerCoverage(ordinary, [], [], []).Validate();
+        Result outcome = new HandlerCoverage(ordinary, [], [new PurposeHandlerInMemory("mailing", "marketing")], [])
+            .Validate();
 
         Assert.True(outcome.Match(() => true, _ => false));
     }
@@ -81,9 +81,7 @@ public sealed class HandlerCoverageTests
     [Fact]
     public void IDN_LIFE_003a_AC6_AMissingHandlerFailsStartup()
     {
-        Result outcome = Coverage(
-            [Covering(ResourceType.Parse("mailing"))],
-            [new PurposeHandlerInMemory("security")]).Validate();
+        Result outcome = Coverage([Covering(ResourceType.Parse("mailing"))], [Handling()]).Validate();
 
         Assert.False(outcome.Match(() => true, _ => false));
     }
@@ -96,7 +94,9 @@ public sealed class HandlerCoverageTests
     [Fact]
     public void PRIV_RIGHT_001a_AC3_AnObjectablePurposeWithNoRegisteredHandlerFailsStartup()
     {
-        Result outcome = Coverage([Covering(Statement)], []).Validate();
+        Result outcome = Coverage(
+            [Covering(Statement)],
+            [new PurposeHandlerInMemory("consents", "marketing", "newsletter", "recommendations")]).Validate();
 
         Assert.Equal(
             ErrorCodes.StartupDeclarationMissing,
@@ -109,6 +109,46 @@ public sealed class HandlerCoverageTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-001a AC3, PRIV-CONS-008 (D-203): a purpose resting on consent is
+    /// asked a handler of as an objectable one is, since a withdrawal erases what the
+    /// host held solely for it, so a deployment registering none for it does not start,
+    /// and the failure names the purpose.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_001a_AC3_AConsentBasedPurposeWithNoRegisteredHandlerFailsStartup()
+    {
+        Result outcome = Coverage(
+            [Covering(Statement)],
+            [new PurposeHandlerInMemory("objections", "security", "marketing", "recommendations")]).Validate();
+
+        Assert.Equal(
+            ErrorCodes.StartupDeclarationMissing,
+            outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
+        Assert.Equal(
+            "newsletter",
+            outcome.Match(
+                () => null,
+                failure => failure.Details["handler"].GetString()));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3: every purpose that needs a handler may be named by a handler
+    /// of its own, and a deployment whose handlers together name each starts.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_001a_AC3_HandlersTogetherNamingEveryPurposeStart()
+    {
+        Result outcome = Coverage(
+            [Covering(Statement)],
+            [
+                new PurposeHandlerInMemory("objections", "security"),
+                new PurposeHandlerInMemory("consents", "marketing", "newsletter", "recommendations"),
+            ]).Validate();
+
+        Assert.True(outcome.Match(() => true, _ => false));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC7, DR-016 AC2: a subscriber registered under the name the erasure
     /// ledger's confirmation is recorded under would take the ledger's line for its own
     /// work, so the deployment does not start, and the failure names it.
@@ -118,7 +158,7 @@ public sealed class HandlerCoverageTests
     {
         Result outcome = Coverage(
             [Covering(Statement), new SubscriberInMemory("erasure-ledger", required: true)],
-            [new PurposeHandlerInMemory("security")]).Validate();
+            [Handling()]).Validate();
 
         Assert.Equal(
             ErrorCodes.StartupSubscriberName,
@@ -140,7 +180,7 @@ public sealed class HandlerCoverageTests
     {
         Result outcome = Coverage(
             [Covering(Statement), new SubscriberInMemory("host", required: false)],
-            [new PurposeHandlerInMemory("security")]).Validate();
+            [Handling()]).Validate();
 
         Assert.Equal(
             ErrorCodes.StartupSubscriberName,
@@ -153,17 +193,42 @@ public sealed class HandlerCoverageTests
     }
 
     /// <summary>
-    /// PRIV-RIGHT-001a AC3: a purpose on a basis that is not objectable is asked no
-    /// handler of, so registering the objectable one is enough.
+    /// IDN-LIFE-003a AC7 (D-203): a purpose handler's confirmation is recorded under its
+    /// name as a subscriber's is, so a handler under a subscriber's name, under another
+    /// handler's or under the erasure ledger's fails startup, naming it.
     /// </summary>
-    [Fact]
-    public void PRIV_RIGHT_001a_AC3_APurposeOnANonObjectableBasisNeedsNoHandler()
+    /// <param name="taken">The name the second registration takes.</param>
+    [Theory]
+    [InlineData("host")]
+    [InlineData("purposes")]
+    [InlineData("erasure-ledger")]
+    public void IDN_LIFE_003a_AC7_APurposeHandlerUnderATakenNameFailsStartup(string taken)
     {
         Result outcome = Coverage(
             [Covering(Statement)],
-            [new PurposeHandlerInMemory("security")]).Validate();
+            [Handling(), new PurposeHandlerInMemory(taken, "security")]).Validate();
+
+        Assert.Equal(
+            ErrorCodes.StartupSubscriberName,
+            outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
+        Assert.Equal(
+            taken,
+            outcome.Match(
+                () => null,
+                failure => failure.Details["handler"].GetString()));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC3: a purpose resting neither on consent nor on an objectable
+    /// basis is asked no handler of, so naming the others is enough.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_001a_AC3_APurposeOnAnotherBasisNeedsNoHandler()
+    {
+        Result outcome = Coverage([Covering(Statement)], [Handling()]).Validate();
 
         Assert.True(outcome.Match(() => true, _ => false));
+        Assert.DoesNotContain("performance", Handling().Purposes);
     }
 
     /// <summary>
@@ -227,6 +292,11 @@ public sealed class HandlerCoverageTests
 
     private static SubscriberInMemory Covering(ResourceType type) =>
         new("host", required: true) { Covers = [type] };
+
+    // One handler naming every purpose of the declaration that rests on consent or on
+    // an objectable basis.
+    private static PurposeHandlerInMemory Handling() =>
+        new("purposes", "marketing", "newsletter", "recommendations", "security");
 
     private static HandlerCoverage Coverage(
         IEnumerable<ISubjectEventSubscriber> subscribers,

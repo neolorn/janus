@@ -10,14 +10,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Privacy.Documents;
 
 /// <summary>
-/// The published versions, over the <c>legal_document_versions</c> and
-/// <c>legal_document_translations</c> tables.
+/// The published versions, over the <c>legal_document_versions</c>,
+/// <c>legal_document_translations</c> and <c>legal_document_cookies</c> tables.
 /// </summary>
 /// <param name="context">The context the operation's reads and writes run on.</param>
 /// <remarks>
-/// Implements PRIV-CONS-005, PRIV-CONS-006 and CONV-DESIGN-003. Every read carries
-/// the translations with the governing text, because a screen that shows one has to
-/// be able to show the other without asking again.
+/// Implements PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-006a and CONV-DESIGN-003. Every
+/// read carries the translations with the governing text, because a screen that shows
+/// one has to be able to show the other without asking again, and the cookies the
+/// version lists with both.
 /// </remarks>
 internal sealed class LegalDocumentStore(StoreContext context) : ILegalDocumentStore
 {
@@ -81,6 +82,19 @@ internal sealed class LegalDocumentStore(StoreContext context) : ILegalDocumentS
             });
         }
 
+        foreach (NoticeCookie cookie in version.Cookies)
+        {
+            record.Cookies.Add(new DocumentCookieRecord
+            {
+                Name = version.DocumentName,
+                Version = version.Version,
+                Cookie = cookie.Name,
+                Purpose = cookie.Purpose,
+                Lifetime = cookie.Lifetime,
+                ThirdParty = cookie.ThirdParty,
+            });
+        }
+
         context.LegalDocumentVersions.Add(record);
 
         return ValueTask.CompletedTask;
@@ -140,8 +154,23 @@ internal sealed class LegalDocumentStore(StoreContext context) : ILegalDocumentS
                         translation.Language,
                         translation.TranslatedText)),
             ],
-            record.PublishedAt);
+            record.PublishedAt)
+        {
+            Cookies =
+            [
+                .. record.Cookies
+                    .OrderBy(cookie => cookie.Cookie, StringComparer.Ordinal)
+                    .Select(cookie => new NoticeCookie(
+                        cookie.Cookie,
+                        cookie.Purpose,
+                        cookie.Lifetime,
+                        cookie.ThirdParty)),
+            ],
+        };
 
     private IQueryable<DocumentVersionRecord> Reading() =>
-        context.LegalDocumentVersions.Include(version => version.Translations);
+        context.LegalDocumentVersions
+            .Include(version => version.Translations)
+            .Include(version => version.Cookies)
+            .AsSingleQuery();
 }

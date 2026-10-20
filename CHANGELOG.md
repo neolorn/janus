@@ -10,6 +10,36 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Where the cookies the deployment sets differ from those the current privacy notice
+  lists, by name, purpose, lifetime or readability by a third party, `degradation` is
+  raised under `notice.cookies` at each start and with each change of a key that gives
+  a library cookie's lifetime, its details naming the cookies `added`, `removed` and
+  `changed`; nothing is raised before a first version of the notice is published.
+- A published version of the privacy notice keeps the cookies the deployment then sets:
+  the library's five, at the lifetimes its configuration gives, and every one the host
+  declares. `GET /privacy/notice` answers the version's own list in `cookies`, each
+  with `name`, `purpose`, `lifetime` and `thirdParty`; `DocumentVersion.Cookies` carries
+  the same.
+- `AuthorizationDeclarationBuilder.Cookie(name, lifetime, thirdPartyReadable, purpose)`
+  declares each cookie the host sets. A cookie serving a purpose that is not declared or
+  does not rest on consent, one named as a cookie the library sets, one whose name is no
+  cookie name, and one declared twice stop startup with
+  `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>`.
+- `GET /admin/erasures` lists every incomplete delivery of host-side work, an erasure's,
+  a takedown's, a restriction's, a consent's and an objection's, each with its `kind`,
+  `purpose` and `change`; `GET /admin/erasures/{id}` reads any of them, and
+  `POST /admin/erasures/{id}/complete` closes any that failed. `IErasures` and
+  `ErasureProgress` carry the same, through the new `DeliveryKind` and `DeliveryChange`.
+- `IPurposeHandler` gains `Name`, `ConsentChangedAsync` and `ObjectionChangedAsync`. Each
+  consent and objection change is delivered through the outbox to every handler naming
+  its purpose, confirmed by the handler's success, retried under `outbox.retry.*` and
+  failed with `erasure-delivery-exhausted` once its attempts are spent; a plain event
+  consumer still receives both events. A handler's name follows the message-place rule
+  and is distinct among the handlers and the subject-event subscribers, and a
+  deployment declaring a purpose on consent that no handler names no longer starts, as
+  one declaring an objectable purpose already did.
+- `ExportRequested` is retired: an assembled export writes no delivery and owes the
+  subject-event subscribers nothing after it.
 - Under a policy requiring `aal1` the session cookie and the token cookie beside it last
   until the session's absolute expiry, so a person stays signed in across a browser's
   restart; under `aal2` they end with the browser's session, as the pre-authentication

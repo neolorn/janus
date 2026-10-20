@@ -39,6 +39,8 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
                     RaisedAt = delivery.RaisedAt,
                     Restricted = delivery.Restricted,
                     Reason = delivery.Reason,
+                    Purpose = delivery.Purpose,
+                    Change = delivery.Change,
                     Status = delivery.Status,
                     Attempts = delivery.Attempts,
                     NextAttemptAt = delivery.NextAttemptAt,
@@ -321,14 +323,12 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
-        SubjectEventKind kind,
-        CancellationToken cancellationToken) =>
+    public async ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(CancellationToken cancellationToken) =>
     [
         .. (await context.Outbox
                 .AsNoTracking()
                 .Include(row => row.Confirmations)
-                .Where(row => row.Kind == kind && row.Status != Core.ErasureStatus.Complete)
+                .Where(row => row.Status != Core.ErasureStatus.Complete)
                 .OrderBy(row => row.RaisedAt)
                 .ThenBy(row => row.Id)
                 .ToListAsync(cancellationToken)
@@ -371,6 +371,8 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
             row.RaisedAt,
             row.Restricted,
             row.Reason,
+            row.Purpose,
+            row.Change,
             row.Status,
             row.Attempts,
             row.NextAttemptAt,
