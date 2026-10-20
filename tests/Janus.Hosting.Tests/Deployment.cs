@@ -1238,6 +1238,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<SourceAdmissions>();
         _ = services.AddScoped<SourceRateLimiting>();
         _ = services.AddScoped<RequestSession>();
+        _ = services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();

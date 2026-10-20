@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host's own endpoint reads who is asking through `IRequestAccess.Current()`: the
+  context and the session the library's own endpoints pass for the same request, or
+  `auth.session.expired` where the request carries no live sign-in session.
+- `Answers` answers a host endpoint's `Result` or `Result<T>`, and `Answers.Refused` an
+  `Error`, in the library's wire format; a code the library does not list is answered
+  500 `system.fault`. `RequestSource.Of` gives the source an operation takes for the
+  request, keyed as the library keys it.
 - Every endpoint a host maps after the browser profile needs a live sign-in session:
   a request that reaches one without it is answered 401 `auth.session.expired` before
   the endpoint runs. `AllowNoSession()` on an endpoint marks one that answers anyone,

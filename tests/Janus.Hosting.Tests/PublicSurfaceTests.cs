@@ -273,8 +273,8 @@ public sealed class PublicSurfaceTests
     /// <summary>
     /// LIB-API-002 AC1: no type of the areas, the storage or the command line can be
     /// reached from outside its assembly, and the hosting project exposes its mounting
-    /// types, the model-builder extension and the registration entry point and nothing
-    /// else (CONV-LAYOUT-002).
+    /// types, the model-builder extension, the registration entry point and what a host's
+    /// own endpoints use, and nothing else (CONV-LAYOUT-002, BFF-HOST-003, BFF-HOST-004).
     /// </summary>
     [Fact]
     public void LIB_API_002_AC1_InternalTypesAreNotPubliclyAccessible()
@@ -291,6 +291,8 @@ public sealed class PublicSurfaceTests
             typeof(IUnsignedCallback),
             typeof(HostingRegistration),
             typeof(IdentityEndpoints),
+            typeof(Answers),
+            typeof(RequestSource),
         ];
 
         IEnumerable<Type> exposed = Internal.SelectMany(name => Load(name).GetExportedTypes());
@@ -299,6 +301,39 @@ public sealed class PublicSurfaceTests
         Assert.Equal(
             mounting.Select(type => type.FullName).Order(StringComparer.Ordinal),
             typeof(HostingRegistration).Assembly.GetExportedTypes().Select(type => type.FullName).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-HOST-003, BFF-HOST-004: what a host's own endpoints are given to answer with
+    /// and to key a source by is what the chapter names, and nothing beside it the
+    /// library's own endpoints use stands public.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_003_AHostEndpointIsGivenTheMembersTheChapterNamesAndNoOthers()
+    {
+        Assert.Equal(["Of(Result, IResult)", "Of(Result`1, Func`2)", "Refused(Error)"], Members(typeof(Answers)));
+        Assert.Equal(["Of(HttpRequest)"], Members(typeof(RequestSource)));
+        Assert.Contains("AllowNoSession(TBuilder)", Members(typeof(PipelineProfiles)));
+    }
+
+    /// <summary>
+    /// BFF-HOST-001 (D-202, D-205): the entry point registers the request's access in each
+    /// request scope, standing on the one record stage 5 writes, and the access carries
+    /// the context and the session and no assurance.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_001_TheAccessIsRegisteredInEachRequestScopeAndCarriesTheContextAndTheSessionAlone()
+    {
+        ServiceDescriptor access = Assert.Single(Registered(), service => service.ServiceType == typeof(IRequestAccess));
+
+        Assert.Equal(ServiceLifetime.Scoped, access.Lifetime);
+        Assert.Equal(typeof(RequestSession), Built(access));
+        Assert.Equal(
+            [nameof(RequestAccess.Context), nameof(RequestAccess.Session)],
+            typeof(RequestAccess).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(property => property.Name));
+        Assert.Equal(
+            [typeof(AccessContext), typeof(SessionId)],
+            typeof(RequestAccess).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(property => property.PropertyType));
     }
 
     /// <summary>
@@ -905,6 +940,15 @@ public sealed class PublicSurfaceTests
     }
 
     private static Assembly Load(string name) => Assembly.Load(new AssemblyName(name));
+
+    // The public methods a type declares, each with the types it takes, in order.
+    private static string[] Members(Type type) =>
+    [
+        .. type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(method => method.Name + "("
+                + string.Join(", ", method.GetParameters().Select(parameter => parameter.ParameterType.Name)) + ")")
+            .Order(StringComparer.Ordinal),
+    ];
 
     // CONV-DESIGN-007 AC6: what the entry point registers for a deployment that declares
     // what the host fixture declares.
