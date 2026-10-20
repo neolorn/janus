@@ -30,6 +30,12 @@ paths = ['''^\Qsrc/Janus.Storage/Migrations/20260930224333_NameTheSubjectOfEachA
 regexes = ['''^PRIV-BREACH-002$''']
 
 [[allowlists]]
+description = "an item identifier in a documentation comment"
+condition = "AND"
+paths = ['''^\Qsrc/Janus.Hosting/DeclarationCoverage.cs\E$''']
+regexes = ['''^PRIV-CONS-006a$''']
+
+[[allowlists]]
 description = "a migration's identifier in a test, not a credential"
 condition = "AND"
 paths = ['''^\Qtests/Janus.Storage.Tests/Privacy/ConsentStoreTests.cs\E$''']
