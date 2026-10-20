@@ -1498,6 +1498,7 @@ GET /privacy/export
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
   429 auth.throttled
+  500 system.fault
 GET /privacy/notice
   200
     application/json

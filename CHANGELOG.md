@@ -10,6 +10,22 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IExportContributor` carries what a host holds about a subject into the subject's
+  export: `GET /privacy/export` carries each registered contributor's sections after the
+  library's, in contributor name order, in both formats. The export is counted only once
+  every contributor has answered; one that fails, faults or answers a section under a
+  name already taken fails the export with 500 `system.fault`, naming the contributor in
+  the log, and the export is not counted. A deployment declaring a type with an encrypted
+  field or a sensitive category that no contributor covers fails startup with
+  `model.startup.declarationmissing`, `details.handler` naming the type.
+- `IPersonalFields` encrypts and decrypts a host's own declared encrypted fields under
+  the subject's key: `WithSubjectAsync` lends one subject's `SubjectFields`, and
+  `WithSubjectsAsync` lends a page of them, reading their keys in one statement and
+  unwrapping each once. Each value is bound to its subject, its type and the field's
+  declared name, so `Encrypted` takes a `name` for a member the host renames. Every key
+  is cleared when the use returns. A field of an erased subject answers
+  `privacy.subject.erased` (409), and a subject the deployment holds no key for answers
+  `api.request.invalid` naming `subject`.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
   number, that the credential is still active and the number still the account's before
   it issues the code. Where either changed since the ask read the credential, nothing is

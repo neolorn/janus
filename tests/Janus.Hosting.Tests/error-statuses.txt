@@ -155,4 +155,5 @@ privacy.request.decided 409
 privacy.request.duplicate 409
 privacy.request.notfound 404
 privacy.request.receivedfuture 422
+privacy.subject.erased 409
 system.fault 500

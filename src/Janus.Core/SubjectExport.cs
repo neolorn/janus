@@ -12,12 +12,13 @@ namespace Janus.Core;
 /// <param name="Sections">
 /// The groups, in reading order: the account and how it was registered, the profile,
 /// the identifiers, the preferences, the live sessions and their location records,
-/// and the consents and objections.
+/// and the consents and objections; then each export contributor's sections, in the order
+/// of the contributors' names.
 /// </param>
 /// <remarks>
 /// Implements PRIV-RIGHT-003 and LIB-API-005. What the host holds in its own tables
-/// is the host's to return, and reaches it as the <c>ExportRequested</c> event this
-/// assembly raises (PRIV-RIGHT-005b).
+/// is the host's to return, and reaches it through the host's export contributors
+/// (D-203).
 /// </remarks>
 public sealed record SubjectExport(
     SubjectId Subject,

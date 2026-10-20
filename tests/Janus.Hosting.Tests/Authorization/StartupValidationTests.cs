@@ -232,6 +232,27 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// PRIV-RIGHT-003 AC6: the deployment declares its documents sensitive and holds a
+    /// field of each under its owner's key, so a deployment that registered no export
+    /// contributor covering them is stopped as it starts rather than at the export that
+    /// would leave them out.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC6_ADeploymentWithNoContributorForItsPersonalTypeIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(contributors: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("document", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
     /// DR-016 AC2, IDN-LIFE-003a: a host subscriber registered under the name the
     /// erasure ledger confirms under would read the ledger's line as its own work, so
     /// the deployment is stopped as it starts.
@@ -1670,6 +1691,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     private IHost Deployed(
         bool catalogue = true,
         bool handlers = true,
+        bool contributors = true,
         bool addresses = true,
         bool signIn = true,
         bool client = true,
@@ -1692,6 +1714,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 services,
                 catalogue,
                 handlers,
+                contributors,
                 addresses,
                 signIn,
                 client,
@@ -1717,6 +1740,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         IServiceCollection services,
         bool catalogue = true,
         bool handlers = true,
+        bool contributors = true,
         bool addresses = true,
         bool signIn = true,
         bool client = true,
@@ -1776,6 +1800,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (handlers)
         {
             services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+        }
+
+        if (contributors)
+        {
+            services.AddSingleton<IExportContributor>(new HostExportContributor());
         }
 
         if (addresses)

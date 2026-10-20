@@ -8,14 +8,15 @@ namespace Janus.Core;
 /// and to take it elsewhere.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, PRIV-RIGHT-003 and chapter 09 section 7. Access and
+/// Implements LIB-API-005, PRIV-RIGHT-003 (D-203) and chapter 09 section 7. Access and
 /// portability are the same assembly in two arrangements, so nothing here decides
 /// which of the two rights is being exercised.
 /// </remarks>
 public interface IExports
 {
     /// <summary>
-    /// Assembles everything the library holds about the caller.
+    /// Assembles everything the library holds about the caller, then what each
+    /// registered export contributor answers, in the order of their names.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="session">The session the step-up is judged on.</param>
@@ -23,7 +24,9 @@ public interface IExports
     /// <returns>
     /// The export, or the refusal: <c>auth.stepup.required</c> where the session has
     /// not proved it is still the account, <c>auth.throttled</c> carrying
-    /// <c>details.retryAt</c> where <c>privacy.export.ratelimit</c> is spent.
+    /// <c>details.retryAt</c> where <c>privacy.export.ratelimit</c> is spent, and
+    /// <c>system.fault</c> naming the contributor where one fails, faults or answers a
+    /// section under a name already taken; an export refused is not counted.
     /// </returns>
     ValueTask<Result<SubjectExport>> AssembleAsync(
         AccessContext context,

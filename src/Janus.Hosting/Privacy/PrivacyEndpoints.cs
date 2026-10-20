@@ -80,7 +80,10 @@ internal static class PrivacyEndpoints
         _ = SessionRequired.On(group.MapGet("/export", ExportAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Throttled))
+                    ErrorCodes.RequestMalformed,
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Throttled,
+                    ErrorCodes.SystemFault))
             .Produces<ExportView>()
             .Produces<PortableExportView>();
 

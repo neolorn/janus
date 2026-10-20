@@ -18,6 +18,7 @@ namespace Janus.Privacy.Exports;
 /// this returns.
 /// </summary>
 /// <param name="source">Where the parts the other areas hold are read.</param>
+/// <param name="contributors">The export contributors the host registered, which answer what it holds.</param>
 /// <param name="ledger">Where the exports already taken are counted.</param>
 /// <param name="consents">Where the consent and objection records are.</param>
 /// <param name="stepUp">The gate the account's own assurance is asked at.</param>
@@ -27,12 +28,13 @@ namespace Janus.Privacy.Exports;
 /// <param name="work">The one transaction the export is counted in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003, LIB-API-005, D-086 and D-141. One routine and not two:
-/// two routines are two answers to the same legal question, and the second one is the
-/// one nobody maintains.
+/// Implements PRIV-RIGHT-003, LIB-API-005, D-086, D-141 and D-203. One routine and not
+/// two: two routines are two answers to the same legal question, and the second one is
+/// the one nobody maintains.
 /// </remarks>
 internal sealed class ExportService(
     IExportSource source,
+    IEnumerable<IExportContributor> contributors,
     IExportLedger ledger,
     IConsentStore consents,
     IStepUpGate stepUp,
@@ -80,10 +82,17 @@ internal sealed class ExportService(
             return Result.Failure<SubjectExport>(Error.Throttled(retryAt));
         }
 
-        var export = new SubjectExport(
-            subject,
-            now,
-            await SectionsAsync(subject, cancellationToken).ConfigureAwait(false));
+        // PRIV-RIGHT-003 (D-203): every contributor has answered before the export is
+        // counted, so one that failed leaves the person's limit as it was.
+        Result<IReadOnlyList<ExportSection>> assembled =
+            await SectionsAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (assembled.Match(_ => (Error?)null, error => error) is Error notAssembled)
+        {
+            return Result.Failure<SubjectExport>(notAssembled);
+        }
+
+        var export = new SubjectExport(subject, now, assembled.Match(sections => sections, _ => []));
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
@@ -187,7 +196,32 @@ internal sealed class ExportService(
         return values;
     }
 
-    private async ValueTask<IReadOnlyList<ExportSection>> SectionsAsync(
+    private static Error Faulted(IExportContributor contributor) =>
+        Error.From(ErrorCodes.SystemFault, "contributor", JsonSerializer.SerializeToElement(contributor.Name));
+
+    // A contributor that throws has failed as one that answered a failure has: the
+    // export names it to the log and is refused, never returned short of what it holds.
+    private static async ValueTask<Result<IReadOnlyList<ExportSection>>> AnsweredAsync(
+        IExportContributor contributor,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await contributor.SectionsAsync(subject, cancellationToken).ConfigureAwait(false))
+                .Match(
+                    held => Result.Success(held),
+                    _ => Result.Failure<IReadOnlyList<ExportSection>>(Faulted(contributor)));
+        }
+        catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            return Result.Failure<IReadOnlyList<ExportSection>>(Faulted(contributor));
+        }
+    }
+
+    // PRIV-RIGHT-003 (D-203): the library's sections, then each contributor's in the
+    // order of the contributors' names, asked outside any unit of work.
+    private async ValueTask<Result<IReadOnlyList<ExportSection>>> SectionsAsync(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
@@ -206,7 +240,26 @@ internal sealed class ExportService(
             (await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false))
                 .Select(Standing)));
 
-        return sections;
+        var taken = new HashSet<string>(sections.Select(section => section.Name), StringComparer.Ordinal);
+
+        foreach (IExportContributor contributor in contributors.OrderBy(each => each.Name, StringComparer.Ordinal))
+        {
+            IReadOnlyList<ExportSection>? answered = (await AnsweredAsync(contributor, subject, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match<IReadOnlyList<ExportSection>?>(held => held, _ => null);
+
+            // A section under a name already taken would be read as the library's or
+            // as another contributor's, by the frontend's labels and by the reader.
+            if (answered is null || answered.Any(section => section is null || taken.Contains(section.Name)))
+            {
+                return Result.Failure<IReadOnlyList<ExportSection>>(Faulted(contributor));
+            }
+
+            taken.UnionWith(answered.Select(section => section.Name));
+            sections.AddRange(answered);
+        }
+
+        return Result.Success<IReadOnlyList<ExportSection>>(sections);
     }
 
     // D-086: the window rolls, so the limit cannot be spent twice across a boundary

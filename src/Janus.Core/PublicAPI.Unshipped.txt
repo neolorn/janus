@@ -892,11 +892,13 @@ Janus.Core.EncryptedFieldDeclaration
 Janus.Core.EncryptedFieldDeclaration.<Clone>$() -> Janus.Core.EncryptedFieldDeclaration!
 Janus.Core.EncryptedFieldDeclaration.Category.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Category.init -> void
-Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn, out string! Category) -> void
-Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn, string! Category) -> void
+Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn, out string! Category, out string! Name) -> void
+Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn, string! Category, string! Name) -> void
 Janus.Core.EncryptedFieldDeclaration.Equals(Janus.Core.EncryptedFieldDeclaration? other) -> bool
 Janus.Core.EncryptedFieldDeclaration.Field.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Field.init -> void
+Janus.Core.EncryptedFieldDeclaration.Name.get -> string!
+Janus.Core.EncryptedFieldDeclaration.Name.init -> void
 Janus.Core.EncryptedFieldDeclaration.SubjectColumn.get -> string!
 Janus.Core.EncryptedFieldDeclaration.SubjectColumn.init -> void
 Janus.Core.EnrolledCredential
@@ -1387,6 +1389,13 @@ Janus.Core.IOrganizations.CreateAsync(Janus.Core.AccessContext! context, string!
 Janus.Core.IOrganizations.PolicyAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationPolicy!>>
 Janus.Core.IOrganizations.ReplacePolicyAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.PolicyOverride! replacement, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.RequestDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IExportContributor
+Janus.Core.IExportContributor.Covers.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.ResourceType>!
+Janus.Core.IExportContributor.Name.get -> string!
+Janus.Core.IExportContributor.SectionsAsync(Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>!>>
+Janus.Core.IPersonalFields
+Janus.Core.IPersonalFields.WithSubjectAsync<TValue>(Janus.Core.SubjectId subject, System.Func<Janus.Core.SubjectFields!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
+Janus.Core.IPersonalFields.WithSubjectsAsync<TValue>(System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>! subjects, System.Func<System.Collections.Generic.IReadOnlyDictionary<Janus.Core.SubjectId, Janus.Core.SubjectFields!>!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.IPrivacyRequests
 Janus.Core.IPrivacyRequests.EnterAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestEntry! entry, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
 Janus.Core.IPrivacyRequests.FulfilAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.PrivacyRequestId request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2475,7 +2484,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.BelongsToOrganization() -> 
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! container) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category, string? name = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null, string? document = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
@@ -2841,6 +2850,8 @@ Janus.Core.SubjectExport.Sections.init -> void
 Janus.Core.SubjectExport.Subject.get -> Janus.Core.SubjectId
 Janus.Core.SubjectExport.Subject.init -> void
 Janus.Core.SubjectExport.SubjectExport(Janus.Core.SubjectId Subject, System.DateTimeOffset AssembledAt, System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>! Sections) -> void
+Janus.Core.SubjectFields
+Janus.Core.SubjectFields.SubjectFields() -> void
 Janus.Core.SubjectId
 Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
 Janus.Core.SubjectId.SubjectId() -> void
@@ -2968,6 +2979,11 @@ Janus.Core.WebAuthnRequestOptions.UserVerification.get -> string!
 Janus.Core.WebAuthnRequestOptions.WebAuthnRequestOptions(string! RelyingPartyId, string! Challenge, System.Collections.Generic.IReadOnlyList<Janus.Core.WebAuthnCredentialDescriptor!>! AllowCredentials) -> void
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 abstract Janus.Core.DomainEvent.<Clone>$() -> Janus.Core.DomainEvent!
+abstract Janus.Core.SubjectFields.Decrypt(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> stored) -> Janus.Core.Result<string!>
+abstract Janus.Core.SubjectFields.DecryptBytes(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> stored) -> Janus.Core.Result<System.ReadOnlyMemory<byte>>
+abstract Janus.Core.SubjectFields.Encrypt(Janus.Core.ResourceType type, string! field, string! value) -> Janus.Core.Result<System.ReadOnlyMemory<byte>>
+abstract Janus.Core.SubjectFields.Encrypt(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> value) -> Janus.Core.Result<System.ReadOnlyMemory<byte>>
+abstract Janus.Core.SubjectFields.Erased.get -> bool
 const Janus.Core.CredentialLabel.MaximumLength = 64 -> int
 const Janus.Core.CredentialLabel.MinimumLength = 1 -> int
 const Janus.Core.DeviceDescription.MaximumLength = 64 -> int
@@ -4114,6 +4130,7 @@ static Janus.Core.ErrorCodes.RequestInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestMalformed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.SubjectErased.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode

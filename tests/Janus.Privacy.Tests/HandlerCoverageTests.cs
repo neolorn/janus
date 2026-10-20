@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Janus.Core;
+using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
@@ -8,8 +9,9 @@ namespace Janus.Privacy.Tests;
 
 /// <summary>
 /// What a deployment has to have registered before it starts: a subject-event
-/// subscriber for every sensitive type, and a handler for every objectable purpose
-/// (PRIV-RIGHT-005b, PRIV-RIGHT-001a, LIB-HOST-001).
+/// subscriber for every sensitive type, an export contributor for every type holding
+/// personal data, and a handler for every objectable purpose (PRIV-RIGHT-005b,
+/// PRIV-RIGHT-003, PRIV-RIGHT-001a, LIB-HOST-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class HandlerCoverageTests
@@ -66,7 +68,7 @@ public sealed class HandlerCoverageTests
                 .Purpose("marketing", "agreement", data: ["identity"], subjects: ["customers"]))
             .Build();
 
-        Result outcome = new HandlerCoverage(ordinary, [], []).Validate();
+        Result outcome = new HandlerCoverage(ordinary, [], [], []).Validate();
 
         Assert.True(outcome.Match(() => true, _ => false));
     }
@@ -164,11 +166,76 @@ public sealed class HandlerCoverageTests
         Assert.True(outcome.Match(() => true, _ => false));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-003 AC6: the deployment declares its statement sensitive and registers
+    /// no export contributor that covers it, so it does not start, and the failure names
+    /// the type.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_003_AC6_ASensitiveTypeNoContributorCoversFailsStartup()
+    {
+        Result outcome = Coverage(
+            [Covering(Statement)],
+            [new PurposeHandlerInMemory("security")],
+            [new ExportContributorInMemory("mailings") { Covers = [ResourceType.Parse("mailing")] }]).Validate();
+
+        Assert.Equal(
+            ErrorCodes.StartupDeclarationMissing,
+            outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
+        Assert.Equal(
+            "statement",
+            outcome.Match(
+                () => null,
+                failure => failure.Details["handler"].GetString()));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC6: a type that is not sensitive but declares an encrypted field
+    /// holds personal data an export must carry, so with no contributor covering it the
+    /// deployment does not start; once one covers it, it does.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_003_AC6_ATypeWithAnEncryptedFieldNoContributorCoversFailsStartup()
+    {
+        AuthorizationDeclaration encrypting = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
+            .Permission("mailing:read")
+            .Resource<Declaration.Mailing>("mailing", mailing => mailing
+                .BelongsToOrganization()
+                .Purpose("delivery", "contract", data: ["identity"], subjects: ["customers"])
+                .Encrypted(row => row.Address, row => row.Recipient, "identity"))
+            .Build();
+
+        Result uncovered = new HandlerCoverage(encrypting, [], [], []).Validate();
+        Result covered = new HandlerCoverage(
+            encrypting,
+            [],
+            [],
+            [new ExportContributorInMemory("mailings") { Covers = [ResourceType.Parse("mailing")] }]).Validate();
+
+        Assert.Equal(
+            ErrorCodes.StartupDeclarationMissing,
+            uncovered.Match(() => (ErrorCode?)null, failure => failure.Code));
+        Assert.Equal(
+            "mailing",
+            uncovered.Match(
+                () => null,
+                failure => failure.Details["handler"].GetString()));
+        Assert.True(covered.Match(() => true, _ => false));
+    }
+
     private static SubscriberInMemory Covering(ResourceType type) =>
         new("host", required: true) { Covers = [type] };
 
     private static HandlerCoverage Coverage(
         IEnumerable<ISubjectEventSubscriber> subscribers,
         IEnumerable<IPurposeHandler> handlers) =>
-        new(Declaration.Declared().Build(), subscribers, handlers);
+        Coverage(subscribers, handlers, [new ExportContributorInMemory("statements") { Covers = [Statement] }]);
+
+    private static HandlerCoverage Coverage(
+        IEnumerable<ISubjectEventSubscriber> subscribers,
+        IEnumerable<IPurposeHandler> handlers,
+        IEnumerable<IExportContributor> contributors) =>
+        new(Declaration.Declared().Build(), subscribers, handlers, contributors);
 }
