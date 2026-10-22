@@ -134,6 +134,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a group created, by a caller restricted since the gate step", Decided.Restricted),
         ("a member a group already holds added again, by a caller managing groups", Decided.Allowed),
         ("a member a group does not hold taken out, by a caller managing groups", Decided.Allowed),
+        (
+            "a member added to a group, on a session that has not proved its gate, by a caller managing groups",
+            Decided.StepUpRequired),
+        (
+            "a member taken out of a group, on a session that has not proved its gate, by a caller managing groups",
+            Decided.StepUpRequired),
+        ("a role defined, on a session that has not proved its gate, by a caller managing roles", Decided.StepUpRequired),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
@@ -1215,6 +1222,19 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a member a group does not hold taken out, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: false);
 
+            // CONV-DESIGN-002 (D-207): a change of members and a role's definition judge
+            // their step-up before their unit of work begins, after every refusal it must
+            // follow; a session that has not proved the gate is refused as before.
+            case "a member added to a group, on a session that has not proved its gate, by a caller managing groups":
+            case "a member taken out of a group, on a session that has not proved its gate, by a caller managing groups":
+                return await MemberChangedUnprovedAsync(
+                    deployment,
+                    caller,
+                    added: scenario.StartsWith("a member added", StringComparison.Ordinal));
+
+            case "a role defined, on a session that has not proved its gate, by a caller managing roles":
+                return await RoleDefinedUnprovedAsync(deployment, caller);
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -1777,6 +1797,83 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(held ? 1 : 0, members);
 
         return decided;
+    }
+
+    // AUTHZ-GROUP-001, OPS-CFG-007: a member added to a group, or one the group holds
+    // taken out, by a caller managing groups on a session the store holds no record of,
+    // which has proved no gate; the change writes nothing whatever it is refused.
+    private async Task<Decided> MemberChangedUnprovedAsync(Deployment deployment, SubjectId caller, bool added)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var member = GrantSubject.Of(await deployment.AccountAsync(cancellationToken));
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        IGroups groups = services.GetRequiredService<IGroups>();
+
+        GroupId group = (await groups.CreateAsync(
+                context,
+                deployment.Organization,
+                "Reviewers",
+                "A group for the reviewers.",
+                cancellationToken))
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        if (!added)
+        {
+            (await groups.AddMemberAsync(
+                    context,
+                    await SteppedUpAsync(services, caller),
+                    group,
+                    member,
+                    "Joined the reviewers.",
+                    cancellationToken))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+
+        var unproved = SessionId.New(TimeProvider.System);
+        Decided decided = (added
+                ? await groups.AddMemberAsync(context, unproved, group, member, "Joined the reviewers.", cancellationToken)
+                : await groups.RemoveMemberAsync(context, unproved, group, member, "Left the reviewers.", cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int members = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM identity.group_members WHERE group_id = @group;",
+            new { group = group.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal(added ? 0 : 1, members);
+
+        return decided;
+    }
+
+    // AUTHZ-GRANT-004, OPS-CFG-007: a role defined by a member of the administrative
+    // organization managing roles there, on a session the store holds no record of,
+    // which has proved no gate.
+    private async Task<Decided> RoleDefinedUnprovedAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.RoleManage], cancellationToken);
+
+        await deployment.MemberAsync(caller, administrative, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IRoles>()
+                .DefineAsync(
+                    AccessContext.Of(caller),
+                    SessionId.New(TimeProvider.System),
+                    new DefinedRole(RoleName.Parse("drafter"), [HostPermissions.Read]),
+                    "A role for the drafters.",
+                    cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
     }
 
     // AUTHZ-GRANT-001, AUTHZ-GRANT-003 AC6 (D-206): a grant across the organization to

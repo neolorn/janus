@@ -16,6 +16,7 @@ using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Xunit;
 
 namespace Janus.Authentication.Tests.Organizations;
@@ -238,12 +239,40 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a policy that would take the administrative organization
-    /// below its floor, decided under the rows' locks, rolls its unit of work back and
-    /// commits nothing.
+    /// CONV-DESIGN-003 AC5: a policy judged within the system policy before its unit of
+    /// work begins, and below it once the rows are held because the system policy was
+    /// raised meanwhile, is refused under the rows' locks, rolls its unit of work back
+    /// and commits nothing.
     /// </summary>
     [Fact]
     public async Task CONV_DESIGN_003_AC5_APolicyRefusedUnderTheLocksIsRolledBackAsync()
+    {
+        _work.Meanwhile = () => _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 });
+
+        Result refused = await Service.ReplacePolicyAsync(
+            Acting,
+            Stepped(),
+            Customer,
+            PolicyOverride.None with { RequiredAssurance = AssuranceLevel.Aal1 },
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.ConfigurationPolicyBelowSystem, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_changes.Written);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 (D-207): a policy that would take the administrative organization
+    /// below its floor is refused before its step-up is judged and before any unit of
+    /// work begins.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_APolicyBelowTheFloorIsRefusedBeforeItsUnitOfWorkAsync()
     {
         Result refused = await Service.ReplacePolicyAsync(
             Acting,
@@ -255,8 +284,8 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.ConfigurationValueBelowFloor, Refused(refused));
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.Opened);
+        Assert.Equal(0, _work.RolledBack);
         Assert.Empty(_changes.Written);
     }
 
