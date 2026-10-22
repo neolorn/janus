@@ -3937,3 +3937,7 @@ against the public contract of LIB-API-001.
   report the transport cannot read and a source past `integration.callback.ratelimit`,
   as every other callback route does: the callback's name, the check and the
   correlation identifier, never the source.
+- Removing a credential that would lower the account's reachable assurance commits its
+  suspension in the removal's own unit of work, on the credential read under its lock,
+  before answering `auth.credential.lastsecondfactor`: nothing is rolled back first, and
+  a sign-in's write to the credential made meanwhile is no longer overwritten.
