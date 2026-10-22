@@ -573,6 +573,54 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// IDN-PRIN-001 AC6, AUTHZ-CONCEAL-004 AC1, OPS-OBS-001 (D-207): a declared job's
+    /// refusals, of a permission its declaration does not name on a record and on its
+    /// organization, and of one it names once its organization's deletion is requested,
+    /// are each recorded as a refusal of background work and resolve to its principal and
+    /// stated reason.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_PRIN_001_AC6_ADeclaredJobsRefusalsAreRecordedNamingItsPrincipalAndReasonAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest, "the nightly digest", deployed.Deployment.Organization));
+
+        AuditRecordId undeclared = await RefusedAsync(job, deployed.Record, HostPermissions.Retain);
+
+        Error organizationWide;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            organizationWide = (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(job, HostPermissions.Retain, deployed.Deployment.Organization, TestContext.Current.CancellationToken))
+                .Match(() => throw new InvalidOperationException("The permission was not refused."), error => error);
+        }
+
+        await deployed.Deployment.SuspendAsync(TestContext.Current.CancellationToken);
+
+        AuditRecordId suspended = await RefusedAsync(job, deployed.Record, HostPermissions.Read);
+
+        foreach (AuditRecordId correlation in new[]
+        {
+            undeclared,
+            new AuditRecordId(organizationWide.Details["correlation"].GetGuid()),
+            suspended,
+        })
+        {
+            Assert.Equal(
+                new Identified(Guid.Empty, Guid.Empty, HostFixture.Digest, "the nightly digest"),
+                await IdentifiedAsync(correlation));
+            Assert.Equal(
+                new ExplainedPrincipal(Acting: null, Effective: null, HostFixture.Digest, "the nightly digest"),
+                (await ResolvedAsync(deployed, correlation)).Principal);
+        }
+
+        Assert.Equal(ErrorCodes.Denied, organizationWide.Code);
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-002 AC1: a refusal about a record that is there and a refusal
     /// about one that is not are the same answer.
     /// </summary>

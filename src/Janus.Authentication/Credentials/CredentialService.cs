@@ -692,8 +692,8 @@ internal sealed class CredentialService(
             return Result.Failure<TextCodeEnrolment>(gate);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<TextCodeEnrolment>(notBegun);
         }
@@ -932,24 +932,19 @@ internal sealed class CredentialService(
                 ? Error.From(ErrorCodes.LinkLastCredential)
                 : null;
 
-        // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
-        // reaching less than it does now runs the notified window instead, so the
-        // credential is refused at once and gone only once somebody has been told.
-        bool lowers = refusal is null && HeldFactors.LoweredWithout(enrolled, going!, password);
-
-        if (refusal is not null || lowers)
+        if (refusal is not null)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return refusal is not null
-                ? Result.Failure(refusal)
-                : (await losses.SuspendAsync(acting.Context, going!, source, cancellationToken).ConfigureAwait(false))
-                    .Match(
-                        reported => Result.Failure(Error.From(
-                            ErrorCodes.CredentialLastSecondFactor,
-                            "invalidatesAt",
-                            JsonSerializer.SerializeToElement(reported.InvalidatesAt))),
-                        Result.Failure);
+            return Result.Failure(refusal);
+        }
+
+        // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
+        // reaching less than it does now runs the notified window instead, so the
+        // credential is refused at once and gone only once somebody has been told.
+        if (HeldFactors.LoweredWithout(enrolled, going!, password))
+        {
+            return await SuspendedAsync(acting, going!, source, now, cancellationToken).ConfigureAwait(false);
         }
 
         await authenticators.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
@@ -967,6 +962,60 @@ internal sealed class CredentialService(
         }
 
         return Result.Success();
+    }
+
+    // AUTH-RECOV-007 AC5, CONV-DESIGN-003 (D-207): a removal that would lower reachable
+    // assurance succeeds by suspending the credential instead, answered as the status
+    // auth.credential.lastsecondfactor. The suspension is written in the removal's own
+    // unit of work, on the credential read under its lock, and committed there, so a
+    // write another transaction makes to the credential waits for it and is never
+    // overwritten; the notices follow the commit.
+    private async ValueTask<Result> SuspendedAsync(
+        Acting acting,
+        Authenticator going,
+        string source,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan window = (await configuration
+                .ReadAsync(Settings.RecoveryInvalidationWindow, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
+        LossReport report = (await losses.OpenAsync(acting.Context, going, window, now, cancellationToken).ConfigureAwait(false))
+            .Match(opened => opened, error => Withheld<LossReport>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        if (await losses.ToldAsync(report, source, now, cancellationToken).ConfigureAwait(false) is Error untold)
+        {
+            return Result.Failure(untold);
+        }
+
+        return Result.Failure(Error.From(
+            ErrorCodes.CredentialLastSecondFactor,
+            "invalidatesAt",
+            JsonSerializer.SerializeToElement(report.InvalidatesAt)));
     }
 
     /// <inheritdoc/>

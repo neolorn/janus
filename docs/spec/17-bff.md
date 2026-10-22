@@ -156,20 +156,23 @@ refuses the library's own.
 live sign-in session: stage 8 refuses a request that reaches it without one with 401
 `auth.session.expired`, carrying `details.reauthenticate` where a sign-in session ended
 (BFF-STEP-001) and the code alone where none was held, before the endpoint runs.
-`AllowNoSession()` (`Janus.Hosting`), on an endpoint's convention builder, marks one that
-answers anyone (a catalogue page, a checkout open to everyone). A marked endpoint still
-passes stages 2 to 6: it is a pre-session endpoint, so the browser profile issues the
-pre-authentication session to a request that reaches it carrying none (BFF-CSRF-005a), and
-a state-changing request to it carries that session's synchronizer token or is refused at
-stage 6 (BFF-CSRF-001). The library's own
-endpoints keep their own marks. **Step-up stays on the action, never on the endpoint:** a
-host binds a gate to its permission (`StepUpGate`, AUTHZ-GATE-005), and `IAccessGate`
-answers `auth.stepup.required` with its `details` when the endpoint asks for that
-permission (`RequireAsync`, `FilterAsync`, `FragmentAsync`) on a record its grants admit
-and the request's session does not meet the gate. `IStepUpGate` is the gate one library
-area asks of another (LIB-API-001) and names only the library's actions.
+`AllowNoSession()` (`Janus.Hosting`), on an endpoint's convention builder, marks one
+that answers anyone (a catalogue page, a checkout open to everyone). A marked endpoint
+still passes stages 2 to 6: it is a pre-session endpoint, so the browser profile issues
+the pre-authentication session to a request that reaches it carrying none
+(BFF-CSRF-005a), and a state-changing request to it carries that session's synchronizer
+token or is refused at stage 6 (BFF-CSRF-001). The library's own endpoints keep their
+own marks. **Step-up stays on the action, never on the endpoint:** a host binds a gate
+to its permission (`StepUpGate`, AUTHZ-GATE-005), and `IAccessGate` answers
+`auth.stepup.required` with its `details` when the endpoint asks for that permission
+(`RequireAsync`, `FilterAsync`, `FragmentAsync`) on a record its grants admit and the
+request's session does not meet the gate. A host asks a bound permission of the gate
+before it begins the unit of work its context joins (`UseUnitOfWorkAsync`), since the
+step-up may ask the phone signal, a host callback that never runs inside an open
+transaction (`08` CONV-DESIGN-003, D-207). `IStepUpGate` is the gate one library area
+asks of another (LIB-API-001) and names only the library's actions.
 
-*Source: D-202*
+*Source: D-202, D-207*
 
 A forgotten mark fails closed: a host endpoint left unmarked answers 401, never anyone
 (P-003; protection comes from where an endpoint is mounted, D-070). A step-up mark on the
@@ -756,7 +759,7 @@ it; the host's route is reached only once the host's confirmation succeeds.
 `ICallbackReferences` is a seam, not an operation of LIB-API-005: it joins the host's
 transaction, so it has no endpoint and takes no access context.
 
-*Source: D-070, INT-GEN-003, D-166, D-197*
+*Source: D-070, INT-GEN-003, D-166, D-197, D-207*
 
 Of the library's own callbacks, the SMS gateway calls over plain HTTP with parameters in
 the query string, which cannot carry a signature meaningfully (R-A12). A host records
@@ -772,7 +775,8 @@ restriction where the provider publishes ranges.
 **Acceptance criteria**
 1. No unsigned callback advances authoritative state without independent confirmation,
    save the releases of INT-SMS-005.
-2. A forged callback with a guessed reference is rejected and logged.
+2. A forged callback with a guessed reference is rejected, recorded against its source's
+   fingerprint and logged, the log line naming no source (INT-GEN-003, D-207).
 3. Repeated verification failures raise an alert.
 
 ---
@@ -797,15 +801,17 @@ for the wire format and the reasoning.
 **BFF-CAP-002** — The library SHALL provide the projection plumbing; the host SHALL
 declare which capabilities are relevant per resource type.
 
-**Values (D-202).** The host declares which of its permissions are capabilities of each of
-its types: `ResourceTypeDeclarationBuilder<T>.Capabilities`, each a declared permission;
-one not declared fails startup with `model.startup.declarationinvalid`,
+**Values (D-202).** The host declares which of its permissions are capabilities of each
+of its types: `ResourceTypeDeclarationBuilder<T>.Capabilities`, each a declared
+permission; one not declared fails startup with `model.startup.declarationinvalid`,
 `details.declaration` naming the type and `details.field` `capabilities`.
 `IAccessGate.CapabilitiesAsync` on a host type answers only for the permissions declared
 as its capabilities: asking it for any other, a declared permission the type does not
-list among them included, is a fault of the calling code (CONV-ERR-001).
-`CapabilityFields` (`Janus.Hosting`) is a sealed record made by
-`CapabilityFields.Of(Capability)`: `Can`, an `IReadOnlyList<string>`, and `Requires`, an
+list among them included, is a fault of the calling code (CONV-ERR-001). It refuses a
+host job's context `authz.denied`, in a request and outside one: the capability page is
+a person's surface (`01` IDN-PRIN-001, D-207). `CapabilityFields` (`Janus.Hosting`) is a
+sealed record made by `CapabilityFields.Of(Capability)`: `Can`, an
+`IReadOnlyList<string>`, and `Requires`, an
 `IReadOnlyDictionary<string, IReadOnlyList<string>>`, the `can` list and the `requires`
 map API-CAP-001 writes. Each entry is a permission's action, the part of its identifier
 after the `:` (CONV-NAME-002), so no permission name reaches the browser (BFF-SESS-001),
@@ -816,7 +822,7 @@ with `model.startup.declarationinvalid`, `details.declaration` the type and
 `details.field` `capabilities`. A host's record carries the two as its members `can` and
 `requires` (D-206). A type that declares none answers none.
 
-*Source: D-052, AUTHZ-MODEL-003, D-202, D-206*
+*Source: D-052, AUTHZ-MODEL-003, D-202, D-206, D-207*
 
 The library cannot know that a document has a "share" action. The host declares it;
 the library computes and attaches it.
@@ -828,6 +834,9 @@ the library computes and attaches it.
    `can` and `requires` exactly as API-CAP-001 writes them.
 4. A declaration naming as a capability a permission it does not declare, or two
    capabilities of one action, fails startup with `model.startup.declarationinvalid`.
+5. `CapabilitiesAsync` given a host job's context is refused `authz.denied`, in a
+   request and outside one (D-207).
+
 
 ---
 

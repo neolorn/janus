@@ -32,7 +32,7 @@ internal static class RegisterClientCommand
 
     /// <summary>
     /// What the command declares (LIB-API-001): its arguments, the key document, the
-    /// client registered, and the codes a refusal carries.
+    /// client registered, and the codes a refusal or a fault carries.
     /// </summary>
     public static CommandContract Contract { get; } = new(
         Name,
@@ -44,6 +44,7 @@ internal static class RegisterClientCommand
             ErrorCodes.StartupRedirectClient,
             ErrorCodes.StartupSchemaMismatch,
             ErrorCodes.StartupSecretUnavailable,
+            ErrorCodes.SystemFault,
         ]);
 
     /// <summary>

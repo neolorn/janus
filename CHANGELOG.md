@@ -41,6 +41,11 @@ against the public contract of LIB-API-001.
   link and the administrative organization `bootstrap` printed.
 - `bootstrap` prints a second line after the enrolment address: the identifier of the
   administrative organization it created, for the host to keep in its own configuration.
+- Every `Janus.Cli` command that a fault ends, rather than a refusal, writes one JSON
+  line on standard error, the code the fault carries or
+  `{"code": "system.fault", "details": {}}` where it carries none, writes nothing on
+  standard output, exits 1 and clears its keys, where it ended with the runtime's own
+  exit code and trace before.
 - The `migrate` command applies the library's migrations to the database of the
   connection piped to it as the only member of its document, and reads no key; a run
   with nothing owed changes nothing. It writes nothing on success; a migration the
@@ -3878,6 +3883,21 @@ against the public contract of LIB-API-001.
   context: a check and both renderings of the filter alike, each refusal recorded with
   its correlation identifier. A host's webhook that needs a host permission hands the
   work to a declared job. `AddJanus` registers the framework's `IHttpContextAccessor`.
+- Outside a request, the gate admits a host's declared job for the host permissions its
+  declaration names on every record of its organization and on the organization itself,
+  through the check, both renderings of the filter and the organization-wide check,
+  with no processing restriction judged for it, a restriction being the acting
+  account's. A permission its declaration does not name, another organization, and its
+  own organization once its deletion is requested or it is erased are refused with
+  `authz.denied`, each refusal recorded with the job's principal and stated reason.
+- The capability page and the explanation refuse a host job's context with
+  `authz.denied`, in a request and outside one.
+- A refresh of a materialised derivation records as granter of each grant it writes,
+  and as revoker of each it takes back, the caller's acting account, or the nil subject
+  for a system principal such as a host's job, with the reason
+  `derivation:<relationship>`, and records each as `authz.grant.materialised` or
+  `authz.grant.retracted` in its transaction, naming the person who called it, or the
+  principal and its stated reason. A system principal's context is no longer refused.
 - A preference declared under a name holding a `.` or a `/`, or named `language` or
   `timeZone`, the names the export gives the account's language and time zone, fails
   startup with `model.startup.preferencedeclaration` naming it.
@@ -3916,3 +3936,54 @@ against the public contract of LIB-API-001.
   map of API-CAP-001: each capability by its action, never its permission name, the
   residuals under their contract names, all in ordinal order, and a capability with
   nothing outstanding left out of `requires`.
+- An operation whose refusal keeps a write (a sign-in, step-up or new-device factor,
+  the ask for a second step's text code, a registration's begin, age, code, link or
+  terms, an identifier's code or link, a text-code enrolment's confirm, a break-glass
+  code, a refresh token's reuse, the bot defence at registration and a delivery
+  report) called inside a unit of work already open, the host's own joined with
+  `UseUnitOfWorkAsync` included, ends that unit of work and throws
+  `InvalidOperationException` before it reads or writes anything else, so nothing of
+  the outer unit of work commits.
+- A provider's security event, and a callback on the machine profile, signed, unsigned
+  or carrying a session cookie, taken inside a unit of work already open is a fault the
+  same way: the request is answered `system.fault` and nothing of the outer unit of
+  work commits.
+- `UseUnitOfWorkAsync` throws `InvalidOperationException` for a context configured with
+  a connection object it owns, which joining would dispose, and for a context taken from
+  a pool (`AddDbContextPool`, `AddPooledDbContextFactory`), whose next lease would keep
+  the unit of work's connection.
+- A context configured with a connection string returns, after the outermost commit or
+  rollback, to its configuration exactly: it keeps the data source its provider built
+  from the string, with its type mappings and plugins, and a named connection string is
+  set back as the context resolved it, not as its name.
+- `UseUnitOfWorkAsync` called with a unit of work the library did not register throws
+  `InvalidOperationException` saying so, rather than saying the unit of work has not
+  begun.
+- A replacement of an organization's policy, an organization domain's addition or
+  removal, a group member's addition or removal, and a role's definition or removal
+  judge their step-up before their unit of work begins, after every refusal it
+  follows (a policy below the system policy or the floor, a loosening without
+  `system:administer`, a domain with no resolver, a cycle of groups, a role carrying
+  `system:administer` for a caller without it, a role not found or in use), and judge
+  those refusals again under the rows' locks; a carrier's signal asked by the
+  step-up is asked with no unit of work begun, and a risk it answers stays recorded
+  when the step-up refuses.
+  An addition of a domain already listed, or a removal of one not listed, begins no
+  unit of work.
+- A refresh token's reuse revokes the provider's grant and every token issued under it
+  in the same unit of work as the session record's spine and its
+  `auth.oidc.refreshreused` record, by the library's own statements: where that commit
+  fails none of them is revoked, and the next presentation of the redeemed token
+  revokes them again.
+- The delivery reports' route logs each rejection, a reference no held send answers, a
+  report the transport cannot read and a source past `integration.callback.ratelimit`,
+  as every other callback route does: the callback's name, the check and the
+  correlation identifier, never the source.
+- Removing a credential that would lower the account's reachable assurance commits its
+  suspension in the removal's own unit of work, on the credential read under its lock,
+  before answering `auth.credential.lastsecondfactor`: nothing is rolled back first, and
+  a sign-in's write to the credential made meanwhile is no longer overwritten.
+- `POST /register` from a signed-in browser carrying an invitation token attaches the
+  invitation in the outermost unit of work and commits it with the
+  `identity.registration.signedin` refusal; called inside a unit of work already open,
+  the host's own included, the begin ends it and throws `InvalidOperationException`.

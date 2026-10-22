@@ -39,7 +39,7 @@ internal static class MigrateCommand
     /// <summary>
     /// What the command declares (LIB-API-001): the report as its one argument, the
     /// connection alone, nothing written after a run and the report's lines after a
-    /// report, and the codes a refusal carries.
+    /// report, and the codes a refusal or a fault carries.
     /// </summary>
     public static CommandContract Contract { get; } = new(
         Name,

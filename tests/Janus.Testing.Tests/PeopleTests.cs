@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Conformance.Tests;
@@ -16,11 +18,102 @@ namespace Janus.Testing.Tests;
 /// </summary>
 /// <param name="host">The conformance suite's sample host, whose first administrator was enrolled through the link bootstrap printed.</param>
 [Trait("kind", "integration")]
-public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>
+public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, IDisposable
 {
     private const string Password = "quietly-folded-heron-lantern-48";
 
     private static readonly RoleName Auditor = RoleName.Parse("auditor");
+
+    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    /// <summary>
+    /// LIB-TEST-003, REG-PROF-002: a customer answers the age step with the date of birth
+    /// 1990-01-01, an adult's on every host.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_003_ACustomerAnswersTheAgeStepWithTheDateOfBirth19900101Async()
+    {
+        await PublishedAsync();
+        var requests = new RequestsInMemory();
+        using TestSession customer = await People(requests).CustomerAsync(
+            Email("customer.three@sample.example.test"),
+            Phone("+201000000025"),
+            Password,
+            TestContext.Current.CancellationToken);
+
+        RequestMade age = Assert.Single(
+            requests.Made,
+            made => made.Method == HttpMethod.Put && made.Path == SampleHost.Prefix + "/register/age");
+        JsonElement answered = JsonSerializer.Deserialize<JsonElement>(age.Body);
+
+        Assert.Equal("1990-01-01", answered.GetProperty("dateOfBirth").GetString());
+    }
+
+    /// <summary>
+    /// LIB-TEST-003, REG-SESS-003: a customer's address and number are each verified by a
+    /// press of the registration link the in-memory transport holds for it, and no code is
+    /// typed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_003_EachVerificationLinkTheTransportsHoldIsPressedAsync()
+    {
+        await PublishedAsync();
+        var requests = new RequestsInMemory();
+        EmailAddress email = Email("customer.four@sample.example.test");
+        PhoneNumber phone = Phone("+201000000026");
+        using TestSession customer = await People(requests).CustomerAsync(
+            email,
+            phone,
+            Password,
+            TestContext.Current.CancellationToken);
+
+        JsonElement[] verifications =
+        [
+            .. requests.Made
+                .Where(made => made.Method == HttpMethod.Post
+                    && made.Path.StartsWith(SampleHost.Prefix + "/register/verify/", StringComparison.Ordinal))
+                .Select(made => JsonSerializer.Deserialize<JsonElement>(made.Body)),
+        ];
+
+        Assert.Equal(2, verifications.Length);
+        Assert.All(verifications, verification =>
+        {
+            Assert.True(verification.GetProperty("press").GetBoolean());
+            Assert.False(verification.TryGetProperty("code", out _));
+        });
+        Assert.Contains(
+            host.Mail.SentTo(email),
+            mail => mail.Body.Contains("#registration." + Token(verifications[0]), StringComparison.Ordinal));
+        Assert.Contains(
+            host.Sms.SentTo(phone),
+            message => message.Text.Contains("#registration." + Token(verifications[1]), StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// LIB-TEST-003: the first administrator's passkey and a staff member's are each
+    /// labelled <c>Software passkey</c>, as the person's credentials list them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_003_EachPasskeyIsLabelledSoftwarePasskeyAsync()
+    {
+        await PublishedAsync();
+        using TestSession staff = await host.People.StaffMemberAsync(
+            host.Administrator,
+            host.AdministrativeOrganization,
+            Email("staff.three@sample.example.test"),
+            Phone("+201000000027"),
+            [Auditor],
+            TestContext.Current.CancellationToken);
+
+        JsonElement administrator = await ReadAsync(host.Administrator, "account/credentials");
+        JsonElement member = await ReadAsync(staff, "account/credentials");
+
+        Assert.Equal(["Software passkey"], Passkeys(administrator));
+        Assert.Equal(["Software passkey"], Passkeys(member));
+    }
 
     /// <summary>
     /// LIB-TEST-003 AC1: a customer, the first administrator and a staff member are each
@@ -142,6 +235,19 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>
         Assert.Null(stepped);
     }
 
+    /// <inheritdoc/>
+    public void Dispose() => _randomness.Dispose();
+
+    private static string? Token(JsonElement verification) => verification.GetProperty("linkToken").GetString();
+
+    // The label of each passkey the person's credentials list.
+    private static string?[] Passkeys(JsonElement credentials) =>
+    [
+        .. credentials.EnumerateArray()
+            .Where(credential => credential.GetProperty("kind").GetString() is "passkey")
+            .Select(credential => credential.GetProperty("label").GetString()),
+    ];
+
     private static EmailAddress Email(string entered) =>
         EmailAddress.TryParse(entered, out EmailAddress address) ? address : throw new ArgumentException(entered);
 
@@ -160,6 +266,17 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>
 
         return await answered.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
     }
+
+    // The people of the host, whose browsers' requests are kept as they are made.
+    private TestPeople People(RequestsInMemory requests) =>
+        new(
+            SampleHost.Address,
+            SampleHost.Client,
+            SampleHost.Terms,
+            () => requests.Over(host.Channel()),
+            host.Mail,
+            host.Sms,
+            _randomness);
 
     // The notice and the terms a registration accepts, published by the administrator.
     private async Task PublishedAsync()

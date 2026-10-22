@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +18,11 @@ namespace Janus.Hosting.Tests.Oidc;
 /// <param name="deployment">What it talks to.</param>
 internal sealed class Machine(Deployment deployment)
 {
+    /// <summary>
+    /// Gets the address the caller connects from, where a test names one.
+    /// </summary>
+    public IPAddress? From { get; init; }
+
     /// <summary>
     /// Posts a form to one of the library's machine routes.
     /// </summary>
@@ -120,6 +126,7 @@ internal sealed class Machine(Deployment deployment)
         context.Request.Host = new HostString("identity.example.test");
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
+        context.Connection.RemoteIpAddress = From;
 
         if (cookie is not null)
         {

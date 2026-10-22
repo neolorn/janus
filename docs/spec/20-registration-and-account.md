@@ -653,7 +653,7 @@ account application in the new session. There SHALL be **no Back navigation**; e
 correction is made in place through a per-identifier Change (REG-IDENT-010) or by editing
 the field later.
 
-*Source: D-148; D-146, D-162, D-166, D-197*
+*Source: D-148; D-146, D-162, D-166, D-197, D-207*
 
 | # | Step | Kind | What it must achieve |
 |---|---|---|---|
@@ -672,7 +672,9 @@ A person who is already signed in and opens registration SHALL be sent to their 
 no session is created. `POST /register` from such a browser SHALL be refused with
 `identity.registration.signedin` and SHALL stage nothing; where it carries an invitation
 token, the invitation SHALL first be attached to the signed-in account (REG-INV-002).
-The privacy notice SHALL be reachable before anything is collected (PRIV-CONS-008a). The
+The attachment is that refusal's kept write: the request begins the outermost unit of
+work and commits the attachment with the refusal (`08` CONV-DESIGN-003, D-207). The
+privacy notice SHALL be reachable before anything is collected (PRIV-CONS-008a). The
 originating application's client identifier SHALL be recorded at session creation
 (`POST /register`, API-REDIR-002), before step 1 (FE-REG-001). Step 3 SHALL be skippable
 where `registration.phone` is `optional` and no invitation bound a phone (REG-MAIL-001);
@@ -691,7 +693,9 @@ a skip otherwise is refused with `identity.registration.incomplete`.
    skipped where `registration.phone` is `optional` and cannot where it is `required` or
    an invitation bound a phone.
 4. `POST /register` from a browser holding a live session is refused with
-   `identity.registration.signedin` and creates no registration session.
+   `identity.registration.signedin` and creates no registration session; where it
+   carries an invitation token, the invitation stands attached to the signed-in account
+   after the refusal (D-207).
 
 ---
 

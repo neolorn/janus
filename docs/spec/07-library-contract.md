@@ -100,14 +100,14 @@ breaking.
 | **Error codes** | Machine-readable codes, their meanings and the status each answers |
 | **Audit actions and permissions** | The audit actions and the permissions `10` lists; each is an identifier, stable as a code is (CONV-NAME-003) |
 | **Testing package** | The public types of `Janus.Testing` (LIB-TEST-003, D-204) |
-| **Command-line tool** | The commands of `Janus.Cli`, their arguments, their standard input and output and their exit codes (OPS-BOOT-001, OPS-MIG-001, D-204) |
+| **Command-line tool** | The commands of `Janus.Cli`, their arguments, their standard input, standard output and standard error, and their exit codes (OPS-BOOT-001, OPS-MIG-001, OPS-SEC-001, D-204, D-207) |
 | **Conformance suite** | The public types of `Janus.Conformance` (LIB-TEST-001): the suite's four calls, the report, the finding, the check, the truth-table case and scenario, the host-rows seam and the deployment factory delegate the step-up scenarios run through (LIB-TEST-001 criterion 2); and the contract in `Janus.Core` through which the suite asks for its provider probes (LIB-TEST-001) |
 | **BFF middleware pipeline** | Mounting API and stage ordering (D-052), and what a host's own endpoints use: `AllowNoSession`, `Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` (`17` section 2a and BFF-CAP-002, `03` AUTHZ-INHERIT-002, D-202, D-203) |
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
 *Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
-D-187, D-188, D-202, D-203, D-204, D-206*
+D-187, D-188, D-202, D-203, D-204, D-206, D-207*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.
@@ -116,8 +116,9 @@ restructured without a major version.
 1. Each surface is documented with its stability guarantee.
 2. A change to any is caught before release by a contract test holding it to a committed
    contract file or to its `PublicAPI` file (REF-001 AC2); the commands of `Janus.Cli`,
-   with their arguments, standard input and output and exit codes, are one of the contract
-   lists, held in `tests/Janus.Cli.Tests/commands.txt` (LIB-TEST-002, D-206).
+   with their arguments, standard input, standard output, standard error and exit codes,
+   are one of the contract lists, held in `tests/Janus.Cli.Tests/commands.txt`
+   (LIB-TEST-002, D-206).
 
 ---
 
@@ -194,7 +195,7 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203*
+*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -248,16 +249,24 @@ moving or removing a record, and who may read what a record holds, are the host'
 actions, which the host asks of the gate before it writes or answers. The host's context
 joins the unit of work's connection and transaction with `UseUnitOfWorkAsync`
 (`Janus.Hosting`), so its writes and the library's commit together (AUTHZ-INHERIT-002,
-D-203); an operation whose refusal keeps a write begins the outermost unit of work and is
-never called inside the host's (CONV-DESIGN-003).
+D-203); an operation whose refusal keeps a write begins the outermost unit of work and
+is never called inside the host's (CONV-DESIGN-003). A context taken from a pool, or
+configured with a connection object it owns, cannot join and is refused with
+`InvalidOperationException`, and a host never returns a joined context to a pool before
+the outermost commit or rollback (AUTHZ-INHERIT-002, D-207); a host asks the gate of an
+action bound to a step-up gate before it begins the unit of work it joins (`08`
+CONV-DESIGN-003, D-207).
 
 **Operations called in process only.** Three operations are called in process only, and
 none has an endpoint or meets a gate (CONV-DESIGN-002 AC3): read-volume counting
 (`IReadVolume`, OPS-ALERT-005), which reports what the host's own gate-filtered queries
 and exports returned, which no HTTP caller has to report; derivation refresh
 (`IDerivationMaterialiser`, AUTHZ-DERIVE-005), which the host calls from its own gated
-operation that changes a relationship; and the conformance suite's provider probes
-(LIB-TEST-001), which the suite calls and which read no record of a person (D-172).
+operation that changes a relationship or from a declared job outside a request, and
+which records each grant it writes or takes back naming who called it, a job's context
+calling it while a request is served being refused `authz.denied` as the gate refuses it
+(`01` IDN-PRIN-001, D-207); and the conformance suite's provider probes (LIB-TEST-001),
+which the suite calls and which read no record of a person (D-172).
 
 **Acceptance criteria**
 1. Each endpoint in `09` other than those named above resolves to exactly one service in
@@ -590,7 +599,7 @@ the host (D-172).
 **LIB-TEST-002** — Contract tests SHALL guard every surface in LIB-API-001, failing
 the build on an unintended change.
 
-*Source: D-026.4, D-166, D-204, D-206*
+*Source: D-026.4, D-166, D-204, D-206, D-207*
 
 **Acceptance criteria**
 1. A release commit, one that changes a `PublicAPI.Shipped.txt`, fails the release gate
@@ -600,11 +609,13 @@ the build on an unintended change.
    with type, scope and constraints, and the key families; the library-owned schema; the
    error codes with their status; the audit actions; the permissions; the endpoints with
    method, route, body members and statuses; the browser profile's stage order; and the
-   commands of `Janus.Cli` with their arguments, standard input and output and exit codes
-   (D-204), rendered from the internal contract each command declares beside its parser
-   (its name; each argument, whether it is required and the form of its value; its
-   standard input, none or its document's members; what it writes on standard output;
-   and its exit codes with the codes a refusal carries) into the committed file
+   commands of `Janus.Cli` with their arguments, standard input, standard output,
+   standard error and exit codes (D-204, D-207), rendered from the internal contract
+   each command declares beside its parser (its name; each argument, whether it is
+   required and the form of its value; its standard input, none or its document's
+   members; what it writes on standard output; and its exit codes with the codes it
+   writes on standard error, those a refusal or a coded fault carries and `system.fault`
+   for any other fault, OPS-SEC-001) into the committed file
    `tests/Janus.Cli.Tests/commands.txt`, in the line form of the endpoints' list
    `tests/Janus.Hosting.Tests/endpoints.txt` (D-206).
 2. Altering the ancestry closure structure fails the build.
@@ -655,12 +666,15 @@ carries:
   `auth/signon/return` route (`09` `GET /auth/signon/return`) and `--scopes openid`
   (AUTH-OIDC-001, D-206);
 - `TestPeople`, over a running host: a customer registered through the registration
-  endpoints with the codes the in-memory transports hold; the first administrator,
-  enrolled with a software passkey through the enrolment link; a staff member invited by
-  an administrator with the roles the test names and enrolled through the invitation; and
-  for each a `TestSession`, an `HttpClient` that carries the session cookie, the
-  synchronizer token and `X-Identity-Request` (BFF-CSRF-001, BFF-CSRF-003) on every
-  request, with the person's subject, and a step-up with the person's passkey or password.
+  endpoints with what the in-memory transports hold (each verification link, pressed,
+  REG-SESS-003), its date of birth 1990-01-01, an adult's on every host (REG-PROF-002);
+  the first administrator, enrolled with a software passkey through the enrolment link;
+  a staff member invited by an administrator into the organization the test names, with
+  the roles the test names, and enrolled through the invitation; each passkey labelled
+  `Software passkey`; and for each a `TestSession`, an `HttpClient` that carries the
+  session cookie, the synchronizer token and `X-Identity-Request` (BFF-CSRF-001,
+  BFF-CSRF-003) on every request, with the person's subject, and a step-up with the
+  person's passkey or password.
 
 A host's project that references the library's packages, a test project using
 `Janus.Testing` among them, carries the framework reference to `Microsoft.AspNetCore.App`
@@ -668,7 +682,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206*
+*Source: D-204, D-205, D-206, D-207*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -690,31 +704,39 @@ so that a host can be built on the public surface and stays able to be.
 
 **Values (D-204).** The sample host lives in the repository outside the library's
 solution, in a solution of its own (`samples/HostSample`, its tests in
-`samples/HostSample.Tests`, `08` CONV-LAYOUT-001), and references only the packages packed
-from the same commit (the main package, `Janus.Hosting`, and `Janus.Testing`, with `Janus.Cli` as its tool),
-restored from a folder feed the gate fills, never a project of the library's solution. Its
-test project carries the framework reference to `Microsoft.AspNetCore.App`, so the
-packages the shared framework serves resolve from it (`08` CONV-LAYOUT-001, D-205). Its domain is its own invention, never a real host's. It is a small business application:
-types of its own with an encrypted personal field, a sensitive type with a consent-based
-purpose, an objectable purpose with its handler, a subject-event subscriber and an export
-contributor, a declared role and a derivation over it, a job, and endpoints of its own
-needing a session or marked as answering anyone, protected by permissions, one bound to a
-step-up gate, with a list filtered by the gate and carrying capabilities. An obstacle met
-in building it is a gap in the public surface, raised as a question, never closed by a
-project reference or an internals grant. Every later decision that adds to what a host
-meets adds to the sample.
+`samples/HostSample.Tests`, `08` CONV-LAYOUT-001), and references only the packages
+packed from the same commit (the main package, `Janus.Hosting`, and `Janus.Testing`,
+with `Janus.Cli` as its tool), restored from a folder feed the gate fills, never a
+project of the library's solution. Its test project carries the framework reference to
+`Microsoft.AspNetCore.App`, so the packages the shared framework serves resolve from it
+(`08` CONV-LAYOUT-001, D-205). Its domain is its own invention, never a real host's. It
+is a small business application: types of its own with an encrypted personal field, a
+sensitive type with a consent-based purpose, an objectable purpose with its handler, a
+subject-event subscriber and an export contributor, a declared role and a derivation
+over it, a job, and endpoints of its own needing a session or marked as answering
+anyone, protected by permissions, one bound to a step-up gate, with a list filtered by
+the gate and carrying capabilities. Its records live in an organization of their own,
+which its first administrator creates (`POST /admin/organizations`) and gives its first
+grants under `system:administer` (`03` AUTHZ-SCOPE-001, D-207), since a grant or a
+derivation in the administrative organization confers nothing on a customer, who holds
+no membership of it. An obstacle met in building it is a gap in the public surface,
+raised as a question, never closed by a project reference or an internals grant. Every
+later decision that adds to what a host meets adds to the sample.
 
-*Source: D-204, D-205*
+*Source: D-204, D-205, D-207*
 
 **Acceptance criteria**
 1. Building the sample host and running its tests is a gate of `08` CONV-GATE-001.
-2. Its tests prove, through its own endpoints and as the people `Janus.Testing` signs in:
-   a record written and read with its personal field encrypted; an endpoint refused
+2. Its tests prove, through its own endpoints and as the people `Janus.Testing` signs
+   in: a record written and read with its personal field encrypted; an endpoint refused
    without a session and one marked as answering anyone reached without one; a bound
    action refused without its step-up; a record registered and rolled back leaving
    neither; a registration removed; an erased customer whose host field no longer
-   decrypts; an export carrying the host's section; a withdrawal and an objection handled
-   by the handler; a job admitted for its declared permission and refused for another.
+   decrypts; an export carrying the host's section; a withdrawal and an objection
+   handled by the handler; a job admitted for its declared permission and refused for
+   another; an organization created through `POST /admin/organizations` and given its
+   first grants under `system:administer` held in the administrative organization, the
+   sample's records registered in it (D-207).
 3. The sample host references no project of the library's solution.
 
 ---

@@ -111,9 +111,10 @@ internal sealed class BreakGlassService(
         // OPS-BOOT-004, D-186: one unit of work for the whole presentation. A refusal
         // commits the kept writes it made together (the attempt's count, the raise at
         // the limit, the source's failure and the failed authentication) and nothing
-        // else; every other failure rolls back.
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        // else; every other failure rolls back. The unit of work is the outermost, so
+        // what a refusal keeps stands whatever a caller does after it.
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<IssuedSession>(notBegun);
         }

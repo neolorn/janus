@@ -168,8 +168,8 @@ internal sealed class RegistrationService(
             }
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<RegistrationSessionId>(notBegun);
         }
@@ -293,7 +293,7 @@ internal sealed class RegistrationService(
         RegistrationSessionId session,
         DateOnly dateOfBirth,
         CancellationToken cancellationToken) =>
-        HeldAsync(session, live => AgeAsync(live, dateOfBirth, cancellationToken), cancellationToken);
+        HeldAsync(session, live => AgeAsync(live, dateOfBirth, cancellationToken), keeps: true, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result<RegistrationState>> VerifyAsync(
@@ -309,6 +309,7 @@ internal sealed class RegistrationService(
         return HeldAsync(
             session,
             live => VerifiedAsync(live, identifier, code, source, cancellationToken),
+            keeps: true,
             cancellationToken);
     }
 
@@ -811,8 +812,8 @@ internal sealed class RegistrationService(
                     : await codes.ShownAsync(Holder(sender.Id, staged.Id), cancellationToken).ConfigureAwait(false)));
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<LinkLanding>(notBegun);
         }
@@ -1087,8 +1088,8 @@ internal sealed class RegistrationService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<RegistrationOutcome>(notBegun);
         }
@@ -1375,6 +1376,7 @@ internal sealed class RegistrationService(
                     ? (Result.Failure<RegistrationState>(failure), false)
                     : (Result.Success(State(live, drawn)), true);
             },
+            keeps: false,
             cancellationToken);
     }
 
@@ -1395,7 +1397,7 @@ internal sealed class RegistrationService(
         RegistrationSessionId session,
         Factor kind,
         CancellationToken cancellationToken) =>
-        HeldAsync(session, live => OpenedAsync(live, kind, cancellationToken), cancellationToken);
+        HeldAsync(session, live => OpenedAsync(live, kind, cancellationToken), keeps: false, cancellationToken);
 
     /// <summary>
     /// Stages the credential a creation ceremony produced, spending the ceremony the
@@ -1420,7 +1422,7 @@ internal sealed class RegistrationService(
         ArgumentNullException.ThrowIfNull(label);
 
         return CredentialLabel.TryParse(label, out CredentialLabel named)
-            ? HeldAsync(session, live => CreatedAsync(live, attestation, named, cancellationToken), cancellationToken)
+            ? HeldAsync(session, live => CreatedAsync(live, attestation, named, cancellationToken), keeps: false, cancellationToken)
             : ValueTask.FromResult(
                 Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CredentialLabelInvalid)));
     }
@@ -1443,7 +1445,7 @@ internal sealed class RegistrationService(
         ArgumentNullException.ThrowIfNull(label);
 
         return CredentialLabel.TryParse(label, out CredentialLabel named)
-            ? HeldAsync(session, live => BegunAsync(live, named, cancellationToken), cancellationToken)
+            ? HeldAsync(session, live => BegunAsync(live, named, cancellationToken), keeps: false, cancellationToken)
             : ValueTask.FromResult(
                 Result.Failure<GeneratorEnrolment>(Error.From(ErrorCodes.CredentialLabelInvalid)));
     }
@@ -1472,6 +1474,7 @@ internal sealed class RegistrationService(
         return HeldAsync(
             session,
             live => ConfirmedAsync(live, credential, code, cancellationToken),
+            keeps: false,
             cancellationToken);
     }
 
@@ -1912,15 +1915,32 @@ internal sealed class RegistrationService(
     }
 
     // AUTH-ABUSE-001, CONV-DESIGN-003: the count of a pressed token that opens nothing
-    // stands whatever the outcome, and the refusal writes nothing else; the throttle's
-    // own unit of work is the outermost here, since nothing was begun for the press.
+    // stands whatever the outcome, and the refusal writes nothing else; the unit of work
+    // it is counted in is the outermost, begun for the press, which the throttle's count
+    // joins.
     private async ValueTask<Result<LinkLanding>> GoneAsync(
         ThrottleAttempt pressing,
-        CancellationToken cancellationToken) =>
-        (await throttle.FailedAsync(pressing, cancellationToken).ConfigureAwait(false))
+        CancellationToken cancellationToken)
+    {
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<LinkLanding>(notBegun);
+        }
+
+        if ((await throttle.FailedAsync(pressing, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error uncounted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<LinkLanding>(uncounted);
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match(
                 () => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeExpired)),
                 Result.Failure<LinkLanding>);
+    }
 
     // The refusal is counted against the delay after it is decided, and answers as it
     // was decided unless the count itself failed. AUTH-ABUSE-001, CONV-DESIGN-003: the
@@ -2094,14 +2114,20 @@ internal sealed class RegistrationService(
     // under the lock, from the read to the write, so answers given at once are decided
     // one after another and none is written over another. CONV-DESIGN-003: the answer
     // says whether it commits, as a success and a refusal that keeps a count do; every
-    // other refusal rolls back.
+    // other refusal rolls back. An answer whose refusal keeps a write is decided in the
+    // outermost unit of work, so what the refusal keeps commits whatever a caller does
+    // after it (AUTHZ-INHERIT-002).
     private async ValueTask<Result<TAnswer>> HeldAsync<TAnswer>(
         RegistrationSessionId id,
         Func<RegistrationSession?, ValueTask<(Result<TAnswer> Answer, bool Commits)>> decide,
+        bool keeps,
         CancellationToken cancellationToken)
     {
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        Result begun = keeps
+            ? await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false)
+            : (await work.BeginAsync(cancellationToken).ConfigureAwait(false)).Match(_ => Result.Success(), Result.Failure);
+
+        if (begun.Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<TAnswer>(notBegun);
         }

@@ -508,7 +508,9 @@ public sealed class SampleHost : IAsyncLifetime
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
+        // D-207: errors are logged, so a fault in the deployment names what was thrown.
         builder.Logging.ClearProviders();
+        builder.Logging.SetMinimumLevel(LogLevel.Error).AddConsole();
 
         if (assurance is not null)
         {

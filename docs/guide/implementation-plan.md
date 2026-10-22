@@ -10,11 +10,11 @@ rules are in the working guide; this plan is the order of work.
 
 **Two milestones.** Milestone 1 is the library: everything the implementer can build and
 prove alone against the specification with a database and a shell, with every external
-system met at its abstraction. It runs autonomously, phase by phase, on phase reports
-alone. Milestone 2 is the deployment: everything that needs the real world or the owner
-(a machine, a credential, a purchase, a physical envelope, a decision). It is a
-checklist of the owner's actions with the implementer's work between them, and it does
-not start until Milestone 1's exit gate is green.
+system met at its abstraction. It ran phase by phase on phase reports alone. Milestone 2
+is the deployment: everything that needs the real world or the owner (a machine, a
+credential, a purchase, a physical envelope, a decision). It is a checklist of the
+owner's actions with the implementer's work between them, and it does not start until
+Milestone 1's exit gate is green.
 
 ---
 
@@ -39,20 +39,22 @@ not start until Milestone 1's exit gate is green.
 
 ## 2. Working rules
 
-- **One phase at a time.** A phase ends with a report: items implemented, criteria proven
-  (test names), items deferred with reason, spec defects found. In Milestone 1 the
-  implementer continues to the next phase on its own when the report lists no unanswered
-  question, no deferred item and a green gate; otherwise it stops and waits. A Tier 2 or
-  Tier 3 question parks the item it touches and every item that depends on it, is reported
-  at once, and the run goes on with the rest; the run ends when the work is done or every
-  item left waits on an answer (the working guide, section 3; D-182). Work that splits
-  into parts sharing no item MAY run in parallel, each on a local branch merged into the
-  working branch (the working guide, section 6; D-182). Milestone 2 never starts without
-  the owner.
-- **Fast checks per commit** (build, analysers, unit suites); the **full gate** (integration,
-  migration twice, contract tests, conformance suite, the sample host of LIB-TEST-004)
-  runs once per phase and once per host round before the report (CONV-GATE-001,
-  CONV-GATE-002).
+- **One phase at a time.** A phase ends with a report: items implemented, criteria
+  proven (test names), items deferred with reason, spec defects found. In Milestone 1
+  the implementer continued to the next phase on its own when the report listed no
+  unanswered question, no deferred item and a green gate; from D-207 a phase or round
+  begins only once the pull request of the one before is merged on the owner's word (the
+  working guide, section 6). A Tier 2 or Tier 3 question parks the item it touches and
+  every item that depends on it, is reported at once, and the run goes on with the rest;
+  the run ends when the work is done or every item left waits on an answer (the working
+  guide, section 3; D-182). Work that splits into parts sharing no item MAY run in
+  parallel, each on a local branch merged into the working branch (the working guide,
+  section 6; D-182). Milestone 2 never starts without the owner.
+- **Fast checks per commit** (build, analysers, unit suites); the **full gate**
+  (integration, migration twice, contract tests, conformance suite, the sample host of
+  LIB-TEST-004) runs once per phase and once per host round before the report, and again
+  on the last commit wherever the work goes on after a push (the working guide, section
+  6; D-207) (CONV-GATE-001, CONV-GATE-002).
 - **No measurements, sweeps or re-runs** beyond what a criterion literally asks for.
 - **Content rule.** No user-facing wording is decided in library code. Messages surface as
   codes (CONV-CONTENT-001, API-CONV-002); the frontend renders them.
@@ -126,21 +128,23 @@ its own features on top of it (D-202). Before the frontends (section 4, step 10)
 library is made usable by a host built only on its public surface, in rounds. A round is
 library work, as a phase of section 3 is: every rule of the working guide holds, the
 implementer starts a round only on the owner's word, and each ends with a report in the
-shape of section 5, written to `docs/reports/round-<id>.md` (`round-h1.md` for the first),
-and the owner's review. A Tier 2 or Tier 3 question parks its item as in section 3; the
-owner answers it with a decision before the round's report is reviewed.
+shape of section 5, written to `docs/reports/round-<id>.md` (`round-h1.md` for the
+first), and the owner's review, after which the implementer merges the round's pull
+request on the owner's word (the working guide, section 6; D-207). A Tier 2 or Tier 3
+question parks its item as in section 3; the owner answers it with a decision before the
+round's report is reviewed.
 
 | # | Round | Builds | Chapters and items | Proves |
 |---|---|---|---|---|
-| H1 | The host's way in, its privacy duties, its setup and its tests | D-202, D-203, D-204, D-205, D-206 | Every item the five decisions' "Propagated to" lines name: `17` section 2a (BFF-HOST-001 to BFF-HOST-004), BFF-OWN-001, BFF-OWN-002, BFF-CAP-001, BFF-CAP-002, BFF-CAP-003, BFF-ORDER-001 (stages 8 and 10), BFF-SESS-002, BFF-SESS-004, BFF-CSRF-005a; `07` LIB-PKG-001, LIB-PKG-003, LIB-API-001, LIB-API-002, LIB-API-005, LIB-HOST-001 (resource types, roles, subject-event handlers, purpose handlers, export contributors, cookies, jobs), LIB-HOST-004, LIB-EXT-001, LIB-TEST-002, LIB-TEST-003, LIB-TEST-004; `03` AUTHZ-IMP-001, AUTHZ-GATE-005, AUTHZ-INHERIT-002, AUTHZ-INHERIT-003, AUTHZ-GRANT-003, AUTHZ-GRANT-004, AUTHZ-MODEL-004, AUTHZ-TEST-001; `01` IDN-PRIN-001, IDN-MEM-001, IDN-LIFE-003a; `02` AUTH-KEY-002, AUTH-SESS-006; `04` PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-003, PRIV-RIGHT-001a, PRIV-CONS-006a, PRIV-CONS-008; `05` INT-SMS-003, INT-PWD-001; `06` OPS-DATA-002, OPS-BOOT-001, OPS-BOOT-002, OPS-MIG-001, OPS-SEC-001, OPS-ENV-001, OPS-ALERT-001, OPS-ALERT-006; `08` CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-SETUP-002, CONV-SETUP-003, CONV-SETUP-004, CONV-DESIGN-003, CONV-DESIGN-006, CONV-DESIGN-007, CONV-DESIGN-008, CONV-CODE-004, CONV-TEST-001, CONV-DEP-001, CONV-DEP-004, CONV-VCS-004, CONV-GATE-001; `09` section 14, API-CAP-001, `POST /auth/step-up`, `GET /privacy/notice`, `GET /privacy/export`, `/admin/erasures`, `POST /admin/erasures/{id}/complete`, `POST /admin/roles`, `DELETE /admin/organizations/{id}/memberships/{subject}`; `10` section 1 (`privacy.subject.erased`, `authz.resource.inuse`, `authz.denied`, `api.request.invalid`, `privacy.erasure.notfound`, `privacy.erasure.notfailed`, `model.role.undeclaredpermission`, the startup codes), sections 2.1, 3, 4 (`outbox.retry.maxattempts`, `privacy.export.ratelimit`), 5a, 5b, 5.23, 5.24, 5.26, 5.28, 5.29, 5.46 and 5.50, REF-001; `11` section 5; `13` R-M20; `15` sections 3.7 and 6.3; `19` INF-HOST-003; `20` REG-PREF-001; `18` FE-COMP-006 criteria 1b and 3, their server side only (the frontends are built in section 4, step 10) | The sample host builds from the packages packed from the same commit and its tests pass in the gate (LIB-TEST-004); every acceptance criterion of the items listed has a passing test carrying its identifier, or is named in the report as one a test cannot decide with how it was verified, save LIB-PKG-001 criterion 3 and LIB-PKG-003 criterion 1, which need the release workflow and the feed of section 4 steps 1 and 2 and are proven there |
+| H1 | The host's way in, its privacy duties, its setup and its tests | D-202, D-203, D-204, D-205, D-206, D-207 | Every item the six decisions' "Propagated to" lines name: `17` section 2a (BFF-HOST-001 to BFF-HOST-004), BFF-MACH-003, BFF-OWN-001, BFF-OWN-002, BFF-CAP-001, BFF-CAP-002, BFF-CAP-003, BFF-ORDER-001 (stages 8 and 10), BFF-SESS-002, BFF-SESS-004, BFF-CSRF-005a; `07` LIB-PKG-001, LIB-PKG-003, LIB-API-001, LIB-API-002, LIB-API-005, LIB-HOST-001 (resource types, roles, subject-event handlers, purpose handlers, export contributors, cookies, jobs), LIB-HOST-004, LIB-EXT-001, LIB-TEST-002, LIB-TEST-003, LIB-TEST-004; `03` AUTHZ-IMP-001, AUTHZ-GATE-005, AUTHZ-INHERIT-002, AUTHZ-INHERIT-003, AUTHZ-GRANT-003, AUTHZ-GRANT-004, AUTHZ-MODEL-004, AUTHZ-TEST-001, AUTHZ-DERIVE-005, AUTHZ-DERIVE-007, AUTHZ-SCOPE-001, AUTHZ-GATE-004, AUTHZ-GATE-006; `01` IDN-PRIN-001, IDN-MEM-001, IDN-MEM-003, IDN-ORG-003, IDN-LIFE-003a; `02` AUTH-KEY-002, AUTH-SESS-006, AUTH-OIDC-003, AUTH-RECOV-007, AUTH-STEP-002, AUTH-FACT-002b, AUTH-SESS-005b; `04` PRIV-RIGHT-004, PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-003, PRIV-RIGHT-001a, PRIV-CONS-006a, PRIV-CONS-008; `05` INT-SMS-003, INT-PWD-001, INT-GEN-003, INT-SMS-005; `06` OPS-DATA-002, OPS-BOOT-001, OPS-BOOT-002, OPS-MIG-001, OPS-SEC-001, OPS-ENV-001, OPS-ALERT-001, OPS-ALERT-006, OPS-OBS-001; `08` CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-SETUP-001, CONV-SETUP-002, CONV-SETUP-003, CONV-SETUP-004, CONV-DESIGN-002, CONV-DESIGN-003, CONV-DESIGN-006, CONV-DESIGN-007, CONV-ERR-003, CONV-CODE-008, CONV-DESIGN-008, CONV-CODE-004, CONV-TEST-001, CONV-DEP-001, CONV-DEP-004, CONV-VCS-004, CONV-GATE-001; `09` section 14, section 10, `POST /admin/grants`, `POST /admin/organizations`, `POST /admin/organizations/{id}/invitations`, `POST /register`, `GET /admin/access`, API-CAP-001, `POST /auth/step-up`, `GET /privacy/notice`, `GET /privacy/export`, `/admin/erasures`, `POST /admin/erasures/{id}/complete`, `POST /admin/roles`, `DELETE /admin/organizations/{id}/memberships/{subject}`; `10` section 1 (`privacy.subject.erased`, `authz.resource.inuse`, `authz.denied`, `api.request.invalid`, `privacy.erasure.notfound`, `privacy.erasure.notfailed`, `model.role.undeclaredpermission`, `identity.registration.signedin`, `auth.credential.lastsecondfactor`, `authz.grant.notfound`, `authz.restricted`, `system.fault`, the startup codes), sections 2.1, 3, 4 (`outbox.retry.maxattempts`, `privacy.export.ratelimit`), 5a, 5b, 5.23, 5.24, 5.26, 5.28, 5.29, 5.46 and 5.50, REF-001; `11` sections 3.3, 4 and 5; `13` R-M20; `15` sections 3.7 and 6.3; `19` INF-HOST-003; `20` REG-PREF-001, REG-SESS-002; `16` step 4; `18` FE-COMP-006 criteria 1b and 3, their server side only (the frontends are built in section 4, step 10) | The sample host builds from the packages packed from the same commit and its tests pass in the gate (LIB-TEST-004); every acceptance criterion of the items listed has a passing test carrying its identifier, or is named in the report as one a test cannot decide with how it was verified, save LIB-PKG-001 criterion 3 and LIB-PKG-003 criterion 1, which need the release workflow and the feed of section 4 steps 1 and 2 and are proven there |
 | H2 | What a host reads and is told | the decision written before the round begins | organizations, members and invitations; another person's account, sessions and standing for staff and jobs; the events a host lacks | as its decision states |
 | P | People without an account | the decision written before the round begins | the person records, consent at collection, "your data" by code, attaching to an account, the age question and the takedown for records, and the staff search | as its decision states |
 | R | Reports and import | the decision written before the round begins | the report feed and the bulk import | as its decision states |
 
-The rounds come in this order, each after the owner's review of the one before. Round H1
-comes before section 4 begins, since its steps 1 and 2 use the sample host H1 builds; the
-others come before section 4's step 10. The sample host grows with each round: every decision that
-adds to what a host meets adds to it.
+The rounds come in this order, each after the pull request of the one before is merged.
+Round H1 comes before section 4 begins, since its steps 1 and 2 use the sample host H1
+builds; the others come before section 4's step 10. The sample host grows with each
+round: every decision that adds to what a host meets adds to it.
 
 ## 4. Milestone 2: the deployment
 
@@ -202,8 +206,10 @@ Each report is short and has the same shape:
    needed, what the spec says, the readings seen, the smallest fix for each, the items it
    parked and, once answered, the decision-log entry that answered it. No fix is applied
    to a chapter from the code side; it goes through the decision log.
-5. Gate result: fast checks per commit, full gate once, both green, with the run
-   identifiers.
+5. Gate result: fast checks per commit, and the full gate on the last commit the report
+   covers, both green, with the run identifiers; a report brought up to date after a
+   push names the full gate's run on its new last commit (the working guide, section 6;
+   D-207).
 6. Nothing else. No narrative, no measurements not asked for.
 
 In Milestone 2 the same shape is used per step, plus the owner action the next step

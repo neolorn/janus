@@ -83,10 +83,15 @@ is created only once that account is gone (REG-MAIL-003, D-178).
 
 **4 — Revoke or transfer their grants.**
 
-Anything granted directly to them rather than through a group. `GET /admin/grants`
-lists them for the person and for a group, per organization (D-166). A revoked grant
-stays on record (IDN-PRIN-003). If they were the sole holder of a permission, transfer
-it before revoking — otherwise something quietly stops working and nobody knows why.
+Anything granted directly to them rather than through a group. `GET /admin/grants` lists
+them for the person and for a group, per organization (D-166). A revoked grant stays on
+record (IDN-PRIN-003). If they were the sole holder of a permission, transfer it before
+revoking; otherwise something quietly stops working and nobody knows why. Their grants
+in another organization, a host's, are revoked the same way by an administrator holding
+`system:administer` in the administrative organization; where the person was the last
+holder of `grant:manage` there, give it to another first; otherwise the organization's
+grants wait on a holder of `system:administer`, who gives `grant:manage` to another
+(AUTHZ-SCOPE-001, D-207).
 
 **5 — Check what they approved.**
 

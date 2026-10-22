@@ -53,6 +53,7 @@ internal sealed class PermissionRule
     private readonly SubjectSet _subjects;
     private readonly DateTimeOffset _at;
     private readonly RequiredConsent? _consent;
+    private readonly bool _exercised;
 
     /// <summary>
     /// The rule one principal's evaluation of a set of permissions over one resource
@@ -115,6 +116,42 @@ internal sealed class PermissionRule
         _derivations = [];
     }
 
+    private PermissionRule(
+        IReadOnlyList<Permission> permissions,
+        ResourceType type,
+        OrganizationId organization,
+        DateTimeOffset at,
+        RequiredConsent? consent)
+        : this(permissions, type, organization, SubjectSet.None(), at, derivations: null, consent) =>
+        _exercised = true;
+
+    /// <summary>
+    /// The rule a host's declared job is admitted under: every record of the type its
+    /// organization holds, with the consent the permission asks of each record's data
+    /// subject.
+    /// </summary>
+    /// <param name="permissions">What is being asked for, each one the job's declaration names.</param>
+    /// <param name="type">The kind of thing the rows are.</param>
+    /// <param name="organization">The job's own organization.</param>
+    /// <param name="at">The instant the rule is rendered at.</param>
+    /// <param name="consent">
+    /// The consent the permission asks of a record's data subject, where it is bound to a
+    /// consent-based purpose (AUTHZ-GATE-002 AC4).
+    /// </param>
+    /// <returns>The rule.</returns>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 (D-202, D-207): a job's declaration reaches every record of
+    /// its organization as an organization-wide grant reaches a person, and a job holds no
+    /// grant, so no grant and no derivation is rendered for it.
+    /// </remarks>
+    public static PermissionRule Exercised(
+        IReadOnlyList<Permission> permissions,
+        ResourceType type,
+        OrganizationId organization,
+        DateTimeOffset at,
+        RequiredConsent? consent) =>
+        new(permissions, type, organization, at, consent);
+
     // Every rendering but the organization-wide one is about records of one type, and
     // the type is what the ancestry is read by.
     private ResourceType Type => _type
@@ -148,24 +185,7 @@ internal sealed class PermissionRule
     {
         ArgumentNullException.ThrowIfNull(sources);
 
-        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
-        Expression<Func<string, bool>> allowed = Stored(sources, _permissions, deny: false);
-        Expression<Func<string, bool>> denied = Stored(sources, _permissions, deny: true);
-
-        ParameterExpression named = allowed.Parameters[0];
-        Expression reaches = allowed.Body;
-
-        // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002 (D-160): a grant or a relationship row for
-        // one of the principal's subjects, on the record or on something above it, and
-        // a deny defeats either.
-        foreach (RelationshipDeclaration relationship in _derivations)
-        {
-            reaches = Expression.OrElse(reaches, Derived(relationship, sources, ancestry, named));
-        }
-
-        Expression body = Expression.AndAlso(
-            reaches,
-            Expression.Not(new Substitution(denied.Parameters[0], named).Visit(denied.Body)));
+        (ParameterExpression named, Expression body) = _exercised ? Held(sources.Ancestry) : Granted(sources);
 
         // AUTHZ-GATE-002 AC4: a permission bound to a consent-based purpose reaches only
         // the records whose data subject consented to it.
@@ -386,6 +406,26 @@ internal sealed class PermissionRule
     {
         string row = Identifier(rowAlias, nameof(rowAlias)) + "." + Identifier(column, nameof(column));
 
+        // IDN-PRIN-001 (D-207): a job's declaration reaches the records its organization
+        // holds, as the expression's rendering of the same rule does.
+        if (_exercised)
+        {
+            return new SqlFilter(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"""
+                    (EXISTS (
+                        SELECT 1
+                        FROM identity.ancestry AS {Prefix}held
+                        WHERE {Prefix}held.resource_type = @{Prefix}type
+                          AND {Prefix}held.resource_id = {row}
+                          AND {Prefix}held.depth = 0
+                          AND {Prefix}held.organization = @{Prefix}organization
+                    ){Consented(row)})
+                    """),
+                ExercisedParameters());
+        }
+
         string text = string.Create(
             CultureInfo.InvariantCulture,
             $"""
@@ -477,6 +517,46 @@ internal sealed class PermissionRule
             GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
             """),
         Parameters());
+
+    // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002 (D-160): a grant or a relationship row for one of
+    // the principal's subjects, on the record or on something above it, and a deny
+    // defeats either.
+    private (ParameterExpression Named, Expression Body) Granted<TResource>(FilterSources<TResource> sources)
+    {
+        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
+        Expression<Func<string, bool>> allowed = Stored(sources, _permissions, deny: false);
+        Expression<Func<string, bool>> denied = Stored(sources, _permissions, deny: true);
+
+        ParameterExpression named = allowed.Parameters[0];
+        Expression reaches = allowed.Body;
+
+        foreach (RelationshipDeclaration relationship in _derivations)
+        {
+            reaches = Expression.OrElse(reaches, Derived(relationship, sources, ancestry, named));
+        }
+
+        return (
+            named,
+            Expression.AndAlso(
+                reaches,
+                Expression.Not(new Substitution(denied.Parameters[0], named).Visit(denied.Body))));
+    }
+
+    // IDN-PRIN-001 (D-207): what a job's declaration reaches, a record of the type the
+    // organization holds, read from the record's own row of the ancestry.
+    private (ParameterExpression Named, Expression Body) Held(IQueryable<AncestryEntry> ancestry)
+    {
+        string type = Type.ToString();
+        Guid organization = _organization.Value;
+
+        Expression<Func<string, bool>> held = identifier => ancestry.Any(entry =>
+            entry.ResourceType == type
+            && entry.ResourceId == identifier
+            && entry.Depth == 0
+            && entry.Organization == organization);
+
+        return (held.Parameters[0], held.Body);
+    }
 
     // AUTHZ-GATE-002 AC1: the one predicate every rendering over the host's rows is
     // built from: a live grant for one of the permissions, held by one of the
@@ -828,6 +908,20 @@ internal sealed class PermissionRule
             parameters[Alias(index) + "_on"] = _derivations[index].On.ToString();
         }
 
+        return WithConsent(parameters);
+    }
+
+    // A job's fragment reads no grant, so it carries the type, the organization and the
+    // consent alone: the statement would hold parameters it never names.
+    private Dictionary<string, object> ExercisedParameters() =>
+        WithConsent(new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [Prefix + "type"] = Type.ToString(),
+            [Prefix + "organization"] = _organization.Value,
+        });
+
+    private Dictionary<string, object> WithConsent(Dictionary<string, object> parameters)
+    {
         if (_consent is RequiredConsent consent)
         {
             parameters[Prefix + "purpose"] = consent.Purpose;

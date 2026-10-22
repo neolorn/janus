@@ -32,7 +32,7 @@ internal static class BootstrapCommand
     /// <summary>
     /// What the command declares (LIB-API-001): its arguments, the key document, the
     /// enrolment address and the administrative organization's identifier on two lines
-    /// (D-204), and the codes a refusal carries.
+    /// (D-204), and the codes a refusal or a fault carries.
     /// </summary>
     public static CommandContract Contract { get; } = new(
         Name,
@@ -54,6 +54,7 @@ internal static class BootstrapCommand
             ErrorCodes.StartupRelyingPartyId,
             ErrorCodes.StartupSchemaMismatch,
             ErrorCodes.StartupSecretUnavailable,
+            ErrorCodes.SystemFault,
         ]);
 
     /// <summary>
