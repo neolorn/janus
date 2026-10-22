@@ -116,17 +116,22 @@ the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised g
 drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record,
 `authz.grant.materialised`, naming the system principal `derivation-driftcheck`; a grant
 the drift check takes back is recorded as `authz.grant.retracted` the same way, in the
-transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a person, an
-acknowledgement or bootstrap writes is recorded as `authz.grant.created`, and a
-revocation a person makes as `authz.grant.revoked`, each with its reason, in the
-transaction that writes it (`10` section 5.24, D-197). A grant revoked because the record
-it names was removed (`IResources.RemoveAsync`, AUTHZ-INHERIT-002) records the nil
-subject as its revoker and the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked`
-(D-203). Each of these four records names the grant's holder as its subject where the
-holder is an account, and none where it is a group, whoever acted (`10` section 5.24,
-D-206).
+transaction that corrects the drift (AUTHZ-DERIVE-005, D-187). A grant a host's refresh
+writes records as its granter the caller's acting account, or the nil subject for a
+system principal, a host's job among them, with the reason `derivation:<relationship>`,
+one it takes back records the same as its revoker, with the same reason, and each is
+recorded as `authz.grant.materialised` or `authz.grant.retracted` in the refresh's
+transaction, naming who called it, a host's job by its principal and stated reason
+(AUTHZ-DERIVE-005, D-207). Any other grant a person, an acknowledgement or bootstrap
+writes is recorded as `authz.grant.created`, and any other revocation a person makes as
+`authz.grant.revoked`, each with its reason, in the transaction that writes it (`10`
+section 5.24, D-197). A grant revoked because the record it names was removed
+(`IResources.RemoveAsync`, AUTHZ-INHERIT-002) records the nil subject as its revoker and
+the reason `AUTHZ-INHERIT-002`, as `authz.grant.revoked` (D-203). Each of these four
+records names the grant's holder as its subject where the holder is an account, and none
+where it is a group, whoever acted (`10` section 5.24, D-206).
 
-*Source: D-015, D-166, D-187, D-197, D-203, D-206*
+*Source: D-015, D-166, D-187, D-197, D-203, D-206, D-207*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -142,11 +147,12 @@ migration across every query later.
    `authz.grant.materialised` or `authz.grant.retracted`, naming the principal
    `derivation-driftcheck` and the reason `AUTHZ-DERIVE-005`, in the transaction that
    corrects the drift.
-6. A grant a person, an acknowledgement or bootstrap writes is recorded as
-   `authz.grant.created`, and a revocation a person or a registration's removal makes as
-   `authz.grant.revoked`, each with its reason, in the transaction that writes it. These
-   two records and the drift check's two name the grant's holder as their subject where
-   the holder is an account, and none where it is a group (D-206).
+6. Save a grant a refresh writes or takes back (AUTHZ-DERIVE-005, D-207), a grant a
+   person, an acknowledgement or bootstrap writes is recorded as `authz.grant.created`,
+   and a revocation a person or a registration's removal makes as `authz.grant.revoked`,
+   each with its reason, in the transaction that writes it. These two records, and the
+   two a refresh or the drift check writes, name the grant's holder as their subject
+   where the holder is an account, and none where it is a group (D-206, D-207).
 
 ---
 
@@ -281,33 +287,40 @@ takes no access context (LIB-API-005).
 `ValueTask`. With `work` begun, it gives the host's context the unit of work's open
 connection, which the context does not own, and its transaction; at the outermost commit
 or rollback the unit of work takes both back, and the context returns to the connection
-it was configured with (D-206). So its `SaveChangesAsync` and the library's writes
-commit together at the outermost `CommitAsync` and roll back together. The connection
-runs under the deployment's one application credential, `identity_app`, to which the
-host's own migrations grant the host's tables (OPS-MIG-003). Called with `work` not
-begun, on a context that holds a connection of its own (one whose connection is open, or
-which holds a transaction, when it is called; one configured with a connection string or
-a closed connection holds none, and one the unit of work gave it is not its own), or for
-another unit of work while one is joined, it throws `InvalidOperationException`, a fault
-of the calling code (CONV-ERR-001); a second call for the unit of work already joined
-changes nothing. An operation whose refusal keeps a write, called inside the host's open
-unit of work, is a fault too (CONV-DESIGN-003). The host saves before the outermost
+it was configured with (D-206), exactly as it was configured: a context configured with
+a connection string keeps the data source its provider built from it, with its type
+mappings and plugins, and the string as the context resolved it (D-207). So its
+`SaveChangesAsync` and the library's writes commit together at the outermost
+`CommitAsync` and roll back together. The connection runs under the deployment's one
+application credential, `identity_app`, to which the host's own migrations grant the
+host's tables (OPS-MIG-003). Called with `work` not begun, on a context that holds a
+connection of its own (one whose connection is open, or which holds a transaction, when
+it is called; one configured with a connection string or a closed connection it does not
+own holds none, and one the unit of work gave it is not its own), on a context
+configured with a connection object it owns (replacing it would dispose it, D-207), on a
+context taken from a pool (`AddDbContextPool`, `AddPooledDbContextFactory`: the pool's
+reset keeps the joined connection, open inside the unit of work's transaction, for the
+next lease, D-207), or for another unit of work while one is joined, it throws
+`InvalidOperationException`, a fault of the calling code (CONV-ERR-001); a second call
+for the unit of work already joined changes nothing. A host never returns a joined
+context to a pool, one it builds itself included, before the outermost commit or
+rollback (D-207). An operation whose refusal keeps a write, called inside the host's
+open unit of work, is a fault too (CONV-DESIGN-003). The host saves before the outermost
 commit; the library commits nothing the host has not saved and clears nothing the host's
-context tracks.
-`IResources.RemoveAsync(resource)` removes a record's registration and its ancestry rows,
-in the unit of work, for a record the host removes from its own table, and revokes every
-live grant that names the record (AUTHZ-GRANT-003), so a later registration of the same
-identifier inherits none of them. It is refused 422 `api.request.invalid` naming
-`resource` where the record is not registered, and 409 `authz.resource.inuse` where a
-record is registered inside it. A record's data subject is fixed at registration: a host
-that must change it removes the registration and registers the record again, encrypting
-its fields again under the new subject (PRIV-RIGHT-005a), in one unit of work, and records
-the change in its own history (IDN-PRIN-003).
-Placing a record, or moving it, confers on it the grants held on its new containers
-(AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action, which the
-host asks of the gate before it writes.
+context tracks. `IResources.RemoveAsync(resource)` removes a record's registration and
+its ancestry rows, in the unit of work, for a record the host removes from its own
+table, and revokes every live grant that names the record (AUTHZ-GRANT-003), so a later
+registration of the same identifier inherits none of them. It is refused 422
+`api.request.invalid` naming `resource` where the record is not registered, and 409
+`authz.resource.inuse` where a record is registered inside it. A record's data subject
+is fixed at registration: a host that must change it removes the registration and
+registers the record again, encrypting its fields again under the new subject
+(PRIV-RIGHT-005a), in one unit of work, and records the change in its own history
+(IDN-PRIN-003). Placing a record, or moving it, confers on it the grants held on its new
+containers (AUTHZ-INHERIT-001), so whether a caller may do it is the host's own action,
+which the host asks of the gate before it writes.
 
-*Source: D-015, D-017, D-166, D-203, D-206*
+*Source: D-015, D-017, D-166, D-203, D-206, D-207*
 
 Precomputation is what keeps the rule composable into a query and therefore usable
 as a `WHERE` clause. Same-transaction maintenance is why permission data and business
@@ -326,10 +339,12 @@ service.
    `resource`, and one that holds a registered record with `authz.resource.inuse`, each
    changing nothing.
 6. `UseUnitOfWorkAsync` called with its unit of work not begun, on a context whose own
-   connection is open or which holds a transaction, or for another unit of work while
-   one is joined throws `InvalidOperationException`; called again for the unit of work
-   it joined, it changes nothing; after the outermost commit or rollback the host's
-   context uses the connection it was configured with (D-206).
+   connection is open or which holds a transaction, on a context configured with a
+   connection object it owns, on a context taken from a pool, or for another unit of
+   work while one is joined throws `InvalidOperationException`; called again for the
+   unit of work it joined, it changes nothing; after the outermost commit or rollback
+   the host's context uses the connection it was configured with (D-206), a context
+   configured with a connection string keeping its provider's type mappings (D-207).
 
 ---
 
@@ -455,19 +470,20 @@ SHALL be marked as such so they are never mistaken for stored grants someone wro
 
 **Values (D-161, D-162).** Refresh is the host's call: the library exposes
 `IDerivationMaterialiser.RefreshAsync(context, derivation, resource, sources)`, which
-takes the access context whose subject every grant it writes records as its granter
-(AUTHZ-GRANT-003), the relationship's name, the `ResourceId` of the resource the
-relationship's rows are about, and the same host-supplied sources object the filter
-takes (AUTHZ-DERIVE-001), and which the host calls from the operation that changes the
-relationship. The grants a refresh writes commit with the library's unit of work, and
-none exists if that unit of work does not commit. Where the host's write and the refresh
-do not both commit, the difference is drift, which the next refresh or the drift check
-detects, reports and corrects: the drift check re-evaluates every materialised
-derivation every `derivation.materialised.driftcheck` (default `P1D`), and a difference
-raises the `degradation` condition with the derivation's name in `details` and is
-corrected in the same run. A refresh SHALL write the derivation's grant on each resource of the type the
-derivation is declared on whose ancestry includes the resource the relationship's row
-names, that resource itself included where it is of that type.
+takes the access context of who calls it (every grant it writes records as its granter
+that context's acting account, or the nil subject for a system principal, a host's job
+among them; AUTHZ-GRANT-003, D-207), the relationship's name, the `ResourceId` of the
+resource the relationship's rows are about, and the same host-supplied sources object
+the filter takes (AUTHZ-DERIVE-001), and which the host calls from the operation that
+changes the relationship. The grants a refresh writes commit with the library's unit of
+work, and none exists if that unit of work does not commit. Where the host's write and
+the refresh do not both commit, the difference is drift, which the next refresh or the
+drift check detects, reports and corrects: the drift check re-evaluates every
+materialised derivation every `derivation.materialised.driftcheck` (default `P1D`), and
+a difference raises the `degradation` condition with the derivation's name in `details`
+and is corrected in the same run. A refresh SHALL write the derivation's grant on each
+resource of the type the derivation is declared on whose ancestry includes the resource
+the relationship's row names, that resource itself included where it is of that type.
 
 **Values (D-166).** The drift check reads each relationship's rows through the source
 the host declares for it (`07` LIB-HOST-001), the source the `GET /admin/access` view
@@ -477,10 +493,24 @@ with `model.startup.declarationmissing` naming the relationship. The drift check
 the system principal `derivation-driftcheck` (`10` section 5.29, IDN-PRIN-001); a grant
 it writes records the nil subject as its granter and the reason `AUTHZ-DERIVE-005`, and
 its audit record (`authz.grant.materialised`, or `authz.grant.retracted` for one it
-takes back) names the principal (AUTHZ-GRANT-003, D-187). The refresh meets no gate of
-its own: the host calls it from its own gated operation (CONV-DESIGN-002 AC3).
+takes back) names the principal (AUTHZ-GRANT-003, D-187); one it takes back records the
+nil subject as its revoker and the reason `AUTHZ-DERIVE-005`. The refresh meets no gate
+of its own, save that a host job's context is refused while a request is served (below):
+the host calls it from its own gated operation, or from a declared job (CONV-DESIGN-002
+AC3, `01` IDN-PRIN-001).
 
-*Source: D-043, D-162, D-166, D-183, D-187*
+**Values (D-207).** A grant a host's refresh writes carries the reason
+`derivation:<relationship>`, whoever calls it, and records as its granter the caller's
+acting account, or the nil subject for a system principal; one it takes back records the
+same as its revoker, with the same reason; and each grant it writes or takes back is
+recorded `authz.grant.materialised` or `authz.grant.retracted`, in the refresh's
+transaction, naming who called it: a person as acting identity, a system principal (a
+host's job) by its name and stated reason (IDN-AUD-001), and the grant's holder as
+subject where the holder is an account (D-206). A job's context calling it while a
+request is served is refused `authz.denied`, recorded as the gate records a refusal of
+background work (AUTHZ-CONCEAL-004, `01` IDN-PRIN-001).
+
+*Source: D-043, D-161, D-162, D-166, D-183, D-187, D-207*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
 synchronisation problem the design otherwise avoids. It is the last rung of the
@@ -506,6 +536,12 @@ and for the same reason.
    `model.startup.declarationinvalid`.
 6. The view and the drift check evaluate a derivation in one statement in the host's
    context, over the rows and the contract tables of one context instance.
+7. A refresh called with a person's context writes grants naming that person as granter,
+   and one called with a host job's context outside a request writes grants naming the
+   nil granter; each carries the reason `derivation:<relationship>`, and each grant
+   written or taken back is recorded `authz.grant.materialised` or
+   `authz.grant.retracted` naming the caller; a job's refresh while a request is served
+   is refused `authz.denied` and writes nothing (D-207).
 
 ---
 
@@ -549,9 +585,10 @@ reads. `unevaluated` names the relationships whose derivations were not evaluate
 grant that confers nothing is not reported. The view is asked under `grant:read` in the
 organization the record belongs to (AUTHZ-SCOPE-001); a record the deployment holds no
 registration for belongs to no organization and is refused as a caller without
-`grant:read` is refused.
+`grant:read` is refused. The view reports grants: a host's declared job holds none and
+is not listed, its reach being its declaration (`01` IDN-PRIN-001, D-207).
 
-*Source: D-043, AUTHZ-GATE-004, D-166*
+*Source: D-043, AUTHZ-GATE-004, D-166, D-207*
 
 Stored grants answer this with a query. Derived grants cannot — there is no row to
 look up. This is the genuine ceiling of the design, and the reason the migration
@@ -585,15 +622,19 @@ recovery approval, the privacy request queue and erasures, the audit trail and
 explanation resolution, compliance text and records, and the break-glass credential.
 Before bootstrap has marked an administrative organization every such operation is
 refused. Grants, groups, memberships and invitations are evaluated in the organization
-they belong to. A grant in the administrative organization confers only on a principal
-holding a current membership of it (IDN-MEM-001). Where the organization is read from
-the row a request names, an identifier naming no row belongs to no organization, so no
-grant reaches it, and it is refused as a missing permission is (`09` section 8). A path
-under `/admin` whose `{id}` names no organization the deployment holds is answered 404
-`identity.organization.notfound`, nothing being concealed at that level (`09` section
-8a).
+they belong to, save that a grant in an organization other than the administrative
+organization, and its revocation, are also admitted under `system:administer` held in
+the administrative organization (D-207): an organization `POST /admin/organizations`
+creates holds no grant until one is written this way, and one whose last holder of
+`grant:manage` has gone is given another. A grant in the administrative organization
+confers only on a principal holding a current membership of it (IDN-MEM-001). Where the
+organization is read from the row a request names, an identifier naming no row belongs
+to no organization, so no grant reaches it, and it is refused as a missing permission is
+(`09` section 8). A path under `/admin` whose `{id}` names no organization the
+deployment holds is answered 404 `identity.organization.notfound`, nothing being
+concealed at that level (`09` section 8a).
 
-*Source: D-003, IDN-MEM-003, D-166*
+*Source: D-003, IDN-MEM-003, D-166, D-207*
 
 **Acceptance criteria**
 1. No session field names an organization.
@@ -601,6 +642,10 @@ under `/admin` whose `{id}` names no organization the deployment holds is answer
    without switching.
 3. A permission held in an organization other than the administrative organization
    authorizes no operation on the deployment or on an account.
+4. A holder of `system:administer` in the administrative organization writes and revokes
+   a grant in an organization `POST /admin/organizations` created, which holds no grant
+   before it; a holder of `grant:manage` in the administrative organization alone is
+   refused there (D-207).
 
 ---
 
@@ -842,20 +887,23 @@ this SHALL be stated in the public contract.
 **AUTHZ-GATE-004** — The gate SHALL provide an explanation operation returning **why**
 access was granted or denied, naming the matched or missing grant.
 
-**Values (D-153).** The explanation is `{ outcome: allowed · denied, permission, principal:
-{ acting, effective, name, reason }, grant }`, `name` and `reason` present only for a
-system principal (D-166), where `grant` is `{ id, kind, subjectType, subjectId, role,
-deny, inheritedFrom: { resourceType, resourceId } or null }` for the grant that decided,
-or null when none matched. A derived grant has no row: it is named `{ id: null, kind:
-derived, subjectType: user, subjectId, role, deny: false, inheritedFrom }`, where
-`subjectId` is the asking account, `role` the role the derivation confers, and
+**Values (D-153).** The explanation is
+`{ outcome: allowed · denied, permission, principal: { acting, effective, name, reason }, grant }`,
+`name` and `reason` present only for a system principal (D-166), where `grant` is
+`{ id, kind, subjectType, subjectId, role, deny, inheritedFrom: { resourceType, resourceId } or null }`
+for the grant that decided, or null when none matched. A derived grant has no row: it is
+named
+`{ id: null, kind: derived, subjectType: user, subjectId, role, deny: false, inheritedFrom }`,
+where `subjectId` is the asking account, `role` the role the derivation confers, and
 `inheritedFrom` the resource the relationship's row names, or null where that is the
 resource explained (D-162). A matching deny is named before any allow; where several
 grants of one kind would decide, the one named is the nearest, on the resource itself
 first and then on its containers nearest first, a derived grant placed by the resource
-its relationship's row names (D-166).
+its relationship's row names (D-166). A host job's context is refused the explanation
+with `authz.denied`, an admitted job having no grant to name; its recorded refusals
+resolve by their correlation identifier (AUTHZ-CONCEAL-004, `01` IDN-PRIN-001, D-207).
 
-*Source: P-003, D-162, D-166*
+*Source: P-003, D-162, D-166, D-207*
 
 Costs little and answers "why can't I see this record?" without a debugger. Also the
 backing query for a "who can access this?" administrative view.
@@ -884,14 +932,14 @@ meaning **"permitted by grants, subject to session gates"** — computed for a w
 at once, in the record's own query or in one statement beside it, never per record.
 
 **A capability is not a promise the action will succeed.** An action can still be
-refused for step-up, a downgraded session, the subject's processing restriction, missing
-or superseded consent, or the caller's account state — none of which the per-row grant
-query evaluates. A list filter or SQL fragment under an action bound to a step-up gate
-asks that gate after the restriction and before its query is rendered, and is refused
-with the gate's code where it is unmet, whatever its rows; the per-row query then
-renders no step-up term (D-187). A check answers the gate's code only for a record its
-grants admit, so a step-up case of the truth table is one whose grants admit the record
-(AUTHZ-TEST-001).
+refused for step-up, a downgraded session, the acting account's processing restriction
+(AUTHZ-GATE-006), missing or superseded consent, or the caller's account state, none of
+which the per-row grant query evaluates. A list filter or SQL fragment under an action
+bound to a step-up gate asks that gate after the restriction and before its query is
+rendered, and is refused with the gate's code where it is unmet, whatever its rows; the
+per-row query then renders no step-up term (D-187). A check answers the gate's code only
+for a record its grants admit, so a step-up case of the truth table is one whose grants
+admit the record (AUTHZ-TEST-001).
 
 **Each capability therefore carries what it still requires:**
 
@@ -915,15 +963,19 @@ last downgrade (AUTH-SESS-009), and `stepup` for one whose bound gate it otherwi
 not currently satisfy (`10` section 5.20).
 
 **Values (D-162, D-166).** The `consent` residual comes from the **purpose bound to the
-action**, as `stepup` comes from its gate: the model builder binds a host-declared action
-to the purpose it is done for, beside its step-up gate. Where that purpose rests on
-consent, the gate SHALL refuse the action until the record's data subject
-(AUTHZ-MODEL-003) holds the consent PRIV-SENS-002 AC1 names, whoever the caller is,
-a system or staff principal included (`privacy.consent.required`,
+action**, as `stepup` comes from its gate: the model builder binds a host-declared
+action to the purpose it is done for, beside its step-up gate. Where that purpose rests
+on consent, the gate SHALL refuse the action until the record's data subject
+(AUTHZ-MODEL-003) holds the consent PRIV-SENS-002 AC1 names, whoever the caller is, a
+system or staff principal included (`privacy.consent.required`,
 `privacy.consent.superseded`, `privacy.consent.writtenrequired`), and `requires` lists
 `consent` for it. The list filter and the SQL fragment apply the same condition
 (AUTHZ-GATE-002). An action bound to no purpose, or to one on another basis, asks for no
-consent.
+consent. On the organization-wide check, which names no record and so no data subject,
+an action bound to a consent-based purpose is refused `privacy.consent.required`, for a
+person as for a host's job (D-207). The capability page is a person's surface: a host
+job's context is refused it with `authz.denied`, in a request and outside one (`01`
+IDN-PRIN-001, D-207).
 
 **Values (D-162, D-166).** Where the host supplies the sources of AUTHZ-DERIVE-001, the
 capabilities of a page SHALL be computed in one query in the host's context: for each
@@ -933,7 +985,7 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206, D-207*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
@@ -960,6 +1012,12 @@ unless the model builder declares it reading. Under restriction the gate allows 
 account's own reading actions and refuses every modifying one with `authz.restricted`.
 The library-owned actions of `10` section 2.1 follow the same rule.
 
+**Values (D-207).** The restriction the gate judges is the acting account's. A host
+job's context acts for no account, so the gate judges no restriction for it, a modifying
+permission on a record whose data subject is restricted included; a data subject's
+restriction reaches the host's processing, a job's included, through
+`RestrictionChanged` (PRIV-RIGHT-004), not through the gate (`01` IDN-PRIN-001).
+
 **Values (D-166).** Restriction refuses no sign-in: a `restricted` account signs in and
 reads (IDN-ACCT-007, "Yes, read only"). The changes the library makes to the account's
 own identifiers, credentials, profile and preferences, and an invitation
@@ -977,7 +1035,10 @@ unit of work begins where the state it reads then already refuses, and asks the 
 again inside its unit of work before its first write, on the state read under that hold;
 a refusal there is recorded as every gate refusal is, and the unit of work rolls back.
 Where a host asks the gate for a modifying action inside an open transaction, the gate
-holds the row in that transaction the same way.
+holds the row in that transaction the same way. A host asks the gate of an action bound
+to a step-up gate before it begins the unit of work it joins, as a library operation
+judges its step-up before its own, and asks again inside it before its first write (`08`
+CONV-DESIGN-003, D-207).
 
 **Values (D-186).** The first write is the first write to the library's database of the
 unit of work that makes the change. Where an effect outside it must come first, the gate
@@ -993,7 +1054,7 @@ the send in the unit of work that writes what the send carries, so the second as
 both: an approved recovery's link is undertaken in the approval's unit of work
 (AUTH-RECOV-002).
 
-*Source: D-037, D-166, D-183, D-186*
+*Source: D-037, D-166, D-183, D-186, D-207*
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.
@@ -1214,7 +1275,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183, D-187, D-189, D-192, D-206*
+*Source: D-015, D-183, D-187, D-189, D-192, D-206, D-207*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1229,19 +1290,29 @@ authorization system that is trusted and one that is feared.
    fails; no provider), **a bound action judged from the library's session** (met; unmet
    on its level, its phishing resistance or its age, each where the bound gate asks it;
    a lower level reached since, beside a higher one past the gate's maximum age; proof
-   reached only before the session's last downgrade), and **a host job's context**
-   (admitted for a permission its declaration names outside a request; refused while a
-   request is served, through either profile or neither and in a scope opened within it;
-   D-206); the session's rows are the library's own, not scenarios of `10` section 5.30,
-   since the conformance suite judges a step-up from a host's report alone
-   (LIB-TEST-001), and so are the job's, since whether a request is being served is the
-   library's own answer (`08` CONV-DESIGN-007).
+   reached only before the session's last downgrade), **a host job's context** (admitted
+   for a permission its declaration names outside a request, on a record, a modifying
+   one on a record whose data subject is restricted included, and on its organization;
+   refused for a permission it does not declare, in another organization, in an
+   organization whose deletion is requested, and while a request is served, through
+   either profile or neither and in a scope opened within it; D-206, D-207), and **a
+   grant written in an organization other than the administrative organization**
+   (admitted under `grant:manage` held there, or under `system:administer` held in the
+   administrative organization; refused under `grant:manage` held in the administrative
+   organization alone; D-207); the session's rows are the library's own, not scenarios
+   of `10` section 5.30, since the conformance suite judges a step-up from a host's
+   report alone (LIB-TEST-001), and so are the job's, since whether a request is being
+   served is the library's own answer (`08` CONV-DESIGN-007), and a grant's, since
+   `grant:manage` and `system:administer` are library-owned permissions no host declares
+   (`10` section 2.1).
 2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
    step-up case agrees when the check answers the gate's outcome and the filter answers
    the same: where the gate is met, the filter lists the record; where it is not, the
    filter is refused with the code the check answers (AUTHZ-GATE-005). A host job's case
    refused while a request is served agrees when the check and the filter are both
-   refused `authz.denied` (D-206).
+   refused `authz.denied` (D-206). A case that names no record (a host job's context on
+   its organization, a grant written in an organization) runs through the single check
+   alone, no list holding it (D-207).
 3. Where a derivation is materialised, the same cases pass identically before and
    after materialisation.
 

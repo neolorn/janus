@@ -36,12 +36,14 @@ for one job produce case-by-case judgment calls.
 transaction already attached. Direct connection retrieval SHALL NOT be used.
 
 A port that runs hand-written SQL inside a unit of work first saves the changes the
-context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003). The one
-other place that touches a context's connection is `UseUnitOfWorkAsync` in
-`Janus.Hosting`, which reads the host's context's connection to judge it and hands it the
-accessor's connection and transaction (AUTHZ-INHERIT-002, `08` CONV-DESIGN-007, D-206).
+context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003). The
+one other place that touches a context's connection is `UseUnitOfWorkAsync` in
+`Janus.Hosting`, which reads the host's context's connection and options to judge it,
+hands it the accessor's connection and transaction, and returns it to its configuration,
+the data source its provider built included, after the outermost commit or rollback
+(AUTHZ-INHERIT-002, `08` CONV-DESIGN-007, D-206, D-207).
 
-*Source: D-017, D-166, D-186, D-206*
+*Source: D-017, D-166, D-186, D-206, D-207*
 
 Without this, a hand-written query on a separate connection silently misses rows
 written earlier in the same transaction — a nasty and easily-missed bug in financial
@@ -1326,16 +1328,19 @@ it fails with `model.startup.declarationmissing`, `details.key` `secretSource`
 A `Janus.Cli` command SHALL read its database connection and every key version it needs
 from one JSON document on standard input, the same document the secret source serves,
 save `migrate`, whose document carries the migration connection alone and which reads no
-key (OPS-MIG-001, D-204),
-SHALL refuse to run where standard input is a terminal, SHALL take none of them as an
-argument, a file or an environment variable, and SHALL clear every key when it ends. A
-command the executable does not carry is refused with one JSON line
-`api.request.malformed` naming it on standard error, and exit code 1. Every `Janus.Cli`
-command exits 0 on success and 1 on a refusal, writing the refusal as one JSON line
-`{"code": ..., "details": {...}}` on standard error and nothing on standard output, as
-`bootstrap` does (OPS-BOOT-001, D-197).
+key (OPS-MIG-001, D-204), SHALL refuse to run where standard input is a terminal, SHALL
+take none of them as an argument, a file or an environment variable, and SHALL clear
+every key when it ends. A command the executable does not carry is refused with one JSON
+line `api.request.malformed` naming it on standard error, and exit code 1. Every
+`Janus.Cli` command exits 0 on success and 1 on a refusal, writing the refusal as one
+JSON line `{"code": ..., "details": {...}}` on standard error and nothing on standard
+output, as `bootstrap` does (OPS-BOOT-001, D-197). A fault ends every command the same
+way: one JSON line on standard error carrying the code the fault carries (OPS-SEC-003
+criterion 3), or `{"code": "system.fault", "details": {}}` for one that carries none, as
+`migrate` answers a database's refusal (OPS-MIG-001); nothing on standard output, exit
+code 1, its keys cleared (D-207).
 
-*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197, D-204*
+*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197, D-204, D-207*
 
 **Acceptance criteria**
 1. No secret value appears in any repository file or image layer.
@@ -1354,6 +1359,9 @@ command exits 0 on success and 1 on a refusal, writing the refusal as one JSON l
    usable key is refused with it naming the missing member in `details.key`, save
    `migrate`, refused with `details.key` `input` where its document carries no connection; a document that is not JSON or exceeds 64 KiB is refused with
    `api.request.malformed` naming `input`; no refusal carries anything of the document.
+5. A command whose work throws a fault that carries no code writes one JSON line
+   `{"code": "system.fault", "details": {}}` on standard error and nothing on standard
+   output, exits 1, and clears every key it read (D-207).
 
 ---
 
@@ -1510,7 +1518,12 @@ than an improvisation.
 **OPS-OBS-001** — Every authorization decision SHALL be explicable without a
 debugger.
 
-*Source: P-003, AUTHZ-GATE-004, D-166*
+*Source: P-003, AUTHZ-GATE-004, D-166, D-207*
+
+A host job's decision is explained by its declaration (`07` LIB-HOST-001, Jobs) and,
+where refused, by its recorded refusal's correlation identifier, which names its
+principal and reason (AUTHZ-CONCEAL-004); the explanation operation refuses a job's
+context `authz.denied` (`01` IDN-PRIN-001, D-207).
 
 **Acceptance criteria**
 1. A denial resolves to an explanation naming the permission and the missing grant,
@@ -1631,7 +1644,7 @@ watched from its rotation record, not from the log (DR-009a).
 **OPS-ENV-001** — Development databases SHALL be seeded with realistic principals and
 grants.
 
-*Source: D-010, D-166, D-204*
+*Source: D-010, D-166, D-204, D-207*
 
 A development environment where nothing is visible invites a temporary bypass that
 reaches production.
@@ -1640,13 +1653,15 @@ reaches production.
 `migrate` command of `Janus.Cli`, then its `bootstrap` command, which seeds the
 administrative organization, the administrative roles and their permissions, the first
 administrator, `emergency` and the canary, then `register-client` for each browser
-application the host declares (AUTH-SESS-012, D-204). The library ships no seed of its own; every
-further principal and grant is made through the library's own operations, and a host
-seeds its own domain the same way: its declared roles at the first start
-(AUTHZ-GRANT-004), and its people through the library's endpoints, which `Janus.Testing`
-drives for a test or a development setup with its stand-in transports and software
-passkey (LIB-TEST-003, D-204). No code path reads which environment it runs in, and no
-key of `10` section 4 bypasses, skips or disables a check.
+application the host declares (AUTH-SESS-012, D-204). The library ships no seed of its
+own; every further principal and grant is made through the library's own operations, and
+a host seeds its own domain the same way: its declared roles at the first start
+(AUTHZ-GRANT-004), an organization of its own through `POST /admin/organizations` with
+its first grants written under `system:administer` (AUTHZ-SCOPE-001, D-207), and its
+people through the library's endpoints, which `Janus.Testing` drives for a test or a
+development setup with its stand-in transports and software passkey (LIB-TEST-003,
+D-204). No code path reads which environment it runs in, and no key of `10` section 4
+bypasses, skips or disables a check.
 
 **Acceptance criteria**
 1. A fresh development database yields a usable, permission-realistic dataset.

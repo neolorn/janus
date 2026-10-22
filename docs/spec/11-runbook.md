@@ -158,6 +158,10 @@ The system warns ahead of this operation: `expiry-approaching` is raised
 key-encryption key's cryptoperiod ends, counted from its last completed rotation
 (OPS-MAINT-001, DR-009a). Record the operation in the maintenance log.
 
+A command that ends with exit code 1 and a JSON line names its refusal or fault there;
+`system.fault` carries nothing more, and `rotate-kek` resumes where it stopped when run
+again (OPS-SEC-001, OPS-SEC-003, D-207).
+
 **Rotate out of cycle** on any intrusion, alarm, or incident touching the secrets
 manager — before a copied key could be used.
 
@@ -201,6 +205,12 @@ pre-existing channel is the entire control.
 Approver anomaly detection runs per approver (AUTH-RECOV-002). With one approver,
 the operator reviews the approver report weekly, rather than relying on it to alert,
 and records the review in the maintenance log of OPS-MAINT-001 (D-147).
+
+**An organization no one can manage.** An organization `POST /admin/organizations`
+creates holds no grant, and one whose last holder of `grant:manage` has left has no one
+to grant. A system administrator writes its grants from the management application
+(`POST /admin/grants`, under `system:administer`, with a reason): `grant:manage` and
+`membership:manage` to a staff member who answers for it (AUTHZ-SCOPE-001, D-207).
 
 ---
 

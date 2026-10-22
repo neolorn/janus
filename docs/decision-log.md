@@ -8527,6 +8527,8 @@ tools for a reason.
 
 > **Amended.** Item 4: a Tier 2 or Tier 3 question is still asked and never decided by the implementer, but it parks its item, not the run (D-182).
 
+> **Amended.** A refresh records as granter the caller's acting account, or the nil subject for a system principal, a host's job among them (D-207).
+
 **Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-160, D-043, the working guide (rule tiers) · **Extends:** D-160
 
 **TL;DR.** Three derivation gaps closed, and a change of working mode: the owner cannot
@@ -12859,6 +12861,8 @@ line); `10` section 1 (`config.value.notallowed`), section 4 (`token.signing.alg
 
 > **Amended.** No part outlives the run, save a finished commit that cannot be made green until a question is answered: it is kept on its part's local branch, unmerged and unpushed, named in the report, and merged into the branch it was cut from once the answer comes, that branch reaching `main` only after the merge (D-206).
 
+> **Amended.** An answer arrives as an archive in the owner's Downloads folder, unpacked apart and checked against each file's `git hash-object` before it is committed; before a run ends the implementer pushes the working branch and opens its pull request, and where the work goes on after a push the full gate runs again on the last commit (D-207).
+
 **Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-161 (item 4, as D-166 left it), D-166 (section B and rule X5, the stop at each question), D-167 (items 4 and 5)
 
 **TL;DR.** A Tier 2 or Tier 3 question is still written up, asked and never decided by the
@@ -13441,6 +13445,8 @@ head does not clear it.
 
 > **Amended.** The kept writes gain, with the spend of an authentication code presented right, the release of its send's count on a restriction marked `resend` (D-198).
 
+> **Amended.** The kept writes add an invitation's attachment at a signed-in registration's begin; an outcome a chapter answers as a status and not a refusal is the operation's success (D-207).
+
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-183 (question 58, the writes a refusal keeps, now a closed list, and a commit made only where a write is kept; questions 27, 38 and 63, a refused retry and a fault after the commit; question 61, a row that tracks several deliveries; question 62, the sites whose first effect is outside the database), D-166 (119 (5), callers that act on a send's delivery; D.8 break-glass part (2), where the limit's raise is committed)
 
 **TL;DR.** The X9 sweep of D-183 question 58 met refusals whose counts or records a
@@ -13703,6 +13709,8 @@ REG-SESS-005 (body, criterion 4), REG-MAIL-002 (body).
 > **Amended.** Question 94: a step-up judges step 1 against the strictest of the policy's gates, offers every combination that reaches the weakest of them, field by field, judges step 3 against that weakest gate, and answers `factorRequired` until the strictest is reached (D-197).
 
 > **Amended.** Question 101: `authz.grant.materialised` and `authz.grant.retracted` name the grant's holder as subject where the holder is an account, and none where it is a group (D-206).
+
+> **Amended.** Question 101: `authz.grant.materialised` and `authz.grant.retracted` also record each grant a host's refresh writes or takes back, in the refresh's transaction, naming who called it, a person as acting identity and a system principal (a host's job) by its name and reason (D-207).
 
 **Date:** 2026-10-04 · **Status:** accepted · **Amends:** D-166 (X3, a decision on a value no one row holds is made under a lock on the value; 115 (2), the holder is an unkeyed hash; 209 (2), the UTS #46 checks; 265, the drift check's audit record; 306, what the sweep waits for and what it removes; section E item 4, what `AddJanus` registers), D-183 (questions 24 and 53, names and identifiers as value types; 25, both directions; 27, 38 and 63, a send's counters taken after the value locks too; 31, where an add is staged and the lock a value is judged under; 39, an invitation's erased value; 40, every site that raises an event; 46, the filter of an unmet step-up row and the suite's step-up scenarios; 50 and 51, the codes a section's text gives; 56, a token not yet valid; 57, the registrations that stay in Hosting)
 
@@ -15503,6 +15511,8 @@ reached it is now a 202, so no sign-in test is owed, and the step-up tests hold 
 
 > **Amended.** Known issues 1 and 11 of the fourth corrections report are answered: every audit record of a grant names its holder as subject where the holder is an account, and a watched change that decides nothing meets CONV-VCS-004 with a row restating the decision (D-206).
 
+> **Amended.** Small gaps: a grant a person's call writes through a refresh of a materialised derivation is recorded `authz.grant.materialised`, and one it takes back `authz.grant.retracted`, not `authz.grant.created` or `authz.grant.revoked` (D-207).
+
 **Date:** 2026-10-06 · **Status:** accepted · **Amends:** D-146 (item 18, the `phoneCode` second step: its enrolment; item 17, the shipped restrictions gain `sms.resend`), D-193 (question 218, the enrolment gap closed and the number bound), D-196 (question 247, the framework's request log), D-195 (questions 236 and 238, a second step accepted before a first factor no longer arises), D-194 (question 229, a second step presented before a first factor at a sign-in), D-188 (question 145, what a step-up's ask offers), D-187 (question 94, what a step-up offers), D-184 (the analyser-authoring packages), D-183 (question 36, where `auth.factor.notpermitted` is judged), D-182 (the last corrections run's questions), D-166 (item 114, where the leaked-password draw runs; item 235, a `resend` restriction counts a send once), D-149 (item 9, the permitted packages), D-141 (item 5, a suspension no cancel returns), D-092 (L3, a cache outage), D-079 and D-043 (the permission cache), D-033 (33.1, staff lifetimes), D-013 (the resend window), D-007 (the session record held in PostgreSQL alone)
 
 **TL;DR.** The run that built D-196 raised no question, so the Milestone 1 review ran: the
@@ -16159,6 +16169,8 @@ the frontends' server side, the known issues carried).
 
 > **Amended.** Rule 1: `RequestAccess` carries `Context` and `Session` alone; the gate a host asks reads the session record and the account's reachable assurance when it judges. Rule 2: what comes with the context is the break-glass reason; the step-up the session proved is judged against the session (D-205).
 
+> **Amended.** Rule 7: a job is admitted on its organization as on its records, a consent-based purpose refused there; no restriction is judged for it; the capability page and the explanation refuse it, and so does a materialiser's refresh while a request is served (D-207).
+
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-201 (Milestone 1 closed), a host's review of the public surface · **Extends:** D-106 (the operations contract) · **Amends:** D-079b (system principals; `Janus.Hosting` beyond mounting), D-138 (what the reserved account refuses), D-162 (section B item 4, the capability query)
 
 **TL;DR.** Milestone 1 was built and tested from the inside. The library's own endpoints
@@ -16348,6 +16360,8 @@ working guide (section 6).
 ## D-203 — The host's privacy duties: its own fields, its transaction, its part of an export
 
 > **Amended.** Rule 1: two encrypted fields of one type under one declared name fail startup; rule 2: `UseUnitOfWorkAsync` takes the open `IUnitOfWork`, and a context holding a connection of its own is one whose connection is open or which holds a transaction; rule 4: a host's section and value names take no `.`, the machine format keys a value `<section>.<index>.<value>`, and `Janus.Hosting` judges a contributor's names (D-206).
+
+> **Amended.** Rule 2: `UseUnitOfWorkAsync` also refuses a context that owns its connection object and one taken from a pool, and a context configured with a connection string returns to it exactly as configured (D-207).
 
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Extends:** D-068 (erasure reaches host data), D-099 (the subject of an encrypted field is declared), D-145 (cookies, objection), D-148 (the takedown's delivery) · **Amends:** D-068 (`ExportRequested` retired), D-079b (`Janus.Hosting` beyond mounting), D-097 and D-100 (a host field's authenticated data), D-155 item 1, D-165 (the host's hooks), D-166 items 264, 320 and 352, D-168 item 2
 
@@ -16554,6 +16568,8 @@ host's fields, the seam's direction), CONV-DESIGN-007 (the seams); `09` `GET
 ## D-204 — A host is set up, migrated and tested from the packages, and a sample host proves it
 
 > **Amended.** Rule 2: `migrate` writes no audit row and runs as no principal, the `migration` operation is gone and no host job may take the name `migrate`; `migrate --report` writes one JSON line per matched statement and exits 0; rule 4: `TestDeployment` registers the sign-on client with arguments it derives; CONV-DESIGN-008: `Janus.Testing` takes `System.Formats.Cbor` from the shared framework, never as a package reference (D-206).
+
+> **Amended.** Rule 4: `TestPeople` registers a customer by pressing each verification link the in-memory transports hold, with the date of birth 1990-01-01, and labels each passkey `Software passkey`; rule 5: the sample host inherits the library's build settings and `.editorconfig`, without a lockfile or MinVer, and its records live in an organization of their own, given its first grants under `system:administer` (D-207).
 
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Amends:** D-018 (migrations are applied by `migrate`, not by an EF Core bundle), D-149 items 4 and 9, D-153 (the command list), D-160 item 4 (what `Janus.Cli` validates), D-184 (the repository's tools), D-028 (what bootstrap prints), D-046 and D-149 item 1 (the sample host keeps no lockfile)
 
@@ -16844,6 +16860,8 @@ criterion 3); `09` `POST /auth/step-up` (a host's gate); `13` R-M20; `15` sectio
 
 ## D-206 — Round H1 questions 4 to 19, and the subject of a grant's audit record
 
+> **Amended.** Answer 7: a context that owns its connection object, a closed one included, and one taken from a pool are refused, and a context configured with a connection string returns to its configuration exactly; answer 16: the drift check's `authz.grant.materialised` and `authz.grant.retracted` records extend to every refresh, which names who called it (D-207).
+
 **Date:** 2026-10-20 · **Status:** accepted · **Follows from:** D-202, D-203, D-204, D-205 · **Amends:** D-203 (rule 1, one declared name per encrypted field of a type; rule 2, how the host's context joins the unit of work; rule 4, the machine format's keys, the names of a host's export sections and values and where they are judged), D-204 (rule 2, `migrate` runs as no principal, the `migration` operation is gone, the name `migrate` stays reserved, and what `migrate --report` writes; rule 4, `TestDeployment`; CONV-DESIGN-008's direct reference to `System.Formats.Cbor`), D-197 (known issues 1 and 11 of the fourth corrections report, answered), D-187 (question 101, the drift check's records name the holder), D-182 (a finished commit a question holds waits on its part's branch), D-017 (the one place outside the accessor that touches a context's connection), D-033 (33.4, the identifier rotated is the one the cookie carries), D-146 (item 7, a preference's name), D-194 (question 230, a change under review that only moves lines in a watched place owes a restating row) · **Extends:** D-202 (rule 5, `CapabilityFields`; rule 7, how a job is told from a request), D-205 (question 1, `System.Formats.Cbor`)
 
 **TL;DR.** Round H1 built every item no question held and reported sixteen more
@@ -17119,6 +17137,274 @@ two keys coincide); `10` section 1 (`model.startup.declarationinvalid`,
 
 ---
 
+## D-207 — Round H1 questions 20 to 34, and the implementer pushes its own work
+
+**Date:** 2026-10-22 · **Status:** accepted · **Follows from:** D-202, D-203, D-204,
+D-206 · **Amends:** D-202 (rule 7, a job's admission: the organization-wide check, no
+restriction judged, the capability page and the explanation refused), D-203 (rule 2, the
+contexts `UseUnitOfWorkAsync` refuses), D-206 (answer 7, the contexts refused and the
+configuration kept; answer 16, the drift check's records extended to every refresh),
+D-182 (how an answer arrives; the full gate after a push), D-186 (the kept writes: an
+invitation's attachment at a signed-in registration's begin; an outcome answered as a
+status), D-187 (question 101, the drift check's records extended to every refresh),
+D-197 (small gaps, the record of a grant a refresh writes), D-161 (who a refresh records
+as granter), D-204 (rule 4, `TestPeople`'s registration and values; rule 5, the sample
+host's build settings) · **Extends:** D-166 (AUTHZ-SCOPE-001, the first grant in an
+organization `POST /admin/organizations` creates)
+
+**TL;DR.** Round H1 reported fifteen more questions (20 to 34) and two observations. In
+short: a host job's context meets no restriction, since restriction is the acting
+account's and a job acts for none (20); it is admitted on its organization as on its
+records, and refused the capability page and the explanation (21, 22); a refresh of a
+materialised derivation records every grant it writes, naming who called it, a job among
+them (23); `UseUnitOfWorkAsync` refuses a context that owns its connection object and
+one taken from a pool, and a context configured with a connection string returns to it
+exactly as configured (24, 25); `Janus.Testing`'s shapes are its public-surface file
+(26); every command answers a fault with `system.fault` and exit code 1 (27); a refresh
+token's reuse revokes its whole family in one unit of work (28); a rejected callback's
+record is its row against its source, and every route logs the rejection (29); the eight
+operations that asked the phone signal inside their unit of work judge their step-up
+before it begins (30); a removal answered `auth.credential.lastsecondfactor` is a
+success, and a signed-in registration's invitation attachment is a kept write (31, 32);
+the sample host inherits the library's build settings (33); `system:administer` writes
+the first grant in an organization `POST /admin/organizations` creates (34). The owner
+also decided that the implementer pushes its own work, takes each update of the
+documents itself, and merges only on the owner's word.
+
+**The questions.** Questions 20 to 34 of the round H1 report (`docs/reports/round-h1.md`
+section 4), and its two observations. Questions 20 to 23, 25, 28, 30 and 34 are Tier 3;
+the others are Tier 2. Each answer names its question; the chapters carry the full rule.
+
+20. **Whose restriction a host job's context meets (Tier 3).** IDN-PRIN-001 applied "the
+    subject's restriction (PRIV-RIGHT-004) ... as for anyone", and for anyone the gate
+    judges the acting account's restriction alone (AUTHZ-GATE-006, D-160): a restricted
+    account reads its own and modifies nothing, and a record's data subject's
+    restriction stops the host's own processing through `RestrictionChanged`
+    (PRIV-RIGHT-004), not through the gate, whoever acts. A job acts for no account, so
+    the gate judges no restriction for it; the record's data subject's restriction
+    reaches a host's job as it reaches the host's own processing, through
+    `RestrictionChanged` and the reads of round H2 (D-203 rule 8). A truth-table row
+    states it: a declared job's modifying permission on a record whose data subject is
+    restricted is admitted. *Rejected:* judging the data subject's restriction for a job
+    alone (a job would be held to a rule no staff member is, and every list would need a
+    per-row restriction term for it); judging it for everyone (it reverses D-160 and is
+    not asked).
+21. **The organization-wide check for a job's context (Tier 3).** A person's
+    organization-wide check is met by an organization-wide grant, and a job's
+    declaration reaches every record of its organization, so it reaches the organization
+    too: the organization-wide `RequireAsync` admits a job's context for a permission
+    its declaration names, in its own organization, while that organization has no
+    deletion request and is not erased; a consent-based purpose is refused there as it
+    is for a person (no record, so no data subject); every refusal is recorded as the
+    gate records a job's. An import that creates a top-level record asks it. The
+    capability page is a person's surface (BFF-CAP-002, API-CAP-001): it refuses a job's
+    context `authz.denied`, in a request and outside one. *Rejected:* refusing the
+    organization-wide check (an import could create nothing the host gates
+    organization-wide); a capability page for a job (no surface reads it, and a second
+    answer for the same question is one more place to keep in step).
+22. **`ExplainAsync` and `WhoCanAccessAsync` for a job's context (Tier 3).** An
+    explanation answers a person's question about a decision, and an admitted job has no
+    grant to name, which AUTHZ-GATE-004's shape cannot express; `ExplainAsync` refuses a
+    job's context `authz.denied`, and a job's recorded refusals stay resolvable by
+    correlation identifier, which names its principal and reason (AUTHZ-CONCEAL-004,
+    D-166). `WhoCanAccessAsync` asks `grant:read`, which a job never holds (a
+    library-owned permission is never declared for a job), so it is refused as built.
+    The "who can access" view reports grants: a declared job holds none and is not
+    listed; its reach is its declaration (AUTHZ-DERIVE-007). *Rejected:* a new grant
+    kind naming a job's declaration (a change to `10` section 5.6 and `09` section 8 for
+    a question no surface asks).
+23. **`IDerivationMaterialiser` with a job's context (Tier 3).** IDN-PRIN-001 already
+    lets the job's context call it. One rule now covers every refresh: a grant it writes
+    records as granter the context's acting account, or the nil subject for a system
+    principal (AUTHZ-GRANT-003), and the reason `derivation:<relationship>`, save the
+    drift check's, which keep `AUTHZ-DERIVE-005`; each grant a refresh writes or takes
+    back is recorded `authz.grant.materialised` or `authz.grant.retracted`, in the
+    refresh's transaction, naming who called it (a person as acting identity; a system
+    principal by its name and reason) and the grant's holder as subject where the holder
+    is an account (D-206). A job's refresh while a request is served is refused
+    `authz.denied`, as the gate refuses it. A person's refresh, which recorded nothing,
+    now records its grants the same way, so the trail holds every materialised grant
+    whoever wrote it. *Rejected:* the job's stated reason on the grant row (the audit
+    record carries it; the row says what the grant is); recording nothing for a host's
+    refresh (a grant would stand that no record explains).
+24. **`UseUnitOfWorkAsync` on a context that owns its connection object.** EF Core's
+    `SetDbConnection` disposes a connection the context owns when it replaces it (EF
+    Core 10.0.12, `RelationalConnection.SetDbConnection` and `ResetState`), so such a
+    context could never return to "the connection it was configured with" (D-206): the
+    call refuses it with `InvalidOperationException`, as it refuses the other contexts
+    it cannot join. Checking it showed a second gap: a context configured with a
+    connection string got back a bare string, and the PostgreSQL provider's own setter
+    drops the data source it built from that string (with its type mappings and plugins,
+    efcore.pg 10.0.3, `NpgsqlRelationalConnection`), and a `Name=` string was set back
+    unresolved. The context now returns to its configuration exactly: the data source
+    the provider built and the string as the context resolved it, a criterion proving a
+    mapping kept. *Rejected:* admitting it and calling the context unusable afterwards
+    (a fault far from its cause).
+25. **A joined context returned to a pool (Tier 3).** A pool's reset keeps an open
+    connection the context does not own, and a joined context's connection is the unit
+    of work's, open inside its transaction: the next lease would read another request's
+    uncommitted rows and write into its transaction (EF Core 10.0.12, `DbContextPool`,
+    `RelationalConnection.ResetState`). `UseUnitOfWorkAsync` refuses a context taken
+    from a pool (`AddDbContextPool`, `AddPooledDbContextFactory`, which set the pool's
+    size in the context's options), and a host never returns a joined context to a pool
+    it builds itself before the outermost commit or rollback. *Rejected:* admitting
+    pooled contexts on the host's discipline alone (a fault path breaks it, and the
+    breach crosses requests); a hook on the pool's reset (none is public, and it could
+    not undo what the next lease already did).
+26. **`TestDeployment`, `TestPeople` and `TestSession`'s signatures.** The
+    public-surface file is the record of a public type's shape (LIB-API-001 criterion
+    2), so the shapes as built stand, and become the contract when the file is shipped.
+    `07` LIB-TEST-003 now states the two values a test meets: the customer's date of
+    birth, 1990-01-01, an adult's on every host (REG-PROF-002), and the passkey label
+    `Software passkey`; a customer is registered by pressing each verification link the
+    in-memory transports hold (REG-SESS-003), as built.
+27. **A fault in a `Janus.Cli` command that is not a refusal.** Every command answers it
+    as `migrate` answers a database's refusal: one JSON line on standard error, carrying
+    the code a coded fault carries (OPS-SEC-003 criterion 3) or `system.fault` for any
+    other, nothing on standard output, exit code 1, its keys cleared (OPS-SEC-001). Exit
+    codes and standard error are public surface (LIB-API-001). *Rejected:* letting the
+    runtime end the process (an exit code and a stack trace outside the contract, and an
+    exception message is not known to carry no value of the document).
+28. **A refresh token's reuse (Tier 3).** The family a reuse revokes is the session
+    record's spine, the provider's grant and every token of that grant, and their
+    revocation with its audit record is one kept write (CONV-DESIGN-003): one unit of
+    work, the grant's and tokens' rows revoked by the library's own statements, never by
+    the provider's manager, whose `TryRevokeAsync` answers any failure as false
+    (OpenIddict 7.7.1) and would abort the transaction unseen. A fault leaves nothing
+    revoked, and the next presentation of a redeemed copy revokes again (AUTH-OIDC-003).
+    *Rejected:* calling the provider's revocations outside the operation (three commits,
+    against "together"); dropping them (a path that accepts a token row without reading
+    the record would stay open).
+29. **"A rejected callback's count and record."** The record is the rejected callback's
+    row, recorded against its source's fingerprint, which the count reads and every
+    route already writes (INT-GEN-003, INT-SMS-005 criterion 3). Every route also logs
+    the rejection, the delivery reports' route included, which did not; the log line
+    carries no source (CONV-LOG-004). *Rejected:* the log line as the record (a log line
+    is not a write committed with the refusal); a new audit action (section 5.24 is
+    closed, and a flood would fill the trail).
+30. **The phone signal asked inside an operation's unit of work (Tier 3).** Eight
+    operations asked their step-up, and through it the phone signal, inside their open
+    unit of work, so the host's callback ran inside a transaction holding row locks and
+    a step-up refusal rolled back the signal's record
+    (`AccountService.EditProfileAsync`'s username change,
+    `OrganizationService.ReplacePolicyAsync`, `OrganizationDomainService.AddDomainAsync`
+    and `RemoveDomainAsync`, `GroupService.AddMemberAsync` and `RemoveMemberAsync`,
+    `RoleService.DefineAsync` and `RemoveAsync`). Each judges its step-up before its
+    unit of work begins, as the other operations already do: each refusal the step-up
+    must follow is judged first without a lock, and again under its lock inside. The
+    signal's `risk` record then commits in its own unit of work, before the operation's
+    (AUTH-FACT-002b, CONV-DESIGN-003). A host asks a bound action's gate before it
+    begins the unit of work it joins, likewise. *Rejected:* recording the consideration
+    in a unit of work of its own inside the operation (the callback would still run
+    inside a transaction holding locks); making the eight outermost-only (the same
+    breach, and a host could no longer call them inside its own unit of work).
+31. **A removal that would lower reachable assurance.** `10` section 1 answers
+    `auth.credential.lastsecondfactor` as a 202 status, not a refusal: the removal
+    suspends the credential instead, and that is its success. It is committed in the
+    removal's own unit of work, under the lock its decision read (CONV-DESIGN-003), not
+    after a rollback in a second one, which let a sign-in between the two be
+    overwritten.
+32. **An invitation attached at a signed-in registration's begin.** The 409
+    `identity.registration.signedin` is a refusal that keeps a write the chapters
+    require (REG-SESS-002, REG-INV-002), so it joins the closed list of kept writes
+    (CONV-DESIGN-003): the opening begins the outermost unit of work on that path and
+    commits the attachment with the refusal. *Rejected:* calling the attachment the
+    request's outcome (the answer is a refusal, and `10` gives it no "not a refusal"
+    note as it does for question 31).
+33. **The sample host's build settings.** `08` names CONV-LAYOUT-002 and CONV-SETUP-003
+    as the only rules that do not reach the sample, and D-204 carved only the lockfile
+    out of the shared settings, so the sample inherits them:
+    `samples/Directory.Build.props` imports the root one, restores without a lockfile
+    and takes no MinVer reference (the sample is never packed, and a reference with no
+    version in the sample's own `Directory.Packages.props` failed its restore with
+    NU1010); the root `.editorconfig` names the sample's host project among the source
+    projects and its test project among the test projects; the format gate covers its
+    solution too (CONV-SETUP-001, CONV-SETUP-004). *Rejected:* a second props file and
+    `.editorconfig` restating the settings ("set once", "defined once"); the SDK's
+    default analysis for the sample (a sample held to less than a host following `08`
+    proves less).
+34. **The first grant in a new organization (Tier 3).** `POST /admin/organizations`
+    creates an organization holding no grant, and grants, memberships and invitations
+    are evaluated in their own organization, so nobody could ever manage one; a
+    customer-facing host needs one, since a grant or a derivation in the administrative
+    organization confers nothing on a customer, who holds no membership of it. A grant
+    in an organization other than the administrative organization, and its revocation,
+    are now also admitted under `system:administer` held in the administrative
+    organization (AUTHZ-SCOPE-001): its holder writes the organization's first grants
+    (to itself or a staff member, `membership:manage` and `grant:manage` among them),
+    and gives an organization whose last grant manager has gone another. Everything else
+    stays in its own organization: an invitation's roles still need `grant:manage` held
+    in the organization itself, so the holder of `system:administer` grants it there
+    first. *Rejected:* creation seeding a grant (an organization orphaned later would
+    have no way back); `grant:manage` in the administrative organization reaching every
+    organization (a far wider holder set than `system:administer`'s); a server command
+    writing the first grant (a change from the server, never through the application,
+    D-176, which no person makes and no gate judges).
+
+**Observations.** A host's own `IUnitOfWork` is outside the contract (`07` LIB-API-001:
+no host implements it); `UseUnitOfWorkAsync` keeps refusing it, with a message naming a
+unit of work the library did not register, and a test. The one `500 system.fault` at
+`PUT /register/age` is not explained by the code; the testing package's own tests log
+errors from now on, so a recurrence names its exception.
+
+**The implementer's pushes (the owner's word, 2026-10-22).** The implementer pushes its
+own work and takes each update of the documents itself, so the owner passes messages and
+gives the review. An update of the documents arrives as an archive in the owner's
+Downloads folder, named in the message with each file's `git hash-object`; it is
+unpacked apart, checked, and only then committed. Before a run ends, after the
+full-history secret scan on the report's own commit, the implementer pushes its working
+branch, opens the pull request into `main` and leaves it unmerged; it merges it, with a
+merge commit and every check green, only when the owner's message says the review
+passed. Work that goes on after a push (an answer, a review that did not pass, a failed
+pipeline run) adds commits and a new report commit on the same branch. The implementer
+never pushes to `main`, by force, or a part's branch, and never rewrites a pushed
+commit, save as the working guide's section 7 allows; what it writes on GitHub (the
+branch's name, the pull request's text, the merge commit's message) keeps the no-trace
+rule, and it acts under the owner's own account only. *Rejected:* the owner pushing each
+ready commit (the scan before a push and the review before a merge both stay, so the
+owner's step added no check).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-PRIN-001 (a job's admission, restriction, the capability
+page and the explanation refused, the refresh in a request, criterion 6), IDN-MEM-003
+(the grant's organization), IDN-ORG-003 (a created organization's first grant); `02`
+AUTH-OIDC-003 (values, criterion 4), AUTH-RECOV-007 (the lowering removal a success,
+criterion 5), AUTH-STEP-002 (a host's gate before its unit of work), AUTH-FACT-002b (the
+signal's record at a step-up), AUTH-SESS-005b (the refusal judged again); `03`
+AUTHZ-GRANT-003 (the refresh's records, criterion 6), AUTHZ-INHERIT-002 (the contexts
+refused, the configuration kept, criterion 6), AUTHZ-DERIVE-005 (who a refresh records,
+the revoker, the refusal in a request, values, criterion 7), AUTHZ-DERIVE-007 (a job is
+not listed), AUTHZ-SCOPE-001 (the first grant, criterion 4), AUTHZ-GATE-004 (the
+explanation refused to a job), AUTHZ-GATE-005 (the capability page refused to a job,
+consent on the organization-wide check, whose restriction), AUTHZ-GATE-006 (whose
+restriction, a host's gate before its unit of work), AUTHZ-TEST-001 (a job's rows, the
+first grant's rows, criteria 1 and 2); `04` PRIV-RIGHT-004 (whose restriction the gate
+judges, criterion 3); `05` INT-GEN-003 (the record and the log, criterion 3),
+INT-SMS-005 (criterion 3); `06` OPS-DATA-002 (`UseUnitOfWorkAsync`), OPS-SEC-001 (a
+command's fault, criterion 5), OPS-OBS-001 (a job's decision explained), OPS-ENV-001 (a
+host's organization); `07` LIB-API-001 (standard error, criterion 2), LIB-API-005 (the
+seams, the refresh), LIB-TEST-002 (criterion 1), LIB-TEST-003 (`TestPeople`'s values),
+LIB-TEST-004 (the sample's organization, criterion 2); `08` the sample host,
+CONV-LAYOUT-001, CONV-SETUP-001, CONV-SETUP-003, CONV-SETUP-004 (the sample's scopes,
+the format gate, CA2007's reason), CONV-DESIGN-002 (the step-up in the fixed order,
+criterion 3), CONV-DESIGN-003 (the kept writes, the family, an outcome answered as a
+status, the step-up before the unit of work, criterion 13), CONV-DESIGN-007 (a job's
+refresh, the host's context returned), CONV-CODE-008 (criterion 2), CONV-ERR-003
+(criterion 2), CONV-GATE-001 (the format row); `09` `POST /register`,
+`GET /admin/access`, `POST /admin/grants`, `POST /admin/organizations`,
+`POST /admin/organizations/{id}/invitations`, section 10 (criterion 1), API-CAP-001;
+`10` section 1 (`identity.registration.signedin`, `auth.credential.lastsecondfactor`,
+`authz.denied`, `authz.grant.notfound`, `authz.restricted`, `system.fault`), section 2.1
+(`grant:manage`, `system:administer`), section 5.24 (`auth.oidc.refreshreused`,
+`authz.grant.created`, `authz.grant.materialised`, `authz.grant.retracted`,
+`authz.grant.revoked`); `11` sections 3.3 and 4; `16` step 4; `17` BFF-HOST-002,
+BFF-MACH-003 (criterion 2), BFF-CAP-002 (criterion 5); `20` REG-SESS-002 (the signed-in
+attachment kept, criterion 4); `implementation-plan.md` (the preamble, sections 2, 3a
+and 5); the working guide (sections 3, 6, 7, 8 and 9).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -17335,6 +17621,7 @@ two keys coincide); `10` section 1 (`model.startup.declarationinvalid`,
 | A host is set up, migrated and tested from the packages, and a sample host proves it | D-204 |
 | Round H1 questions 1 to 3: test projects take the shared framework, the main package is `Janus.Hosting`, a host's request carries no assurance | D-205 |
 | Round H1 questions 4 to 19, and the subject of a grant's audit record | D-206 |
+| Round H1 questions 20 to 34, and the implementer pushes its own work | D-207 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

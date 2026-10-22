@@ -925,7 +925,14 @@ Restriction is not a sanction on the person: a `restricted` account signs in, re
 own data and exercises its rights; the changes IDN-ACCT-007 lists are refused with
 `authz.restricted` (AUTHZ-GATE-006).
 
-*Source: D-037, D-068, AUTHZ-GATE-006, D-166*
+The gate judges the acting account's restriction (AUTHZ-GATE-006). A record's data
+subject's restriction stops the host's own processing of that record through
+`RestrictionChanged`, not through the gate, whoever acts, a host's job included: a job
+acts for no account, so the gate judges no restriction for it, and it reads the
+subject's standing restriction through the reads of round H2 (IDN-PRIN-001, D-203,
+D-207).
+
+*Source: D-037, D-068, AUTHZ-GATE-006, D-166, D-207*
 
 Restriction is temporary, pending a dispute. It is not deletion and not concealment;
 removing restricted records from staff views would corrupt historical and analytical
@@ -934,7 +941,11 @@ totals for a condition that is meant to be reversible.
 **Acceptance criteria**
 1. Restriction suspends processing without deleting anything.
 2. Lifting it restores prior behaviour exactly.
-3. Enforcement is through the gate, not scattered checks.
+3. An account's own restriction is enforced through the gate, not scattered checks
+   (AUTHZ-GATE-006); a data subject's restriction reaches the host's processing of its
+   records through `RestrictionChanged`, and a host's declared job is admitted for a
+   modifying permission its declaration names on a record whose data subject is
+   restricted (IDN-PRIN-001, D-207).
 4. An account restricted and then taken through a cancelled deletion window, a
    reversed takedown or a reactivated suspension returns `restricted`, and a
    restriction decided while it was away is in force on its return.

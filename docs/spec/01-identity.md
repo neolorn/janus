@@ -311,15 +311,17 @@ physically deleted (IDN-PRIN-003).
 | Cancelled | Memberships and grants restored in full, no data loss; the sessions the request ended stay ended |
 | Window elapsed | **Erasure executes**: every current membership ends; the organization's name, and every domain it listed, is replaced by its identifier and each domain is marked removed; the grants scoped to it stay unrevoked and confer nothing, as from the request; no account is erased. **No row is removed** (IDN-PRIN-003) |
 
-*Source: D-038, D-090, D-166*
+*Source: D-038, D-090, D-166, D-207*
 
 A deletion request and its cancellation SHALL be asked of `organization:manage` in the
-administrative organization, SHALL be the `organization:delete` step-up action, and SHALL
-carry a `reason` (a free-text member, API-CONV-002); each, and the creation of an
-organization, SHALL be recorded under the organization. A request for an organization
-already being deleted, and a cancellation where none is pending, SHALL change and record
-nothing. A cancellation at or after `organization.deletion.grace` from the request, or
-after the erasure, SHALL be refused with `identity.deletion.windowelapsed`. A request or
+administrative organization, SHALL be the `organization:delete` step-up action, and
+SHALL carry a `reason` (a free-text member, API-CONV-002); each, and the creation of an
+organization, SHALL be recorded under the organization. An organization so created holds
+no grant until a holder of `system:administer` in the administrative organization writes
+its first (AUTHZ-SCOPE-001, D-207). A request for an organization already being deleted,
+and a cancellation where none is pending, SHALL change and record nothing. A
+cancellation at or after `organization.deletion.grace` from the request, or after the
+erasure, SHALL be refused with `identity.deletion.windowelapsed`. A request or
 cancellation whose path names no organization the deployment holds SHALL be refused with
 404 `identity.organization.notfound` (D-166).
 
@@ -463,9 +465,13 @@ later would be a model change to something that assumed one-to-one.
 ---
 
 **IDN-MEM-003** — Authorization SHALL evaluate against the organization owning the
-resource in question. The session SHALL NOT carry an "active organization."
+resource in question, save as AUTHZ-SCOPE-001 states: an operation on the deployment or
+an account is evaluated in the administrative organization, and a grant in another
+organization, and its revocation, are also admitted under `system:administer` held in
+the administrative organization (D-207). The session SHALL NOT carry an "active
+organization."
 
-*Source: D-003*
+*Source: D-003, D-207*
 
 No organization switcher, unless multi-membership is later enabled and a UI needs
 one.
@@ -1426,25 +1432,35 @@ INT-SMS-003's rule, distinct from every other job, from every name of `10` secti
 and from `migrate` (D-206), and the host permissions it exercises. Its principal is
 organization-scoped, `SystemPrincipal.ForOrganization(name, reason, organization)`
 naming a declared job. The gate admits it for the host permissions its declaration
-names, on the records of its organization, with the consent the permission's purpose
-asks of the record's data subject (AUTHZ-GATE-005) and the subject's restriction
-(PRIV-RIGHT-004) applied as for anyone; the operations called in process only
-(`IReadVolume`, `IDerivationMaterialiser`, LIB-API-005) take its context. It is refused
-`authz.denied` for anything else: every library operation that meets a gate, since each
-that changes a person's account is a person's step-up action; any permission while a
-request is being served, since a job is background work, the gate telling the two apart
-by whether an HTTP request is being served on the calling flow, in every scope opened
-within it, whoever built the context (`08` CONV-DESIGN-007, D-206), so a host's webhook
-that needs a host permission records what arrived and hands the work to a declared job;
-and any permission in an organization whose deletion is requested or which has been
-erased (IDN-ORG-003). A principal naming no declared job is refused for every host
-permission. A job is never declared with a permission not declared, a library-owned one,
-one bound to a step-up gate (no session proves a person) or one whose action is `export`
-(OPS-ALERT-006): startup fails with `model.startup.declarationinvalid`,
-`details.declaration` `job.<name>`, `details.field` `permissions`; nor under a name of
-`10` section 5.29 or `migrate` (`details.field` `name`, D-206).
+names, on the records of its organization and on the organization itself (the
+organization-wide check), as an organization-wide grant of them admits a person, with
+the consent the permission's purpose asks of the record's data subject (AUTHZ-GATE-005),
+a consent-based purpose being refused `privacy.consent.required` on the
+organization-wide check, which names no data subject. The gate judges no restriction for
+it: a restriction is the acting account's (AUTHZ-GATE-006), and a job acts for none; a
+record's data subject's restriction reaches a host's job as it reaches the host's own
+processing, through `RestrictionChanged` (PRIV-RIGHT-004) and the reads of round H2
+(D-203, D-207). The check, the list filter and the fragment take its context, and so do
+the operations called in process only (`IReadVolume`, `IDerivationMaterialiser`,
+LIB-API-005). It is refused `authz.denied` for anything else: the capability page and
+the explanation, which serve a person's surface and answer a person's question (its
+recorded refusals stay resolvable by their correlation identifier, AUTHZ-CONCEAL-004,
+D-207); every library operation that meets a gate, since each that changes a person's
+account is a person's step-up action; any permission while a request is being served,
+and a materialiser's refresh then too, since a job is background work, the gate telling
+the two apart by whether an HTTP request is being served on the calling flow, in every
+scope opened within it, whoever built the context (`08` CONV-DESIGN-007, D-206), so a
+host's webhook that needs a host permission records what arrived and hands the work to a
+declared job; and any permission in an organization whose deletion is requested or which
+has been erased (IDN-ORG-003), each evaluation reading that state live. A principal
+naming no declared job is refused for every host permission. A job is never declared
+with a permission not declared, a library-owned one, one bound to a step-up gate (no
+session proves a person) or one whose action is `export` (OPS-ALERT-006): startup fails
+with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`,
+`details.field` `permissions`; nor under a name of `10` section 5.29 or `migrate`
+(`details.field` `name`, D-206).
 
-*Source: D-079b, D-166, D-202, D-204, D-206*
+*Source: D-079b, D-166, D-202, D-204, D-206, D-207*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.
@@ -1453,11 +1469,14 @@ one bound to a step-up gate (no session proves a person) or one whose action is 
    cannot serve a request.
 4. Actions taken by either are audited with the reason.
 5. Every scheduled job refuses to run under a principal that may not run its operation.
-6. A host's declared job is admitted for the host permissions its declaration names on its
-   organization's records, and refused `authz.denied` for any other, for every library
-   operation that meets a gate, for any permission while a request is served (through
-   either profile or neither, and in a scope opened within the request), and in an
-   organization whose deletion is requested.
+6. A host's declared job is admitted for the host permissions its declaration names on
+   its organization's records and on its organization, a modifying permission on a
+   record whose data subject is restricted included, and refused `authz.denied` for any
+   other, for the capability page and the explanation, for every library operation that
+   meets a gate, for any permission and a materialiser's refresh while a request is
+   served (through either profile or neither, and in a scope opened within the request),
+   and in an organization whose deletion is requested; on the organization-wide check a
+   consent-based purpose is refused `privacy.consent.required` (D-207).
 7. A job declared with a permission not declared, a library-owned one, one bound to a
    step-up gate or one whose action is `export`, or under a name of `10` section 5.29 or
    `migrate`, fails startup with `model.startup.declarationinvalid`.

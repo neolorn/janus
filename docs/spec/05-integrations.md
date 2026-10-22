@@ -104,15 +104,17 @@ its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003);
 send's reference, drawn at its admission, also travels inside its outbox row's encrypted
 content until the row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24
 hour overlap (BFF-MACH-002). A callback's admission count, a rejected callback's count
-and record, the `callback-verification-failed` raise past `alerting.callback.threshold`
-and, for a provider's security event, the record of its rejection
+and record (one row, recorded against its source's fingerprint, which the count reads,
+D-207), the `callback-verification-failed` raise past `alerting.callback.threshold` and,
+for a provider's security event, the record of its rejection
 (`auth.providerevent.rejected`, IDN-LIFE-012a) are kept writes, committed with the
 refusal and nothing else (CONV-DESIGN-003); any other failure in handling a callback
-rolls back.
+rolls back. Every route logs each rejection, the delivery reports' route included, and
+the log line carries no source (CONV-LOG-004, D-207).
 
 *Source: D-070*
 
-*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197*
+*Source: D-013, D-030, D-164, D-166, D-183, D-186, D-197, D-207*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
 unable to mark a phone verified, or to advance any state the host hangs on a callback.
@@ -122,7 +124,8 @@ unable to mark a phone verified, or to advance any state the host hangs on a cal
 2. An unsigned callback advances state only after the system confirms independently, or
    is treated as a hint requiring corroboration, save the releases INT-SMS-005 allows
    (BFF-MACH-003).
-3. Rejected callbacks are logged with their source.
+3. Rejected callbacks are recorded against their source's fingerprint and logged, on
+   every route, the delivery reports' included; the log line carries no source (D-207).
 4. A callback past `integration.callback.ratelimit` is answered 429 with `Retry-After`
    before any lookup; a callback refused for any other cause is answered 422 with no
    `Retry-After`, except where `09` section 10 gives a provider's route an answer of its
@@ -825,7 +828,7 @@ that text's count from every bucket it counted against but those of a restrictio
 release that send's one count from each restriction marked `resend` (AUTH-ABUSE-004,
 D-197); a report SHALL do nothing else.
 
-*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197*
+*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183, D-197, D-207*
 
 The gateway calls over plain HTTP with parameters in the query string, unauthenticated.
 The deployment's SMS transport (`ISmsTransport`, INT-SMS-006) reads the report from the
@@ -848,8 +851,9 @@ already allowed, a forged delivery report at most one text to that number sooner
    text of the send has failed for good, and a credit it spent is spent no longer. A
    report of delivery releases a `secondfactor` send's count from each restriction
    marked `resend` and changes nothing else. A report of either kind whose reference no
-   held send answers changes nothing and is rejected, recorded against its source and
-   counted toward `alerting.callback.threshold` (INT-GEN-003 AC1).
+   held send answers changes nothing and is rejected, recorded against its source's
+   fingerprint, logged without its source and counted toward
+   `alerting.callback.threshold` (INT-GEN-003 criteria 1 and 3, D-207).
 
 ---
 
