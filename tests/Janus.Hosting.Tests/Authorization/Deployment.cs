@@ -344,6 +344,26 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Erases the organization once its window has elapsed, as the erasure does, which
+    /// keeps the instant its deletion was requested.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task EraseAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE identity.organizations
+            SET deletion_requested_at = @requested, erased_at = @at
+            WHERE id = @organization;
+            """,
+            new { requested = Noon.AddDays(-31), at = Noon, organization = Organization.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Cancels the organization's deletion, as the operation that restores it does.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

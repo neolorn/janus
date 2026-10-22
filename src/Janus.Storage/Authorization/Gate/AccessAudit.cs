@@ -204,19 +204,19 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
                     at = corrected.At.ToUniversalTime(),
                     action = action.ToString(),
 
-                    // IDN-AUD-001: the drift check is no account, so the row names the
-                    // nil subject under both identities beside its principal.
-                    acting = default(SubjectId).Value,
-                    effective = default(SubjectId).Value,
+                    // IDN-AUD-001 (D-207): the person who called the refresh, or the nil
+                    // subject under both identities beside a system principal.
+                    acting = (corrected.Acting ?? default).Value,
+                    effective = (corrected.Effective ?? default).Value,
 
                     // Chapter 10 section 5.24 (D-206): the grant's holder where it is an
                     // account; a group is no data subject.
                     subject = corrected.Holder.Type == SubjectType.User ? corrected.Holder.Value : (Guid?)null,
                     organization = (Guid?)corrected.Organization.Value,
                     details = Written(corrected),
-                    principal = corrected.Principal.Name,
-                    reason = corrected.Principal.Reason,
-                    breakGlassReason = (string?)null,
+                    principal = corrected.Principal?.Name,
+                    reason = corrected.Principal?.Reason,
+                    breakGlassReason = corrected.BreakGlassReason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -325,8 +325,8 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
         return JsonSerializer.Serialize(details, AuditDocument.Default.DictionaryStringJsonElement);
     }
 
-    // AUTHZ-GRANT-003, chapter 10 section 5.24: the grant the drift check wrote or took
-    // back, and the role it confers.
+    // AUTHZ-GRANT-003, chapter 10 section 5.24: the grant a refresh or the drift check
+    // wrote or took back, and the role it confers.
     private static string Written(CorrectedGrant corrected) =>
         JsonSerializer.Serialize(
             new Dictionary<string, JsonElement>(StringComparer.Ordinal)
