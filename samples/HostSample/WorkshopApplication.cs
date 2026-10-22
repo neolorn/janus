@@ -97,6 +97,10 @@ public static class WorkshopApplication
             new WorkshopSubjectEvents(provider.GetRequiredService<IServiceScopeFactory>()));
         _ = services.AddSingleton<IExportContributor>(provider =>
             new WorkshopExport(provider.GetRequiredService<IServiceScopeFactory>()));
+
+        // IDN-PRIN-001: the workshop's job, which whoever starts the application runs in
+        // the background.
+        _ = services.AddSingleton(provider => new FollowUpCalls(provider.GetRequiredService<IServiceScopeFactory>()));
     }
 
     /// <summary>

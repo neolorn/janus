@@ -50,9 +50,6 @@ internal static class WorkshopModel
     // The step-up gate releasing a kite is bound to, a gate of the workshop's own naming.
     private const string Releasing = "releasing";
 
-    // The job that calls customers after their repairs.
-    private const string FollowUpCalls = "follow-up-calls";
-
     // What the workshop holds, and of whom.
     private const string Catalogue = "catalogue";
 
@@ -156,7 +153,7 @@ internal static class WorkshopModel
                 AddFitting.ToString(),
                 ReadFitting.ToString())
             .Role(WorkshopRoles.RepairCollector, ReadRepair.ToString())
-            .Job(FollowUpCalls, ReadRepair.ToString())
+            .Job(FollowUpCalls.Name, ReadRepair.ToString())
             .Relationship<RepairOwner>(
                 Owner,
                 RepairType.ToString(),

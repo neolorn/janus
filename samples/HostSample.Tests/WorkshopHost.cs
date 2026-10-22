@@ -102,7 +102,14 @@ public sealed class WorkshopHost : IAsyncLifetime
     /// </summary>
     public string Workshop { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// The workshop's job, as the application registers it.
+    /// </summary>
+    public FollowUpCalls FollowUpCalls => Application.Services.GetRequiredService<FollowUpCalls>();
+
     private TestPeople People => _people ?? throw new InvalidOperationException("The host has not started.");
+
+    private WebApplication Application => _application ?? throw new InvalidOperationException("The host has not started.");
 
     /// <summary>
     /// A browser that holds no session, as a visitor's does.
@@ -160,6 +167,29 @@ public sealed class WorkshopHost : IAsyncLifetime
         await connection.OpenAsync(cancellationToken);
 
         return connection;
+    }
+
+    /// <summary>
+    /// Asks the gate whether a context may act under a permission across an organization,
+    /// in a scope of the application's own and outside any request, as a host's
+    /// background work asks it.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">What it would do.</param>
+    /// <param name="organization">The organization it would do it in.</param>
+    /// <param name="cancellationToken">Abandons the question.</param>
+    /// <returns>The gate's answer.</returns>
+    public async Task<Result> RequireAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        await using AsyncServiceScope scope = Application.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider
+            .GetRequiredService<IAccessGate>()
+            .RequireAsync(context, permission, organization, cancellationToken);
     }
 
     /// <summary>
