@@ -3970,3 +3970,20 @@ against the public contract of LIB-API-001.
   when the step-up refuses.
   An addition of a domain already listed, or a removal of one not listed, begins no
   unit of work.
+- A refresh token's reuse revokes the provider's grant and every token issued under it
+  in the same unit of work as the session record's spine and its
+  `auth.oidc.refreshreused` record, by the library's own statements: where that commit
+  fails none of them is revoked, and the next presentation of the redeemed token
+  revokes them again.
+- The delivery reports' route logs each rejection, a reference no held send answers, a
+  report the transport cannot read and a source past `integration.callback.ratelimit`,
+  as every other callback route does: the callback's name, the check and the
+  correlation identifier, never the source.
+- Removing a credential that would lower the account's reachable assurance commits its
+  suspension in the removal's own unit of work, on the credential read under its lock,
+  before answering `auth.credential.lastsecondfactor`: nothing is rolled back first, and
+  a sign-in's write to the credential made meanwhile is no longer overwritten.
+- `POST /register` from a signed-in browser carrying an invitation token attaches the
+  invitation in the outermost unit of work and commits it with the
+  `identity.registration.signedin` refusal; called inside a unit of work already open,
+  the host's own included, the begin ends it and throws `InvalidOperationException`.

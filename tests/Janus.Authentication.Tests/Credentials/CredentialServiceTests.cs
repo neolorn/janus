@@ -812,11 +812,11 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        // CONV-DESIGN-003 AC5: the refused removal ends the unit of work it was decided
-        // in with nothing committed, and the window's report then commits on its own: the
-        // suspension, the notices it undertakes, and what became of them.
+        // CONV-DESIGN-003 AC13 (D-207): the removal answered as the status commits the
+        // suspension in its own unit of work, rolling nothing back, and the notices it
+        // undertakes and what became of them commit after it.
         Assert.False(_work.Open);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.RolledBack);
         Assert.Equal(3, _work.OutermostCommitted);
         Assert.Equal(3, _work.Committed);
 
@@ -829,6 +829,48 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             (await _authenticators.FindAsync(
                 confirmed.Credential,
                 TestContext.Current.CancellationToken))!.State);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC5 and CONV-DESIGN-003 AC13 (D-207): a removal that would lower
+    /// reachable assurance suspends the credential in its own unit of work, on the row
+    /// its decision read under the lock, so a sign-in's write to the credential that
+    /// waited on that lock and committed as soon as the removal's transaction ended is
+    /// not overwritten by the suspension.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC5_ASignInsWriteWhileTheRemovalRunsIsNotOverwrittenAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        EnrolledCredential confirmed = await ConfirmedAsync(subject, session);
+
+        await PresentedAsync(subject, session);
+
+        DateTimeOffset signedIn = _clock.GetUtcNow() + TimeSpan.FromMinutes(1);
+
+        _authenticators.Locking = held =>
+        {
+            if (held.Id == confirmed.Credential)
+            {
+                _authenticators.Locking = null;
+                _work.Meanwhile = () => SignedIn(confirmed.Credential, signedIn);
+            }
+        };
+
+        Error window = Failure(await Service.RemoveAsync(
+            Authority(subject, session),
+            confirmed.Credential,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Authenticator stood = Held(confirmed.Credential);
+
+        Assert.Equal(ErrorCodes.CredentialLastSecondFactor, window.Code);
+        Assert.Null(_work.Meanwhile);
+        Assert.Equal(AuthenticatorState.Suspended, stood.State);
+        Assert.Equal(signedIn, stood.LastUsedAt);
     }
 
     /// <summary>
@@ -2617,6 +2659,28 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
     private Authenticator Held(AuthenticatorId credential) =>
         _authenticators.All.Single(held => held.Id == credential);
+
+    // What a sign-in commits to a credential's row: the row as it stands, presented at
+    // the instant given.
+    private void SignedIn(AuthenticatorId credential, DateTimeOffset at)
+    {
+        Authenticator stood = Held(credential);
+
+        _authenticators.Hold(Authenticator.Existing(
+            stood.Id,
+            stood.Subject,
+            stood.Factor,
+            stood.Label,
+            stood.State,
+            stood.AddedAt,
+            at,
+            stood.InvalidatesAt,
+            stood.Confirmed,
+            stood.Totp,
+            stood.WebAuthn,
+            stood.IsPreferred,
+            stood.Number));
+    }
 
     private async ValueTask<EnrolledCredential> SecurityKeyAsync(
         SubjectId subject,
