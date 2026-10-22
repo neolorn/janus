@@ -219,18 +219,44 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a record that names no data subject", Decided.ConsentRequired),
     ];
 
-    // A host's declared job asking a host permission its declaration names, on a record
-    // of its organization, while a request is served: through either profile or neither,
-    // and in a scope opened within the request. A job is background work, so the check
-    // and both renderings are refused with the code the check answers, and a rendering
-    // handed out is a list the job was admitted to, whatever rows it matches
-    // (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, D-206).
+    // A host's declared job asking a host permission on a record. While a request is
+    // served, through either profile or neither and in a scope opened within the
+    // request, the check and both renderings are refused with the code the check
+    // answers, a job being background work (D-206). Outside a request its declaration
+    // reaches every record of its organization, and no restriction is judged for it, a
+    // restriction being the acting account's; it is refused for any other permission,
+    // in another organization, and in its own once its deletion is requested or it is
+    // erased. The lists admit the record where the check does, and a list the
+    // declaration does not reach is refused with the code the check answers
+    // (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, PRIV-RIGHT-004 AC3, D-207).
     private static readonly (string Scenario, Decided Decided)[] Jobs =
     [
         ("a declared job asking while a request is served through the browser profile", Decided.Denied),
         ("a declared job asking while a request is served through the machine profile", Decided.Denied),
         ("a declared job asking while a request is served outside both profiles", Decided.Denied),
         ("a declared job asking in a scope opened within a request", Decided.Denied),
+        ("a declared job asking a permission its declaration names, outside a request", Decided.Allowed),
+        (
+            "a declared job asking a modifying permission its declaration names, on a record whose data subject is restricted",
+            Decided.Allowed),
+        ("a declared job asking a permission its declaration does not name", Decided.Denied),
+        ("a declared job asking on a record of another organization", Decided.Denied),
+        ("a declared job asking in its organization, whose deletion is requested", Decided.Denied),
+        ("a declared job asking in its organization, once it is erased", Decided.Denied),
+    ];
+
+    // A host's declared job asking a host permission of its organization itself, which
+    // names no record and so runs through the single check alone: its declaration
+    // reaches the organization as an organization-wide grant reaches a person, and the
+    // refusals are those of its records (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, D-207).
+    private static readonly (string Scenario, Decided Decided)[] JobOrganizations =
+    [
+        ("a declared job asking a permission its declaration names, of its organization", Decided.Allowed),
+        ("a declared job asking a permission its declaration does not name, of its organization", Decided.Denied),
+        ("a declared job asking of another organization", Decided.Denied),
+        ("a declared job asking of its organization, whose deletion is requested", Decided.Denied),
+        ("a declared job asking of its organization, once it is erased", Decided.Denied),
+        ("a declared job asking of its organization while a request is served", Decided.Denied),
     ];
 
     /// <summary>
@@ -262,6 +288,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The jobs' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> JobCases => Read(Jobs);
+
+    /// <summary>
+    /// The jobs' organization table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> JobOrganizationCases => Read(JobOrganizations);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -380,9 +411,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
-    /// AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6 (D-206): every case of the jobs' table
-    /// decides the way the table says through the single check, the expression and the
-    /// fragment alike, each asked inside the request the case serves.
+    /// AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6 (D-206, D-207), PRIV-RIGHT-004 AC3: every
+    /// case of the jobs' table decides the way the table says through the single check,
+    /// the expression and the fragment alike, each asked inside the request the case
+    /// serves or in background work.
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="decided">What it decides.</param>
@@ -393,7 +425,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         string scenario,
         Decided decided)
     {
-        Case written = await WriteJobAsync();
+        Case written = await WriteJobAsync(scenario);
+
+        if (!scenario.Contains("request is served", StringComparison.Ordinal)
+            && !scenario.Contains("within a request", StringComparison.Ordinal))
+        {
+            Assert.Equal((decided, decided, decided), await JobListedAsync(written, scenario));
+
+            return;
+        }
+
         (Decided Check, Decided Expression, Decided Fragment)? answered = null;
 
         await using ServedRequests served = await ServedRequests.StartAsync(
@@ -423,6 +464,51 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         });
 
         Assert.Equal((decided, decided, decided), answered);
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6 (D-207): every case of the jobs'
+    /// organization table decides the way the table says through the single check, the
+    /// one path a case naming no record runs through.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(JobOrganizationCases))]
+    public async Task AUTHZ_TEST_001_AC2_EveryJobOrganizationCaseDecidesTheWayTheTableSaysThroughTheCheckAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteJobAsync(scenario);
+        AccessContext job = await JobOfAsync(written, scenario);
+        Decided? answered = null;
+
+        async Task<Decided> CheckedAsync(IServiceProvider asking) =>
+            (await asking.GetRequiredService<IAccessGate>().RequireAsync(
+                    job,
+                    written.Asked,
+                    written.Deployment.Organization,
+                    TestContext.Current.CancellationToken))
+                .Match(() => Decided.Allowed, Refused);
+
+        if (scenario.EndsWith("while a request is served", StringComparison.Ordinal))
+        {
+            await using ServedRequests served = await ServedRequests.StartAsync(
+                host,
+                async context => answered = await CheckedAsync(context.RequestServices),
+                TestContext.Current.CancellationToken);
+
+            _ = await served.SendAsync(ServedRequests.Browser);
+        }
+        else
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+            answered = await CheckedAsync(scope.ServiceProvider);
+        }
+
+        Assert.Equal(decided, answered);
     }
 
     /// <summary>
@@ -676,7 +762,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Case written,
         HostContext reading,
         IServiceProvider? deployment,
-        Session? carried)
+        Session? carried,
+        AccessContext? asking = null)
     {
         await using AsyncServiceScope scope = (deployment ?? written.Host.Services).CreateAsyncScope();
 
@@ -684,7 +771,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
-                AccessContext.Of(written.Account),
+                asking ?? AccessContext.Of(written.Account),
                 written.Asked,
                 written.Record.Type,
                 written.Deployment.Organization,
@@ -784,7 +871,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private async Task<Decided> ChecksAsync(
         Case written,
         IServiceProvider? deployment = null,
-        Session? carried = null) =>
+        Session? carried = null,
+        AccessContext? asking = null) =>
         await RaisedOrAsync(async () =>
         {
             await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
@@ -794,7 +882,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .RequireAsync(
-                    AccessContext.Of(written.Account),
+                    asking ?? AccessContext.Of(written.Account),
                     written.Asked,
                     written.Record,
                     Sources(reading),
@@ -806,12 +894,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private async Task<Decided> ExpressionAdmitsAsync(
         Case written,
         IServiceProvider? deployment = null,
-        Session? carried = null) =>
+        Session? carried = null,
+        AccessContext? asking = null) =>
         await RaisedOrAsync(async () =>
         {
             await using HostContext reading = host.Context();
 
-            return await (await FilteredAsync(written, reading, deployment, carried)).Match(
+            return await (await FilteredAsync(written, reading, deployment, carried, asking)).Match(
                 async expression => await reading.Documents
                     .Where(expression)
                     .AnyAsync(
@@ -825,7 +914,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private async Task<Decided> FragmentAdmitsAsync(
         Case written,
         IServiceProvider? deployment = null,
-        Session? carried = null) =>
+        Session? carried = null,
+        AccessContext? asking = null) =>
         await RaisedOrAsync(async () =>
         {
             Result<SqlFilter> rendered;
@@ -836,7 +926,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
                 rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                     .FragmentAsync(
-                        AccessContext.Of(written.Account),
+                        asking ?? AccessContext.Of(written.Account),
                         written.Asked,
                         written.Record.Type,
                         written.Deployment.Organization,
@@ -1191,9 +1281,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             .Match(() => Decided.Allowed, Refused);
     }
 
-    // A record of the case's organization, which the host's declared job is asked a
-    // permission its declaration names on.
-    private async Task<Case> WriteJobAsync()
+    // A record of the case's organization whose data subject is the case's account,
+    // which the host's declared job is asked a permission on: one its declaration names,
+    // the modifying one where the case says so, or one it does not name; the account
+    // restricted, and the organization's deletion requested or the organization erased,
+    // where the case says so.
+    private async Task<Case> WriteJobAsync(string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var deployment = new Deployment(host);
@@ -1206,10 +1299,63 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ResourceReference sibling = Reference(Document);
 
         await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
-        await deployment.RegisterAsync(record, outer, cancellationToken);
+        await deployment.RegisterAsync(record, outer, cancellationToken, subject: account);
         await deployment.RegisterAsync(sibling, outer, cancellationToken);
 
-        return new Case(host, deployment, account, record, sibling, outer, outer, HostPermissions.Read);
+        if (scenario.Contains("data subject is restricted", StringComparison.Ordinal))
+        {
+            await deployment.RestrictAsync(account, cancellationToken);
+        }
+
+        if (scenario.Contains("whose deletion is requested", StringComparison.Ordinal))
+        {
+            await deployment.SuspendAsync(cancellationToken);
+        }
+
+        if (scenario.Contains("once it is erased", StringComparison.Ordinal))
+        {
+            await deployment.EraseAsync(cancellationToken);
+        }
+
+        Permission asked = scenario.Contains("does not name", StringComparison.Ordinal)
+            ? HostPermissions.Retain
+            : scenario.Contains("modifying", StringComparison.Ordinal)
+                ? HostPermissions.Edit
+                : HostPermissions.Read;
+
+        return new Case(host, deployment, account, record, sibling, outer, outer, asked);
+    }
+
+    // The declared job's context, acting for the case's organization or, where the case
+    // says so, for another organization the deployment holds.
+    private async Task<AccessContext> JobOfAsync(Case written, string scenario)
+    {
+        OrganizationId acting = written.Deployment.Organization;
+
+        if (scenario.Contains("another organization", StringComparison.Ordinal))
+        {
+            var other = new Deployment(host);
+
+            _ = await other.BeginAsync([HostPermissions.Read], TestContext.Current.CancellationToken);
+
+            acting = other.Organization;
+        }
+
+        return AccessContext.Of(SystemPrincipal.ForOrganization(HostFixture.Digest, "the nightly digest", acting));
+    }
+
+    // The check, the expression and the fragment asked under the declared job's context
+    // in background work, each list decided by whether it holds the record.
+    private async Task<(Decided Check, Decided Expression, Decided Fragment)> JobListedAsync(
+        Case written,
+        string scenario)
+    {
+        AccessContext job = await JobOfAsync(written, scenario);
+
+        return (
+            await ChecksAsync(written, asking: job),
+            await ExpressionAdmitsAsync(written, asking: job),
+            await FragmentAdmitsAsync(written, asking: job));
     }
 
     // The check, the expression and the fragment asked under the declared job's context

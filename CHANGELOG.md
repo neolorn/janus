@@ -3878,6 +3878,15 @@ against the public contract of LIB-API-001.
   context: a check and both renderings of the filter alike, each refusal recorded with
   its correlation identifier. A host's webhook that needs a host permission hands the
   work to a declared job. `AddJanus` registers the framework's `IHttpContextAccessor`.
+- Outside a request, the gate admits a host's declared job for the host permissions its
+  declaration names on every record of its organization and on the organization itself,
+  through the check, both renderings of the filter and the organization-wide check,
+  with no processing restriction judged for it, a restriction being the acting
+  account's. A permission its declaration does not name, another organization, and its
+  own organization once its deletion is requested or it is erased are refused with
+  `authz.denied`, each refusal recorded with the job's principal and stated reason.
+- The capability page and the explanation refuse a host job's context with
+  `authz.denied`, in a request and outside one.
 - A preference declared under a name holding a `.` or a `/`, or named `language` or
   `timeZone`, the names the export gives the account's language and time zone, fails
   startup with `model.startup.preferencedeclaration` naming it.

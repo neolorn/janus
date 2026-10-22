@@ -30,7 +30,7 @@ namespace Janus.Hosting.Tests.Authorization;
 public sealed class HostFixture : IAsyncLifetime
 {
     /// <summary>
-    /// The one background job the host declares, which reads its documents
+    /// The one background job the host declares, which reads and edits its documents
     /// (IDN-PRIN-001).
     /// </summary>
     internal const string Digest = "digest";
@@ -299,7 +299,7 @@ public sealed class HostFixture : IAsyncLifetime
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .ServesPurpose(HostPermissions.Retain.ToString(), "keeping the books")
-            .Job(Digest, HostPermissions.Read.ToString())
+            .Job(Digest, HostPermissions.Read.ToString(), HostPermissions.Edit.ToString())
             .Relationship<HostReviewer>(
                 "reviewer",
                 "workspace",

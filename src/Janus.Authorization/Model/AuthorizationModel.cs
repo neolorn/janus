@@ -78,6 +78,7 @@ internal sealed class AuthorizationModel
     private readonly IReadOnlyDictionary<Permission, string> _actionPurposes;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
     private readonly IReadOnlyList<DefinedRole> _declaredRoles;
+    private readonly Dictionary<string, HashSet<Permission>> _jobs;
 
     private AuthorizationModel(
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
@@ -90,7 +91,8 @@ internal sealed class AuthorizationModel
         Dictionary<string, LawfulBasisDeclaration> bases,
         IReadOnlyList<string> sensitiveCategories,
         DeclaredProcessing processing,
-        IReadOnlyList<DefinedRole> declaredRoles)
+        IReadOnlyList<DefinedRole> declaredRoles,
+        Dictionary<string, HashSet<Permission>> jobs)
     {
         _types = types;
         _entities = entities;
@@ -109,6 +111,7 @@ internal sealed class AuthorizationModel
         _sensitiveCategories = sensitiveCategories;
         _processing = processing;
         _declaredRoles = declaredRoles;
+        _jobs = jobs;
     }
 
     /// <summary>
@@ -194,7 +197,11 @@ internal sealed class AuthorizationModel
             bases,
             declaration.SensitiveCategories,
             processing,
-            Roles(declaration, permissions));
+            Roles(declaration, permissions),
+            declaration.Jobs.ToDictionary(
+                job => job.Name,
+                job => new HashSet<Permission>(job.Permissions),
+                StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -203,6 +210,20 @@ internal sealed class AuthorizationModel
     /// <param name="permission">The permission a role would grant.</param>
     /// <returns>Whether it is declared.</returns>
     public bool Declares(Permission permission) => _permissions.Contains(permission);
+
+    /// <summary>
+    /// Whether the host declared a job of that name whose declaration names the
+    /// permission.
+    /// </summary>
+    /// <param name="job">The name the job's principal carries.</param>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>Whether the job is declared and exercises the permission.</returns>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 (D-202): a principal naming no declared job exercises no
+    /// host permission, and a declared job none its declaration does not name.
+    /// </remarks>
+    public bool Exercises(string job, Permission permission) =>
+        _jobs.TryGetValue(job, out HashSet<Permission>? permissions) && permissions.Contains(permission);
 
     /// <summary>
     /// The export operations: every permission the host declares whose action is
