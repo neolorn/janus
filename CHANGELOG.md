@@ -3936,3 +3936,6 @@ against the public contract of LIB-API-001.
   rollback, to its configuration exactly: it keeps the data source its provider built
   from the string, with its type mappings and plugins, and a named connection string is
   set back as the context resolved it, not as its name.
+- `UseUnitOfWorkAsync` called with a unit of work the library did not register throws
+  `InvalidOperationException` saying so, rather than saying the unit of work has not
+  begun.

@@ -175,6 +175,36 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-002 AC6, LIB-API-001: a unit of work the library did not register,
+    /// here one a host wrote around the library's begun one, is outside the contract, so
+    /// joining it is a fault whose message names that, not a unit of work not begun, and
+    /// the context is left as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AUnitOfWorkTheLibraryDidNotRegisterIsAFaultNamingThatAsync()
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork registered = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        HostContext context = scope.ServiceProvider.GetRequiredService<HostContext>();
+        await using var hosts = new UnitOfWorkInterleaved(registered, _ => Task.CompletedTask);
+        DbConnection configured = context.Database.GetDbConnection();
+
+        await hosts.BeginAsync(TestContext.Current.CancellationToken);
+
+        InvalidOperationException fault = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await context.Database.UseUnitOfWorkAsync(hosts, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "The unit of work is not the one the library registered, so the context cannot join it.",
+            fault.Message);
+        Assert.Same(configured, context.Database.GetDbConnection());
+        Assert.Null(context.Database.CurrentTransaction);
+
+        await hosts.RollbackAsync();
+    }
+
+    /// <summary>
     /// AUTHZ-INHERIT-002 AC6: a context whose own connection is open holds a connection of
     /// its own, so joining is a fault, and the context keeps its connection.
     /// </summary>

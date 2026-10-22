@@ -36,10 +36,10 @@ public static class UnitOfWorkJoin
     /// <returns>The work of joining.</returns>
     /// <exception cref="ArgumentNullException">The context or the unit of work is absent.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The unit of work has not begun; the context is configured with a connection object
-    /// it owns, or was taken from a pool; the context's own connection is open or it holds
-    /// a transaction; or it has joined another unit of work. Each is a fault of the calling
-    /// code (CONV-ERR-001).
+    /// The unit of work is not the one the library registered, or has not begun; the
+    /// context is configured with a connection object it owns, or was taken from a pool;
+    /// the context's own connection is open or it holds a transaction; or it has joined
+    /// another unit of work. Each is a fault of the calling code (CONV-ERR-001).
     /// </exception>
     public static async ValueTask UseUnitOfWorkAsync(
         this DatabaseFacade database,
@@ -49,8 +49,15 @@ public static class UnitOfWorkJoin
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(work);
 
-        // Only the library's own unit of work can have begun a transaction to join.
-        if (work is not IJoinableUnitOfWork joinable || !joinable.Begun)
+        // D-207, LIB-API-001: no host implements the unit of work, so only the library's
+        // own can have begun a transaction to join.
+        if (work is not IJoinableUnitOfWork joinable)
+        {
+            throw new InvalidOperationException(
+                "The unit of work is not the one the library registered, so the context cannot join it.");
+        }
+
+        if (!joinable.Begun)
         {
             throw new InvalidOperationException(
                 "The unit of work has not begun, so it holds no transaction for the context to join.");
