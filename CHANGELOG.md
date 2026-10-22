@@ -3933,3 +3933,7 @@ against the public contract of LIB-API-001.
   `auth.oidc.refreshreused` record, by the library's own statements: where that commit
   fails none of them is revoked, and the next presentation of the redeemed token
   revokes them again.
+- The delivery reports' route logs each rejection, a reference no held send answers, a
+  report the transport cannot read and a source past `integration.callback.ratelimit`,
+  as every other callback route does: the callback's name, the check and the
+  correlation identifier, never the source.

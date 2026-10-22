@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Sending;
@@ -23,6 +25,8 @@ namespace Janus.Hosting.Tests.Sending;
 [Trait("kind", "unit")]
 public sealed class DeliveryReportEndpointTests
 {
+    private const string Origin = "198.51.100.23";
+
     /// <summary>
     /// BFF-MACH-001 AC3 and INT-SMS-005 AC3: a report of failed delivery for a live
     /// send is carried on the machine profile and releases the send; the answer sets no
@@ -132,6 +136,38 @@ public sealed class DeliveryReportEndpointTests
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
         Assert.Null(unreadable.Header(HeaderNames.RetryAfter));
         Assert.Single(deployment.SendLedger.Sends(destination));
+    }
+
+    /// <summary>
+    /// INT-GEN-003 AC3, INT-SMS-005 AC3 and BFF-MACH-003 AC2 (D-207): a report whose
+    /// reference no held send answers, and one past the rate limit, are each logged as
+    /// every callback route logs a rejection, naming the check and never the source; the
+    /// first is recorded as a rejection against its source, the second is not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_GEN_003_AC3_ARejectedReportIsRecordedAgainstItsSourceAndLoggedWithoutItAsync()
+    {
+        await using Deployment deployment = Prepared();
+
+        _ = await SentAsync(deployment);
+        var machine = new Machine(deployment) { From = IPAddress.Parse(Origin) };
+
+        Answer forged = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed");
+
+        deployment.Configuration.Set(Settings.IntegrationCallbackRateLimit, 0);
+
+        Answer flooded = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed");
+
+        string[] refused = [.. deployment.Logs.Lines.Where(line => line.Contains("Callback=sms/dlr", StringComparison.Ordinal))];
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, flooded.Status);
+        Assert.Equal(2, refused.Length);
+        Assert.Contains("Check=Reference", refused[0], StringComparison.Ordinal);
+        Assert.Contains("Check=RateLimit", refused[1], StringComparison.Ordinal);
+        Assert.DoesNotContain(deployment.Logs.Lines, line => line.Contains(Origin, StringComparison.Ordinal));
+        Assert.Single(Counted(deployment), callback => callback.Rejected && callback.Source == Origin);
     }
 
     /// <summary>
