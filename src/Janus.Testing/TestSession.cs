@@ -119,8 +119,7 @@ public sealed class TestSession : HttpClient
     /// <exception cref="InvalidOperationException">The answer carries none.</exception>
     internal static JsonElement Assertion(JsonElement begun)
     {
-        // 09 POST /auth/begin spells the member webauthn and the endpoint's declaration
-        // webAuthn; the member is read under either spelling.
+        // 09 POST /auth/begin and the endpoint's declaration spell the member webauthn.
         foreach (JsonProperty member in begun.EnumerateObject())
         {
             if (string.Equals(member.Name, "webauthn", StringComparison.OrdinalIgnoreCase))
