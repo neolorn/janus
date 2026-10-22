@@ -144,6 +144,7 @@ public sealed class HostFixture : IAsyncLifetime
                     reviewer uuid NOT NULL,
                     PRIMARY KEY (workspace_id, reviewer));
                 CREATE INDEX ix_reviewers_reviewer ON host.reviewers (reviewer);
+                CREATE TYPE host.stage AS ENUM ('draft', 'published');
                 """);
         }
 

@@ -3932,3 +3932,7 @@ against the public contract of LIB-API-001.
   a connection object it owns, which joining would dispose, and for a context taken from
   a pool (`AddDbContextPool`, `AddPooledDbContextFactory`), whose next lease would keep
   the unit of work's connection.
+- A context configured with a connection string returns, after the outermost commit or
+  rollback, to its configuration exactly: it keeps the data source its provider built
+  from the string, with its type mappings and plugins, and a named connection string is
+  set back as the context resolved it, not as its name.

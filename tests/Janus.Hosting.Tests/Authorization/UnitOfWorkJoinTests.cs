@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using Janus.Core;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -399,6 +401,77 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
         Assert.Null(context.Database.CurrentTransaction);
 
         context.Documents.Add(new HostDocument { Id = document, Title = "on its own" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, await HostRowsAsync(document));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context configured with a connection string and a type
+    /// mapping, which its provider carries in the data source it built from the string,
+    /// keeps that data source after the outermost commit: it still reads the host's own
+    /// database type, and its string is the one it had before it joined.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextConfiguredWithAConnectionStringKeepsItsProvidersTypeMappingsAsync()
+    {
+        await using HostContext context = new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql(host.ConnectionString, npgsql => npgsql.MapEnum<HostStage>("stage", "host"))
+            .Options);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        string? configured = context.Database.GetConnectionString();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(configured, context.Database.GetConnectionString());
+        Assert.Equal(
+            HostStage.Published,
+            await context.Database
+                .SqlQuery<HostStage>($"SELECT 'published'::host.stage AS \"Value\"")
+                .SingleAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context configured with a named connection string, which
+    /// it resolved from the host's configuration, is on the string as it resolved it
+    /// after the outermost rollback, not on the name, and what it writes then commits on
+    /// its own.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextConfiguredWithANamedConnectionStringKeepsTheStringItResolvedAsync()
+    {
+        string document = Guid.NewGuid().ToString();
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["ConnectionStrings:host"] = host.ConnectionString,
+            })
+            .Build();
+
+        await using ServiceProvider application = new ServiceCollection()
+            .AddSingleton(configuration)
+            .BuildServiceProvider();
+        await using HostContext context = new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql("Name=host")
+            .UseApplicationServiceProvider(application)
+            .Options);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        string? resolved = context.Database.GetConnectionString();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+        await work.RollbackAsync();
+
+        Assert.Equal(host.ConnectionString, resolved);
+        Assert.Equal(resolved, context.Database.GetConnectionString());
+
+        context.Documents.Add(new HostDocument { Id = document, Title = "on the resolved string" });
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, await HostRowsAsync(document));

@@ -96,32 +96,41 @@ public static class UnitOfWorkJoin
                 "The context holds a connection or a transaction of its own, or has joined another unit of work.");
         }
 
+        // D-207: the string as the context resolved it, a named one included, read
+        // before the context is given the unit of work's connection, which clears it.
+        string? resolved = connection.ConnectionString;
+
         connection.SetDbConnection(ambient.Connection, contextOwnsConnection: false);
-        joinable.AtEnd(() => Released(connection, configured));
+        joinable.AtEnd(() => Released(connection, configured.Connection, resolved));
 
         _ = await connection.UseTransactionAsync(ambient.Transaction, cancellationToken).ConfigureAwait(false);
     }
 
     // The unit of work has taken its connection and transaction back: the context lets
-    // go of the transaction it was handed, which it never owned, and returns to the
-    // connection it was configured with, or to the connection string or data source a
-    // connection is made from where it was configured with no connection.
-    private static void Released(IRelationalConnection connection, RelationalOptionsExtension configured)
+    // go of the transaction it was handed, which it never owned, and returns to its
+    // configuration exactly: the connection it was configured with, or, where it was
+    // configured with none, the data source its provider built and the string as it
+    // resolved it.
+    private static void Released(IRelationalConnection connection, DbConnection? configured, string? resolved)
     {
         connection.CurrentTransaction?.Dispose();
 
-        if (configured.Connection is not null)
+        if (configured is not null)
         {
-            connection.SetDbConnection(configured.Connection, contextOwnsConnection: false);
+            connection.SetDbConnection(configured, contextOwnsConnection: false);
 
             return;
         }
 
         connection.SetDbConnection(null, contextOwnsConnection: true);
 
-        if (configured.ConnectionString is not null)
+        // D-207: the provider keeps the data source it built through the connection's
+        // replacement and answers its string, and setting the string would drop the data
+        // source with its type mappings and plugins, so the string is set back only where
+        // the context no longer answers it.
+        if (!string.Equals(connection.ConnectionString, resolved, StringComparison.Ordinal))
         {
-            connection.ConnectionString = configured.ConnectionString;
+            connection.ConnectionString = resolved;
         }
     }
 }
