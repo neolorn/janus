@@ -3887,6 +3887,12 @@ against the public contract of LIB-API-001.
   `authz.denied`, each refusal recorded with the job's principal and stated reason.
 - The capability page and the explanation refuse a host job's context with
   `authz.denied`, in a request and outside one.
+- A refresh of a materialised derivation records as granter of each grant it writes,
+  and as revoker of each it takes back, the caller's acting account, or the nil subject
+  for a system principal such as a host's job, with the reason
+  `derivation:<relationship>`, and records each as `authz.grant.materialised` or
+  `authz.grant.retracted` in its transaction, naming the person who called it, or the
+  principal and its stated reason. A system principal's context is no longer refused.
 - A preference declared under a name holding a `.` or a `/`, or named `language` or
   `timeZone`, the names the export gives the account's language and time zone, fails
   startup with `model.startup.preferencedeclaration` naming it.

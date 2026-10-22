@@ -138,6 +138,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
+        ("a fact in the host's data a declared job's refresh materialised, outside a request", Decided.Allowed),
         ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
         ("a type declaring as capabilities two permissions of one action", Decided.Raised),
         ("a role defined with the context of the start principal role-declaration", Decided.Denied),
@@ -1223,6 +1224,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     deployment,
                     supported: scenario.StartsWith("a fact", StringComparison.Ordinal));
 
+            case "a fact in the host's data a declared job's refresh materialised, outside a request":
+                return await JobRefreshedAsync(deployment);
+
             case "a page asked for a declared permission its type does not list as a capability":
                 return await RaisedOrAsync(async () =>
                     (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -1455,6 +1459,52 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 .RequireAsync(AccessContext.Of(reviewing), HostPermissions.Read, record, cancellationToken))
             .Match(() => Decided.Allowed, Refused);
     }
+
+    // AUTHZ-DERIVE-005 AC7 (D-207): a record under a workspace someone reviews, in the
+    // deployment with the derivation materialised, the grant written by a refresh a
+    // declared job called outside a request; the grant confers what any refresh's does.
+    private async Task<Decided> JobRefreshedAsync(Deployment deployment)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        SubjectId reviewing = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await deployment.ReviewAsync(workspace, reviewing, cancellationToken);
+
+        await using ServiceProvider materialised = Materialised();
+
+        await using (AsyncServiceScope refreshing = materialised.CreateAsyncScope())
+        {
+            await using HostContext reading = host.Context();
+
+            IUnitOfWork work = refreshing.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await work.BeginAsync(cancellationToken);
+
+            Rendered(await refreshing.ServiceProvider.GetRequiredService<IDerivationMaterialiser>().RefreshAsync(
+                AccessContext.Of(SystemPrincipal.ForOrganization(
+                    HostFixture.Digest,
+                    "the nightly digest",
+                    deployment.Organization)),
+                "reviewer",
+                workspace.Id,
+                Sources(reading),
+                cancellationToken));
+
+            await work.CommitAsync(cancellationToken);
+        }
+
+        await using AsyncServiceScope scope = materialised.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(reviewing), HostPermissions.Read, record, cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+    }
+
 
     // The drift check as the worker runs it: the job, under its own principal.
     private static async Task DriftCheckedAsync(IServiceProvider deployment)

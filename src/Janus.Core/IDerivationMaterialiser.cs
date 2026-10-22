@@ -20,7 +20,11 @@ public interface IDerivationMaterialiser
     /// the ones they no longer confer.
     /// </summary>
     /// <typeparam name="TResource">The host's row.</typeparam>
-    /// <param name="context">Who is asking, recorded on every grant the refresh writes.</param>
+    /// <param name="context">
+    /// Who is asking: its acting account, or the nil subject for a system principal, is
+    /// recorded on every grant the refresh writes, and each grant written or taken back
+    /// is recorded in the trail naming it (AUTHZ-GRANT-003, D-207).
+    /// </param>
     /// <param name="derivation">The relationship the materialised derivations follow from.</param>
     /// <param name="resource">The record the relationship's rows are about.</param>
     /// <param name="sources">The rows of that relationship, from the host's own context.</param>
@@ -28,9 +32,8 @@ public interface IDerivationMaterialiser
     /// <returns>What the refresh changed.</returns>
     /// <exception cref="System.ArgumentNullException">The context or the sources are absent.</exception>
     /// <exception cref="System.ArgumentException">
-    /// The relationship is undeclared, no materialised derivation follows from it, the
-    /// rows of it were not supplied, or the context names no subject to record the
-    /// grants against.
+    /// The relationship is undeclared, no materialised derivation follows from it, or the
+    /// rows of it were not supplied.
     /// </exception>
     ValueTask<Result<DerivationRefresh>> RefreshAsync<TResource>(
         AccessContext context,
