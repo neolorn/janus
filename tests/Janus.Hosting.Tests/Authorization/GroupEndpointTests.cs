@@ -527,9 +527,10 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a removal and a change of members refused after the unit of
-    /// work began, with the organization's groups held or for want of the step-up, each
-    /// roll it back, so no unit of work is left open.
+    /// CONV-DESIGN-003 AC5: a removal refused after the unit of work began, with the
+    /// organization's groups held, rolls it back, so no unit of work is left open. A
+    /// change of members refused before its step-up, or for want of it, begins none
+    /// (CONV-DESIGN-002, D-207).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -552,7 +553,7 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Answer around = await AddedAsync(administrator, team, GrantSubject.Of(department));
 
         Assert.Equal(ErrorCodes.GroupCycle.ToString(), around.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 2), Ended());
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
 
         _deployment.Groups.Holding = held =>
         {
@@ -561,14 +562,14 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         };
 
         Denied(await RemovedAsync(administrator, empty));
-        Assert.Equal((false, 0, rolledBack + 3), Ended());
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
 
         _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
 
         Answer removed = await MemberRemovedAsync(administrator, department, GrantSubject.Of(team));
 
         Assert.Equal(ErrorCodes.StepUpRequired.ToString(), removed.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 4), Ended());
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
 
         // Whether a unit of work is open, how many were left neither committed nor rolled
         // back, and how many were rolled back.

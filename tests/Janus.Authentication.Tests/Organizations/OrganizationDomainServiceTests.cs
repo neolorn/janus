@@ -84,11 +84,11 @@ public sealed class OrganizationDomainServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a domain added where the deployment declares no resolver is
-    /// refused after the list's row is held, and the refusal rolls the unit of work back.
+    /// CONV-DESIGN-002 (D-207): a domain added where the deployment declares no resolver
+    /// is refused before the step-up is judged and before any unit of work begins.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ADomainAddedWithNoResolverIsRolledBackAsync()
+    public async Task CONV_DESIGN_002_ADomainAddedWithNoResolverIsRefusedBeforeItsUnitOfWorkAsync()
     {
         Result<OrganizationDomain> refused = await Service(dns: null).AddDomainAsync(
             Acting,
@@ -101,16 +101,17 @@ public sealed class OrganizationDomainServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Refused(refused));
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.Opened);
+        Assert.Equal(0, _work.RolledBack);
         Assert.Empty(_domains.Held);
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a domain added on a session whose proof is not recent is
-    /// refused under the list's lock, and the refusal rolls the unit of work back.
+    /// CONV-DESIGN-002 (D-207): a domain added on a session whose proof is not recent is
+    /// refused at its step-up, judged before any unit of work begins.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ADomainAddedWithoutStepUpIsRolledBackAsync()
+    public async Task CONV_DESIGN_002_ADomainAddedWithoutStepUpIsRefusedBeforeItsUnitOfWorkAsync()
     {
         Result<OrganizationDomain> refused = await Service(_dns).AddDomainAsync(
             Acting,
@@ -123,16 +124,17 @@ public sealed class OrganizationDomainServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.StepUpRequired, Refused(refused));
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.Opened);
+        Assert.Equal(0, _work.RolledBack);
         Assert.Empty(_domains.Held);
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a domain removed on a session whose proof is not recent is
-    /// refused under the list's lock, and the refusal rolls the unit of work back.
+    /// CONV-DESIGN-002 (D-207): a domain removed on a session whose proof is not recent
+    /// is refused at its step-up, judged before any unit of work begins.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ADomainRemovedWithoutStepUpIsRolledBackAsync()
+    public async Task CONV_DESIGN_002_ADomainRemovedWithoutStepUpIsRefusedBeforeItsUnitOfWorkAsync()
     {
         _ = (await Service(_dns).AddDomainAsync(
                 Acting,
@@ -159,7 +161,8 @@ public sealed class OrganizationDomainServiceTests : IAsyncDisposable
                 error => error.Code));
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.Opened);
+        Assert.Equal(0, _work.RolledBack);
         Assert.True(Assert.Single(_domains.Held).IsListed);
     }
 

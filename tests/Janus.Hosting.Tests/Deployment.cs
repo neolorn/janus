@@ -184,6 +184,7 @@ internal sealed class Deployment : IAsyncDisposable
         builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
+        Considered = new PhoneSignalAuditInMemory(Work);
         Directory = new RegistrationDirectoryInMemory(Identifiers);
         Identifiers.Pending = Pending;
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
@@ -369,6 +370,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// The bot-defence signals recorded (AUTH-ABUSE-008).
     /// </summary>
     public BotDefenceAuditInMemory Signalled { get; } = new();
+
+    /// <summary>
+    /// What was known about each number before a restricted factor was offered or sent
+    /// to it, a record whose unit of work does not commit forgotten (AUTH-FACT-002b).
+    /// </summary>
+    public PhoneSignalAuditInMemory Considered { get; }
 
     /// <summary>
     /// The channel the waiting screen's stream waits on.
@@ -1024,7 +1031,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ISendCarrier>(
             provider => provider.GetRequiredService<SendPublisher>());
         _ = services.AddScoped<INotificationHandler, NotificationHandler>();
-        _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
+        _ = services.AddSingleton<IPhoneSignalAudit>(Considered);
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),
             provider.GetRequiredService<IPhoneSignalAudit>(),

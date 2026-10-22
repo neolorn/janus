@@ -470,10 +470,27 @@ internal sealed class OrganizationService(
             return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
+        // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
+        // on the values in force without a lock, so the step-up, which may ask the
+        // carrier's signal, is judged before the unit of work begins.
+        if ((await JudgedAsync(context, organization, standing, replacement, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error unjudged)
+        {
+            return Result.Failure(unjudged);
+        }
+
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.PolicyChange, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
         // OPS-CFG-002 AC6, X3: the direction, the system's floor and the lock the change
-        // keeps are decided on the values in force under their rows' locks, taken in the
-        // order every change takes them, so a concurrent change waits and cannot turn
-        // this one into another.
+        // keeps are decided again on the values in force under their rows' locks, taken
+        // in the order every change takes them, so a concurrent change waits and cannot
+        // turn this one into another.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -498,12 +515,9 @@ internal sealed class OrganizationService(
 
         Error? failure = null;
 
-        Policy system = (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<Policy>(error, ref failure));
-        PolicyOverride before = (await configuration
-                .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+        Replacement judged = (await JudgedAsync(context, organization, standing, replacement, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Held<PolicyOverride>(error, ref failure));
+            .Match(value => value, error => Held<Replacement>(error, ref failure));
 
         if (failure is not null)
         {
@@ -512,59 +526,7 @@ internal sealed class OrganizationService(
             return Result.Failure(failure);
         }
 
-        PolicyOverride after = replacement with { EmailDomains = before.EmailDomains };
-
-        // AUTH-STEP-002a: an organization may tighten any field and may not loosen one
-        // below the system policy.
-        if (PolicyStrictness.BelowSystem(system, after) is string looser)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(
-                Error.From(
-                    ErrorCodes.ConfigurationPolicyBelowSystem,
-                    "field",
-                    JsonSerializer.SerializeToElement(looser)));
-        }
-
-        Policy was = PolicyStrictness.Tighten(system, before);
-        Policy becomes = PolicyStrictness.Tighten(system, after);
-
-        // AUTH-SESS-005b: the administrative organization is held to a stated floor of
-        // AAL2, which no change of its policy takes it below.
-        if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(
-                Error.From(
-                    ErrorCodes.ConfigurationValueBelowFloor,
-                    "field",
-                    JsonSerializer.SerializeToElement("requiredAssurance")));
-        }
-
-        bool loosening = PolicyStrictness.Loosens(was, becomes);
-
-        // OPS-CFG-002 and chapter 10 section 2.1: a loosening of runtime configuration
-        // also needs the permission to loosen the deployment.
-        if (loosening
-            && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
-                is Error withheld)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(withheld);
-        }
-
-        if (await stepUp
-                .PassedAsync(acting, session, StepUpAction.PolicyChange, cancellationToken)
-                .ConfigureAwait(false)
-            is Error challenged)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(challenged);
-        }
+        (PolicyOverride before, PolicyOverride after, Policy was, Policy becomes, bool loosening) = judged;
 
         if ((await administration
                 .ChangeMemberAsync(
@@ -619,6 +581,72 @@ internal sealed class OrganizationService(
         return Result.Success();
     }
 
+    // AUTH-STEP-002a, AUTH-SESS-005b, OPS-CFG-002: what a replacement would make of the
+    // policy in force, or the refusal it meets: below the system policy, below the
+    // administrative organization's floor, or a loosening the caller may not make. It
+    // reads the values as they stand, held where the caller holds their rows.
+    private async ValueTask<Result<Replacement>> JudgedAsync(
+        AccessContext context,
+        OrganizationId organization,
+        OrganizationStanding standing,
+        PolicyOverride replacement,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        Policy system = (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+        PolicyOverride before = (await configuration
+                .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<PolicyOverride>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<Replacement>(failure);
+        }
+
+        PolicyOverride after = replacement with { EmailDomains = before.EmailDomains };
+
+        // AUTH-STEP-002a: an organization may tighten any field and may not loosen one
+        // below the system policy.
+        if (PolicyStrictness.BelowSystem(system, after) is string looser)
+        {
+            return Result.Failure<Replacement>(
+                Error.From(
+                    ErrorCodes.ConfigurationPolicyBelowSystem,
+                    "field",
+                    JsonSerializer.SerializeToElement(looser)));
+        }
+
+        Policy was = PolicyStrictness.Tighten(system, before);
+        Policy becomes = PolicyStrictness.Tighten(system, after);
+
+        // AUTH-SESS-005b: the administrative organization is held to a stated floor of
+        // AAL2, which no change of its policy takes it below.
+        if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
+        {
+            return Result.Failure<Replacement>(
+                Error.From(
+                    ErrorCodes.ConfigurationValueBelowFloor,
+                    "field",
+                    JsonSerializer.SerializeToElement("requiredAssurance")));
+        }
+
+        bool loosening = PolicyStrictness.Loosens(was, becomes);
+
+        // OPS-CFG-002 and chapter 10 section 2.1: a loosening of runtime configuration
+        // also needs the permission to loosen the deployment.
+        if (loosening
+            && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
+                is Error withheld)
+        {
+            return Result.Failure<Replacement>(withheld);
+        }
+
+        return Result.Success(new Replacement(before, after, was, becomes, loosening));
+    }
+
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -632,4 +660,11 @@ internal sealed class OrganizationService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    private sealed record Replacement(
+        PolicyOverride Before,
+        PolicyOverride After,
+        Policy Was,
+        Policy Becomes,
+        bool Loosening);
 }

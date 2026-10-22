@@ -3928,3 +3928,14 @@ against the public contract of LIB-API-001.
   or carrying a session cookie, taken inside a unit of work already open is a fault the
   same way: the request is answered `system.fault` and nothing of the outer unit of
   work commits.
+- A replacement of an organization's policy, an organization domain's addition or
+  removal, a group member's addition or removal, and a role's definition or removal
+  judge their step-up before their unit of work begins, after every refusal it
+  follows (a policy below the system policy or the floor, a loosening without
+  `system:administer`, a domain with no resolver, a cycle of groups, a role carrying
+  `system:administer` for a caller without it, a role not found or in use), and judge
+  those refusals again under the rows' locks; a carrier's signal asked by the
+  step-up is asked with no unit of work begun, and a risk it answers stays recorded
+  when the step-up refuses.
+  An addition of a domain already listed, or a removal of one not listed, begins no
+  unit of work.
