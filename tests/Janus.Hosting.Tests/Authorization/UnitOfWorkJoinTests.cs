@@ -222,6 +222,78 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context configured with a connection object it owns
+    /// would dispose it on being given the unit of work's, so joining is a fault, and the
+    /// context keeps that connection, undisposed, and writes on it once the unit of work
+    /// has ended.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextConfiguredWithAConnectionObjectItOwnsIsAFaultAsync()
+    {
+        string document = Guid.NewGuid().ToString();
+        await using var own = new NpgsqlConnection(host.ConnectionString);
+
+        await using HostContext context = new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql(own, contextOwnsConnection: true)
+            .Options);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken));
+
+        Assert.Same(own, context.Database.GetDbConnection());
+        Assert.Null(context.Database.CurrentTransaction);
+
+        await work.RollbackAsync();
+
+        context.Documents.Add(new HostDocument { Id = document, Title = "on its own connection" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, await HostRowsAsync(document));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context a pool registered with <c>AddDbContextPool</c>
+    /// leases would go back to the pool still holding the unit of work's open connection,
+    /// so joining is a fault, and the context keeps its own, closed, with no transaction.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextTakenFromAContextPoolIsAFaultAsync()
+    {
+        await using ServiceProvider pooled = new ServiceCollection()
+            .AddDbContextPool<HostContext>(options => options.UseNpgsql(host.ConnectionString))
+            .BuildServiceProvider();
+        await using AsyncServiceScope leased = pooled.CreateAsyncScope();
+        HostContext context = leased.ServiceProvider.GetRequiredService<HostContext>();
+
+        await RefusedFromAPoolAsync(context);
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context a pooled factory registered with
+    /// <c>AddPooledDbContextFactory</c> creates is leased from its pool the same way, so
+    /// joining is a fault, and the context keeps its own connection.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextFromAPooledFactoryIsAFaultAsync()
+    {
+        await using ServiceProvider pooled = new ServiceCollection()
+            .AddPooledDbContextFactory<HostContext>(options => options.UseNpgsql(host.ConnectionString))
+            .BuildServiceProvider();
+        IDbContextFactory<HostContext> factory = pooled.GetRequiredService<IDbContextFactory<HostContext>>();
+
+        await using HostContext context = await factory.CreateDbContextAsync(TestContext.Current.CancellationToken);
+
+        await RefusedFromAPoolAsync(context);
+    }
+
+    /// <summary>
     /// AUTHZ-INHERIT-002 AC6: a context joined to one unit of work cannot join another
     /// while it is joined: the call is a fault, and what the context then writes still
     /// commits with the unit of work it joined and with nothing of the other.
@@ -393,6 +465,26 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
         });
 
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A begun unit of work refuses a context leased from a pool, and leaves it on its own
+    // connection, closed, holding no transaction.
+    private async Task RefusedFromAPoolAsync(HostContext context)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        DbConnection configured = context.Database.GetDbConnection();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken));
+
+        Assert.Same(configured, context.Database.GetDbConnection());
+        Assert.Equal(ConnectionState.Closed, configured.State);
+        Assert.Null(context.Database.CurrentTransaction);
+
+        await work.RollbackAsync();
     }
 
     private async Task<Case> BeginAsync()

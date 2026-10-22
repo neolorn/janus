@@ -17,9 +17,9 @@ namespace Janus.Hosting;
 /// </summary>
 /// <remarks>
 /// Implements AUTHZ-INHERIT-002, OPS-DATA-002, CONV-DESIGN-007 and CONV-LAYOUT-002
-/// (D-203, D-206). It is the one place outside the connection accessor that touches a
-/// context's connection: it reads the host's to judge it, and hands the context the
-/// accessor's connection and transaction.
+/// (D-203, D-206, D-207). It is the one place outside the connection accessor that
+/// touches a context's connection: it reads the host's and its options to judge it, and
+/// hands the context the accessor's connection and transaction.
 /// </remarks>
 public static class UnitOfWorkJoin
 {
@@ -36,8 +36,9 @@ public static class UnitOfWorkJoin
     /// <returns>The work of joining.</returns>
     /// <exception cref="ArgumentNullException">The context or the unit of work is absent.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The unit of work has not begun; the context's own connection is open or it holds a
-    /// transaction; or it has joined another unit of work. Each is a fault of the calling
+    /// The unit of work has not begun; the context is configured with a connection object
+    /// it owns, or was taken from a pool; the context's own connection is open or it holds
+    /// a transaction; or it has joined another unit of work. Each is a fault of the calling
     /// code (CONV-ERR-001).
     /// </exception>
     public static async ValueTask UseUnitOfWorkAsync(
@@ -53,6 +54,25 @@ public static class UnitOfWorkJoin
         {
             throw new InvalidOperationException(
                 "The unit of work has not begun, so it holds no transaction for the context to join.");
+        }
+
+        IDbContextOptions options = database.GetService<IDbContextOptions>();
+        var configured = RelationalOptionsExtension.Extract(options);
+
+        // D-207: a connection object the context owns is disposed when the context is
+        // given another, so the context could never return to it.
+        if (configured.Connection is not null && configured.IsConnectionOwned)
+        {
+            throw new InvalidOperationException(
+                "The context owns the connection object it was configured with, which joining would dispose.");
+        }
+
+        // D-207: a pool's reset keeps a connection the context does not own, so the next
+        // lease would run inside the unit of work's transaction.
+        if (options.FindExtension<CoreOptionsExtension>()?.MaxPoolSize is not null)
+        {
+            throw new InvalidOperationException(
+                "The context was taken from a pool, whose next lease would keep the unit of work's connection.");
         }
 
         // The context's connection service, read while the context is open, since the
@@ -76,8 +96,6 @@ public static class UnitOfWorkJoin
                 "The context holds a connection or a transaction of its own, or has joined another unit of work.");
         }
 
-        var configured = RelationalOptionsExtension.Extract(database.GetService<IDbContextOptions>());
-
         connection.SetDbConnection(ambient.Connection, contextOwnsConnection: false);
         joinable.AtEnd(() => Released(connection, configured));
 
@@ -94,7 +112,7 @@ public static class UnitOfWorkJoin
 
         if (configured.Connection is not null)
         {
-            connection.SetDbConnection(configured.Connection, configured.IsConnectionOwned);
+            connection.SetDbConnection(configured.Connection, contextOwnsConnection: false);
 
             return;
         }
