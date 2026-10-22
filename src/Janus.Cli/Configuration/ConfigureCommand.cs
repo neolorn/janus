@@ -33,7 +33,7 @@ internal static class ConfigureCommand
 
     /// <summary>
     /// What the command declares (LIB-API-001): its arguments, the key document, the keys
-    /// changed, and the codes a refusal carries, the start's checks over the settings the
+    /// changed, and the codes a refusal or a fault carries, the start's checks over the settings the
     /// change leaves among them.
     /// </summary>
     public static CommandContract Contract { get; } = new(
@@ -53,6 +53,7 @@ internal static class ConfigureCommand
             ErrorCodes.StartupRelyingPartyId,
             ErrorCodes.StartupSchemaMismatch,
             ErrorCodes.StartupSecretUnavailable,
+            ErrorCodes.SystemFault,
         ]);
 
     /// <summary>

@@ -41,6 +41,11 @@ against the public contract of LIB-API-001.
   link and the administrative organization `bootstrap` printed.
 - `bootstrap` prints a second line after the enrolment address: the identifier of the
   administrative organization it created, for the host to keep in its own configuration.
+- Every `Janus.Cli` command that a fault ends, rather than a refusal, writes one JSON
+  line on standard error, the code the fault carries or
+  `{"code": "system.fault", "details": {}}` where it carries none, writes nothing on
+  standard output, exits 1 and clears its keys, where it ended with the runtime's own
+  exit code and trace before.
 - The `migrate` command applies the library's migrations to the database of the
   connection piped to it as the only member of its document, and reads no key; a run
   with nothing owed changes nothing. It writes nothing on success; a migration the

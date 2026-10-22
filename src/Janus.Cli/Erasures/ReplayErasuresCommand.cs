@@ -36,14 +36,14 @@ internal static class ReplayErasuresCommand
     /// <summary>
     /// What the command declares (LIB-API-001): the path of the ledger's copy in the
     /// place of its one argument, the key document, the three counts, and the codes a
-    /// refusal carries.
+    /// refusal or a fault carries.
     /// </summary>
     public static CommandContract Contract { get; } = new(
         Name,
         [new(Ledger, Required: true, "path")],
         KeyDocument.Members,
         [new("application/json", ["reapplied: number", "standing: number", "absent: number"])],
-        [ErrorCodes.RequestMalformed, ErrorCodes.StartupSecretUnavailable]);
+        [ErrorCodes.RequestMalformed, ErrorCodes.StartupSecretUnavailable, ErrorCodes.SystemFault]);
 
     // DR-016: the ledger is UTF-8 with no header, so bytes that are not UTF-8 are refused
     // rather than read as a replacement character, and no byte order mark is taken as
