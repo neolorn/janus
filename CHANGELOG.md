@@ -3933,3 +3933,14 @@ against the public contract of LIB-API-001.
   or carrying a session cookie, taken inside a unit of work already open is a fault the
   same way: the request is answered `system.fault` and nothing of the outer unit of
   work commits.
+- `UseUnitOfWorkAsync` throws `InvalidOperationException` for a context configured with
+  a connection object it owns, which joining would dispose, and for a context taken from
+  a pool (`AddDbContextPool`, `AddPooledDbContextFactory`), whose next lease would keep
+  the unit of work's connection.
+- A context configured with a connection string returns, after the outermost commit or
+  rollback, to its configuration exactly: it keeps the data source its provider built
+  from the string, with its type mappings and plugins, and a named connection string is
+  set back as the context resolved it, not as its name.
+- `UseUnitOfWorkAsync` called with a unit of work the library did not register throws
+  `InvalidOperationException` saying so, rather than saying the unit of work has not
+  begun.

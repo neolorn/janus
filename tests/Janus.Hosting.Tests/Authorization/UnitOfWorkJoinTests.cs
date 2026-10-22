@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using Janus.Core;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -173,6 +175,36 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-002 AC6, LIB-API-001: a unit of work the library did not register,
+    /// here one a host wrote around the library's begun one, is outside the contract, so
+    /// joining it is a fault whose message names that, not a unit of work not begun, and
+    /// the context is left as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AUnitOfWorkTheLibraryDidNotRegisterIsAFaultNamingThatAsync()
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork registered = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        HostContext context = scope.ServiceProvider.GetRequiredService<HostContext>();
+        await using var hosts = new UnitOfWorkInterleaved(registered, _ => Task.CompletedTask);
+        DbConnection configured = context.Database.GetDbConnection();
+
+        await hosts.BeginAsync(TestContext.Current.CancellationToken);
+
+        InvalidOperationException fault = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await context.Database.UseUnitOfWorkAsync(hosts, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "The unit of work is not the one the library registered, so the context cannot join it.",
+            fault.Message);
+        Assert.Same(configured, context.Database.GetDbConnection());
+        Assert.Null(context.Database.CurrentTransaction);
+
+        await hosts.RollbackAsync();
+    }
+
+    /// <summary>
     /// AUTHZ-INHERIT-002 AC6: a context whose own connection is open holds a connection of
     /// its own, so joining is a fault, and the context keeps its connection.
     /// </summary>
@@ -219,6 +251,78 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
         Assert.Same(own, context.Database.CurrentTransaction);
 
         await work.RollbackAsync();
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context configured with a connection object it owns
+    /// would dispose it on being given the unit of work's, so joining is a fault, and the
+    /// context keeps that connection, undisposed, and writes on it once the unit of work
+    /// has ended.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextConfiguredWithAConnectionObjectItOwnsIsAFaultAsync()
+    {
+        string document = Guid.NewGuid().ToString();
+        await using var own = new NpgsqlConnection(host.ConnectionString);
+
+        await using HostContext context = new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql(own, contextOwnsConnection: true)
+            .Options);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken));
+
+        Assert.Same(own, context.Database.GetDbConnection());
+        Assert.Null(context.Database.CurrentTransaction);
+
+        await work.RollbackAsync();
+
+        context.Documents.Add(new HostDocument { Id = document, Title = "on its own connection" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, await HostRowsAsync(document));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context a pool registered with <c>AddDbContextPool</c>
+    /// leases would go back to the pool still holding the unit of work's open connection,
+    /// so joining is a fault, and the context keeps its own, closed, with no transaction.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextTakenFromAContextPoolIsAFaultAsync()
+    {
+        await using ServiceProvider pooled = new ServiceCollection()
+            .AddDbContextPool<HostContext>(options => options.UseNpgsql(host.ConnectionString))
+            .BuildServiceProvider();
+        await using AsyncServiceScope leased = pooled.CreateAsyncScope();
+        HostContext context = leased.ServiceProvider.GetRequiredService<HostContext>();
+
+        await RefusedFromAPoolAsync(context);
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context a pooled factory registered with
+    /// <c>AddPooledDbContextFactory</c> creates is leased from its pool the same way, so
+    /// joining is a fault, and the context keeps its own connection.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextFromAPooledFactoryIsAFaultAsync()
+    {
+        await using ServiceProvider pooled = new ServiceCollection()
+            .AddPooledDbContextFactory<HostContext>(options => options.UseNpgsql(host.ConnectionString))
+            .BuildServiceProvider();
+        IDbContextFactory<HostContext> factory = pooled.GetRequiredService<IDbContextFactory<HostContext>>();
+
+        await using HostContext context = await factory.CreateDbContextAsync(TestContext.Current.CancellationToken);
+
+        await RefusedFromAPoolAsync(context);
     }
 
     /// <summary>
@@ -333,6 +437,77 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context configured with a connection string and a type
+    /// mapping, which its provider carries in the data source it built from the string,
+    /// keeps that data source after the outermost commit: it still reads the host's own
+    /// database type, and its string is the one it had before it joined.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextConfiguredWithAConnectionStringKeepsItsProvidersTypeMappingsAsync()
+    {
+        await using HostContext context = new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql(host.ConnectionString, npgsql => npgsql.MapEnum<HostStage>("stage", "host"))
+            .Options);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        string? configured = context.Database.GetConnectionString();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(configured, context.Database.GetConnectionString());
+        Assert.Equal(
+            HostStage.Published,
+            await context.Database
+                .SqlQuery<HostStage>($"SELECT 'published'::host.stage AS \"Value\"")
+                .SingleAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002 AC6: a context configured with a named connection string, which
+    /// it resolved from the host's configuration, is on the string as it resolved it
+    /// after the outermost rollback, not on the name, and what it writes then commits on
+    /// its own.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_AC6_AContextConfiguredWithANamedConnectionStringKeepsTheStringItResolvedAsync()
+    {
+        string document = Guid.NewGuid().ToString();
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["ConnectionStrings:host"] = host.ConnectionString,
+            })
+            .Build();
+
+        await using ServiceProvider application = new ServiceCollection()
+            .AddSingleton(configuration)
+            .BuildServiceProvider();
+        await using HostContext context = new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql("Name=host")
+            .UseApplicationServiceProvider(application)
+            .Options);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        string? resolved = context.Database.GetConnectionString();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken);
+        await work.RollbackAsync();
+
+        Assert.Equal(host.ConnectionString, resolved);
+        Assert.Equal(resolved, context.Database.GetConnectionString());
+
+        context.Documents.Add(new HostDocument { Id = document, Title = "on the resolved string" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, await HostRowsAsync(document));
+    }
+
+    /// <summary>
     /// AUTHZ-INHERIT-002 AC6: after the outermost rollback a context configured with a
     /// closed connection is on that same connection again, and what it writes then commits
     /// on its own.
@@ -393,6 +568,26 @@ public sealed class UnitOfWorkJoinTests(HostFixture host) : IClassFixture<HostFi
         });
 
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A begun unit of work refuses a context leased from a pool, and leaves it on its own
+    // connection, closed, holding no transaction.
+    private async Task RefusedFromAPoolAsync(HostContext context)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        DbConnection configured = context.Database.GetDbConnection();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await context.Database.UseUnitOfWorkAsync(work, TestContext.Current.CancellationToken));
+
+        Assert.Same(configured, context.Database.GetDbConnection());
+        Assert.Equal(ConnectionState.Closed, configured.State);
+        Assert.Null(context.Database.CurrentTransaction);
+
+        await work.RollbackAsync();
     }
 
     private async Task<Case> BeginAsync()
