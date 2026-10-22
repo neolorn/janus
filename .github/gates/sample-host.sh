@@ -6,6 +6,9 @@
 # which its own package versions read as LibraryVersion, the command-line tool is
 # installed at that version into the sample's tool manifest, and the sample is built and
 # its tests run. The sample keeps no lockfile, so its restore is not locked.
+# CONV-SETUP-004 (D-207): the format gate covers the sample's solution too. It reads the
+# restored packages, so it runs here, once they are, with the version they were packed at
+# given to its evaluation through the environment, as dotnet format takes no property.
 # Its packages are restored into a folder of the run's own, so a package of an earlier
 # commit packed under the same version is never taken from the machine's cache.
 
@@ -44,5 +47,6 @@ dotnet restore "$samples/HostSample.slnx" \
   cd "$samples"
   dotnet tool install Janus.Cli --local --version "$version" --add-source "$feed"
   dotnet build HostSample.slnx --no-restore -p:LibraryVersion="$version"
+  LibraryVersion="$version" dotnet format HostSample.slnx --verify-no-changes --no-restore
   dotnet test --solution HostSample.slnx --no-build
 )

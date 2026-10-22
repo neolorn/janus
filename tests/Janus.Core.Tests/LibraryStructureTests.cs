@@ -198,9 +198,10 @@ public sealed class LibraryStructureTests
         "TreatWarningsAsErrors",
     ];
 
-    // CONV-SETUP-004 AC2: the folders every project lives in. With the root above them
-    // they are every directory the build reads a configuration from.
-    private static readonly string[] Built = ["src", "tests", "tools"];
+    // CONV-SETUP-004 AC2: the folders every project lives in, the sample host's among
+    // them (D-207). With the root above them they are every directory the build reads a
+    // configuration from.
+    private static readonly string[] Built = ["src", "tests", "tools", "samples"];
 
     // CONV-SETUP-004 AC2: what configures a rule when a project, props or targets file
     // declares it, as a property, an item or an item's metadata: a rule's severity or
@@ -784,6 +785,45 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-LAYOUT-001 (D-207): the sample host's projects take the library's settings
+    /// from the root's file, which the sample's own imports, without a lockfile and
+    /// without a MinVer reference, and none of the sample's build files references the
+    /// public surface analysers or the library's analysers.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_001_TheSampleHostTakesTheLibrarysSettingsWithoutALockfileOrMinVer()
+    {
+        var settings = XDocument.Parse(Repository.ReadText(Path.Combine("samples", "Directory.Build.props")));
+        string[] files =
+        [
+            Path.Combine(Repository.Root, "samples", "Directory.Build.props"),
+            Path.Combine(Repository.Root, "samples", "Directory.Packages.props"),
+            .. SolutionProjects(Path.Combine("samples", "HostSample.slnx")),
+        ];
+
+        Assert.Equal(
+            ["$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"],
+            settings.Descendants("Import").Select(import => import.Attribute("Project")!.Value));
+        Assert.Equal(
+            ["false"],
+            settings.Descendants("RestorePackagesWithLockFile").Select(property => property.Value));
+        Assert.Equal(
+            ["MinVer"],
+            settings.Descendants("PackageReference").Select(reference => reference.Attribute("Remove")!.Value));
+
+        foreach (string file in files)
+        {
+            Assert.DoesNotContain(
+                XDocument.Parse(File.ReadAllText(file)).Descendants(),
+                element => element.Name.LocalName is "PackageReference" or "PackageVersion" or "ProjectReference"
+                    && element.Attribute("Include")?.Value is string include
+                    && (include.Contains("PublicApiAnalyzers", StringComparison.Ordinal)
+                        || include.Contains("Janus.Analyzers", StringComparison.Ordinal)
+                        || string.Equals(include, "MinVer", StringComparison.Ordinal)));
+        }
+    }
+
+    /// <summary>
     /// CONV-TEST-001 AC2: no project grants its internals to the project that holds
     /// the consumer sample.
     /// </summary>
@@ -1129,12 +1169,21 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-SETUP-001 AC1: no project file sets a target framework or any inherited
-    /// property, except the analyser project, which must target netstandard2.0.
+    /// property, except the analyser project, which must target netstandard2.0, the
+    /// sample host's projects among them (D-207).
     /// </summary>
     [Fact]
     public void CONV_SETUP_001_AC1_NoProjectOverridesTheInheritedProperties()
     {
-        foreach (string project in Projects().Where(project => !IsTheAnalyserProject(project)))
+        string[] projects =
+        [
+            .. Projects().Where(project => !IsTheAnalyserProject(project)),
+            .. SolutionProjects(Path.Combine("samples", "HostSample.slnx")),
+        ];
+
+        Assert.Contains(projects, project => Path.GetFileNameWithoutExtension(project) is "HostSample.Tests");
+
+        foreach (string project in projects)
         {
             Assert.Empty(XDocument
                 .Parse(File.ReadAllText(project))
@@ -1221,18 +1270,20 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-SETUP-004 AC3, the configuration: the .editorconfig sets below error the five
-    /// rules of the table, each where the table scopes it, and no other rule.
+    /// rules of the table, each where the table scopes it, the sample host's project among
+    /// the source projects and its test project among the test projects (D-207), and no
+    /// other rule.
     /// </summary>
     [Fact]
     public void CONV_SETUP_004_AC3_NoRuleButTheFiveOfTheTableIsSetBelowError() =>
         Assert.Equal(
             [
                 "*.cs CA1062 none",
-                "src/**.cs CA1812 none",
+                "{src,samples/HostSample}/**.cs CA1812 none",
                 "src/{Janus.Core,Janus.Hosting,Janus.Conformance,Janus.Testing}/**.cs CA1515 none",
-                "{tests,src/Janus.Hosting,src/Janus.Cli}/**.cs CA2007 none",
-                "tests/**.cs CA1707 none",
-                "tests/**.cs CA1515 none",
+                "{tests,samples/HostSample.Tests,src/Janus.Hosting,src/Janus.Cli}/**.cs CA2007 none",
+                "{tests,samples/HostSample.Tests}/**.cs CA1707 none",
+                "{tests,samples/HostSample.Tests}/**.cs CA1515 none",
             ],
             BelowError(Repository.ReadText(".editorconfig")));
 
