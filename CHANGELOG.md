@@ -3928,3 +3928,8 @@ against the public contract of LIB-API-001.
   or carrying a session cookie, taken inside a unit of work already open is a fault the
   same way: the request is answered `system.fault` and nothing of the outer unit of
   work commits.
+- A refresh token's reuse revokes the provider's grant and every token issued under it
+  in the same unit of work as the session record's spine and its
+  `auth.oidc.refreshreused` record, by the library's own statements: where that commit
+  fails none of them is revoked, and the next presentation of the redeemed token
+  revokes them again.

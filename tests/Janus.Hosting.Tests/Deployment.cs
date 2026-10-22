@@ -955,6 +955,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>>(Grants);
         _ = services.AddSingleton<IOpenIddictScopeStore<OidcScopeRecord>>(Scopes);
         _ = services.AddSingleton<IOpenIddictTokenStore<OidcTokenRecord>>(Tokens);
+        _ = services.AddSingleton<IOidcGrantStore>(new OidcGrantRevocationInMemory(Grants, Tokens));
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);

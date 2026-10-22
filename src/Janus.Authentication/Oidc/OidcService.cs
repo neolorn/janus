@@ -20,6 +20,7 @@ namespace Janus.Authentication.Oidc;
 /// <param name="sessions">Where the session record a token stands on is read and ended.</param>
 /// <param name="identifiers">Where the primary address and the language are read.</param>
 /// <param name="accounts">Where the display name is read.</param>
+/// <param name="grants">Where the provider's grant and its tokens are revoked.</param>
 /// <param name="audit">Where a revoked family is recorded.</param>
 /// <param name="configuration">Where the lifetime comes from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -35,6 +36,7 @@ internal sealed class OidcService(
     ISessionStore sessions,
     IIdentifierDirectory identifiers,
     IAccountDirectory accounts,
+    IOidcGrantStore grants,
     IOidcAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -81,23 +83,32 @@ internal sealed class OidcService(
     /// <param name="subject">Whose account.</param>
     /// <param name="session">The record everything derived from.</param>
     /// <param name="clientId">Which client presented it.</param>
+    /// <param name="grant">The provider's grant the token was issued under, or nothing where it names none.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of ending them.</returns>
     public async ValueTask ReuseAsync(
         SubjectId subject,
         SessionId session,
         string clientId,
+        string? grant,
         CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        // AUTH-OIDC-003 AC1 and AC2: a token presented twice means a copy is in
-        // someone's hands and there is no telling whose, so everything derived from the
-        // record goes and the whole of it is recorded, in the outermost unit of work, so
-        // the revocation stands whatever a caller does after it (CONV-DESIGN-003).
+        // AUTH-OIDC-003 AC1, AC2 and AC4 (D-207): a token presented twice means a copy is
+        // in someone's hands and there is no telling whose, so the whole family goes (the
+        // session record's spine, the grant and every token of it) and is recorded, in
+        // the outermost unit of work and one commit, so the revocation stands whatever a
+        // caller does after it and a fault leaves none of it (CONV-DESIGN-003).
         (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await sessions.EndSpineAsync(session, now, cancellationToken).ConfigureAwait(false);
+
+        if (grant is not null)
+        {
+            await grants.RevokeAsync(grant, cancellationToken).ConfigureAwait(false);
+        }
+
         await audit.ReusedAsync(subject, clientId, session, now, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
