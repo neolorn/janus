@@ -34,7 +34,7 @@ internal static class RotateKeyEncryptionKeyCommand
     /// <summary>
     /// What the command declares (LIB-API-001): its arguments, the key document, the
     /// escrow copy and the pass's report, or with the seal the retirement's report, and
-    /// the codes a refusal carries.
+    /// the codes a refusal or a fault carries.
     /// </summary>
     public static CommandContract Contract { get; } = new(
         Name,
@@ -48,7 +48,13 @@ internal static class RotateKeyEncryptionKeyCommand
                 ["version: number", "processed: number", "retired[]: number", "keepUntil: DateTime"],
                 RotationArguments.Sealed),
         ],
-        [ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.RotationNotReady, ErrorCodes.StartupSecretUnavailable]);
+        [
+            ErrorCodes.RequestMalformed,
+            ErrorCodes.Denied,
+            ErrorCodes.RotationNotReady,
+            ErrorCodes.StartupSecretUnavailable,
+            ErrorCodes.SystemFault,
+        ]);
 
     /// <summary>
     /// Runs the command.

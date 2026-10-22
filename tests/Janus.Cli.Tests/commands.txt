@@ -31,7 +31,7 @@ bootstrap
       enrolment: string
     text/plain
       organization: string
-  1 api.request.malformed authz.denied config.value.notallowed identity.identifier.invalid identity.identifier.mixedscript identity.profile.underage model.startup.declarationmissing model.startup.governinglanguage model.startup.rpid model.startup.schemamismatch model.startup.secretunavailable
+  1 api.request.malformed authz.denied config.value.notallowed identity.identifier.invalid identity.identifier.mixedscript identity.profile.underage model.startup.declarationmissing model.startup.governinglanguage model.startup.rpid model.startup.schemamismatch model.startup.secretunavailable system.fault
 configure
   arguments
     --abuse.throttle.enabled optional setting
@@ -58,7 +58,7 @@ configure
   0
     application/json
       changed[]: string
-  1 api.request.malformed config.change.reasonrequired config.value.notallowed integration.endpoint.insecure model.startup.declarationmissing model.startup.governinglanguage model.startup.labellimit model.startup.redirectclient model.startup.rpid model.startup.schemamismatch model.startup.secretunavailable
+  1 api.request.malformed config.change.reasonrequired config.value.notallowed integration.endpoint.insecure model.startup.declarationmissing model.startup.governinglanguage model.startup.labellimit model.startup.redirectclient model.startup.rpid model.startup.schemamismatch model.startup.secretunavailable system.fault
 migrate
   arguments
     --report optional flag
@@ -86,7 +86,7 @@ register-client
   0
     application/json
       registered: string
-  1 api.request.malformed model.startup.redirectclient model.startup.schemamismatch model.startup.secretunavailable
+  1 api.request.malformed model.startup.redirectclient model.startup.schemamismatch model.startup.secretunavailable system.fault
 replay-erasures
   arguments
     ledger required path
@@ -101,7 +101,7 @@ replay-erasures
       reapplied: number
       standing: number
       absent: number
-  1 api.request.malformed model.startup.secretunavailable
+  1 api.request.malformed model.startup.secretunavailable system.fault
 rotate-fingerprint-key
   arguments
     --sealed optional flag
@@ -124,7 +124,7 @@ rotate-fingerprint-key
       processed: number
       retired[]: number
       keepUntil: DateTime
-  1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable
+  1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable system.fault
 rotate-kek
   arguments
     --sealed optional flag
@@ -147,4 +147,4 @@ rotate-kek
       processed: number
       retired[]: number
       keepUntil: DateTime
-  1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable
+  1 api.request.malformed authz.denied model.rotation.notready model.startup.secretunavailable system.fault
