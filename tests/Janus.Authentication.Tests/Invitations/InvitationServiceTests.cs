@@ -646,6 +646,32 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001 and AUTHZ-SCOPE-001 (D-207): the roles an invitation attaches need
+    /// <c>grant:manage</c> held in the invitation's own organization, for which the
+    /// permission to administer the deployment, held in the administrative organization,
+    /// does not stand in.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_SystemAdministrationDoesNotStandInForAnInvitationsRolesAsync()
+    {
+        RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
+
+        _gate.Grant(_inviter, Staff, Permissions.SystemAdminister);
+        _gate.Grant(_inviter, Staff, Permissions.GrantManage);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk]))).Code);
+        Assert.Empty(_invitations.Held);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Personal, roles: [clerk])));
+
+        Assert.Equal([clerk], Assert.Single(_invitations.Held).Roles);
+    }
+
+    /// <summary>
     /// REG-INV-001: an invitation naming a role is also the <c>grant:manage</c> step-up
     /// action, judged after <c>invitation:issue</c>, so a session that meets the issue's
     /// gate and not the grant's issues nothing; one naming no role asks only the issue's.
