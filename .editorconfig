@@ -198,7 +198,7 @@ generated_code = true
 # (CONV-DESIGN-002).
 dotnet_diagnostic.CA1812.severity = none
 
-[src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**.cs]
+[src/{Janus.Core,Janus.Hosting,Janus.Conformance,Janus.Testing}/**.cs]
 # CA1515: these projects hold the contract (CONV-LAYOUT-002).
 dotnet_diagnostic.CA1515.severity = none
 

@@ -158,6 +158,10 @@ The system warns ahead of this operation: `expiry-approaching` is raised
 key-encryption key's cryptoperiod ends, counted from its last completed rotation
 (OPS-MAINT-001, DR-009a). Record the operation in the maintenance log.
 
+A command that ends with exit code 1 and a JSON line names its refusal or fault there;
+`system.fault` carries nothing more, and `rotate-kek` resumes where it stopped when run
+again (OPS-SEC-001, OPS-SEC-003, D-207).
+
 **Rotate out of cycle** on any intrusion, alarm, or incident touching the secrets
 manager — before a copied key could be used.
 
@@ -201,6 +205,12 @@ pre-existing channel is the entire control.
 Approver anomaly detection runs per approver (AUTH-RECOV-002). With one approver,
 the operator reviews the approver report weekly, rather than relying on it to alert,
 and records the review in the maintenance log of OPS-MAINT-001 (D-147).
+
+**An organization no one can manage.** An organization `POST /admin/organizations`
+creates holds no grant, and one whose last holder of `grant:manage` has left has no one
+to grant. A system administrator writes its grants from the management application
+(`POST /admin/grants`, under `system:administer`, with a reason): `grant:manage` and
+`membership:manage` to a staff member who answers for it (AUTHZ-SCOPE-001, D-207).
 
 ---
 
@@ -250,14 +260,18 @@ permanent failure alerts you immediately (`erasure-delivery-exhausted`). Once th
 host's step is done by other means, close the failed delivery by hand with the manual
 completion control (`POST /admin/erasures/{id}/complete`, naming the takedown's
 identifier, step-up `erasure:complete`); the completion is itself recorded
-(IDN-LIFE-003a).
+(IDN-LIFE-003a). Every other delivery of host-side work that raises the same alert (an
+erasure's, a restriction change's, a consent change's or an objection's) is closed the
+same way: find it in the list of incomplete deliveries (`GET /admin/erasures`, which shows
+each with its kind and the subscribers still owed), make sure the host's step is done by
+other means, and complete it by its identifier (D-203).
 
 **Do not** ask for proof of age. The date of birth entered at registration is retained
 only where `profile.dateofbirth` is on (REG-PROF-002, PRIV-MINOR-001); by default only
 the derived affirmation is held, and collecting a date to resolve a takedown would
 create the data the policy exists to avoid.
 
-*Source: D-039, IDN-LIFE-003, PRIV-MINOR-002, D-166*
+*Source: D-039, IDN-LIFE-003, PRIV-MINOR-002, D-166, D-203*
 
 ---
 

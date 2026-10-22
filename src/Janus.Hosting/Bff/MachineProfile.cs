@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.Callbacks;
 using Janus.Core;
 using Janus.Hosting.Callbacks;
@@ -48,8 +49,8 @@ internal sealed class MachineProfile(ILogger<MachineProfile> log) : IMiddleware
             CallbackAdmission admission = context.RequestServices.GetRequiredService<CallbackAdmission>();
             IUnitOfWork work = context.RequestServices.GetRequiredService<IUnitOfWork>();
 
-            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             await CallbackIntake
                 .CookieRefusedAsync(context, admission, work, cancellationToken)

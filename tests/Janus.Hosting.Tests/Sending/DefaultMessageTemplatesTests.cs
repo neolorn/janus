@@ -28,7 +28,7 @@ public sealed class DefaultMessageTemplatesTests
 
     private static readonly DefaultMessageTemplates Shipped = new();
 
-    private static readonly MessagePlaceholders Measured = new([], [], Landing.Origins);
+    private static readonly MessagePlaceholders Measured = new([], [], [], Landing.Origins);
 
     // The link kind each message that carries a link lands under (API-LAND-001).
     private static readonly Dictionary<MessageKind, LinkKind> Linked = new()

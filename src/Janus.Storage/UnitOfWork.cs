@@ -15,10 +15,13 @@ namespace Janus.Storage;
 /// <remarks>
 /// Implements CONV-DESIGN-003 and OPS-DATA-002. The transaction is the context's own,
 /// so a hand-written query taken through the connection accessor sees the writes made
-/// before it in the same operation.
+/// before it in the same operation. A host's own context joins the same connection and
+/// transaction and is given both back when the outermost level ends (AUTHZ-INHERIT-002).
 /// </remarks>
-internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
+internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork, IJoinableUnitOfWork
 {
+    private readonly DataConnections _connections = new(context);
+
     private IDbContextTransaction? _transaction;
 
     private int _depth;
@@ -28,6 +31,13 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
 
     // What runs once the outermost transaction has committed; a rollback discards it.
     private List<Func<CancellationToken, ValueTask>> _afterCommit = [];
+
+    // What gives a joined context its own connection back, whichever way the outermost
+    // transaction ended.
+    private List<Action> _atEnd = [];
+
+    /// <inheritdoc/>
+    public bool Begun => _transaction is not null;
 
     /// <inheritdoc/>
     public async ValueTask<Result<bool>> BeginAsync(CancellationToken cancellationToken)
@@ -90,6 +100,10 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         await _transaction.DisposeAsync().ConfigureAwait(false);
         _transaction = null;
 
+        // AUTHZ-INHERIT-002: a joined context is given its own connection back before
+        // anything registered runs, since that may begin a unit of work of its own.
+        Ended();
+
         // CONV-DESIGN-002: what was registered runs now, outside any transaction. Each
         // may begin and commit a unit of work of its own in this scope, so the list is
         // taken before the first runs and nothing registered meanwhile is run twice.
@@ -118,6 +132,30 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         _afterCommit.Add(work);
 
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<AmbientConnection> ConnectionAsync(CancellationToken cancellationToken)
+    {
+        if (_transaction is null)
+        {
+            throw new InvalidOperationException("No unit of work is in progress to join.");
+        }
+
+        return await _connections.UseAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public void AtEnd(Action release)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+
+        if (_transaction is null)
+        {
+            throw new InvalidOperationException("No unit of work is in progress to join.");
+        }
+
+        _atEnd.Add(release);
     }
 
     /// <inheritdoc/>
@@ -166,7 +204,29 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         _afterCommit = [];
         context.ChangeTracker.Clear();
 
-        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            // AUTHZ-INHERIT-002: a joined context is given its own connection back
+            // however the rollback went, so none is left on a transaction that ended.
+            Ended();
+        }
+    }
+
+    // Gives every joined context its own connection back, each once.
+    private void Ended()
+    {
+        List<Action> releases = _atEnd;
+
+        _atEnd = [];
+
+        foreach (Action release in releases)
+        {
+            release();
+        }
     }
 }

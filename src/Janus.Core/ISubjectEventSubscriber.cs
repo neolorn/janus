@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 namespace Janus.Core;
 
 /// <summary>
-/// What a host registers to do its own half of an erasure, a restriction or an
-/// export. Delivery is at least once, so a subscriber given the same event twice
+/// What a host registers to do its own half of an erasure, a restriction or a
+/// takedown. Delivery is at least once, so a subscriber given the same event twice
 /// produces the same result, and one that did not do its work says so rather than
 /// throwing.
 /// </summary>

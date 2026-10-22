@@ -12,27 +12,29 @@ using Janus.Privacy.Policies;
 namespace Janus.Privacy.Erasures;
 
 /// <summary>
-/// The erasures an operator reads and, where a subscriber could not finish an erasure,
-/// a takedown or a restriction, the delivery it completes.
+/// The deliveries of host-side work an operator reads, of every kind, and, where a
+/// subscriber or a purpose handler could not finish one, the delivery it completes.
 /// </summary>
 /// <param name="scope">Whether the caller may work the erasures.</param>
 /// <param name="stepUp">What the manual completion asks of the caller's session.</param>
 /// <param name="outbox">Where each erasure's delivery and its confirmations are.</param>
 /// <param name="erasures">Where the erasure's own row is carried in step with its delivery.</param>
 /// <param name="subscribers">Who the host registered to do its half.</param>
+/// <param name="handlers">The purpose handlers the host registered.</param>
 /// <param name="ledger">Where an erasure is written down off the host, if the deployment registered one.</param>
 /// <param name="audit">Where a manual completion is written down.</param>
 /// <param name="work">The one transaction a completion runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b, AUTHZ-GATE-006 and DR-016. An
-/// erasure is read from the delivery its host-side work travels on, which carries its
-/// subject, reason, status, attempts and confirmations, and which the erasures row
-/// follows step for step. The manual path is for permanent failure and is itself recorded, so a delivery
-/// never closes without a trace of who closed it or what was outstanding. The operator
-/// vouches for the host's subscribers and never for an erasure's ledger line: the path
-/// appends it where it is outstanding, and closes nothing until it is durable (DR-016
-/// AC2).
+/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b, AUTHZ-GATE-006 and DR-016
+/// (D-203). Every kind of delivery is read from the outbox row it travels on, which
+/// carries its subject, its kind, the purpose and the change of a consent or an
+/// objection change, an erasure's reason, its status, attempts and confirmations; an
+/// erasures row follows its delivery step for step. The manual path is for permanent
+/// failure and is itself recorded, so a delivery never closes without a trace of who
+/// closed it or what was outstanding. The operator vouches for the host's subscribers
+/// and purpose handlers and never for an erasure's ledger line: the path appends it
+/// where it is outstanding, and closes nothing until it is durable (DR-016 AC2).
 /// </remarks>
 internal sealed class ErasureService(
     AdministrativeScope scope,
@@ -40,6 +42,7 @@ internal sealed class ErasureService(
     IOutboxStore outbox,
     IErasureStore erasures,
     IEnumerable<ISubjectEventSubscriber> subscribers,
+    IEnumerable<IPurposeHandler> handlers,
     IErasureLedger? ledger,
     IPrivacyAudit audit,
     IUnitOfWork work,
@@ -49,17 +52,6 @@ internal sealed class ErasureService(
 
     private static readonly JsonSerializerOptions Spelled =
         new() { Converters = { new JsonStringEnumConverter() } };
-
-    // IDN-LIFE-003a: the deliveries whose spent retries the manual path closes.
-    private static readonly SubjectEventKind[] Completable =
-    [
-        SubjectEventKind.ErasureRequested,
-        SubjectEventKind.TakedownExecuted,
-        SubjectEventKind.RestrictionChanged,
-    ];
-
-    private readonly IReadOnlyList<ISubjectEventSubscriber> _waitedFor =
-        ErasureLedgerSubscriber.Joined(subscribers, ledger);
 
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<ErasureProgress>>> ListAsync(
@@ -76,7 +68,7 @@ internal sealed class ErasureService(
         }
 
         IReadOnlyList<DeliveryProgress> outstanding = await outbox
-            .OutstandingAsync(SubjectEventKind.ErasureRequested, cancellationToken)
+            .OutstandingAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return Result.Success<IReadOnlyList<ErasureProgress>>([.. outstanding.Select(Progress)]);
@@ -100,7 +92,7 @@ internal sealed class ErasureService(
         return await outbox
                 .ProgressAsync(new DeliveryId(erasure.Value), cancellationToken)
                 .ConfigureAwait(false)
-            is { Delivery.Kind: SubjectEventKind.ErasureRequested } progress
+            is DeliveryProgress progress
             ? Result.Success(Progress(progress))
             : Result.Failure<ErasureProgress>(Error.From(ErrorCodes.ErasureNotFound));
     }
@@ -122,8 +114,7 @@ internal sealed class ErasureService(
         }
 
         if (await outbox.FindAsync(new DeliveryId(erasure.Value), cancellationToken).ConfigureAwait(false)
-                is not Delivery delivery
-            || !Completable.Contains(delivery.Kind))
+                is not Delivery delivery)
         {
             return Result.Failure(Error.From(ErrorCodes.ErasureNotFound));
         }
@@ -201,7 +192,7 @@ internal sealed class ErasureService(
                 context.BreakGlassReason,
                 held.Subject,
                 time.GetUtcNow(),
-                Named(erasure, held.Kind, outstanding),
+                Named(erasure, Kinded(held.Kind), outstanding),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -216,7 +207,7 @@ internal sealed class ErasureService(
 
     private static Dictionary<string, JsonElement> Named(
         ErasureId erasure,
-        SubjectEventKind kind,
+        DeliveryKind kind,
         string[] outstanding) =>
         new(capacity: 3, StringComparer.Ordinal)
         {
@@ -225,33 +216,61 @@ internal sealed class ErasureService(
             ["outstanding"] = JsonSerializer.SerializeToElement(outstanding),
         };
 
+    // Chapter 10 section 5.50: the kind of host-side work a delivery carries, spelled as
+    // the operator reads it.
+    private static DeliveryKind Kinded(SubjectEventKind kind) => kind switch
+    {
+        SubjectEventKind.ErasureRequested => DeliveryKind.Erasure,
+        SubjectEventKind.TakedownExecuted => DeliveryKind.Takedown,
+        SubjectEventKind.RestrictionChanged => DeliveryKind.Restriction,
+        SubjectEventKind.ConsentChanged => DeliveryKind.Consent,
+        SubjectEventKind.ObjectionChanged => DeliveryKind.Objection,
+        _ => throw new InvalidOperationException("The delivery carries no kind of host-side work."),
+    };
+
+    // Chapter 10 section 5.50: a consent's and an objection's change as the row holds it,
+    // a restriction's as its event sets or lifts it, and none for an erasure or a
+    // takedown.
+    private static DeliveryChange? Announced(Delivery delivery) => delivery.Kind switch
+    {
+        SubjectEventKind.RestrictionChanged => delivery.Restricted ? DeliveryChange.Set : DeliveryChange.Lifted,
+        SubjectEventKind.ConsentChanged or SubjectEventKind.ObjectionChanged => delivery.Change,
+        _ => null,
+    };
+
     private ErasureProgress Progress(DeliveryProgress progress)
     {
         Delivery delivery = progress.Delivery;
 
         return new ErasureProgress(
             new ErasureId(delivery.Id.Value),
+            Kinded(delivery.Kind),
             delivery.Subject,
-            delivery.Reason,
+            delivery.Purpose,
+            Announced(delivery),
+            delivery.Kind is SubjectEventKind.ErasureRequested ? delivery.Reason : null,
             delivery.Status,
             delivery.Attempts,
             [
-                .. _waitedFor.Select(subscriber => new SubscriberConfirmation(
-                    subscriber.Name,
-                    subscriber.Required,
-                    progress.ConfirmedAt.TryGetValue(subscriber.Name, out DateTimeOffset at)
-                        ? at
-                        : null)),
+                .. DeliveryRecipient
+                    .Of(delivery, subscribers, handlers, ledger)
+                    .Select(owed => new SubscriberConfirmation(
+                        owed.Name,
+                        owed.Required,
+                        progress.ConfirmedAt.TryGetValue(owed.Name, out DateTimeOffset at)
+                            ? at
+                            : null)),
             ]);
     }
 
-    // What the operator vouches for: the required subscribers that had not confirmed
-    // when the budget was spent.
+    // What the operator vouches for: the required subscribers, or the purpose handlers,
+    // that had not confirmed when the budget was spent. The erasure ledger's line is the
+    // library's own and never vouched for.
     private string[] Outstanding(Delivery delivery) =>
     [
-        .. subscribers
-            .Where(subscriber => subscriber.Required && !delivery.Confirmed.Contains(subscriber.Name))
-            .Select(subscriber => subscriber.Name),
+        .. DeliveryRecipient.Of(delivery, subscribers, handlers, ledger: null)
+            .Where(owed => owed.Required && !delivery.Confirmed.Contains(owed.Name))
+            .Select(owed => owed.Name),
     ];
 
     // DR-016 AC2: the line is appended here where the delivery's attempts never made it

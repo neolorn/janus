@@ -36,7 +36,8 @@ public sealed class PreferenceDeclarations
     /// <returns>The declarations.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
     /// <exception cref="StartupException">
-    /// A key is unnamed, declared twice, names values where its type takes none, names
+    /// A key is unnamed, named with a <c>.</c> or a <c>/</c> or as <c>language</c> or
+    /// <c>timeZone</c>, declared twice, names values where its type takes none, names
     /// none where its type takes them, or carries a default its own type refuses.
     /// </exception>
     public static PreferenceDeclarations Of(IEnumerable<PreferenceDeclaration> declared)
@@ -52,6 +53,16 @@ public sealed class PreferenceDeclarations
             if (string.IsNullOrWhiteSpace(declaration.Name))
             {
                 throw Malformed(declaration.Name, "a preference is declared without a name");
+            }
+
+            // REG-PREF-001 (D-206): the export keys the value by the name, beside the
+            // account's language and time zone, so a name no two keys of it could
+            // share is the only one it takes.
+            if (declaration.Name.Contains('.', StringComparison.Ordinal)
+                || declaration.Name.Contains('/', StringComparison.Ordinal)
+                || declaration.Name is "language" or "timeZone")
+            {
+                throw Malformed(declaration.Name, "the export cannot key a value by its name");
             }
 
             if (!keys.TryAdd(declaration.Name, declaration))

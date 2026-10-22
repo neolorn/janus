@@ -317,6 +317,13 @@ public static class AuditActions
     public static AuditAction ExportAssembled { get; } = AuditAction.Parse("privacy.export.assembled");
 
     /// <summary>
+    /// A person, an acknowledgement or bootstrap wrote a grant; the record names the
+    /// grant's holder as its subject where the holder is an account.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003 (D-197, D-206), chapter 10 section 5.</remarks>
+    public static AuditAction GrantCreated { get; } = AuditAction.Parse("authz.grant.created");
+
+    /// <summary>
     /// The drift check wrote a materialised derivation's grant it found missing.
     /// </summary>
     /// <remarks>Implements AUTHZ-DERIVE-005, AUTHZ-GRANT-003, chapter 10 section 5.</remarks>
@@ -328,6 +335,13 @@ public static class AuditActions
     /// </summary>
     /// <remarks>Implements AUTHZ-DERIVE-005, AUTHZ-GRANT-003, chapter 10 section 5.</remarks>
     public static AuditAction GrantRetracted { get; } = AuditAction.Parse("authz.grant.retracted");
+
+    /// <summary>
+    /// A grant was revoked; one the removal of the record it names revoked records the
+    /// nil subject as its revoker and the reason <c>AUTHZ-INHERIT-002</c>.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003 and AUTHZ-INHERIT-002 (D-203), chapter 10 section 5.</remarks>
+    public static AuditAction GrantRevoked { get; } = AuditAction.Parse("authz.grant.revoked");
 
     /// <summary>
     /// A group was created.

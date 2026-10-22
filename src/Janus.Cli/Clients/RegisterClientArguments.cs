@@ -36,6 +36,21 @@ internal static class RegisterClientArguments
     private static readonly string[] Members = [Client, Name, Kind, Redirect, Scopes];
 
     /// <summary>
+    /// The arguments the command takes (LIB-API-001), each required.
+    /// </summary>
+    public static IReadOnlyList<CommandArgument> Declared { get; } =
+    [
+        new(Prefix + Client, Required: true, "text"),
+        new(Prefix + Name, Required: true, "text"),
+        new(
+            Prefix + Kind,
+            Required: true,
+            "choice allowed=" + string.Join(',', Enum.GetValues<OidcClientKind>().Select(kind => WrittenName.Of(kind)).Order(StringComparer.Ordinal))),
+        new(Prefix + Redirect, Required: true, "url"),
+        new(Prefix + Scopes, Required: true, "text-list separator=space"),
+    ];
+
+    /// <summary>
     /// Reads the arguments that follow the command's name.
     /// </summary>
     /// <param name="arguments">The arguments.</param>

@@ -58,9 +58,9 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
     private const string Append =
         """
         INSERT INTO identity.audit_records
-            (id, category, occurred_at, action, acting_subject, effective_subject,
+            (id, category, occurred_at, action, acting_subject, effective_subject, subject,
              organization, details, principal, principal_reason, breakglass_reason)
-        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
+        VALUES (@id, @category, @at, @action, @acting, @effective, @subject, @organization,
                 CAST(@details AS jsonb), @principal, @reason, @breakGlassReason);
         """;
 
@@ -140,6 +140,7 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
                     // every row its work leaves does.
                     acting = (denial.Acting ?? default).Value,
                     effective = (denial.Effective ?? default).Value,
+                    subject = (Guid?)null,
                     principal = denial.Principal,
                     reason = denial.PrincipalReason,
                     breakGlassReason = denial.BreakGlassReason,
@@ -172,6 +173,7 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
                     // as every row a system principal's work leaves does.
                     acting = (export.Acting ?? default).Value,
                     effective = (export.Effective ?? default).Value,
+                    subject = (Guid?)null,
                     organization = export.Organization?.Value,
                     details = Written(export),
                     principal = export.Principal?.Name,
@@ -202,15 +204,19 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
                     at = corrected.At.ToUniversalTime(),
                     action = action.ToString(),
 
-                    // IDN-AUD-001: the drift check is no account, so the row names the
-                    // nil subject under both identities beside its principal.
-                    acting = default(SubjectId).Value,
-                    effective = default(SubjectId).Value,
+                    // IDN-AUD-001 (D-207): the person who called the refresh, or the nil
+                    // subject under both identities beside a system principal.
+                    acting = (corrected.Acting ?? default).Value,
+                    effective = (corrected.Effective ?? default).Value,
+
+                    // Chapter 10 section 5.24 (D-206): the grant's holder where it is an
+                    // account; a group is no data subject.
+                    subject = corrected.Holder.Type == SubjectType.User ? corrected.Holder.Value : (Guid?)null,
                     organization = (Guid?)corrected.Organization.Value,
                     details = Written(corrected),
-                    principal = corrected.Principal.Name,
-                    reason = corrected.Principal.Reason,
-                    breakGlassReason = (string?)null,
+                    principal = corrected.Principal?.Name,
+                    reason = corrected.Principal?.Reason,
+                    breakGlassReason = corrected.BreakGlassReason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -319,8 +325,8 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
         return JsonSerializer.Serialize(details, AuditDocument.Default.DictionaryStringJsonElement);
     }
 
-    // AUTHZ-GRANT-003, chapter 10 section 5.24: the grant the drift check wrote or took
-    // back, and the role it confers.
+    // AUTHZ-GRANT-003, chapter 10 section 5.24: the grant a refresh or the drift check
+    // wrote or took back, and the role it confers.
     private static string Written(CorrectedGrant corrected) =>
         JsonSerializer.Serialize(
             new Dictionary<string, JsonElement>(StringComparer.Ordinal)

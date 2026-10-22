@@ -382,8 +382,9 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     /// <summary>
     /// OPS-CFG-002 AC6 and X3 of D-166 (178): a change of the list is decided on the list
     /// in force under the lock of the organization's policy row, taken inside its one
-    /// unit of work, which the write joins; a refusal made under it rolls that unit of
-    /// work back before it answers (CONV-DESIGN-003).
+    /// unit of work, which the write joins; a refusal made under it, for a permission
+    /// withdrawn after the change was first judged, rolls that unit of work back before
+    /// it answers (CONV-DESIGN-003).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -394,8 +395,14 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         ConfigurationKey member = Settings.OrganizationPolicy.For(Branch.ToString());
 
         _deployment.Gate.Grant(subject, Administration, Permissions.DomainManage);
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
         _deployment.Configuration.Held.Clear();
         _deployment.Work.Reset();
+
+        // The request's own unit of work begins first; the permission a loosening needs
+        // is withdrawn as the change's begins, after the change was judged without a lock.
+        _deployment.Work.Meanwhile = () => _deployment.Work.Meanwhile =
+            () => _deployment.Gate.Revoke(subject, Administration, Permissions.SystemAdminister);
 
         Answer withheld = await browser.SendAsync("POST", PathOf(Branch), Listed);
 

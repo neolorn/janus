@@ -84,6 +84,23 @@ internal interface IResourceStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether any record is registered inside this one.
+    /// </summary>
+    /// <param name="container">The record in question.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether one is.</returns>
+    ValueTask<bool> HoldsAnyAsync(ResourceReference container, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes a record's registration and every ancestry row naming it.
+    /// </summary>
+    /// <param name="reference">Which record, which holds no registered record.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of removing it.</returns>
+    /// <exception cref="System.InvalidOperationException">No such row exists.</exception>
+    ValueTask RemoveAsync(ResourceReference reference, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The records of one type that a container reaches, itself included where it is
     /// of that type. This is what a materialised derivation writes its grants on
     /// (AUTHZ-DERIVE-005).

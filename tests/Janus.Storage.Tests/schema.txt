@@ -531,6 +531,18 @@ table lawful_bases
   column requires_assessment boolean not null
   column is_objectable boolean not null
   constraint pk_lawful_bases PRIMARY KEY (key)
+table legal_document_cookies
+  column document text not null
+  column version text not null
+  column cookie text not null
+  column purpose text
+  column lifetime interval
+  column third_party boolean not null
+  constraint ck_legal_document_cookies_cookie CHECK ((length(TRIM(BOTH FROM cookie)) > 0))
+  constraint ck_legal_document_cookies_lifetime CHECK (((lifetime IS NULL) OR (lifetime > '00:00:00'::interval)))
+  constraint ck_legal_document_cookies_purpose CHECK (((purpose IS NULL) OR (length(TRIM(BOTH FROM purpose)) > 0)))
+  constraint fk_legal_document_cookies_version FOREIGN KEY (document, version) REFERENCES identity.legal_document_versions(document, version) ON DELETE CASCADE
+  constraint pk_legal_document_cookies PRIMARY KEY (document, version, cookie)
 table legal_document_translations
   column document text not null
   column version text not null
@@ -762,8 +774,12 @@ table outbox
   column attempts integer not null
   column next_attempt_at timestamp with time zone not null
   column claimed_until timestamp with time zone
+  column change text
+  column purpose text
   constraint ck_outbox_attempts CHECK ((attempts >= 0))
-  constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['erasure-requested'::text, 'export-requested'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
+  constraint ck_outbox_change CHECK ((change = ANY (ARRAY['granted'::text, 'lifted'::text, 'recorded'::text, 'set'::text, 'superseded'::text, 'withdrawn'::text])))
+  constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['consent-changed'::text, 'erasure-requested'::text, 'objection-changed'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
+  constraint ck_outbox_purpose CHECK ((((kind = ANY (ARRAY['consent-changed'::text, 'objection-changed'::text])) AND (purpose IS NOT NULL) AND (length(TRIM(BOTH FROM purpose)) > 0) AND (change IS NOT NULL)) OR ((kind <> ALL (ARRAY['consent-changed'::text, 'objection-changed'::text])) AND (purpose IS NULL) AND (change IS NULL))))
   constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
   constraint ck_outbox_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
@@ -1019,6 +1035,9 @@ table role_permissions
 table roles
   column name text not null
   constraint pk_roles PRIMARY KEY (name)
+table seeded_roles
+  column name text not null
+  constraint pk_seeded_roles PRIMARY KEY (name)
 table send_counters
   column key bytea not null
   column sent_at timestamp with time zone[] not null

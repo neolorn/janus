@@ -10,12 +10,14 @@ namespace Janus.Hosting.Bff;
 /// after it.
 /// </summary>
 /// <remarks>
-/// Implements BFF-ORDER-001 stage 5, BFF-CSRF-005a and LIB-API-005. Resolution
-/// happens once per request, here, and every later stage reads what it left rather
-/// than looking the session up again: two lookups are two answers, and the second
-/// one is the one an attacker races. Nothing writes to this except that stage.
+/// Implements BFF-ORDER-001 stage 5, BFF-CSRF-005a, BFF-HOST-001 and LIB-API-005.
+/// Resolution happens once per request, here, and every later stage reads what it left
+/// rather than looking the session up again: two lookups are two answers, and the
+/// second one is the one an attacker races. Nothing writes to this except that stage,
+/// and a host's own endpoint reads it through the contract it answers, as the
+/// library's own endpoints read it.
 /// </remarks>
-internal sealed class RequestSession
+internal sealed class RequestSession : IRequestAccess
 {
     /// <summary>
     /// The session the request arrived on, or nothing where it carried none.
@@ -73,6 +75,12 @@ internal sealed class RequestSession
     /// The endpoint was reached without being marked as one that needs a session.
     /// </exception>
     public AccessContext Asking => Of(Required);
+
+    /// <inheritdoc/>
+    public Result<RequestAccess> Current() =>
+        Live is Session live
+            ? Result.Success(new RequestAccess(Of(live), live.Id))
+            : Result.Failure<RequestAccess>(Error.From(ErrorCodes.SessionExpired));
 
     /// <summary>
     /// Records the session the request arrived on.

@@ -4,11 +4,18 @@
     <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

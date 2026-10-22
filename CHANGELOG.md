@@ -10,6 +10,133 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `UseUnitOfWorkAsync(work, cancellationToken)`, on the host's own context's
+  `DatabaseFacade`, joins the context to the library's unit of work once it has begun:
+  what the host saves and what the library writes commit together at the outermost
+  commit and roll back together, and the context then returns to the connection it was
+  configured with. A unit of work not begun, a context whose own connection is open or
+  which holds a transaction, and another unit of work while one is joined each throw
+  `InvalidOperationException`; joining the same unit of work again changes nothing.
+- A `Janus.Testing` package for a host's tests and development setup, depending on the
+  main package: `InMemoryMailTransport` and `InMemorySmsTransport`, which keep each
+  message by destination and fail a delivery only where the test says so;
+  `FixedSecretSource`, whose keys are drawn per instance and which writes the key
+  document the commands read; `FixedClockReference`, `SucceededCertificateRenewal`,
+  `EmptyLocationSource` and `EmptyDatacenterRangeSource`, under which a development
+  deployment raises no degradation for those seams; and `SoftwarePasskey`, an ES256
+  authenticator in memory that answers the library's creation and request options.
+  A project using it carries its own framework reference to `Microsoft.AspNetCore.App`.
+- `Janus.Testing` adds `TestPeople`, which signs people in over a running host through
+  the library's own endpoints: a customer registered with the links the in-memory
+  transports hold, the first administrator enrolled with a software passkey through
+  the enrolment link, and a staff member invited with the roles a test names; and
+  `TestSession`, the client each is signed in on, which carries the session cookie, the
+  synchronizer token and `X-Identity-Request` on every request to the application's
+  origin, with the person's subject and a step-up with the person's passkey or password.
+- `Janus.Testing` adds `TestDeployment`, which prepares an empty database through the
+  installed `identity` tool as a production one is prepared: `migrate`, then
+  `bootstrap`, then `register-client` for the host's browser application, its return
+  address the `auth/signon/return` route of the address the test serves the
+  application at (`https`, or `http` on a loopback IP literal); it keeps the enrolment
+  link and the administrative organization `bootstrap` printed.
+- `bootstrap` prints a second line after the enrolment address: the identifier of the
+  administrative organization it created, for the host to keep in its own configuration.
+- Every `Janus.Cli` command that a fault ends, rather than a refusal, writes one JSON
+  line on standard error, the code the fault carries or
+  `{"code": "system.fault", "details": {}}` where it carries none, writes nothing on
+  standard output, exits 1 and clears its keys, where it ended with the runtime's own
+  exit code and trace before.
+- The `migrate` command applies the library's migrations to the database of the
+  connection piped to it as the only member of its document, and reads no key; a run
+  with nothing owed changes nothing. It writes nothing on success; a migration the
+  database refuses exits 1 with `system.fault` on standard error, the migrations
+  before it applied and nothing after. A pipeline runs it before deploying.
+  It runs as no system principal: it asks no gate and writes no audit record.
+- `migrate --report` applies nothing and writes the destructive-operation report of the
+  migrations pending on its target: one JSON line for each statement the scan matches,
+  in the order they apply, with `migration`, the statement itself and `destructive`, and
+  nothing where none matches. It exits 0 whatever it found, so a host's pipeline decides
+  whether a destructive statement stops its deploy.
+- The commands of the command-line application are part of the versioned contract:
+  each command's name, its arguments with whether each is required and the form of its
+  value, the members it reads on standard input, what it writes on standard output and
+  the codes its refusal carries. A release that takes one away or changes it raises the
+  major version, and one that adds to them raises at least the minor version.
+- Where the cookies the deployment sets differ from those the current privacy notice
+  lists, by name, purpose, lifetime or readability by a third party, `degradation` is
+  raised under `notice.cookies` at each start and with each change of a key that gives
+  a library cookie's lifetime, its details naming the cookies `added`, `removed` and
+  `changed`; nothing is raised before a first version of the notice is published.
+- A published version of the privacy notice keeps the cookies the deployment then sets:
+  the library's five, at the lifetimes its configuration gives, and every one the host
+  declares. `GET /privacy/notice` answers the version's own list in `cookies`, each
+  with `name`, `purpose`, `lifetime` and `thirdParty`; `DocumentVersion.Cookies` carries
+  the same.
+- `AuthorizationDeclarationBuilder.Cookie(name, lifetime, thirdPartyReadable, purpose)`
+  declares each cookie the host sets. A cookie serving a purpose that is not declared or
+  does not rest on consent, one named as a cookie the library sets, one whose name is no
+  cookie name, and one declared twice stop startup with
+  `model.startup.declarationinvalid`, `details.declaration` `cookie.<name>`.
+- `GET /admin/erasures` lists every incomplete delivery of host-side work, an erasure's,
+  a takedown's, a restriction's, a consent's and an objection's, each with its `kind`,
+  `purpose` and `change`; `GET /admin/erasures/{id}` reads any of them, and
+  `POST /admin/erasures/{id}/complete` closes any that failed. `IErasures` and
+  `ErasureProgress` carry the same, through the new `DeliveryKind` and `DeliveryChange`.
+- `IPurposeHandler` gains `Name`, `ConsentChangedAsync` and `ObjectionChangedAsync`. Each
+  consent and objection change is delivered through the outbox to every handler naming
+  its purpose, confirmed by the handler's success, retried under `outbox.retry.*` and
+  failed with `erasure-delivery-exhausted` once its attempts are spent; a plain event
+  consumer still receives both events. A handler's name follows the message-place rule
+  and is distinct among the handlers and the subject-event subscribers, and a
+  deployment declaring a purpose on consent that no handler names no longer starts, as
+  one declaring an objectable purpose already did.
+- `ExportRequested` is retired: an assembled export writes no delivery and owes the
+  subject-event subscribers nothing after it.
+- Under a policy requiring `aal1` the session cookie and the token cookie beside it last
+  until the session's absolute expiry, so a person stays signed in across a browser's
+  restart; under `aal2` they end with the browser's session, as the pre-authentication
+  cookie and its token always do. A pair issued again at a step-up or a privilege change
+  follows the policy in force then.
+- A host's own endpoint reads who is asking through `IRequestAccess.Current()`: the
+  context and the session the library's own endpoints pass for the same request, or
+  `auth.session.expired` where the request carries no live sign-in session.
+- `Answers` answers a host endpoint's `Result` or `Result<T>`, and `Answers.Refused` an
+  `Error`, in the library's wire format; a code the library does not list is answered
+  500 `system.fault`. `RequestSource.Of` gives the source an operation takes for the
+  request, keyed as the library keys it.
+- Every endpoint a host maps after the browser profile needs a live sign-in session:
+  a request that reaches one without it is answered 401 `auth.session.expired` before
+  the endpoint runs. `AllowNoSession()` on an endpoint marks one that answers anyone,
+  which is still issued the pre-authentication session and held to its token.
+- No public member makes an `AccessContext` whose acting and effective identities
+  differ: `AccessContext.Of(SubjectId, SubjectId)` is no longer public, and a person's
+  context is made with `AccessContext.Of(SubjectId)`, one identity standing for both.
+- The library packs as the main package `Janus.Hosting`, which carries the assemblies of
+  every area and declares as its dependencies the packages they reference at run time,
+  beside `Janus.Conformance`, which depends on it at the same version, `Janus.Analyzers`,
+  an analyser no package depends on, and `Janus.Cli`, a .NET tool whose command is
+  `identity`. No other project packs.
+- `IExportContributor` carries what a host holds about a subject into the subject's
+  export: `GET /privacy/export` carries each registered contributor's sections after the
+  library's, in contributor name order, in both formats. The export is counted only once
+  every contributor has answered; one that fails, faults or answers a section under a
+  name already taken fails the export with 500 `system.fault`, naming the contributor in
+  the log, and the export is not counted. A deployment declaring a type with an encrypted
+  field or a sensitive category that no contributor covers fails startup with
+  `model.startup.declarationmissing`, `details.handler` naming the type.
+- `IPersonalFields` encrypts and decrypts a host's own declared encrypted fields under
+  the subject's key: `WithSubjectAsync` lends one subject's `SubjectFields`, and
+  `WithSubjectsAsync` lends a page of them, reading their keys in one statement and
+  unwrapping each once. Each value is bound to its subject, its type and the field's
+  declared name, so `Encrypted` takes a `name` for a member the host renames. Every key
+  is cleared when the use returns. A field of an erased subject answers
+  `privacy.subject.erased` (409), and a subject the deployment holds no key for answers
+  `api.request.invalid` naming `subject`.
+- A grant written by a person, an acknowledged invitation or bootstrap is recorded as
+  `authz.grant.created`, and a grant a person revokes as `authz.grant.revoked`, each with
+  its reason, in the transaction that writes it. Every record of a grant written,
+  revoked, materialised or retracted names the grant's holder as its `subject` where the
+  holder is an account, and none where it is a group, whoever acted.
 - A `phoneCode` ask judges, under the lock of the identifier that holds the credential's
   number, that the credential is still active and the number still the account's before
   it issues the code. Where either changed since the ask read the credential, nothing is
@@ -3714,3 +3841,149 @@ against the public contract of LIB-API-001.
   `botdefence.ranges.absent` where no file is held, or under `botdefence.ranges.stale`
   where the one held is older than `abuse.botdefence.ranges.maxage`; the raise where a
   registration is judged stays.
+- `ResourceTypeDeclarationBuilder<T>.Capabilities` declares which permissions are
+  capabilities of a type. A capability the model does not declare fails startup with
+  `model.startup.declarationinvalid` (`declaration` the type, `field` `capabilities`).
+  `IAccessGate.CapabilitiesAsync` answers only for the capabilities its type declares:
+  asking it for any other permission, a declared one included, raises, and a type that
+  declares none answers none. A type declaring as capabilities two permissions of one
+  action fails startup the same way, since the browser reads a capability by its action.
+- Ending the reserved `emergency` account's membership of the administrative
+  organization (`DELETE /admin/organizations/{id}/memberships/{subject}`) is refused
+  with 403 `authz.denied`, for anyone, before the step-up, and the membership stays
+  current; its membership of another organization ends as anyone's does.
+- `IResources.RemoveAsync` removes a record's registration and its ancestry in the unit
+  of work, for a record the host removes from its own table, and revokes every live
+  grant naming the record, each with the nil subject as revoker and the reason
+  `AUTHZ-INHERIT-002`, recorded `authz.grant.revoked`; a later registration of the same
+  identifier inherits none of them. A record not registered is refused with
+  `api.request.invalid` naming `resource`, and one holding a registered record with 409
+  `authz.resource.inuse`. A registration, a move and a grant on a record judge the
+  container or the record again with the organization's tree held, so none lands on a
+  record removed meanwhile.
+- `AuthorizationDeclarationBuilder.Role(name, permissions)` declares a role the
+  deployment starts with. At each start, before a request is served, every declared role
+  not yet seeded is defined where no role of its name exists, recorded
+  `authz.role.defined` under the start principal `role-declaration` (operation
+  `role-seeding`) with the reason `AUTHZ-GRANT-004`, and its name kept as seeded, so a
+  later change or removal by an administrator stands. A declared role named as a role
+  bootstrap seeds, outside the role name rule, declared twice, or granting a permission
+  not declared or `system:administer` stops the deployment with
+  `model.startup.declarationinvalid` naming `role.<name>`. `IRoles` refuses every system
+  principal with `authz.denied`.
+- `AuthorizationDeclarationBuilder.Job(name, permissions)` declares one of the host's
+  background jobs and the host permissions it exercises. A job declared with a
+  permission not declared, one of the library's own, one bound to a step-up gate or one
+  whose action is `export`, or under a name outside the rule of a message place, given
+  twice, taken by one of the library's principals or `migrate`, stops the deployment
+  with `model.startup.declarationinvalid` naming `job.<name>`.
+- The gate refuses a context of `SystemPrincipal.ForOrganization`, a host's job, with
+  `authz.denied` while an HTTP request is served on the calling flow, through either
+  profile or neither and in any scope opened within the request, whoever built the
+  context: a check and both renderings of the filter alike, each refusal recorded with
+  its correlation identifier. A host's webhook that needs a host permission hands the
+  work to a declared job. `AddJanus` registers the framework's `IHttpContextAccessor`.
+- Outside a request, the gate admits a host's declared job for the host permissions its
+  declaration names on every record of its organization and on the organization itself,
+  through the check, both renderings of the filter and the organization-wide check,
+  with no processing restriction judged for it, a restriction being the acting
+  account's. A permission its declaration does not name, another organization, and its
+  own organization once its deletion is requested or it is erased are refused with
+  `authz.denied`, each refusal recorded with the job's principal and stated reason.
+- The capability page and the explanation refuse a host job's context with
+  `authz.denied`, in a request and outside one.
+- A refresh of a materialised derivation records as granter of each grant it writes,
+  and as revoker of each it takes back, the caller's acting account, or the nil subject
+  for a system principal such as a host's job, with the reason
+  `derivation:<relationship>`, and records each as `authz.grant.materialised` or
+  `authz.grant.retracted` in its transaction, naming the person who called it, or the
+  principal and its stated reason. A system principal's context is no longer refused.
+- A preference declared under a name holding a `.` or a `/`, or named `language` or
+  `timeZone`, the names the export gives the account's language and time zone, fails
+  startup with `model.startup.preferencedeclaration` naming it.
+- A resource type declared twice under one name fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` the type and
+  `details.field` `name`, since a host's encrypted value is bound to its type's name.
+- A resource type declaring two encrypted fields under one name, a member's own or
+  the one `Encrypted` gives it, fails startup with `model.startup.declarationinvalid`,
+  `details.declaration` the type and `details.field` the name.
+- An export contributor answering two sections under one name fails the export as one
+  answering a section under a library section's name does: 500 `system.fault`, the
+  contributor named in the log, and the export not counted.
+- The names of the sections and values an export contributor answers are held to 1 to
+  64 lower-case letters and digits separated by single `-` or `_`, so no two keys
+  `<section>.<index>.<value>` of the machine format coincide; an answer naming one
+  outside the rule fails the export with 500 `system.fault`, the contributor named in
+  the log, and the export is not counted.
+- An export contributor registered under a name outside the rule of a message place, or
+  under a name another contributor holds, fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` `contributor.<name>` and
+  `details.field` `name`.
+- A sign-in that completes on `POST /auth/factor`, `POST /auth/device/verify` or a sign-in
+  link, and presenting the break-glass credential, end the pre-authentication session the
+  browser carried: its token resolves nothing afterwards, where before only its cookie was
+  cleared. A step-up keeps the session's record and its identifier and rotates only the
+  token its cookie carries.
+- `AddJanus` no longer changes the application's HTTP JSON options, so a host's own
+  endpoint types serialize as the host configures them. Every library endpoint reads its
+  JSON body with the library's own serializer settings, whatever the host sets for its
+  endpoints: a member is read only under the name the contract spells, case-sensitively,
+  and a number only as a JSON number, and a body that does not read is 400
+  `api.request.malformed` naming the member it stopped at.
+- `POST /auth/begin` answers the assertion challenge under `webauthn`, as the contract and
+  every other sign-in answer spell it, where it was `webAuthn`.
+- `CapabilityFields.Of(Capability)` gives a host's record the `can` list and `requires`
+  map of API-CAP-001: each capability by its action, never its permission name, the
+  residuals under their contract names, all in ordinal order, and a capability with
+  nothing outstanding left out of `requires`.
+- An operation whose refusal keeps a write (a sign-in, step-up or new-device factor,
+  the ask for a second step's text code, a registration's begin, age, code, link or
+  terms, an identifier's code or link, a text-code enrolment's confirm, a break-glass
+  code, a refresh token's reuse, the bot defence at registration and a delivery
+  report) called inside a unit of work already open, the host's own joined with
+  `UseUnitOfWorkAsync` included, ends that unit of work and throws
+  `InvalidOperationException` before it reads or writes anything else, so nothing of
+  the outer unit of work commits.
+- A provider's security event, and a callback on the machine profile, signed, unsigned
+  or carrying a session cookie, taken inside a unit of work already open is a fault the
+  same way: the request is answered `system.fault` and nothing of the outer unit of
+  work commits.
+- `UseUnitOfWorkAsync` throws `InvalidOperationException` for a context configured with
+  a connection object it owns, which joining would dispose, and for a context taken from
+  a pool (`AddDbContextPool`, `AddPooledDbContextFactory`), whose next lease would keep
+  the unit of work's connection.
+- A context configured with a connection string returns, after the outermost commit or
+  rollback, to its configuration exactly: it keeps the data source its provider built
+  from the string, with its type mappings and plugins, and a named connection string is
+  set back as the context resolved it, not as its name.
+- `UseUnitOfWorkAsync` called with a unit of work the library did not register throws
+  `InvalidOperationException` saying so, rather than saying the unit of work has not
+  begun.
+- A replacement of an organization's policy, an organization domain's addition or
+  removal, a group member's addition or removal, and a role's definition or removal
+  judge their step-up before their unit of work begins, after every refusal it
+  follows (a policy below the system policy or the floor, a loosening without
+  `system:administer`, a domain with no resolver, a cycle of groups, a role carrying
+  `system:administer` for a caller without it, a role not found or in use), and judge
+  those refusals again under the rows' locks; a carrier's signal asked by the
+  step-up is asked with no unit of work begun, and a risk it answers stays recorded
+  when the step-up refuses.
+  An addition of a domain already listed, or a removal of one not listed, begins no
+  unit of work.
+- A refresh token's reuse revokes the provider's grant and every token issued under it
+  in the same unit of work as the session record's spine and its
+  `auth.oidc.refreshreused` record, by the library's own statements: where that commit
+  fails none of them is revoked, and the next presentation of the redeemed token
+  revokes them again.
+- The delivery reports' route logs each rejection, a reference no held send answers, a
+  report the transport cannot read and a source past `integration.callback.ratelimit`,
+  as every other callback route does: the callback's name, the check and the
+  correlation identifier, never the source.
+- Removing a credential that would lower the account's reachable assurance commits its
+  suspension in the removal's own unit of work, on the credential read under its lock,
+  before answering `auth.credential.lastsecondfactor`: nothing is rolled back first, and
+  a sign-in's write to the credential made meanwhile is no longer overwritten.
+- `POST /register` from a signed-in browser carrying an invitation token attaches the
+  invitation in the outermost unit of work and commits it with the
+  `identity.registration.signedin` refusal; called inside a unit of work already open,
+  the host's own included, the begin ends it and throws `InvalidOperationException`.

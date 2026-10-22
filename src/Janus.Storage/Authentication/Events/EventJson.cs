@@ -24,7 +24,6 @@ namespace Janus.Storage.Authentication.Events;
 [JsonSerializable(typeof(CredentialSuspended))]
 [JsonSerializable(typeof(DeviceVerified))]
 [JsonSerializable(typeof(ErasureRequested))]
-[JsonSerializable(typeof(ExportRequested))]
 [JsonSerializable(typeof(IdentifierAdded))]
 [JsonSerializable(typeof(IdentifierPrimaryChanged))]
 [JsonSerializable(typeof(IdentifierRemoved))]

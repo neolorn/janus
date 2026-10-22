@@ -2,8 +2,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
@@ -40,10 +38,11 @@ using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
+using Janus.Privacy.Documents;
+using Janus.Privacy.Exports;
 using Janus.Privacy.Requests;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -107,6 +106,11 @@ public static class HostingRegistration
         // request.
         services.AddScoped<ISessionGates, RequestGates>();
 
+        // IDN-PRIN-001, CONV-DESIGN-007 (D-206): whether a request is served on the
+        // calling flow is read from the request the framework tracks for it, which it
+        // tracks only where this is registered.
+        services.AddHttpContextAccessor();
+
         // API-CONV-002: a body the reader could not parse is answered by the library
         // with a code and a correlation identifier, so the reader raises the failure
         // instead of writing a bare status the pipeline never sees.
@@ -131,6 +135,10 @@ public static class HostingRegistration
         services.AddSingleton<SourceAdmissions>();
         services.AddScoped<SourceRateLimiting>();
         services.AddScoped<RequestSession>();
+
+        // BFF-HOST-001: a host's own endpoint reads what stage 5 established for the
+        // request, the one record the library's own endpoints read.
+        services.AddScoped<IRequestAccess>(provider => provider.GetRequiredService<RequestSession>());
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
@@ -210,6 +218,7 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetRequiredService<CategoryRetention>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<NoticeCookieCheck>(),
             provider.GetRequiredService<IUnitOfWork>()));
 
         // AUTH-PASS-004: what a password is screened against, and the record of each
@@ -270,11 +279,12 @@ public static class HostingRegistration
             provider.GetServices<RelationshipSource>(),
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetServices<IPurposeHandler>(),
+            provider.GetServices<IExportContributor>(),
             provider.GetRequiredService<IOidcClientStore>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider));
 
-        services.ConfigureHttpJsonOptions(ReadThroughContexts);
         services.AddOidc();
 
         // LIB-HOST-001, PRIV-RIGHT-005b: what the host declared is read back at
@@ -282,7 +292,13 @@ public static class HostingRegistration
         // the host wrote it and not only as the model rebuilt it.
         services.AddSingleton(declaration);
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        services.AddScoped<IDeploymentCookies, DeploymentCookies>();
+        services.AddScoped<NoticeCookieCheck>();
         services.AddScoped<ISubjectNotices, SubjectNotices>();
+
+        // PRIV-RIGHT-003 (D-206): the names a contributor answers are judged by the rule
+        // this project holds the check of, before the export takes them.
+        services.AddSingleton<IExportNameRule, ExportNames>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
         // declaration the host makes, so the privacy side reads it from there rather
@@ -362,10 +378,18 @@ public static class HostingRegistration
         // before the server serves.
         services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
 
+        // PRIV-CONS-006a AC4 (D-203): the cookies the deployment now sets are compared with
+        // those the current privacy notice lists once the declaration has been checked.
+        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, NoticeCookiesStartService>());
+
+        // AUTHZ-GRANT-004 (D-204): each declared role not yet seeded is defined once the
+        // model and the stored roles have been checked, and before the server serves.
+        services.Insert(14, ServiceDescriptor.Singleton<IHostedService, DeclaredRoleStartService>());
+
         // BFF-LOG-002 (D-197): what the host's logging makes of the server's per-request
         // entries is read once the host has written every rule it will, and before the
         // server serves.
-        services.Insert(13, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
+        services.Insert(15, ServiceDescriptor.Singleton<IHostedService, RequestLoggingValidationService>());
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(
@@ -375,45 +399,5 @@ public static class HostingRegistration
             provider.GetRequiredService<ILogger<BackgroundWorker>>()));
 
         return services;
-    }
-
-    /// <summary>
-    /// Reads every request body through the generated contexts and through nothing
-    /// else.
-    /// </summary>
-    /// <param name="options">The options minimal APIs read a request with.</param>
-    /// <remarks>
-    /// Implements CONV-DESIGN-006 and CONV-CODE-004. The chain the framework starts
-    /// with holds the reflection resolver, and a context added after it is never asked,
-    /// so the chain is replaced rather than added to: a body no context declares fails
-    /// where it is first read instead of being reflected over.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">The options are absent.</exception>
-    internal static void ReadThroughContexts(JsonOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-
-        // The contexts spell an enum as the contract spells it, and a request is read
-        // through these options rather than through a context's own, so the same
-        // converter stands here (API-CONV-002).
-        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
-        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
-        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
-        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<SubjectType>());
-        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<FormerMailbox>());
-        options.SerializerOptions.TypeInfoResolverChain.Clear();
-        options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(BreakGlassJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(MaintenanceJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(SendingJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(AuthorizationJson.Default);
-        options.SerializerOptions.TypeInfoResolverChain.Add(OrganizationJson.Default);
     }
 }

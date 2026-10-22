@@ -66,4 +66,21 @@ public interface IResources
         ResourceReference resource,
         ResourceReference? containedIn,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes the registration of a record the host removes from its own table, with
+    /// its ancestry, and revokes every live grant that names it, so a later registration
+    /// of the same identifier inherits none of them.
+    /// </summary>
+    /// <param name="resource">Which record.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal, each changing nothing: <c>api.request.invalid</c> naming
+    /// <c>resource</c> where the record is not registered, or
+    /// <c>authz.resource.inuse</c> where a record is registered inside it.
+    /// </returns>
+    /// <remarks>Implements AUTHZ-INHERIT-002 and AUTHZ-GRANT-003 (D-203).</remarks>
+    ValueTask<Result> RemoveAsync(
+        ResourceReference resource,
+        CancellationToken cancellationToken);
 }

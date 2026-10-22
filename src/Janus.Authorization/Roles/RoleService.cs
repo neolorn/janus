@@ -52,6 +52,13 @@ internal sealed class RoleService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // AUTHZ-GRANT-004 (D-204): roles are a person's to manage; a system principal,
+        // the start step's included, reaches them through none of these operations.
+        if (context.Acting is null)
+        {
+            return Result.Failure<IReadOnlyList<DefinedRole>>(Error.From(ErrorCodes.Denied));
+        }
+
         if (await scope.RefusedAsync(context, Permissions.RoleManage, cancellationToken).ConfigureAwait(false)
             is Error refused)
         {
@@ -101,6 +108,24 @@ internal sealed class RoleService(
             return Result.Failure<bool>(Malformed("reason"));
         }
 
+        var defined = Role.Of(role.Name, role.Permissions);
+
+        // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
+        // on the role as it stands without a lock, so the step-up, which may ask the
+        // carrier's signal, is judged before the unit of work begins.
+        Error? unmet = await DefinitionRefusedAsync(
+                context,
+                await roles.FindAsync(role.Name, cancellationToken).ConfigureAwait(false),
+                defined,
+                cancellationToken)
+            .ConfigureAwait(false)
+            ?? await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false);
+
+        if (unmet is not null)
+        {
+            return Result.Failure<bool>(unmet);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -118,35 +143,16 @@ internal sealed class RoleService(
             return Result.Failure<bool>(since);
         }
 
-        // D-166 X3: the role is read under its row's lock, so two definitions at once are
-        // made one after the other and the second is judged on what the first left.
+        // D-166 X3: the role is read again under its row's lock, so two definitions at once
+        // are made one after the other and the second is judged on what the first left.
         Role? held = await roles.FindForUpdateAsync(role.Name, cancellationToken).ConfigureAwait(false);
-        var defined = Role.Of(role.Name, role.Permissions);
 
-        if (await AdministeringRefusedAsync(context, [held, defined], cancellationToken).ConfigureAwait(false)
-            is Error administering)
+        if (await DefinitionRefusedAsync(context, held, defined, cancellationToken).ConfigureAwait(false)
+            is Error refusedSince)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure<bool>(administering);
-        }
-
-        // OPS-BOOT-002, D-166: the break-glass session holds what the reserved account's
-        // role allows, so that role keeps every permission the library declares. A
-        // permission the host declares may still be added to it.
-        if (!Permissions.All.All(defined.Allows)
-            && await ReservedHoldsAsync(role.Name, cancellationToken).ConfigureAwait(false))
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<bool>(Error.From(ErrorCodes.Denied));
-        }
-
-        if (await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false) is Error challenged)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<bool>(challenged);
+            return Result.Failure<bool>(refusedSince);
         }
 
         if (held is null)
@@ -205,6 +211,22 @@ internal sealed class RoleService(
             return Result.Failure(Malformed("reason"));
         }
 
+        // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
+        // on the role as it stands without a lock, so the step-up, which may ask the
+        // carrier's signal, is judged before the unit of work begins.
+        Error? unmet = await RemovalRefusedAsync(
+                context,
+                role,
+                await roles.FindAsync(role, cancellationToken).ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false)
+            ?? await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false);
+
+        if (unmet is not null)
+        {
+            return Result.Failure(unmet);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -222,47 +244,23 @@ internal sealed class RoleService(
             return Result.Failure(since);
         }
 
-        // X5, D-166: a path naming a role the deployment does not hold names no record,
-        // and under /admin nothing is concealed.
         // D-166 X3: as for a definition; an invitation's issue and a grant hold the row
         // too, so none comes to name a role removed meanwhile.
-        if (await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false) is not Role held)
+        Role? held = await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false);
+
+        if (await RemovalRefusedAsync(context, role, held, cancellationToken).ConfigureAwait(false)
+            is Error refusedSince)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure(Error.From(ErrorCodes.RoleNotFound));
-        }
-
-        if (await AdministeringRefusedAsync(context, [held], cancellationToken).ConfigureAwait(false)
-            is Error administering)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(administering);
-        }
-
-        // AUTHZ-GRANT-003 AC3, REG-INV-001: a grant's history names its role, revoked or
-        // not, a derivation confers it from the host's data, and a standing invitation
-        // grants it at the acknowledgement; none is left naming nothing.
-        if (Derived(role) || await references.NamedAsync(role, cancellationToken).ConfigureAwait(false))
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(Error.From(ErrorCodes.RoleInUse));
-        }
-
-        if (await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false) is Error challenged)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(challenged);
+            return Result.Failure(refusedSince);
         }
 
         await roles.RemoveAsync(role, cancellationToken).ConfigureAwait(false);
         await audit
             .RemovedAsync(
                 role,
-                Defined(held).Permissions,
+                Defined(held!).Permissions,
                 stated,
                 acting,
                 context.BreakGlassReason,
@@ -309,6 +307,58 @@ internal sealed class RoleService(
 
     private bool Derived(RoleName role) =>
         model.ResourceTypes.Any(type => type.Derivations.Any(derivation => derivation.Role == role));
+
+    // The refusals a definition meets before its step-up, judged on the role as it stands
+    // where it is held: a role that carries system administration before or after the
+    // change, by a caller who is no system administrator (OPS-CFG-007); and the
+    // reserved account's role losing a permission the library declares (OPS-BOOT-002,
+    // D-166), which keeps every one of them so that the break-glass session does, a
+    // permission the host declares still being one it may gain.
+    private async ValueTask<Error?> DefinitionRefusedAsync(
+        AccessContext context,
+        Role? held,
+        Role defined,
+        CancellationToken cancellationToken)
+    {
+        if (await AdministeringRefusedAsync(context, [held, defined], cancellationToken).ConfigureAwait(false)
+            is Error administering)
+        {
+            return administering;
+        }
+
+        return !Permissions.All.All(defined.Allows)
+            && await ReservedHoldsAsync(defined.Name, cancellationToken).ConfigureAwait(false)
+                ? Error.From(ErrorCodes.Denied)
+                : null;
+    }
+
+    // The refusals a removal meets before its step-up, judged on the role as it stands
+    // where it is held: a role the deployment does not hold, named by a path that names
+    // no record, and under /admin nothing is concealed (X5, D-166); one that carries
+    // system administration, by a caller who is no system administrator (OPS-CFG-007); and
+    // one a grant's history, a derivation or a standing invitation names, none of
+    // which is left naming nothing (AUTHZ-GRANT-003 AC3, REG-INV-001).
+    private async ValueTask<Error?> RemovalRefusedAsync(
+        AccessContext context,
+        RoleName role,
+        Role? held,
+        CancellationToken cancellationToken)
+    {
+        if (held is null)
+        {
+            return Error.From(ErrorCodes.RoleNotFound);
+        }
+
+        if (await AdministeringRefusedAsync(context, [held], cancellationToken).ConfigureAwait(false)
+            is Error administering)
+        {
+            return administering;
+        }
+
+        return Derived(role) || await references.NamedAsync(role, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.RoleInUse)
+            : null;
+    }
 
     // OPS-CFG-007: a role that carries system administration before or after the change
     // is changed only by a system administrator.

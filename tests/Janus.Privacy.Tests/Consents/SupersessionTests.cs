@@ -7,8 +7,10 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Tests.Documents;
+using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Consents;
@@ -46,6 +48,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     private readonly ConsentStoreInMemory _consents = new();
     private readonly LegalDocumentStoreInMemory _documents = new();
     private readonly EventsInMemory _events = new();
+    private readonly OutboxStoreInMemory _outbox = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly PrivacyAlertsInMemory _alerts = new();
     private readonly AccessGateInMemory _gate = new();
@@ -66,16 +69,17 @@ public sealed class SupersessionTests : IAsyncDisposable
     }
 
     private ConsentService Consents =>
-        new(_consents, _documents, Declaration.Processing, _events, _audit, _work, _clock);
+        new(_consents, _documents, Declaration.Processing, _events, _outbox, _audit, _work, _clock);
 
     private LegalDocumentService Documents =>
         new(
             _documents,
             new AdministrativeScope(_gate, _administrative),
-            new Supersession(_consents, Declaration.Processing, _events),
+            new Supersession(_consents, Declaration.Processing, _events, _outbox),
             _configuration,
             _audit,
             _alerts,
+            new DeploymentCookiesInMemory(),
             _work,
             _clock);
 
@@ -127,6 +131,30 @@ public sealed class SupersessionTests : IAsyncDisposable
             ConsentChange.Superseded,
             Assert.Single(_events.Of<ConsentChanged>(), raised => raised.Subject == Ahmed
                 && raised.Change is ConsentChange.Superseded).Change);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-008, IDN-LIFE-003a AC1: a consent a material revision supersedes is owed
+    /// to the handlers naming its purpose, written with the revision, as its grant was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_ASupersededConsentIsOwedToItsPurposesHandlersAsync()
+    {
+        await GrantAsync(Ahmed, Recommendations);
+
+        _outbox.Work = _work;
+
+        await PublishAsync(material: true);
+
+        Delivery owed = Assert.Single(_outbox.AddedInTransaction);
+
+        Assert.Equal(
+            (Ahmed, SubjectEventKind.ConsentChanged, Recommendations, DeliveryChange.Superseded),
+            (owed.Subject, owed.Kind, owed.Purpose, owed.Change));
+        Assert.Equal(
+            [DeliveryChange.Granted, DeliveryChange.Superseded],
+            _outbox.Deliveries.Select(delivery => delivery.Change));
     }
 
     /// <summary>

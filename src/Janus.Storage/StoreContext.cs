@@ -207,6 +207,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<RolePermissionRecord> RolePermissions => Set<RolePermissionRecord>();
 
     /// <summary>
+    /// The names of the declared roles a start has seeded.
+    /// </summary>
+    public DbSet<SeededRoleRecord> SeededRoles => Set<SeededRoleRecord>();
+
+    /// <summary>
     /// The grants: subject, role, resource or organization.
     /// </summary>
     public DbSet<GrantRecord> Grants => Set<GrantRecord>();
@@ -548,6 +553,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
+        modelBuilder.ApplyConfiguration(new SeededRoleConfiguration());
         modelBuilder.ApplyConfiguration(new GrantConfiguration());
         modelBuilder.ApplyConfiguration(new GrantVersionConfiguration());
         modelBuilder.ApplyConfiguration(new GroupConfiguration());
@@ -603,6 +609,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());
+        modelBuilder.ApplyConfiguration(new DocumentCookieConfiguration());
         modelBuilder.ApplyConfiguration(new ConsentConfiguration());
         modelBuilder.ApplyConfiguration(new ObjectionConfiguration());
         modelBuilder.ApplyConfiguration(new DeliveryConfiguration());

@@ -8,6 +8,7 @@ using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
 using Janus.Authorization.Resources;
 using Janus.Authorization.Roles;
+using Janus.Authorization.Tests.Grants;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -295,6 +296,39 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Equal(_deployment.Clock.GetUtcNow(), grant.RevokedAt);
         Assert.Equal("Left the project.", grant.RevocationReason);
         Assert.Empty(await HeldAsync(Branch));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC6: a grant a person writes is recorded as
+    /// <c>authz.grant.created</c>, and a revocation a person makes as
+    /// <c>authz.grant.revoked</c>, each naming the person as actor and the grant's
+    /// holder, with its reason; a revocation refused records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC6_APersonsGrantAndRevocationAreEachRecordedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(administrator, "document", "d-1");
+        Answer revoked = await RevokedAsync(administrator, created.Text("id"));
+        Answer again = await RevokedAsync(administrator, created.Text("id"));
+
+        Grant grant = await StoredAsync(created);
+
+        Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(
+            [
+                new GrantAuditInMemory.GrantChange(AuditActions.GrantCreated, grant.Id, grant.Subject, actor, grant.Reason),
+                new GrantAuditInMemory.GrantChange(
+                    AuditActions.GrantRevoked,
+                    grant.Id,
+                    grant.Subject,
+                    actor,
+                    grant.RevocationReason!),
+            ],
+            _deployment.GrantChanges.Changes);
     }
 
     /// <summary>

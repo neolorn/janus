@@ -265,6 +265,18 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("reason"));
         }
 
+        // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
+        // without a lock, so the step-up, which may ask the carrier's signal, is judged
+        // before the unit of work begins; each is judged again under the lock inside.
+        Error? unmet = await CycleAsync(group, member, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.GroupCycle)
+            : await ChangeRefusedAsync(context, acting, session, found, cancellationToken).ConfigureAwait(false);
+
+        if (unmet is not null)
+        {
+            return Result.Failure(unmet);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -294,7 +306,7 @@ internal sealed class GroupService(
                 ? Unjoinable()
                 : await CycleAsync(group, member, cancellationToken).ConfigureAwait(false)
                     ? Error.From(ErrorCodes.GroupCycle)
-                    : await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false);
+                    : await AdministeringRefusedAsync(context, held, locking: true, cancellationToken).ConfigureAwait(false);
 
         if (refused is not null)
         {
@@ -357,6 +369,15 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("reason"));
         }
 
+        // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
+        // without a lock, so the step-up, which may ask the carrier's signal, is judged
+        // before the unit of work begins; each is judged again under the lock inside.
+        if (await ChangeRefusedAsync(context, acting, session, found, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return Result.Failure(unmet);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -381,7 +402,7 @@ internal sealed class GroupService(
 
         if ((held is null
                 ? await GoneAsync(context, cancellationToken).ConfigureAwait(false)
-                : await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false))
+                : await AdministeringRefusedAsync(context, held, locking: true, cancellationToken).ConfigureAwait(false))
             is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -478,31 +499,37 @@ internal sealed class GroupService(
     // OPS-CFG-007: a member holds what the group holds and what every group holding it
     // holds, so a change of members where any of them carries system administration,
     // an allow or a deny, is made only by a system administrator. The step-up is judged
-    // last, as for a grant.
+    // last, as for a grant, and before the unit of work begins, since it may ask the
+    // carrier's signal (CONV-DESIGN-002, D-207).
     private async ValueTask<Error?> ChangeRefusedAsync(
         AccessContext context,
         SubjectId acting,
         SessionId session,
         Group group,
-        CancellationToken cancellationToken)
-    {
-        if (await AdministersAsync(group, cancellationToken).ConfigureAwait(false)
-            && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
-                is Error administering)
-        {
-            return administering;
-        }
-
-        return (await stepUp
-            .RequireAsync(acting, session, StepUpAction.GrantManage, cancellationToken)
-            .ConfigureAwait(false))
+        CancellationToken cancellationToken) =>
+        await AdministeringRefusedAsync(context, group, locking: false, cancellationToken).ConfigureAwait(false)
+            ?? (await stepUp
+                .RequireAsync(acting, session, StepUpAction.GrantManage, cancellationToken)
+                .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
-    }
+
+    // OPS-CFG-007: the refusal of a change of members by a caller who is no system
+    // administrator, where the group or a group holding it carries system
+    // administration; judged first without a lock and again under the roles' locks.
+    private async ValueTask<Error?> AdministeringRefusedAsync(
+        AccessContext context,
+        Group group,
+        bool locking,
+        CancellationToken cancellationToken) =>
+        await AdministersAsync(group, locking, cancellationToken).ConfigureAwait(false)
+            ? await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
+            : null;
 
     // A role nobody can read is taken to carry system administration, so the check
-    // fails closed. D-166 X3: each role is read under its row's lock, in one order, so a
-    // definition at the same moment is judged before or after the change.
-    private async ValueTask<bool> AdministersAsync(Group group, CancellationToken cancellationToken)
+    // fails closed. D-166 X3: inside the unit of work each role is read under its row's
+    // lock, in one order, so a definition at the same moment is judged before or after
+    // the change.
+    private async ValueTask<bool> AdministersAsync(Group group, bool locking, CancellationToken cancellationToken)
     {
         IReadOnlyList<GroupId> above = await groups
             .GroupsOfAsync(GrantSubject.Of(group.Id), cancellationToken)
@@ -521,8 +548,11 @@ internal sealed class GroupService(
             .Distinct()
             .OrderBy(name => name.ToString(), StringComparer.Ordinal))
         {
-            if (await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false) is not Role read
-                || read.Allows(Permissions.SystemAdminister))
+            Role? read = locking
+                ? await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false)
+                : await roles.FindAsync(role, cancellationToken).ConfigureAwait(false);
+
+            if (read is null || read.Allows(Permissions.SystemAdminister))
             {
                 return true;
             }

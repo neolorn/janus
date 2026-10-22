@@ -183,14 +183,19 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     /// OPS-CFG-002 AC6 and X3 of D-166 (178): a policy change is decided on the values
     /// in force under the locks of the system policy's row and the organization's,
     /// taken in that order inside its one unit of work, which the write joins; a
-    /// refusal made under them rolls that unit of work back before it answers
-    /// (CONV-DESIGN-003).
+    /// refusal made under them, for a system policy raised after the change was first
+    /// judged, rolls that unit of work back before it answers (CONV-DESIGN-003).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_CFG_002_AC6_APolicyChangeIsDecidedUnderItsRowsLocksAsync()
     {
-        Browser administrator = await AuthorisedAsync();
+        (Browser administrator, SubjectId subject) = await SignedInAsync();
+
+        // The second change gives up the first's raise, a loosening, so it is judged
+        // admitted without a lock and refused only under them.
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
         ConfigurationKey member = Settings.OrganizationPolicy.For(Branch.ToString());
 
         _deployment.Configuration.Held.Clear();
@@ -202,7 +207,10 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
 
         _deployment.Configuration.Held.Clear();
         _deployment.Work.Reset();
-        _deployment.Configuration.Set(
+
+        // The request's own unit of work begins first; the system policy is raised as
+        // the change's begins, after the change was judged without a lock.
+        _deployment.Work.Meanwhile = () => _deployment.Work.Meanwhile = () => _deployment.Configuration.Set(
             Settings.PolicyDefault,
             Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 });
 

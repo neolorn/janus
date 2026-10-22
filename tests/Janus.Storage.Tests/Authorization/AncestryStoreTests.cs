@@ -225,6 +225,44 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-INHERIT-003 AC3, AUTHZ-INHERIT-002 AC5 (D-203): a removal leaves no row of
+    /// the closure naming the record removed, as the record or as an ancestor, and no
+    /// row naming a record that is not registered.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_INHERIT_003_AC3_ARemovalLeavesNoAncestryRowOrphanedAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        ResourceReference workspace = Reference("workspace");
+        ResourceReference folder = Reference("folder");
+        ResourceReference document = Reference("document");
+        ResourceReference kept = Reference("document");
+
+        await RegisterAsync(workspace, organization, containedIn: null);
+        await RegisterAsync(folder, organization, workspace);
+        await RegisterAsync(document, organization, folder);
+        await RegisterAsync(kept, organization, folder);
+        await MoveAsync(kept, workspace);
+        await RemoveAsync(document);
+        await RemoveAsync(folder);
+
+        await using StoreContext reading = database.Context();
+
+        List<AncestryRecord> rows = await reading.Ancestry
+            .Where(row => row.Organization == organization)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.All(rows, row => Assert.True(
+            reading.Resources.Any(resource => resource.Type == row.Type && resource.Id == row.Id)
+            && reading.Resources.Any(resource =>
+                resource.Type == row.AncestorType && resource.Id == row.AncestorId)));
+        Assert.DoesNotContain(rows, row => (row.Type == document.Type && row.Id == document.Id)
+            || (row.AncestorType == folder.Type && row.AncestorId == folder.Id)
+            || (row.Type == folder.Type && row.Id == folder.Id));
+        Assert.Equal([kept, workspace], await AncestryAsync(kept));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-004 AC3: a record whose identifier was never read writes neither the
     /// record nor its ancestry, on the path that writes the ancestry by statement.
     /// </summary>
@@ -279,6 +317,16 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
         await Store(writing).MoveAsync(reference, containedIn, TestContext.Current.CancellationToken);
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task RemoveAsync(ResourceReference reference)
+    {
+        await using StoreContext writing = database.Context();
+        await using var transaction = new UnitOfWork(writing);
+        await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+        await Store(writing).RemoveAsync(reference, TestContext.Current.CancellationToken);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
     }
 

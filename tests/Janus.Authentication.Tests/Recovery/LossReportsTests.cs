@@ -309,20 +309,19 @@ public sealed class LossReportsTests : IAsyncDisposable
         AuthenticatorId owned = await EnrolledAsync(own);
         SubjectId other = await AccountAsync();
         AuthenticatorId others = await EnrolledAsync(other);
-        var acting = new SubjectId(Guid.NewGuid());
 
         _ = await Service.ReportAsync(AccessContext.Of(own), owned, Source, TestContext.Current.CancellationToken);
 
         string token = _notifications.Mail[^1].Token();
 
         _ = await Service.ReportAsync(
-            AccessContext.Of(acting, other),
+            AccessContext.Of(other),
             others,
             Source,
             TestContext.Current.CancellationToken);
         _ = await Service.CancelAsync(null, owned, token, TestContext.Current.CancellationToken);
         _ = await Service.CancelAsync(
-            AccessContext.Of(acting, other),
+            AccessContext.Of(other),
             others,
             cancelToken: null,
             TestContext.Current.CancellationToken);
@@ -331,15 +330,15 @@ public sealed class LossReportsTests : IAsyncDisposable
         IReadOnlyList<CredentialRestored> restored = _events.Of<CredentialRestored>();
 
         Assert.Equal(((SubjectId?)own, (SubjectId?)own), (suspended[0].Subject, suspended[0].Actor));
-        Assert.Equal(((SubjectId?)other, (SubjectId?)acting), (suspended[1].Subject, suspended[1].Actor));
+        Assert.Equal(((SubjectId?)other, (SubjectId?)other), (suspended[1].Subject, suspended[1].Actor));
         Assert.Equal(((SubjectId?)own, (SubjectId?)null, (SubjectId?)null), (restored[0].Subject, restored[0].Actor, restored[0].Effective));
-        Assert.Equal(((SubjectId?)other, (SubjectId?)acting, (SubjectId?)other), (restored[1].Subject, restored[1].Actor, restored[1].Effective));
+        Assert.Equal(((SubjectId?)other, (SubjectId?)other, (SubjectId?)other), (restored[1].Subject, restored[1].Actor, restored[1].Effective));
     }
 
     /// <summary>
     /// AUTHZ-IMP-001, chapter 10 section 5b: a suspension carries the acting and the
     /// effective identity of the context that reported it, each as the context gives
-    /// it, whether or not they are one account.
+    /// it, for each account that reports.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -349,11 +348,10 @@ public sealed class LossReportsTests : IAsyncDisposable
         AuthenticatorId owned = await EnrolledAsync(own);
         SubjectId other = await AccountAsync();
         AuthenticatorId others = await EnrolledAsync(other);
-        var acting = new SubjectId(Guid.NewGuid());
 
         _ = await Service.ReportAsync(AccessContext.Of(own), owned, Source, TestContext.Current.CancellationToken);
         _ = await Service.ReportAsync(
-            AccessContext.Of(acting, other),
+            AccessContext.Of(other),
             others,
             Source,
             TestContext.Current.CancellationToken);
@@ -361,7 +359,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         IReadOnlyList<CredentialSuspended> suspended = _events.Of<CredentialSuspended>();
 
         Assert.Equal(((SubjectId?)own, (SubjectId?)own), (suspended[0].Actor, suspended[0].Effective));
-        Assert.Equal(((SubjectId?)acting, (SubjectId?)other), (suspended[1].Actor, suspended[1].Effective));
+        Assert.Equal(((SubjectId?)other, (SubjectId?)other), (suspended[1].Actor, suspended[1].Effective));
     }
 
     /// <summary>

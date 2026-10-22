@@ -61,4 +61,8 @@
     </ItemGroup>
   </Target>
 
+  <!-- INT-PWD-001 AC3 (D-205): a project's package identifier as its build sets it, for a
+       test that reads the main package's from the build rather than spelling it. -->
+  <Target Name="PackageIdentity" Returns="$(PackageId)" />
+
 </Project>

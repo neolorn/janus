@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Credentials;
 using Janus.Core;
@@ -99,8 +100,8 @@ internal sealed class ProviderEventIntake(
         string callback = ProviderEvents.CallbackOf(provider);
         Delivery delivered = Deliveries[provider];
 
-        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback, Anywhere, admission, work, log, cancellationToken)

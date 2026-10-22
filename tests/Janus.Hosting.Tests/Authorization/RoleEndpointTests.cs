@@ -11,6 +11,7 @@ using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Roles;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -509,13 +510,13 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a definition and a removal refused after the unit of work
-    /// began, under the role's lock or for want of the step-up, each roll it back, so
-    /// no unit of work is left open.
+    /// CONV-DESIGN-002 (D-207): a definition and a removal refused on the role as it
+    /// stands, or for want of the step-up, are refused before their unit of work begins,
+    /// so none is opened for them and none is left open.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ADefinitionOrARemovalRefusedAfterItBeganRollsBackAsync()
+    public async Task CONV_DESIGN_002_ADefinitionOrARemovalRefusedBeforeItsStepUpBeginsNoUnitOfWorkAsync()
     {
         (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
 
@@ -527,42 +528,75 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Answer conferred = await DefinedAsync(administrator, Administering);
 
         Assert.Equal(ErrorCodes.Denied.ToString(), conferred.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 1), Ended());
+        Assert.Equal((false, 0, rolledBack), Ended());
 
         Answer narrowed = await RemovedAsync(administrator, "system-administrator");
 
         Assert.Equal(ErrorCodes.Denied.ToString(), narrowed.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 2), Ended());
+        Assert.Equal((false, 0, rolledBack), Ended());
 
         Answer unknown = await RemovedAsync(administrator, "no-such-role");
 
         Assert.Equal(ErrorCodes.RoleNotFound.ToString(), unknown.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 3), Ended());
+        Assert.Equal((false, 0, rolledBack), Ended());
 
         Answer derived = await RemovedAsync(administrator, "reader");
 
         Assert.Equal(ErrorCodes.RoleInUse.ToString(), derived.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 4), Ended());
+        Assert.Equal((false, 0, rolledBack), Ended());
 
         _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
 
         Answer changed = await DefinedAsync(administrator, Reading);
 
         Assert.Equal(ErrorCodes.StepUpRequired.ToString(), changed.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 5), Ended());
+        Assert.Equal((false, 0, rolledBack), Ended());
 
         Answer removed = await RemovedAsync(administrator, "editor");
 
         Assert.Equal(ErrorCodes.StepUpRequired.ToString(), removed.Text("code"));
-        Assert.Equal((false, 0, rolledBack + 6), Ended());
+        Assert.Equal((false, 0, rolledBack), Ended());
+    }
 
-        // Whether a unit of work is open, how many were left neither committed nor rolled
-        // back, and how many were rolled back.
-        (bool Open, int Unended, int RolledBack) Ended() =>
-            (
-                _deployment.Work.Open,
-                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
-                _deployment.Work.RolledBack);
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a definition and a removal admitted on the role as it stood,
+    /// and refused on it as it is once its row is held, because another transaction
+    /// changed it meanwhile, each roll their unit of work back, so none is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADefinitionOrARemovalRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Editing);
+        _ = await DefinedAsync(administrator, Reading, name: "drafter");
+
+        int recorded = _deployment.RoleChanges.Changes.Count;
+        int rolledBack = _deployment.Work.RolledBack;
+
+        _deployment.Roles.Locking = name =>
+        {
+            _deployment.Roles.Locking = null;
+            _ = _deployment.Roles.RecordAsync(Role.Of(name, Permissions.All), CancellationToken.None).AsTask();
+        };
+
+        Answer conferred = await DefinedAsync(administrator, Reading);
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), conferred.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        _deployment.Roles.Locking = name =>
+        {
+            _deployment.Roles.Locking = null;
+            _ = _deployment.Roles.RemoveAsync(name, CancellationToken.None).AsTask();
+        };
+
+        Answer removed = await RemovedAsync(administrator, "drafter");
+
+        Assert.Equal(ErrorCodes.RoleNotFound.ToString(), removed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+        Assert.Equal(recorded, _deployment.RoleChanges.Changes.Count);
     }
 
     /// <summary>
@@ -605,14 +639,14 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
 
-        Assert.Equal(StatusCodes.Status201Created, (await DefinedAsync(administrator, Reading, "reader")).Status);
+        Assert.Equal(StatusCodes.Status201Created, (await DefinedAsync(administrator, Reading, "drafter")).Status);
 
         int recorded = _deployment.RoleChanges.Changes.Count;
 
         foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
         {
             () => DefinedAsync(administrator, Editing),
-            () => RemovedAsync(administrator, "reader"),
+            () => RemovedAsync(administrator, "drafter"),
         })
         {
             int rolledBack = _deployment.Work.RolledBack;
@@ -630,8 +664,55 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         }
 
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
-        Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("reader"), CancellationToken.None));
+        Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("drafter"), CancellationToken.None));
         Assert.Equal(recorded, _deployment.RoleChanges.Changes.Count);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC7 (D-204): reading, defining and removing a role with a system
+    /// principal's context is refused with <c>authz.denied</c>, the start principal
+    /// <c>role-declaration</c> included, and changes nothing: a declared role is defined
+    /// by the start step alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC7_AnIRolesCallWithASystemPrincipalsContextIsRefusedAsync()
+    {
+        SystemPrincipal[] principals =
+        [
+            DeclaredRoleSeed.Principal,
+            SystemPrincipal.ForDeployment("bootstrap", "OPS-BOOT-001", SystemOperation.Bootstrap),
+            SystemPrincipal.ForOrganization("ledger-close", "LIB-HOST-001", Administration),
+        ];
+        var session = SessionId.New(_deployment.Clock);
+        var refusals = new List<Error?>();
+
+        foreach (SystemPrincipal principal in principals)
+        {
+            var context = AccessContext.Of(principal);
+
+            await using AsyncServiceScope scope = _deployment.Scope();
+            IRoles roles = scope.ServiceProvider.GetRequiredService<IRoles>();
+
+            refusals.Add((await roles.AllAsync(context, CancellationToken.None))
+                .Match<Error?>(_ => null, error => error));
+            refusals.Add((await roles.DefineAsync(
+                    context,
+                    session,
+                    new DefinedRole(Editor, [Permission.Parse("article:read")]),
+                    "Seeded at the start.",
+                    CancellationToken.None))
+                .Match<Error?>(_ => null, error => error));
+            refusals.Add((await roles.RemoveAsync(context, session, SystemAdministrator, "Not needed.", CancellationToken.None))
+                .Match<Error?>(() => null, error => error));
+        }
+
+        Assert.Equal(9, refusals.Count);
+        Assert.All(refusals, refused => Assert.Equal(ErrorCodes.Denied, refused?.Code));
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.NotNull(await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+        Assert.Empty(_deployment.RoleChanges.Principals);
     }
 
     private static string Member(Answer answer)
@@ -655,6 +736,14 @@ public sealed class RoleEndpointTests : IAsyncLifetime
 
     private static Task<Answer> RemovedAsync(Browser administrator, string name) =>
         administrator.SendAsync("DELETE", "/admin/roles/" + name, ("reason", "No longer used."));
+
+    // Whether a unit of work is open, how many were left neither committed nor rolled
+    // back, and how many were rolled back.
+    private (bool Open, int Unended, int RolledBack) Ended() =>
+        (
+            _deployment.Work.Open,
+            _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+            _deployment.Work.RolledBack);
 
     // An invitation into the branch naming the role, standing, for seven days from
     // when it was issued.

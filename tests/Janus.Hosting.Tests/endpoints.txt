@@ -697,8 +697,11 @@ GET /admin/erasures
   200
     application/json
       [].id: Guid
+      [].kind: DeliveryKind
       [].subject: Guid
-      [].reason: ErasureReason
+      [].purpose: string
+      [].change: DeliveryChange?
+      [].reason: ErasureReason?
       [].status: ErasureStatus
       [].attempts: number
       [].subscribers[].name: string
@@ -710,8 +713,11 @@ GET /admin/erasures/{id}
   200
     application/json
       id: Guid
+      kind: DeliveryKind
       subject: Guid
-      reason: ErasureReason
+      purpose: string
+      change: DeliveryChange?
+      reason: ErasureReason?
       status: ErasureStatus
       attempts: number
       subscribers[].name: string
@@ -1215,8 +1221,8 @@ POST /auth/begin
     application/json
       challengeId: string
       available[]: Factor
-      webAuthn.relyingPartyId: string
-      webAuthn.challenge: string
+      webauthn.relyingPartyId: string
+      webauthn.challenge: string
   400 api.request.malformed
   403 auth.session.csrfinvalid
 POST /auth/break-glass
@@ -1498,6 +1504,7 @@ GET /privacy/export
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required
   429 auth.throttled
+  500 system.fault
 GET /privacy/notice
   200
     application/json
@@ -1507,6 +1514,10 @@ GET /privacy/notice
       text: string
       translations[].language: string
       translations[].text: string
+      cookies[].name: string
+      cookies[].purpose: string
+      cookies[].lifetime: string
+      cookies[].thirdParty: boolean
   403 auth.session.csrfinvalid
   404 privacy.document.notfound
 GET /privacy/objections

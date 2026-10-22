@@ -36,6 +36,12 @@ internal sealed class SessionGatesInMemory(SubjectId holder) : ISessionGates
     /// <param name="cost">Its three values.</param>
     public void Costs(string gate, Core.Gate cost) => _costs[gate] = cost;
 
+    /// <summary>
+    /// Whether the flow it is asked on serves a request, which it does, since the session
+    /// carries one.
+    /// </summary>
+    public bool ServesRequest => true;
+
     /// <inheritdoc/>
     public bool Judges(AccessContext context) => context.Acting == holder;
 

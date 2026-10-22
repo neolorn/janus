@@ -34,6 +34,19 @@ namespace Janus.Core;
 /// the period the category is kept for until the deployment states a longer one
 /// (PRIV-RET-001, chapter 10 section 4).
 /// </param>
+/// <param name="Cookies">
+/// Every cookie the host sets, which the privacy notice lists beside the library's own
+/// (PRIV-CONS-006a, D-203).
+/// </param>
+/// <param name="Roles">
+/// The roles the deployment starts with, in the order declared, each seeded once at a
+/// start (AUTHZ-GRANT-004, D-204).
+/// </param>
+/// <param name="Jobs">
+/// The host's background jobs, each with the host permissions it exercises, which the
+/// gate admits an organization-scoped principal naming the job for (IDN-PRIN-001,
+/// D-202).
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-006. It is what
 /// <see cref="AuthorizationDeclarationBuilder"/> produces and what the model is built
@@ -49,4 +62,7 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyList<LawfulBasisDeclaration> LawfulBases,
     IReadOnlyList<string> SensitiveCategories,
     IReadOnlyList<RecipientDeclaration> Recipients,
-    IReadOnlyDictionary<string, TimeSpan> RetentionFloors);
+    IReadOnlyDictionary<string, TimeSpan> RetentionFloors,
+    IReadOnlyList<CookieDeclaration> Cookies,
+    IReadOnlyList<RoleDeclaration> Roles,
+    IReadOnlyList<JobDeclaration> Jobs);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using Janus.Core;
 
 namespace Janus.Hosting.Authentication;
@@ -17,6 +18,7 @@ namespace Janus.Hosting.Authentication;
 internal sealed record SignInChallengeView(
     string ChallengeId,
     IReadOnlyList<Factor> Available,
+    [property: JsonPropertyName("webauthn")]
     WebAuthnChallenge WebAuthn)
 {
     /// <summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -83,8 +84,9 @@ public sealed class ScreeningTests : IDisposable
 
     /// <summary>
     /// INT-PWD-001 AC3: every range request the client the library registers makes names
-    /// the library's package and its version, the version being the constant the build
-    /// writes and carrying no build metadata.
+    /// the main package, by the identifier its build sets, read from that build here and
+    /// never spelled, and its version, the constant the build writes and carrying no build
+    /// metadata.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -117,10 +119,16 @@ public sealed class ScreeningTests : IDisposable
                 TestContext.Current.CancellationToken);
         }
 
+        string identifier = typeof(ScreeningTests).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .Single(metadata => metadata.Key == "MainPackageIdentifier")
+            .Value!;
+
         Assert.Equal(2, _service.Agents.Count);
+        Assert.NotEmpty(identifier);
         Assert.All(
             _service.Agents,
-            agent => Assert.Equal(LibraryPackage.Identifier + "/" + LibraryPackage.Version, agent));
+            agent => Assert.Equal(identifier + "/" + LibraryPackage.Version, agent));
         Assert.DoesNotContain('+', LibraryPackage.Version);
     }
 

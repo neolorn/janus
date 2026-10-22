@@ -442,18 +442,23 @@ it**, with no interstitial attempting to dissuade.
 **FE-COMP-006** — The **privacy dashboard** SHALL provide self-service access,
 portability, rectification, objection, and consent management.
 
-*Source: PRIV-CONS-011, PRIV-RIGHT-001*
+*Source: PRIV-CONS-011, PRIV-RIGHT-001, PRIV-RIGHT-003, PRIV-CONS-006a, D-203*
 
 **Acceptance criteria**
 1. Every consent held is visible to its subject and withdrawable there.
 1a. Every purpose on an objectable basis shows an objection switch labelled as such,
    calling `POST` / `DELETE /privacy/objections/{purpose}` (PRIV-RIGHT-001a); no
    purpose is assumed to exist or not exist.
-1b. No cookie consent prompt is shown while only strictly necessary cookies are set;
-   the notice lists them (PRIV-CONS-006a).
+1b. No cookie consent prompt is shown while no cookie set names a purpose; each version
+   of the notice shows every cookie its `GET /privacy/notice` answer lists in `cookies`,
+   with its purpose, lifetime and whether a third party can read it (PRIV-CONS-006a,
+   D-203).
 2. Export is available in both formats without contacting support.
 3. The readable export is **rendered by the frontend from structured data** — the
-   server produces no document (D-058).
+   server produces no document (D-058); a host's sections render as the library's, their
+   labels read from the message catalogue under the keys `export/<section>` and
+   `export/<section>/<value>`, which the host adds (`09` `GET /privacy/export`, FE-LOC-001,
+   D-203).
 
 ---
 

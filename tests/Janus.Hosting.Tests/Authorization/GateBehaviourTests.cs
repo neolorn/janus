@@ -1066,6 +1066,46 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC3: the capabilities the gate reads for a host's record, written
+    /// through <see cref="CapabilityFields"/>, carry <c>can</c> and <c>requires</c> as
+    /// API-CAP-001 writes them: the actions in ordinal order, and only the gated one
+    /// with what it still requires.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC3_CapabilitiesReadForAHostsRecordCarryCanAndRequiresAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        var fields = CapabilityFields.Of(Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, HostPermissions.Publish],
+                    Sources(reading),
+                    cancellationToken))));
+
+        Assert.Equal(["publish", "read"], fields.Can);
+        Assert.Equal(["publish"], fields.Requires.Keys);
+        Assert.Equal(["stepup"], fields.Requires["publish"]);
+    }
+
+    /// <summary>
     /// BFF-CAP-002 AC2, AUTHZ-PRIN-003 AC1: a permission the model does not declare,
     /// asked for beside one it does, is no capability of any response: the page raises
     /// even where a stored role allows it, and answers nothing.
@@ -1103,6 +1143,60 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     [HostPermissions.Read, undeclared],
                     Sources(reading),
                     cancellationToken));
+    }
+
+    /// <summary>
+    /// BFF-CAP-002 AC2 (D-202): a page of a host type answers only for the permissions
+    /// the host declared as its capabilities. A declared permission the type does not
+    /// list among them, held under a grant, and any permission on a type that lists
+    /// none, is the calling code's fault: it raises on both ways of asking, before the
+    /// gate reads anything of the caller or records a refusal.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC2_ADeclaredPermissionTheTypeDoesNotListAsACapabilityRaisesAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Export, HostPermissions.ReadNote]);
+        var context = AccessContext.Of(nested.Account);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Func<Task>[] asking =
+        [
+            async () => await gate.CapabilitiesAsync(context, Document, [nested.Record.Id], [HostPermissions.Read, HostPermissions.Export], cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, Document, [nested.Record.Id], [HostPermissions.Read, HostPermissions.Export], Sources(reading), cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, nested.Note.Type, [nested.Note.Id], [HostPermissions.ReadNote], cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, Workspace, [nested.Bottom.Id], [HostPermissions.Read], cancellationToken),
+        ];
+
+        foreach (Func<Task> asked in asking)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(asked);
+        }
+
+        Assert.Equal(0, await DenialsRecordedAsync(nested.Account));
+
+        Capability capability = Assert.Single(Rendered(await gate.CapabilitiesAsync(
+            context,
+            Document,
+            [nested.Record.Id],
+            [HostPermissions.Read],
+            Sources(reading),
+            cancellationToken)));
+
+        Assert.Equal([HostPermissions.Read], capability.Can);
     }
 
     /// <summary>

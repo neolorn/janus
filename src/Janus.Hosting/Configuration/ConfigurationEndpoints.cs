@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Net.Mime;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,6 +53,7 @@ internal static class ConfigurationEndpoints
                     ErrorCodes.ConfigurationLastDestination, ErrorCodes.EndpointInsecure,
                     ErrorCodes.ConfigurationChangeReasonRequired)
                 .Binding<ConfigurationKey>("key"))
+            .Accepts<ConfigurationBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -85,17 +87,21 @@ internal static class ConfigurationEndpoints
     }
 
     private static async Task<IResult> ChangeAsync(
-        ConfigurationBody body,
         IConfigurationAdministration administration,
         AuthorizationDeclaration declaration,
         RequestSession browser,
         ConfigurationKey key,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(administration);
         ArgumentNullException.ThrowIfNull(declaration);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        ConfigurationBody body = await JsonBody
+            .ReadAsync<ConfigurationBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Known(key, declaration) is not ConfigurationKey known)
         {

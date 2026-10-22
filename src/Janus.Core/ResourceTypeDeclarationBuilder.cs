@@ -13,6 +13,7 @@ namespace Janus.Core;
 /// <remarks>Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-003.</remarks>
 public sealed class ResourceTypeDeclarationBuilder<TResource>
 {
+    private readonly List<Permission> _capabilities = [];
     private readonly List<DerivationDeclaration> _derivations = [];
     private readonly List<EncryptedFieldDeclaration> _encrypted = [];
     private readonly List<PurposeDeclaration> _purposes = [];
@@ -122,19 +123,35 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     /// <param name="field">The encrypted field.</param>
     /// <param name="subject">The field naming the subject.</param>
     /// <param name="category">The data category it holds, as a purpose on this type names it.</param>
+    /// <param name="name">
+    /// The name the field's values are bound to, where it is not the member's own: a
+    /// member the host renames is given its old name here, and its values stay readable
+    /// (PRIV-RIGHT-005a). Two encrypted fields of one type under one name stop the
+    /// deployment as the model is built.
+    /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">Either expression is absent.</exception>
     /// <exception cref="ArgumentException">
-    /// Either expression names no member, or the category is absent or blank.
+    /// Either expression names no member, the category is absent or blank, or a name is
+    /// given blank.
     /// </exception>
     public ResourceTypeDeclarationBuilder<TResource> Encrypted(
         Expression<Func<TResource, object?>> field,
         Expression<Func<TResource, object?>> subject,
-        string category)
+        string category,
+        string? name = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(category);
+
+        if (name is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        }
+
+        string member = DeclaredMember.Of(field);
+
         _encrypted.Add(
-            new EncryptedFieldDeclaration(DeclaredMember.Of(field), DeclaredMember.Of(subject), category));
+            new EncryptedFieldDeclaration(member, DeclaredMember.Of(subject), category, name ?? member));
 
         return this;
     }
@@ -164,6 +181,27 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
         return this;
     }
 
+    /// <summary>
+    /// Declares permissions that are capabilities of this type: what a page of its
+    /// records may be asked the caller may do, each a declared permission.
+    /// </summary>
+    /// <param name="permissions">The permissions, each in the form resource:action.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The list is absent.</exception>
+    /// <exception cref="ArgumentException">A permission is not well formed.</exception>
+    /// <remarks>Implements BFF-CAP-002 (D-202).</remarks>
+    public ResourceTypeDeclarationBuilder<TResource> Capabilities(params IReadOnlyList<string> permissions)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        foreach (string permission in permissions)
+        {
+            _capabilities.Add(Permission.Parse(permission));
+        }
+
+        return this;
+    }
+
     internal ResourceTypeDeclaration Build() =>
         new(_name,
             typeof(TResource),
@@ -173,5 +211,6 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
             _sensitive,
             _purposes,
             _derivations,
-            _encrypted);
+            _encrypted,
+            _capabilities);
 }

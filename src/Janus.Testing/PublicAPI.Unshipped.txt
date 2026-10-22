@@ -1,0 +1,59 @@
+#nullable enable
+Janus.Testing.EmptyDatacenterRangeSource
+Janus.Testing.EmptyDatacenterRangeSource.EmptyDatacenterRangeSource(System.TimeProvider! time) -> void
+Janus.Testing.EmptyDatacenterRangeSource.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.IO.Stream!>>
+Janus.Testing.EmptyLocationSource
+Janus.Testing.EmptyLocationSource.EmptyLocationSource(System.TimeProvider! time) -> void
+Janus.Testing.EmptyLocationSource.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.IO.Stream!>>
+Janus.Testing.FixedClockReference
+Janus.Testing.FixedClockReference.FixedClockReference() -> void
+Janus.Testing.FixedClockReference.OffsetAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.TimeSpan>>
+Janus.Testing.FixedSecretSource
+Janus.Testing.FixedSecretSource.FixedSecretSource(System.Security.Cryptography.RandomNumberGenerator! randomness) -> void
+Janus.Testing.FixedSecretSource.KeyDocument(string! connection) -> byte[]!
+Janus.Testing.FixedSecretSource.MailServerSecret.get -> System.ReadOnlyMemory<byte>?
+Janus.Testing.FixedSecretSource.MailServerSecret.init -> void
+Janus.Testing.FixedSecretSource.MaintenanceCredential.get -> System.ReadOnlyMemory<byte>?
+Janus.Testing.FixedSecretSource.MaintenanceCredential.init -> void
+Janus.Testing.FixedSecretSource.ProviderCredentials.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Janus.Core.ProviderCredential!>!
+Janus.Testing.FixedSecretSource.ProviderCredentials.init -> void
+Janus.Testing.FixedSecretSource.ReadFingerprintKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.FingerprintKeys!>>
+Janus.Testing.FixedSecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.KeyEncryptionKeys!>>
+Janus.Testing.FixedSecretSource.ReadMailServerSecretAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
+Janus.Testing.FixedSecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
+Janus.Testing.FixedSecretSource.ReadProviderCredentialAsync(string! provider, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ProviderCredential!>>
+Janus.Testing.InMemoryMailTransport
+Janus.Testing.InMemoryMailTransport.AcceptDeliveriesTo(Janus.Core.EmailAddress destination) -> void
+Janus.Testing.InMemoryMailTransport.FailDeliveriesTo(Janus.Core.EmailAddress destination) -> void
+Janus.Testing.InMemoryMailTransport.InMemoryMailTransport() -> void
+Janus.Testing.InMemoryMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Testing.InMemoryMailTransport.SentTo(Janus.Core.EmailAddress destination) -> System.Collections.Generic.IReadOnlyList<Janus.Core.MailMessage!>!
+Janus.Testing.InMemorySmsTransport
+Janus.Testing.InMemorySmsTransport.AcceptDeliveriesTo(Janus.Core.PhoneNumber destination) -> void
+Janus.Testing.InMemorySmsTransport.BalanceAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<decimal>>
+Janus.Testing.InMemorySmsTransport.FailDeliveriesTo(Janus.Core.PhoneNumber destination) -> void
+Janus.Testing.InMemorySmsTransport.InMemorySmsTransport() -> void
+Janus.Testing.InMemorySmsTransport.ReadReport(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! parameters) -> Janus.Core.Result<Janus.Core.SmsDeliveryReport!>
+Janus.Testing.InMemorySmsTransport.SendAsync(Janus.Core.SmsMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Testing.InMemorySmsTransport.SentTo(Janus.Core.PhoneNumber destination) -> System.Collections.Generic.IReadOnlyList<Janus.Core.SmsMessage!>!
+Janus.Testing.SoftwarePasskey
+Janus.Testing.SoftwarePasskey.Create(System.Text.Json.JsonElement options) -> System.Text.Json.Nodes.JsonObject!
+Janus.Testing.SoftwarePasskey.CredentialId.get -> string!
+Janus.Testing.SoftwarePasskey.Get(System.Text.Json.JsonElement options) -> System.Text.Json.Nodes.JsonObject!
+Janus.Testing.SoftwarePasskey.SoftwarePasskey(System.Uri! origin, System.Security.Cryptography.RandomNumberGenerator! randomness) -> void
+Janus.Testing.SucceededCertificateRenewal
+Janus.Testing.SucceededCertificateRenewal.LastFailureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.DateTimeOffset?>>
+Janus.Testing.SucceededCertificateRenewal.SucceededCertificateRenewal() -> void
+Janus.Testing.TestPeople
+Janus.Testing.TestPeople.AdministratorAsync(System.Uri! enrolment, Janus.Core.EmailAddress email, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
+Janus.Testing.TestPeople.CustomerAsync(Janus.Core.EmailAddress email, Janus.Core.PhoneNumber? phone, string! password, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
+Janus.Testing.TestPeople.StaffMemberAsync(Janus.Testing.TestSession! administrator, Janus.Core.OrganizationId organization, Janus.Core.EmailAddress email, Janus.Core.PhoneNumber? phone, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! roles, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestSession!>
+Janus.Testing.TestPeople.TestPeople(System.Uri! address, Janus.Core.SignOnClient! client, Janus.Core.DocumentName terms, System.Func<System.Net.Http.HttpMessageHandler!>! channel, Janus.Testing.InMemoryMailTransport! mail, Janus.Testing.InMemorySmsTransport! sms, System.Security.Cryptography.RandomNumberGenerator! randomness) -> void
+Janus.Testing.TestSession
+Janus.Testing.TestSession.StepUpAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Janus.Testing.TestSession.Subject.get -> Janus.Core.SubjectId
+Janus.Testing.TestDeployment
+Janus.Testing.TestDeployment.Address.get -> System.Uri!
+Janus.Testing.TestDeployment.AdministrativeOrganization.get -> Janus.Core.OrganizationId
+Janus.Testing.TestDeployment.EnrolmentLink.get -> System.Uri!
+static Janus.Testing.TestDeployment.PrepareAsync(System.Uri! address, Janus.Core.SignOnClient! client, Janus.Testing.FixedSecretSource! secrets, string! migrationConnection, string! applicationConnection, System.Collections.Generic.IReadOnlyList<string!>! bootstrap, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Testing.TestDeployment!>

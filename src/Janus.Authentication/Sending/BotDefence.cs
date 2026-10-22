@@ -101,8 +101,10 @@ internal sealed class BotDefence(
             return Result.Success();
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        // CONV-DESIGN-003: the record is a kept write committed alone, so its unit of
+        // work is the outermost; one joined to another's would commit nothing here.
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

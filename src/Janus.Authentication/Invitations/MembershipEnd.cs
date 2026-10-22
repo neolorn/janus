@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
@@ -23,6 +24,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="stepUp">What judges the session against the <c>membership:end</c> gate.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
 /// <param name="memberships">Where the membership is ended.</param>
+/// <param name="emergency">Which account the break-glass session belongs to.</param>
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address retired.</param>
 /// <param name="mailboxes">Where the mailbox the account holds is retired.</param>
 /// <param name="sending">What tells the security-notice set of the new primary.</param>
@@ -32,16 +34,17 @@ namespace Janus.Authentication.Invitations;
 /// <param name="work">The one transaction the end runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REG-MAIL-003, IDN-MEM-001, INT-MAIL-006a and chapter 09 section 8a. The
-/// account's state and its grants are left as they are: suspension and the removal of
-/// grants are separate steps of offboarding. Everything is written in one transaction,
-/// so no instant exists at which the account holds no primary email.
+/// Implements REG-MAIL-003, IDN-MEM-001, INT-MAIL-006a, OPS-BOOT-002 and chapter 09
+/// section 8a. The account's state and its grants are left as they are: suspension and
+/// the removal of grants are separate steps of offboarding. Everything is written in one
+/// transaction, so no instant exists at which the account holds no primary email.
 /// </remarks>
 internal sealed class MembershipEnd(
     IAccessGate gate,
     StepUpGuard stepUp,
     IOrganizationDirectory directory,
     IMembershipEnding memberships,
+    IEmergencyAccount emergency,
     IIdentifierDirectory identifiers,
     IMailboxStore mailboxes,
     IGovernedSend sending,
@@ -110,6 +113,16 @@ internal sealed class MembershipEnd(
             is not OrganizationStanding standing)
         {
             return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        // OPS-BOOT-002, IDN-MEM-001 (D-202): the reserved account's grant confers only
+        // while it is a member of the administrative organization, so that membership is
+        // kept for anyone who asks, refused once the organization's standing is read and
+        // before the step-up, as the revocation of its grant is.
+        if (standing.IsAdministrative
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == member)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         // REG-MAIL-003: ending a membership changes another person's account, so it is

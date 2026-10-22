@@ -49,6 +49,7 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
         IReadOnlyList<RoleName> roles,
         SubjectId grantedBy,
         string reason,
+        AccessContext acting,
         bool multiple,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -72,6 +73,7 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
             [.. roles.Distinct()],
             grantedBy,
             reason,
+            acting,
             at));
 
         return Result.Success(membership);

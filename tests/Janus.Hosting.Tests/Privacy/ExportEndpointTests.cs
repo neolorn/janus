@@ -153,23 +153,19 @@ public sealed class ExportEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005b: the host holds the half the library cannot produce, so an
-    /// assembled export puts the fact on the outbox for the subscribers.
+    /// PRIV-RIGHT-005b, chapter 10 section 5b: <c>ExportRequested</c> is retired, so an
+    /// assembled export is counted and owes the subscribers nothing after it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_RIGHT_003_AnAssembledExportReachesTheSubscribersAsync()
+    public async Task PRIV_RIGHT_005b_AnAssembledExportOwesTheSubscribersNothingAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
         _ = await browser.SendAsync("GET", "/privacy/export?format=machine");
 
-        Delivery raised = Assert.Single(
-            _deployment.Outbox.Deliveries,
-            delivery => delivery.Kind is SubjectEventKind.ExportRequested);
-
-        Assert.Equal(Subject(), raised.Subject);
         Assert.Equal(Subject(), Assert.Single(_deployment.ExportLedger.Taken).Subject);
+        Assert.DoesNotContain(_deployment.Outbox.Deliveries, delivery => delivery.Subject == Subject());
     }
 
     /// <summary>
@@ -188,6 +184,141 @@ public sealed class ExportEndpointTests : IAsyncDisposable
             StatusCodes.Status401Unauthorized,
             (await browser.SendAsync("GET", "/privacy/export?format=human")).Status);
     }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: the readable arrangement carries the host's sections after the
+    /// library's, grouped as the library's are, each record an object of its named values.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_TheReadableFormatCarriesTheContributorsSectionsAfterTheLibrarysAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Held();
+        _deployment.ExportContributor.Sections =
+        [
+            new ExportSection(
+                "parcels",
+                [
+                    new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["tracking-number"] = "pn-1001",
+                        ["delivered-at"] = "2026-09-21T10:00:00.0000000+00:00",
+                    }),
+                ]),
+        ];
+
+        JsonElement sections =
+            (await browser.SendAsync("GET", "/privacy/export?format=human"))
+            .Json()
+            .GetProperty("sections");
+
+        Assert.Equal(
+            ["identifiers", "consents", "objections", "parcels"],
+            sections.EnumerateArray().Select(section => section.GetProperty("name").GetString()));
+        Assert.Equal(
+            "pn-1001",
+            sections[3].GetProperty("records")[0].GetProperty("tracking-number").GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5: a contributor that faults fails the export with a fault that
+    /// carries nothing but the correlation identifier, names the contributor in the log,
+    /// and spends nothing of the person's limit.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_AFaultingContributorAnswersAFaultAndIsNotCountedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.ExportContributor.Faults = true;
+
+        Answer refused = await browser.SendAsync("GET", "/privacy/export?format=human");
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, refused.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), refused.Text("code"));
+        Assert.Empty(refused.Json().GetProperty("details").EnumerateObject());
+        Assert.Empty(_deployment.ExportLedger.Taken);
+        Assert.Contains(
+            _deployment.Logs.Lines,
+            line => line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal)
+                && line.Contains("contributor", StringComparison.Ordinal)
+                && line.Contains("host", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): in <c>machine</c> a host's value is keyed
+    /// <c>&lt;section&gt;.&lt;index&gt;.&lt;value&gt;</c> as a library value is, the index
+    /// counting the section's records from 0.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC7_AHostValueIsKeyedAsALibraryValueIsAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Held();
+        _deployment.ExportContributor.Sections = [Parcels("parcels", "tracking-number")];
+
+        JsonElement values =
+            (await browser.SendAsync("GET", "/privacy/export?format=machine"))
+            .Json()
+            .GetProperty("values");
+
+        Assert.Equal("ahmed@example.test", values.GetProperty("identifiers.0.value").GetString());
+        Assert.Equal("pn-1001", values.GetProperty("parcels.0.tracking-number").GetString());
+        Assert.Equal("pn-1002", values.GetProperty("parcels.1.tracking-number").GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC7 (D-206): a section or a value a contributor names with a
+    /// <c>.</c>, or otherwise outside the rule, fails the export as a contributor that
+    /// faults does: 500 <c>system.fault</c>, the contributor named in the log, and
+    /// nothing counted; the same contributor named inside the rule is exported.
+    /// </summary>
+    /// <param name="section">The name the contributor gives its section.</param>
+    /// <param name="value">The name it gives its value.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("parcels.v2", "tracking-number")]
+    [InlineData("parcels", "tracking.number")]
+    [InlineData("Parcels", "tracking-number")]
+    [InlineData("parcels", "trackingNumber")]
+    public async Task PRIV_RIGHT_003_AC7_ANameOutsideTheRuleFailsTheExportAsync(string section, string value)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.ExportContributor.Sections = [Parcels(section, value)];
+
+        Answer refused = await browser.SendAsync("GET", "/privacy/export?format=machine");
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, refused.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), refused.Text("code"));
+        Assert.Empty(_deployment.ExportLedger.Taken);
+        Assert.Contains(
+            _deployment.Logs.Lines,
+            line => line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal)
+                && line.Contains("contributor", StringComparison.Ordinal)
+                && line.Contains("host", StringComparison.Ordinal));
+
+        _deployment.ExportContributor.Sections = [Parcels("parcels", "tracking-number")];
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("GET", "/privacy/export?format=machine")).Status);
+    }
+
+    // A host's section of two parcels, each holding its tracking number under the name
+    // given.
+    private static ExportSection Parcels(string section, string value) =>
+        new(
+            section,
+            [
+                new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { [value] = "pn-1001" }),
+                new ExportRecord(new Dictionary<string, string>(StringComparer.Ordinal) { [value] = "pn-1002" }),
+            ]);
 
     private static Dictionary<string, string> Flattened(JsonElement sections)
     {

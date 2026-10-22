@@ -311,6 +311,30 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a report, whose rejection keeps its
+    /// counts, called inside a unit of work another opened is a fault of the calling
+    /// code: it ends the level it joined before it counts anything, so nothing of the
+    /// outer unit of work commits and the send is not released.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AReportInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SendReference reference = await SentAsync();
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Reports.ReportAsync(Gateway, reference.Value, delivered: false, TestContext.Current.CancellationToken));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_callbacks.Counted);
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10, INT-GEN-003: a report that fails for any cause but its
     /// rejection, here the raise that cannot be written, rolls back and leaves no unit
     /// of work open.

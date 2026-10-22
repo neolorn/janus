@@ -151,6 +151,38 @@ public sealed class AccessSeamTests
     }
 
     /// <summary>
+    /// AUTHZ-IMP-001 AC6 (D-202): no public member makes a context whose two identities
+    /// differ. A context is made by its own type alone, which nothing derives from and no
+    /// public constructor opens, and its public makers are the person's own and the
+    /// system principal's, each with one identity standing for both.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_IMP_001_AC6_NoPublicMemberMakesAContextWhoseIdentitiesDiffer()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+
+        var subject = SubjectId.New(randomness);
+        var person = AccessContext.Of(subject);
+        var principal = AccessContext.Of(
+            SystemPrincipal.ForDeployment("expiry-sweep", "AUTHZ-IMP-001", SystemOperation.ExpirySweep));
+        string[] makers =
+        [
+            .. typeof(AccessContext)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(method => method.ReturnType == typeof(AccessContext))
+                .Select(method => method.Name + "(" + string.Join(", ", method.GetParameters().Select(parameter => parameter.ParameterType.Name)) + ")")
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.True(typeof(AccessContext).IsSealed);
+        Assert.Empty(typeof(AccessContext).GetConstructors(BindingFlags.Public | BindingFlags.Instance));
+        Assert.Equal(["Of(SubjectId)", "Of(SystemPrincipal)"], makers);
+        Assert.Equal((subject, subject), (person.Acting!.Value, person.Effective!.Value));
+        Assert.Null(principal.Acting);
+        Assert.Null(principal.Effective);
+    }
+
+    /// <summary>
     /// LIB-SEAM-001 AC1: what evaluates a permission is named in one place, so putting
     /// something else behind the interface is one line and no call site.
     /// </summary>

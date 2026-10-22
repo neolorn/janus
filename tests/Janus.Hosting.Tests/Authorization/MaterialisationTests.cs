@@ -424,13 +424,88 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
-    /// AUTHZ-DERIVE-005, CONV-DESIGN-002 AC3: the refresh takes the drift check's
-    /// principal and no other context that names no subject, and reads the rows through
-    /// the source the host declared.
+    /// AUTHZ-DERIVE-005 AC7, AUTHZ-GRANT-003 (D-207): a refresh called with a person's
+    /// context names that person as the granter of each grant it writes and as the
+    /// revoker of each it takes back, with the reason <c>derivation:reviewer</c>, and
+    /// records each as materialised or retracted naming the person as acting identity.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_DERIVE_005_TheRefreshTakesTheDriftChecksPrincipalAndNoOtherAsync()
+    public async Task AUTHZ_DERIVE_005_AC7_APersonsRefreshNamesThePersonAndRecordsEachGrantAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+        Guid person = reviewed.Deployment.Granter.Value;
+
+        await using ServiceProvider deployment = Materialised();
+
+        _ = await RefreshAsync(deployment, reviewed);
+
+        Assert.Equal(
+            new Written(person, "derivation:reviewer", RevokedBy: null, RevocationReason: null),
+            await WrittenAsync(reviewed));
+
+        await reviewed.Deployment.UnreviewAsync(reviewed.Workspace, reviewed.Account, cancellationToken);
+
+        Assert.Equal(new DerivationRefresh(0, 1), await RefreshAsync(deployment, reviewed));
+        Assert.Equal(
+            new Written(person, "derivation:reviewer", person, "derivation:reviewer"),
+            await WrittenAsync(reviewed));
+        Assert.Equal(
+            [
+                Corrected.Refreshed("authz.grant.materialised", reviewed.Deployment.Granter, reviewed.Deployment.Organization),
+                Corrected.Refreshed("authz.grant.retracted", reviewed.Deployment.Granter, reviewed.Deployment.Organization),
+            ],
+            await CorrectedAsync(reviewed));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC7, AUTHZ-GRANT-003, IDN-PRIN-001 (D-207): a refresh called with
+    /// a host job's context outside a request names the nil subject as granter and as
+    /// revoker, with the reason <c>derivation:reviewer</c>, and records each grant it
+    /// writes or takes back naming the job's principal and stated reason.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC7_AJobsRefreshOutsideARequestNamesTheNilGranterAndTheJobAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the nightly digest",
+            reviewed.Deployment.Organization));
+
+        await using ServiceProvider deployment = Materialised();
+
+        Assert.Equal(new DerivationRefresh(1, 0), await RefreshAsync(deployment, reviewed, job));
+        Assert.Equal(
+            new Written(Guid.Empty, "derivation:reviewer", RevokedBy: null, RevocationReason: null),
+            await WrittenAsync(reviewed));
+
+        await reviewed.Deployment.UnreviewAsync(reviewed.Workspace, reviewed.Account, cancellationToken);
+
+        Assert.Equal(new DerivationRefresh(0, 1), await RefreshAsync(deployment, reviewed, job));
+        Assert.Equal(
+            new Written(Guid.Empty, "derivation:reviewer", Guid.Empty, "derivation:reviewer"),
+            await WrittenAsync(reviewed));
+        Assert.Equal(
+            [
+                Corrected.Named("authz.grant.materialised", HostFixture.Digest, "the nightly digest", reviewed.Deployment.Organization),
+                Corrected.Named("authz.grant.retracted", HostFixture.Digest, "the nightly digest", reviewed.Deployment.Organization),
+            ],
+            await CorrectedAsync(reviewed));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005, AUTHZ-GRANT-003 (D-207): the refresh over the source the host
+    /// declared, called with a system principal other than the drift check's, names the
+    /// nil subject as granter with the reason <c>derivation:reviewer</c> and records the
+    /// grant naming that principal; the drift check's reason is the drift check's alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_ASystemPrincipalsRefreshNamesTheNilGranterAndThePrincipalAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Reviewed reviewed = await ReviewedAsync();
@@ -440,22 +515,19 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
 
         DerivationMaterialiser materialiser = scope.ServiceProvider.GetRequiredService<DerivationMaterialiser>();
 
-        await Assert.ThrowsAsync<ArgumentException>(async () => await materialiser.RefreshAsync(
-            AccessContext.Of(SystemPrincipal.ForDeployment("mail-reconciliation", "INT-MAIL-007", SystemOperation.Reconciliation)),
-            "reviewer",
-            reviewed.Workspace.Id,
-            cancellationToken));
-
         DerivationRefresh refreshed = Rendered(await materialiser.RefreshAsync(
-            AccessContext.Of(DriftCheck.Principal),
+            AccessContext.Of(SystemPrincipal.ForDeployment("mail-reconciliation", "INT-MAIL-007", SystemOperation.Reconciliation)),
             "reviewer",
             reviewed.Workspace.Id,
             cancellationToken));
 
         Assert.Equal(new DerivationRefresh(1, 0), refreshed);
         Assert.Equal(
-            new Written(Guid.Empty, "AUTHZ-DERIVE-005", RevokedBy: null, RevocationReason: null),
+            new Written(Guid.Empty, "derivation:reviewer", RevokedBy: null, RevocationReason: null),
             await WrittenAsync(reviewed));
+        Assert.Equal(
+            [Corrected.Named("authz.grant.materialised", "mail-reconciliation", "INT-MAIL-007", reviewed.Deployment.Organization)],
+            await CorrectedAsync(reviewed));
     }
 
     /// <summary>
@@ -480,8 +552,8 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     /// <summary>
     /// AUTHZ-GRANT-003 AC5: a grant the drift check writes is recorded as materialised
     /// and one it takes back as retracted, each naming the check's principal and the
-    /// reason <c>AUTHZ-DERIVE-005</c> beside the grant and its role, and a grant a host's
-    /// own refresh writes is recorded as neither.
+    /// reason <c>AUTHZ-DERIVE-005</c> beside the grant and its role, where the grant a host's
+    /// own refresh wrote was recorded naming the person who called it (D-207).
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -496,16 +568,46 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         _ = await RefreshAsync(deployment, unsupported);
         await unsupported.Deployment.UnreviewAsync(unsupported.Workspace, unsupported.Account, cancellationToken);
 
-        Assert.Empty(await CorrectedAsync(unsupported));
+        var refreshed = Corrected.Refreshed(
+            "authz.grant.materialised",
+            unsupported.Deployment.Granter,
+            unsupported.Deployment.Organization);
+
+        Assert.Equal([refreshed], await CorrectedAsync(unsupported));
 
         await DriftCheckedAsync(deployment);
 
         Assert.Equal(
-            [Corrected.By("authz.grant.retracted", unsupported.Deployment.Organization)],
+            [refreshed, Corrected.By("authz.grant.retracted", unsupported.Deployment.Organization)],
             await CorrectedAsync(unsupported));
         Assert.Equal(
             [Corrected.By("authz.grant.materialised", unwritten.Deployment.Organization)],
             await CorrectedAsync(unwritten));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC6: the record of a grant a refresh or the drift check writes or
+    /// takes back names the grant's holder, an account, as its subject (D-206, D-207).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC6_TheDriftChecksRecordsNameTheGrantsHolderAsTheirSubjectAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed unsupported = await ReviewedAsync();
+        Reviewed unwritten = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        _ = await RefreshAsync(deployment, unsupported);
+        await unsupported.Deployment.UnreviewAsync(unsupported.Workspace, unsupported.Account, cancellationToken);
+
+        await DriftCheckedAsync(deployment);
+
+        Assert.Equal(
+            [(Guid?)unsupported.Account.Value, unsupported.Account.Value],
+            await CorrectedSubjectsAsync(unsupported));
+        Assert.Equal([(Guid?)unwritten.Account.Value], await CorrectedSubjectsAsync(unwritten));
     }
 
     /// <summary>
@@ -568,7 +670,10 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
 
     // The host's own call, from the operation that changed the relationship, inside the
     // unit of work that operation runs in (AUTHZ-DERIVE-005 AC3, D-161).
-    private async Task<DerivationRefresh> RefreshAsync(IServiceProvider deployment, Reviewed reviewed)
+    private async Task<DerivationRefresh> RefreshAsync(
+        IServiceProvider deployment,
+        Reviewed reviewed,
+        AccessContext? asking = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -582,7 +687,7 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         DerivationRefresh refreshed = Rendered(await scope.ServiceProvider
             .GetRequiredService<IDerivationMaterialiser>()
             .RefreshAsync(
-                AccessContext.Of(reviewed.Deployment.Granter),
+                asking ?? AccessContext.Of(reviewed.Deployment.Granter),
                 "reviewer",
                 reviewed.Workspace.Id,
                 Sources(reading),
@@ -741,7 +846,8 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     // What the trail holds of the materialised grants of the reviewing account: each
     // record's action and category, the principal and reason it names, the identities and
     // the organization it is filed under, and the role of the grant it names
-    // (AUTHZ-GRANT-003 AC5, chapter 10 section 5.24).
+    // (AUTHZ-GRANT-003 AC5, chapter 10 section 5.24). The deployment's clock stands
+    // still, so the records are read in the order of their action and then of who called.
     private async Task<IReadOnlyList<Corrected>> CorrectedAsync(Reviewed reviewed)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
@@ -757,6 +863,24 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
               ON recorded.details->>'grant' = CAST(written.id AS text)
             WHERE written.kind = 'materialised' AND written.subject_id = @account
               AND recorded.action LIKE 'authz.grant.%'
+            ORDER BY recorded.action, recorded.principal NULLS FIRST;
+            """,
+            new { account = reviewed.Account.Value },
+            cancellationToken: TestContext.Current.CancellationToken))];
+    }
+
+    private async Task<IReadOnlyList<Guid?>> CorrectedSubjectsAsync(Reviewed reviewed)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<Guid?>(new CommandDefinition(
+            """
+            SELECT recorded.subject
+            FROM identity.grants AS written
+            JOIN identity.audit_records AS recorded
+              ON recorded.details->>'grant' = CAST(written.id AS text)
+            WHERE written.kind = 'materialised' AND written.subject_id = @account
+              AND recorded.action IN ('authz.grant.materialised', 'authz.grant.retracted')
             ORDER BY recorded.occurred_at, recorded.id;
             """,
             new { account = reviewed.Account.Value },
@@ -768,23 +892,21 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     private sealed record Corrected(
         string Action,
         string Category,
-        string Principal,
-        string Reason,
+        string? Principal,
+        string? Reason,
         Guid Acting,
         Guid Effective,
         Guid Organization,
         string Role)
     {
         public static Corrected By(string action, OrganizationId organization) =>
-            new(
-                action,
-                "security",
-                "derivation-driftcheck",
-                "AUTHZ-DERIVE-005",
-                Guid.Empty,
-                Guid.Empty,
-                organization.Value,
-                "reviewer");
+            Named(action, "derivation-driftcheck", "AUTHZ-DERIVE-005", organization);
+
+        public static Corrected Named(string action, string principal, string reason, OrganizationId organization) =>
+            new(action, "security", principal, reason, Guid.Empty, Guid.Empty, organization.Value, "reviewer");
+
+        public static Corrected Refreshed(string action, SubjectId person, OrganizationId organization) =>
+            new(action, "security", Principal: null, Reason: null, person.Value, person.Value, organization.Value, "reviewer");
     }
 
     private sealed record Reviewed(

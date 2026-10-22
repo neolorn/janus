@@ -317,9 +317,13 @@ Janus.Core.AuthorizationDeclaration
 Janus.Core.AuthorizationDeclaration.<Clone>$() -> Janus.Core.AuthorizationDeclaration!
 Janus.Core.AuthorizationDeclaration.ActionPurposes.get -> System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>!
 Janus.Core.AuthorizationDeclaration.ActionPurposes.init -> void
-Janus.Core.AuthorizationDeclaration.AuthorizationDeclaration(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! ReadingActions, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! StepUpGates, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! ActionPurposes, System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientDeclaration!>! Recipients, System.Collections.Generic.IReadOnlyDictionary<string!, System.TimeSpan>! RetentionFloors) -> void
-Janus.Core.AuthorizationDeclaration.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, out System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! ReadingActions, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! StepUpGates, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! ActionPurposes, out System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientDeclaration!>! Recipients, out System.Collections.Generic.IReadOnlyDictionary<string!, System.TimeSpan>! RetentionFloors) -> void
+Janus.Core.AuthorizationDeclaration.AuthorizationDeclaration(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! ReadingActions, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! StepUpGates, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! ActionPurposes, System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientDeclaration!>! Recipients, System.Collections.Generic.IReadOnlyDictionary<string!, System.TimeSpan>! RetentionFloors, System.Collections.Generic.IReadOnlyList<Janus.Core.CookieDeclaration!>! Cookies, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleDeclaration!>! Roles, System.Collections.Generic.IReadOnlyList<Janus.Core.JobDeclaration!>! Jobs) -> void
+Janus.Core.AuthorizationDeclaration.Cookies.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.CookieDeclaration!>!
+Janus.Core.AuthorizationDeclaration.Cookies.init -> void
+Janus.Core.AuthorizationDeclaration.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, out System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! ReadingActions, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! StepUpGates, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>! ActionPurposes, out System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientDeclaration!>! Recipients, out System.Collections.Generic.IReadOnlyDictionary<string!, System.TimeSpan>! RetentionFloors, out System.Collections.Generic.IReadOnlyList<Janus.Core.CookieDeclaration!>! Cookies, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleDeclaration!>! Roles, out System.Collections.Generic.IReadOnlyList<Janus.Core.JobDeclaration!>! Jobs) -> void
 Janus.Core.AuthorizationDeclaration.Equals(Janus.Core.AuthorizationDeclaration? other) -> bool
+Janus.Core.AuthorizationDeclaration.Jobs.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.JobDeclaration!>!
+Janus.Core.AuthorizationDeclaration.Jobs.init -> void
 Janus.Core.AuthorizationDeclaration.LawfulBases.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
 Janus.Core.AuthorizationDeclaration.LawfulBases.init -> void
 Janus.Core.AuthorizationDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
@@ -334,6 +338,8 @@ Janus.Core.AuthorizationDeclaration.ResourceTypes.get -> System.Collections.Gene
 Janus.Core.AuthorizationDeclaration.ResourceTypes.init -> void
 Janus.Core.AuthorizationDeclaration.RetentionFloors.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.TimeSpan>!
 Janus.Core.AuthorizationDeclaration.RetentionFloors.init -> void
+Janus.Core.AuthorizationDeclaration.Roles.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleDeclaration!>!
+Janus.Core.AuthorizationDeclaration.Roles.init -> void
 Janus.Core.AuthorizationDeclaration.SensitiveCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.AuthorizationDeclaration.SensitiveCategories.init -> void
 Janus.Core.AuthorizationDeclaration.StepUpGates.get -> System.Collections.Generic.IReadOnlyDictionary<Janus.Core.Permission, string!>!
@@ -341,13 +347,16 @@ Janus.Core.AuthorizationDeclaration.StepUpGates.init -> void
 Janus.Core.AuthorizationDeclarationBuilder
 Janus.Core.AuthorizationDeclarationBuilder.AuthorizationDeclarationBuilder() -> void
 Janus.Core.AuthorizationDeclarationBuilder.Build() -> Janus.Core.AuthorizationDeclaration!
+Janus.Core.AuthorizationDeclarationBuilder.Job(string! name, params System.Collections.Generic.IReadOnlyList<string!>! permissions) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.LawfulBasis(Janus.Core.LawfulBasisDeclaration! basis) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission, bool reading) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Recipient(Janus.Core.RecipientDeclaration! recipient) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Relationship<TRelationship>(string! name, string! on, string! relation, System.Linq.Expressions.Expression<System.Func<TRelationship, Janus.Core.SubjectId>!>! holder, string! holderColumn, System.Linq.Expressions.Expression<System.Func<TRelationship, string!>!>! resource, string! resourceColumn) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Resource<TResource>(string! name, System.Action<Janus.Core.ResourceTypeDeclarationBuilder<TResource>!>! declare) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.Cookie(string! name, System.TimeSpan? lifetime, bool thirdPartyReadable, string? purpose) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.RetentionFloor(string! category, System.TimeSpan floor) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.Role(string! name, params System.Collections.Generic.IReadOnlyList<string!>! permissions) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.ServesPurpose(string! permission, string! purpose) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.StepUpGate(string! permission, string! gate) -> Janus.Core.AuthorizationDeclarationBuilder!
@@ -427,6 +436,19 @@ Janus.Core.ComplianceRecord.Deconstruct(out string? DataOwner, out string? Organ
 Janus.Core.ComplianceRecord.Equals(Janus.Core.ComplianceRecord? other) -> bool
 Janus.Core.ComplianceRecord.OrganizationalSecurityMeasures.get -> string?
 Janus.Core.ComplianceRecord.OrganizationalSecurityMeasures.init -> void
+Janus.Core.CookieDeclaration
+Janus.Core.CookieDeclaration.<Clone>$() -> Janus.Core.CookieDeclaration!
+Janus.Core.CookieDeclaration.CookieDeclaration(string! Name, System.TimeSpan? Lifetime, bool ThirdPartyReadable, string? Purpose) -> void
+Janus.Core.CookieDeclaration.Deconstruct(out string! Name, out System.TimeSpan? Lifetime, out bool ThirdPartyReadable, out string? Purpose) -> void
+Janus.Core.CookieDeclaration.Equals(Janus.Core.CookieDeclaration? other) -> bool
+Janus.Core.CookieDeclaration.Lifetime.get -> System.TimeSpan?
+Janus.Core.CookieDeclaration.Lifetime.init -> void
+Janus.Core.CookieDeclaration.Name.get -> string!
+Janus.Core.CookieDeclaration.Name.init -> void
+Janus.Core.CookieDeclaration.Purpose.get -> string?
+Janus.Core.CookieDeclaration.Purpose.init -> void
+Janus.Core.CookieDeclaration.ThirdPartyReadable.get -> bool
+Janus.Core.CookieDeclaration.ThirdPartyReadable.init -> void
 Janus.Core.ConcealmentBehaviour
 Janus.Core.ConcealmentBehaviour.Conceal = 0 -> Janus.Core.ConcealmentBehaviour
 Janus.Core.ConcealmentBehaviour.Disclose = 1 -> Janus.Core.ConcealmentBehaviour
@@ -680,6 +702,19 @@ Janus.Core.CredentialSuspended.InvalidatesAt.get -> System.DateTimeOffset
 Janus.Core.CredentialSuspended.InvalidatesAt.init -> void
 Janus.Core.CredentialSuspended.Kind.get -> Janus.Core.Factor
 Janus.Core.CredentialSuspended.Kind.init -> void
+Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Consent = 3 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Erasure = 0 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Objection = 4 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Restriction = 2 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryKind.Takedown = 1 -> Janus.Core.DeliveryKind
+Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Granted = 0 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Lifted = 5 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Recorded = 3 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Set = 4 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Superseded = 2 -> Janus.Core.DeliveryChange
+Janus.Core.DeliveryChange.Withdrawn = 1 -> Janus.Core.DeliveryChange
 Janus.Core.DeclaredProcessing
 Janus.Core.DeclaredProcessing.Find(string! purpose) -> Janus.Core.DeclaredPurpose?
 Janus.Core.DeclaredProcessing.Purposes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DeclaredPurpose!>!
@@ -826,6 +861,8 @@ Janus.Core.DocumentTranslation.Text.get -> string!
 Janus.Core.DocumentTranslation.Text.init -> void
 Janus.Core.DocumentVersion
 Janus.Core.DocumentVersion.<Clone>$() -> Janus.Core.DocumentVersion!
+Janus.Core.DocumentVersion.Cookies.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.NoticeCookie!>!
+Janus.Core.DocumentVersion.Cookies.init -> void
 Janus.Core.DocumentVersion.Deconstruct(out string! DocumentName, out string! Version, out string! GoverningLanguage, out string! Text, out System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, out System.DateTimeOffset PublishedAt) -> void
 Janus.Core.DocumentVersion.DocumentName.get -> string!
 Janus.Core.DocumentVersion.DocumentName.init -> void
@@ -892,11 +929,13 @@ Janus.Core.EncryptedFieldDeclaration
 Janus.Core.EncryptedFieldDeclaration.<Clone>$() -> Janus.Core.EncryptedFieldDeclaration!
 Janus.Core.EncryptedFieldDeclaration.Category.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Category.init -> void
-Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn, out string! Category) -> void
-Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn, string! Category) -> void
+Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn, out string! Category, out string! Name) -> void
+Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn, string! Category, string! Name) -> void
 Janus.Core.EncryptedFieldDeclaration.Equals(Janus.Core.EncryptedFieldDeclaration? other) -> bool
 Janus.Core.EncryptedFieldDeclaration.Field.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Field.init -> void
+Janus.Core.EncryptedFieldDeclaration.Name.get -> string!
+Janus.Core.EncryptedFieldDeclaration.Name.init -> void
 Janus.Core.EncryptedFieldDeclaration.SubjectColumn.get -> string!
 Janus.Core.EncryptedFieldDeclaration.SubjectColumn.init -> void
 Janus.Core.EnrolledCredential
@@ -941,12 +980,18 @@ Janus.Core.ErasureProgress
 Janus.Core.ErasureProgress.<Clone>$() -> Janus.Core.ErasureProgress!
 Janus.Core.ErasureProgress.Attempts.get -> int
 Janus.Core.ErasureProgress.Attempts.init -> void
-Janus.Core.ErasureProgress.Deconstruct(out Janus.Core.ErasureId Id, out Janus.Core.SubjectId Subject, out Janus.Core.ErasureReason Reason, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.ErasureProgress.Change.get -> Janus.Core.DeliveryChange?
+Janus.Core.ErasureProgress.Change.init -> void
+Janus.Core.ErasureProgress.Deconstruct(out Janus.Core.ErasureId Id, out Janus.Core.DeliveryKind Kind, out Janus.Core.SubjectId Subject, out string? Purpose, out Janus.Core.DeliveryChange? Change, out Janus.Core.ErasureReason? Reason, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.ErasureProgress.Equals(Janus.Core.ErasureProgress? other) -> bool
-Janus.Core.ErasureProgress.ErasureProgress(Janus.Core.ErasureId Id, Janus.Core.SubjectId Subject, Janus.Core.ErasureReason Reason, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.ErasureProgress.ErasureProgress(Janus.Core.ErasureId Id, Janus.Core.DeliveryKind Kind, Janus.Core.SubjectId Subject, string? Purpose, Janus.Core.DeliveryChange? Change, Janus.Core.ErasureReason? Reason, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.ErasureProgress.Id.get -> Janus.Core.ErasureId
 Janus.Core.ErasureProgress.Id.init -> void
-Janus.Core.ErasureProgress.Reason.get -> Janus.Core.ErasureReason
+Janus.Core.ErasureProgress.Kind.get -> Janus.Core.DeliveryKind
+Janus.Core.ErasureProgress.Kind.init -> void
+Janus.Core.ErasureProgress.Purpose.get -> string?
+Janus.Core.ErasureProgress.Purpose.init -> void
+Janus.Core.ErasureProgress.Reason.get -> Janus.Core.ErasureReason?
 Janus.Core.ErasureProgress.Reason.init -> void
 Janus.Core.ErasureProgress.Status.get -> Janus.Core.ErasureStatus
 Janus.Core.ErasureProgress.Status.init -> void
@@ -1025,10 +1070,6 @@ Janus.Core.ExportRecord.Equals(Janus.Core.ExportRecord? other) -> bool
 Janus.Core.ExportRecord.ExportRecord(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void
 Janus.Core.ExportRecord.Values.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
 Janus.Core.ExportRecord.Values.init -> void
-Janus.Core.ExportRequested
-Janus.Core.ExportRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
-Janus.Core.ExportRequested.Equals(Janus.Core.ExportRequested? other) -> bool
-Janus.Core.ExportRequested.ExportRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
 Janus.Core.ExportSection
 Janus.Core.ExportSection.<Clone>$() -> Janus.Core.ExportSection!
 Janus.Core.ExportSection.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.ExportRecord!>! Records) -> void
@@ -1387,6 +1428,13 @@ Janus.Core.IOrganizations.CreateAsync(Janus.Core.AccessContext! context, string!
 Janus.Core.IOrganizations.PolicyAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationPolicy!>>
 Janus.Core.IOrganizations.ReplacePolicyAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.PolicyOverride! replacement, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.RequestDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IExportContributor
+Janus.Core.IExportContributor.Covers.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.ResourceType>!
+Janus.Core.IExportContributor.Name.get -> string!
+Janus.Core.IExportContributor.SectionsAsync(Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>!>>
+Janus.Core.IPersonalFields
+Janus.Core.IPersonalFields.WithSubjectAsync<TValue>(Janus.Core.SubjectId subject, System.Func<Janus.Core.SubjectFields!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
+Janus.Core.IPersonalFields.WithSubjectsAsync<TValue>(System.Collections.Generic.IReadOnlyList<Janus.Core.SubjectId>! subjects, System.Func<System.Collections.Generic.IReadOnlyDictionary<Janus.Core.SubjectId, Janus.Core.SubjectFields!>!, Janus.Core.Result<TValue>>! use, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.IPrivacyRequests
 Janus.Core.IPrivacyRequests.EnterAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestEntry! entry, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
 Janus.Core.IPrivacyRequests.FulfilAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.PrivacyRequestId request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1399,6 +1447,9 @@ Janus.Core.IProcessingRecords.GenerateAsync(Janus.Core.AccessContext! context, S
 Janus.Core.IProviderProbes
 Janus.Core.IProviderProbes.RunAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Error!>!>>
 Janus.Core.IPurposeHandler
+Janus.Core.IPurposeHandler.ConsentChangedAsync(Janus.Core.ConsentChanged! changed, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IPurposeHandler.Name.get -> string!
+Janus.Core.IPurposeHandler.ObjectionChangedAsync(Janus.Core.ObjectionChanged! changed, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPurposeHandler.Purposes.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.IReadVolume
 Janus.Core.IReadVolume.ReturnedAsync(Janus.Core.AccessContext! context, int records, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1424,10 +1475,13 @@ Janus.Core.IRegistration.SkipPhoneAsync(Janus.Core.RegistrationSessionId session
 Janus.Core.IRegistration.StageAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierKind kind, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.StateAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.VerifyAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
+Janus.Core.IRequestAccess
+Janus.Core.IRequestAccess.Current() -> Janus.Core.Result<Janus.Core.RequestAccess!>
 Janus.Core.IResources
 Janus.Core.IResources.MoveAsync(Janus.Core.ResourceReference resource, Janus.Core.ResourceReference? containedIn, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IResources.RegisterAsync(Janus.Core.ResourceRegistration! registration, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IResources.RegisterManyAsync(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceRegistration!>! registrations, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IResources.RemoveAsync(Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestoreTestInstance
 Janus.Core.IRestoreTestInstance.RestoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<string!>>
 Janus.Core.IRestoreTestInstance.TearDownAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1587,6 +1641,15 @@ Janus.Core.IssuedInvitation.Id.init -> void
 Janus.Core.IssuedInvitation.IssuedInvitation(Janus.Core.InvitationId Id, System.DateTimeOffset ExpiresAt, string? Token) -> void
 Janus.Core.IssuedInvitation.Token.get -> string?
 Janus.Core.IssuedInvitation.Token.init -> void
+Janus.Core.JobDeclaration
+Janus.Core.JobDeclaration.<Clone>$() -> Janus.Core.JobDeclaration!
+Janus.Core.JobDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.JobDeclaration.Equals(Janus.Core.JobDeclaration? other) -> bool
+Janus.Core.JobDeclaration.JobDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.JobDeclaration.Name.get -> string!
+Janus.Core.JobDeclaration.Name.init -> void
+Janus.Core.JobDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+Janus.Core.JobDeclaration.Permissions.init -> void
 Janus.Core.KeyEncryptionKeys
 Janus.Core.KeyEncryptionKeys.<Clone>$() -> Janus.Core.KeyEncryptionKeys!
 Janus.Core.KeyEncryptionKeys.Current.get -> System.ReadOnlyMemory<byte>
@@ -1806,6 +1869,19 @@ Janus.Core.MessageTemplate.Text.get -> string!
 Janus.Core.MessageTemplate.Text.init -> void
 Janus.Core.NeverLoggedAttribute
 Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
+Janus.Core.NoticeCookie
+Janus.Core.NoticeCookie.<Clone>$() -> Janus.Core.NoticeCookie!
+Janus.Core.NoticeCookie.Deconstruct(out string! Name, out string? Purpose, out System.TimeSpan? Lifetime, out bool ThirdParty) -> void
+Janus.Core.NoticeCookie.Equals(Janus.Core.NoticeCookie? other) -> bool
+Janus.Core.NoticeCookie.Lifetime.get -> System.TimeSpan?
+Janus.Core.NoticeCookie.Lifetime.init -> void
+Janus.Core.NoticeCookie.Name.get -> string!
+Janus.Core.NoticeCookie.Name.init -> void
+Janus.Core.NoticeCookie.NoticeCookie(string! Name, string? Purpose, System.TimeSpan? Lifetime, bool ThirdParty) -> void
+Janus.Core.NoticeCookie.Purpose.get -> string?
+Janus.Core.NoticeCookie.Purpose.init -> void
+Janus.Core.NoticeCookie.ThirdParty.get -> bool
+Janus.Core.NoticeCookie.ThirdParty.init -> void
 Janus.Core.ObjectionChanged
 Janus.Core.ObjectionChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out string! Purpose, out bool Objecting) -> void
 Janus.Core.ObjectionChanged.Equals(Janus.Core.ObjectionChanged? other) -> bool
@@ -2403,6 +2479,15 @@ Janus.Core.RelationshipRows
 Janus.Core.RelationshipRows.Any(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
 Janus.Core.RelationshipRows.HeldBy(System.Linq.Expressions.LambdaExpression! predicate, System.Linq.Expressions.LambdaExpression! holder) -> System.Collections.Generic.IAsyncEnumerable<Janus.Core.SubjectId>!
 Janus.Core.RelationshipSource
+Janus.Core.RequestAccess
+Janus.Core.RequestAccess.<Clone>$() -> Janus.Core.RequestAccess!
+Janus.Core.RequestAccess.Context.get -> Janus.Core.AccessContext!
+Janus.Core.RequestAccess.Context.init -> void
+Janus.Core.RequestAccess.Deconstruct(out Janus.Core.AccessContext! Context, out Janus.Core.SessionId Session) -> void
+Janus.Core.RequestAccess.Equals(Janus.Core.RequestAccess? other) -> bool
+Janus.Core.RequestAccess.RequestAccess(Janus.Core.AccessContext! Context, Janus.Core.SessionId Session) -> void
+Janus.Core.RequestAccess.Session.get -> Janus.Core.SessionId
+Janus.Core.RequestAccess.Session.init -> void
 Janus.Core.ReservedUsernames
 Janus.Core.ReservedUsernames.All.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.ReservedUsernames.Holds(Janus.Core.Username username) -> bool
@@ -2451,11 +2536,13 @@ Janus.Core.ResourceTypeDeclaration
 Janus.Core.ResourceTypeDeclaration.<Clone>$() -> Janus.Core.ResourceTypeDeclaration!
 Janus.Core.ResourceTypeDeclaration.BelongsToOrganization.get -> bool
 Janus.Core.ResourceTypeDeclaration.BelongsToOrganization.init -> void
+Janus.Core.ResourceTypeDeclaration.Capabilities.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+Janus.Core.ResourceTypeDeclaration.Capabilities.init -> void
 Janus.Core.ResourceTypeDeclaration.Concealment.get -> Janus.Core.ConcealmentBehaviour
 Janus.Core.ResourceTypeDeclaration.Concealment.init -> void
 Janus.Core.ResourceTypeDeclaration.ContainedIn.get -> Janus.Core.ResourceType?
 Janus.Core.ResourceTypeDeclaration.ContainedIn.init -> void
-Janus.Core.ResourceTypeDeclaration.Deconstruct(out Janus.Core.ResourceType Name, out System.Type! Entity, out Janus.Core.ResourceType? ContainedIn, out bool BelongsToOrganization, out Janus.Core.ConcealmentBehaviour Concealment, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, out System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, out System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields) -> void
+Janus.Core.ResourceTypeDeclaration.Deconstruct(out Janus.Core.ResourceType Name, out System.Type! Entity, out Janus.Core.ResourceType? ContainedIn, out bool BelongsToOrganization, out Janus.Core.ConcealmentBehaviour Concealment, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, out System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, out System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Capabilities) -> void
 Janus.Core.ResourceTypeDeclaration.Derivations.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>!
 Janus.Core.ResourceTypeDeclaration.Derivations.init -> void
 Janus.Core.ResourceTypeDeclaration.EncryptedFields.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>!
@@ -2467,15 +2554,16 @@ Janus.Core.ResourceTypeDeclaration.Name.get -> Janus.Core.ResourceType
 Janus.Core.ResourceTypeDeclaration.Name.init -> void
 Janus.Core.ResourceTypeDeclaration.Purposes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>!
 Janus.Core.ResourceTypeDeclaration.Purposes.init -> void
-Janus.Core.ResourceTypeDeclaration.ResourceTypeDeclaration(Janus.Core.ResourceType Name, System.Type! Entity, Janus.Core.ResourceType? ContainedIn, bool BelongsToOrganization, Janus.Core.ConcealmentBehaviour Concealment, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields) -> void
+Janus.Core.ResourceTypeDeclaration.ResourceTypeDeclaration(Janus.Core.ResourceType Name, System.Type! Entity, Janus.Core.ResourceType? ContainedIn, bool BelongsToOrganization, Janus.Core.ConcealmentBehaviour Concealment, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.PurposeDeclaration!>! Purposes, System.Collections.Generic.IReadOnlyList<Janus.Core.DerivationDeclaration!>! Derivations, System.Collections.Generic.IReadOnlyList<Janus.Core.EncryptedFieldDeclaration!>! EncryptedFields, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Capabilities) -> void
 Janus.Core.ResourceTypeDeclaration.SensitiveCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.ResourceTypeDeclaration.SensitiveCategories.init -> void
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.BelongsToOrganization() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Capabilities(params System.Collections.Generic.IReadOnlyList<string!>! permissions) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! container) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category, string? name = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null, string? document = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
@@ -2544,6 +2632,15 @@ Janus.Core.Result<TValue>.Equals(Janus.Core.Result<TValue> other) -> bool
 Janus.Core.Result<TValue>.Match<TOutcome>(System.Func<TValue, TOutcome>! onSuccess, System.Func<Janus.Core.Error!, TOutcome>! onFailure) -> TOutcome
 Janus.Core.Result<TValue>.Result() -> void
 Janus.Core.Result<TValue>.Switch(System.Action<TValue>! onSuccess, System.Action<Janus.Core.Error!>! onFailure) -> void
+Janus.Core.RoleDeclaration
+Janus.Core.RoleDeclaration.<Clone>$() -> Janus.Core.RoleDeclaration!
+Janus.Core.RoleDeclaration.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.RoleDeclaration.Equals(Janus.Core.RoleDeclaration? other) -> bool
+Janus.Core.RoleDeclaration.Name.get -> string!
+Janus.Core.RoleDeclaration.Name.init -> void
+Janus.Core.RoleDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+Janus.Core.RoleDeclaration.Permissions.init -> void
+Janus.Core.RoleDeclaration.RoleDeclaration(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
 Janus.Core.RoleName
 Janus.Core.RoleName.Equals(Janus.Core.RoleName other) -> bool
 Janus.Core.RoleName.RoleName() -> void
@@ -2841,6 +2938,8 @@ Janus.Core.SubjectExport.Sections.init -> void
 Janus.Core.SubjectExport.Subject.get -> Janus.Core.SubjectId
 Janus.Core.SubjectExport.Subject.init -> void
 Janus.Core.SubjectExport.SubjectExport(Janus.Core.SubjectId Subject, System.DateTimeOffset AssembledAt, System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>! Sections) -> void
+Janus.Core.SubjectFields
+Janus.Core.SubjectFields.SubjectFields() -> void
 Janus.Core.SubjectId
 Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
 Janus.Core.SubjectId.SubjectId() -> void
@@ -2874,6 +2973,7 @@ Janus.Core.SystemOperation.Monitoring = 5 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Reconciliation = 0 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.RecordsOfProcessing = 2 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.RetentionPurge = 1 -> Janus.Core.SystemOperation
+Janus.Core.SystemOperation.RoleSeeding = 10 -> Janus.Core.SystemOperation
 Janus.Core.SystemPrincipal
 Janus.Core.SystemPrincipal.ActsFor(Janus.Core.OrganizationId organization) -> bool
 Janus.Core.SystemPrincipal.IsDeploymentScoped.get -> bool
@@ -2968,6 +3068,11 @@ Janus.Core.WebAuthnRequestOptions.UserVerification.get -> string!
 Janus.Core.WebAuthnRequestOptions.WebAuthnRequestOptions(string! RelyingPartyId, string! Challenge, System.Collections.Generic.IReadOnlyList<Janus.Core.WebAuthnCredentialDescriptor!>! AllowCredentials) -> void
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 abstract Janus.Core.DomainEvent.<Clone>$() -> Janus.Core.DomainEvent!
+abstract Janus.Core.SubjectFields.Decrypt(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> stored) -> Janus.Core.Result<string!>
+abstract Janus.Core.SubjectFields.DecryptBytes(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> stored) -> Janus.Core.Result<System.ReadOnlyMemory<byte>>
+abstract Janus.Core.SubjectFields.Encrypt(Janus.Core.ResourceType type, string! field, string! value) -> Janus.Core.Result<System.ReadOnlyMemory<byte>>
+abstract Janus.Core.SubjectFields.Encrypt(Janus.Core.ResourceType type, string! field, System.ReadOnlyMemory<byte> value) -> Janus.Core.Result<System.ReadOnlyMemory<byte>>
+abstract Janus.Core.SubjectFields.Erased.get -> bool
 const Janus.Core.CredentialLabel.MaximumLength = 64 -> int
 const Janus.Core.CredentialLabel.MinimumLength = 1 -> int
 const Janus.Core.DeviceDescription.MaximumLength = 64 -> int
@@ -3071,6 +3176,9 @@ override Janus.Core.ChallengeVerifier.ToString() -> string!
 override Janus.Core.ComplianceRecord.Equals(object? obj) -> bool
 override Janus.Core.ComplianceRecord.GetHashCode() -> int
 override Janus.Core.ComplianceRecord.ToString() -> string!
+override Janus.Core.CookieDeclaration.Equals(object? obj) -> bool
+override Janus.Core.CookieDeclaration.GetHashCode() -> int
+override Janus.Core.CookieDeclaration.ToString() -> string!
 override Janus.Core.Configuration.Argon2StrengthClass.Equals(object? obj) -> bool
 override Janus.Core.Configuration.Argon2StrengthClass.GetHashCode() -> int
 override Janus.Core.Configuration.Argon2StrengthClass.ToString() -> string!
@@ -3212,10 +3320,6 @@ override Janus.Core.ExplainedPrincipal.GetHashCode() -> int
 override Janus.Core.ExportRecord.Equals(object? obj) -> bool
 override Janus.Core.ExportRecord.GetHashCode() -> int
 override Janus.Core.ExportRecord.ToString() -> string!
-override Janus.Core.ExportRequested.<Clone>$() -> Janus.Core.ExportRequested!
-override Janus.Core.ExportRequested.Equals(object? obj) -> bool
-override Janus.Core.ExportRequested.GetHashCode() -> int
-override Janus.Core.ExportRequested.ToString() -> string!
 override Janus.Core.ExportSection.Equals(object? obj) -> bool
 override Janus.Core.ExportSection.GetHashCode() -> int
 override Janus.Core.ExportSection.ToString() -> string!
@@ -3286,6 +3390,9 @@ override Janus.Core.IssuedAppPassword.ToString() -> string!
 override Janus.Core.IssuedInvitation.Equals(object? obj) -> bool
 override Janus.Core.IssuedInvitation.GetHashCode() -> int
 override Janus.Core.IssuedInvitation.ToString() -> string!
+override Janus.Core.JobDeclaration.Equals(object? obj) -> bool
+override Janus.Core.JobDeclaration.GetHashCode() -> int
+override Janus.Core.JobDeclaration.ToString() -> string!
 override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
 override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
 override Janus.Core.KeyEncryptionKeys.ToString() -> string!
@@ -3333,6 +3440,9 @@ override Janus.Core.MembershipId.ToString() -> string!
 override Janus.Core.MessageTemplate.Equals(object? obj) -> bool
 override Janus.Core.MessageTemplate.GetHashCode() -> int
 override Janus.Core.MessageTemplate.ToString() -> string!
+override Janus.Core.NoticeCookie.Equals(object? obj) -> bool
+override Janus.Core.NoticeCookie.GetHashCode() -> int
+override Janus.Core.NoticeCookie.ToString() -> string!
 override Janus.Core.ObjectionChanged.<Clone>$() -> Janus.Core.ObjectionChanged!
 override Janus.Core.ObjectionChanged.Equals(object? obj) -> bool
 override Janus.Core.ObjectionChanged.GetHashCode() -> int
@@ -3441,6 +3551,9 @@ override Janus.Core.RegistrationState.ToString() -> string!
 override Janus.Core.RelationshipDeclaration.Equals(object? obj) -> bool
 override Janus.Core.RelationshipDeclaration.GetHashCode() -> int
 override Janus.Core.RelationshipDeclaration.ToString() -> string!
+override Janus.Core.RequestAccess.Equals(object? obj) -> bool
+override Janus.Core.RequestAccess.GetHashCode() -> int
+override Janus.Core.RequestAccess.ToString() -> string!
 override Janus.Core.ResourceAccess.Equals(object? obj) -> bool
 override Janus.Core.ResourceAccess.GetHashCode() -> int
 override Janus.Core.ResourceAccess.ToString() -> string!
@@ -3469,6 +3582,9 @@ override Janus.Core.Result.GetHashCode() -> int
 override Janus.Core.Result<TValue>.GetHashCode() -> int
 override Janus.Core.RestrictionName.GetHashCode() -> int
 override Janus.Core.RestrictionName.ToString() -> string!
+override Janus.Core.RoleDeclaration.Equals(object? obj) -> bool
+override Janus.Core.RoleDeclaration.GetHashCode() -> int
+override Janus.Core.RoleDeclaration.ToString() -> string!
 override Janus.Core.RoleName.GetHashCode() -> int
 override Janus.Core.RoleName.ToString() -> string!
 override Janus.Core.SendContext.Equals(object? obj) -> bool
@@ -3582,7 +3698,6 @@ override sealed Janus.Core.CredentialRestored.Equals(Janus.Core.DomainEvent? oth
 override sealed Janus.Core.CredentialSuspended.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ErasureRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
-override sealed Janus.Core.ExportRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -3595,7 +3710,6 @@ override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.DomainEve
 override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.TakedownExecuted.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.TakedownReversed.Equals(Janus.Core.DomainEvent? other) -> bool
-static Janus.Core.AccessContext.Of(Janus.Core.SubjectId acting, Janus.Core.SubjectId effective) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
 static Janus.Core.AccessExplanation.operator !=(Janus.Core.AccessExplanation? left, Janus.Core.AccessExplanation? right) -> bool
@@ -3663,8 +3777,10 @@ static Janus.Core.AuditActions.DocumentTranslated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ErasureCompleted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GrantCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantMaterialised.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GrantRetracted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GrantRevoked.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberAdded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberRemoved.get -> Janus.Core.AuditAction
@@ -3748,6 +3864,8 @@ static Janus.Core.ChallengeVerifier.operator !=(Janus.Core.ChallengeVerifier? le
 static Janus.Core.ChallengeVerifier.operator ==(Janus.Core.ChallengeVerifier? left, Janus.Core.ChallengeVerifier? right) -> bool
 static Janus.Core.ComplianceRecord.operator !=(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
 static Janus.Core.ComplianceRecord.operator ==(Janus.Core.ComplianceRecord? left, Janus.Core.ComplianceRecord? right) -> bool
+static Janus.Core.CookieDeclaration.operator !=(Janus.Core.CookieDeclaration? left, Janus.Core.CookieDeclaration? right) -> bool
+static Janus.Core.CookieDeclaration.operator ==(Janus.Core.CookieDeclaration? left, Janus.Core.CookieDeclaration? right) -> bool
 static Janus.Core.Configuration.Argon2StrengthClass.operator !=(Janus.Core.Configuration.Argon2StrengthClass? left, Janus.Core.Configuration.Argon2StrengthClass? right) -> bool
 static Janus.Core.Configuration.Argon2StrengthClass.operator ==(Janus.Core.Configuration.Argon2StrengthClass? left, Janus.Core.Configuration.Argon2StrengthClass? right) -> bool
 static Janus.Core.Configuration.ConfigurationKey.Parse(string! value) -> Janus.Core.Configuration.ConfigurationKey
@@ -4114,6 +4232,8 @@ static Janus.Core.ErrorCodes.RequestInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestMalformed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ResourceInUse.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.SubjectErased.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
@@ -4169,8 +4289,6 @@ static Janus.Core.ExplainedPrincipal.operator !=(Janus.Core.ExplainedPrincipal l
 static Janus.Core.ExplainedPrincipal.operator ==(Janus.Core.ExplainedPrincipal left, Janus.Core.ExplainedPrincipal right) -> bool
 static Janus.Core.ExportRecord.operator !=(Janus.Core.ExportRecord? left, Janus.Core.ExportRecord? right) -> bool
 static Janus.Core.ExportRecord.operator ==(Janus.Core.ExportRecord? left, Janus.Core.ExportRecord? right) -> bool
-static Janus.Core.ExportRequested.operator !=(Janus.Core.ExportRequested? left, Janus.Core.ExportRequested? right) -> bool
-static Janus.Core.ExportRequested.operator ==(Janus.Core.ExportRequested? left, Janus.Core.ExportRequested? right) -> bool
 static Janus.Core.ExportSection.operator !=(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
 static Janus.Core.ExportSection.operator ==(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
 static Janus.Core.FactorPresentation.operator !=(Janus.Core.FactorPresentation? left, Janus.Core.FactorPresentation? right) -> bool
@@ -4234,6 +4352,8 @@ static Janus.Core.IssuedAppPassword.operator !=(Janus.Core.IssuedAppPassword? le
 static Janus.Core.IssuedAppPassword.operator ==(Janus.Core.IssuedAppPassword? left, Janus.Core.IssuedAppPassword? right) -> bool
 static Janus.Core.IssuedInvitation.operator !=(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
 static Janus.Core.IssuedInvitation.operator ==(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
+static Janus.Core.JobDeclaration.operator !=(Janus.Core.JobDeclaration? left, Janus.Core.JobDeclaration? right) -> bool
+static Janus.Core.JobDeclaration.operator ==(Janus.Core.JobDeclaration? left, Janus.Core.JobDeclaration? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.LandingOrigins.operator !=(Janus.Core.LandingOrigins? left, Janus.Core.LandingOrigins? right) -> bool
@@ -4273,6 +4393,8 @@ static Janus.Core.MembershipId.operator !=(Janus.Core.MembershipId left, Janus.C
 static Janus.Core.MembershipId.operator ==(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool
 static Janus.Core.MessageTemplate.operator !=(Janus.Core.MessageTemplate? left, Janus.Core.MessageTemplate? right) -> bool
 static Janus.Core.MessageTemplate.operator ==(Janus.Core.MessageTemplate? left, Janus.Core.MessageTemplate? right) -> bool
+static Janus.Core.NoticeCookie.operator !=(Janus.Core.NoticeCookie? left, Janus.Core.NoticeCookie? right) -> bool
+static Janus.Core.NoticeCookie.operator ==(Janus.Core.NoticeCookie? left, Janus.Core.NoticeCookie? right) -> bool
 static Janus.Core.ObjectionChanged.operator !=(Janus.Core.ObjectionChanged? left, Janus.Core.ObjectionChanged? right) -> bool
 static Janus.Core.ObjectionChanged.operator ==(Janus.Core.ObjectionChanged? left, Janus.Core.ObjectionChanged? right) -> bool
 static Janus.Core.ObjectionRecord.operator !=(Janus.Core.ObjectionRecord? left, Janus.Core.ObjectionRecord? right) -> bool
@@ -4393,6 +4515,8 @@ static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDec
 static Janus.Core.RelationshipSource.Of<TContext, TRow>(string! relationship, System.Func<TContext!, System.Linq.IQueryable<TRow>!>! rows) -> Janus.Core.RelationshipSource!
 static Janus.Core.ReservedUsernames.Default.get -> Janus.Core.ReservedUsernames!
 static Janus.Core.ReservedUsernames.Of(System.Collections.Generic.IEnumerable<string!>! added) -> Janus.Core.ReservedUsernames!
+static Janus.Core.RequestAccess.operator !=(Janus.Core.RequestAccess? left, Janus.Core.RequestAccess? right) -> bool
+static Janus.Core.RequestAccess.operator ==(Janus.Core.RequestAccess? left, Janus.Core.RequestAccess? right) -> bool
 static Janus.Core.ResourceAccess.operator !=(Janus.Core.ResourceAccess? left, Janus.Core.ResourceAccess? right) -> bool
 static Janus.Core.ResourceAccess.operator ==(Janus.Core.ResourceAccess? left, Janus.Core.ResourceAccess? right) -> bool
 static Janus.Core.ResourceId.Parse(string! value) -> Janus.Core.ResourceId
@@ -4428,6 +4552,8 @@ static Janus.Core.RestrictionName.Parse(string! value) -> Janus.Core.Restriction
 static Janus.Core.RestrictionName.TryParse(string? value, out Janus.Core.RestrictionName name) -> bool
 static Janus.Core.RestrictionName.operator !=(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
 static Janus.Core.RestrictionName.operator ==(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
+static Janus.Core.RoleDeclaration.operator !=(Janus.Core.RoleDeclaration? left, Janus.Core.RoleDeclaration? right) -> bool
+static Janus.Core.RoleDeclaration.operator ==(Janus.Core.RoleDeclaration? left, Janus.Core.RoleDeclaration? right) -> bool
 static Janus.Core.RoleName.Parse(string! value) -> Janus.Core.RoleName
 static Janus.Core.RoleName.TryParse(string? value, out Janus.Core.RoleName name) -> bool
 static Janus.Core.RoleName.operator !=(Janus.Core.RoleName left, Janus.Core.RoleName right) -> bool

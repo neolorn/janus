@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -118,6 +121,30 @@ public sealed class DatabaseFixture : IAsyncLifetime
     {
         await using StoreContext context = Context();
         await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The migrations the build declares, in the order they apply. Nothing connects.
+    /// </summary>
+    /// <returns>Each migration's identifier.</returns>
+    public static IReadOnlyList<string> DeclaredMigrations()
+    {
+        using StoreContext context = Context("Host=declared");
+
+        return [.. context.Database.GetMigrations()];
+    }
+
+    /// <summary>
+    /// Applies the migrations to a database of the instance up to the one named, and
+    /// that one, as a database the previous version left behind holds them.
+    /// </summary>
+    /// <param name="connectionString">How to reach the database.</param>
+    /// <param name="through">The last migration applied.</param>
+    /// <returns>The work of applying them.</returns>
+    public static async ValueTask MigrateAsync(string connectionString, string through)
+    {
+        await using StoreContext context = Context(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync(through, TestContext.Current.CancellationToken);
     }
 
     /// <summary>

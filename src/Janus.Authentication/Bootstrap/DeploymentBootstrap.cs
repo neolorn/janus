@@ -390,7 +390,7 @@ internal sealed class DeploymentBootstrap(
             return Result.Failure<BootstrapEnrolment>(notCommitted);
         }
 
-        return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime));
+        return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime, organization));
     }
 
     private static string? Stated(string text) =>
@@ -486,7 +486,17 @@ internal sealed class DeploymentBootstrap(
         Error? failure = null;
 
         MembershipId membership = (await memberships
-                .AttachAsync(subject, organization, [], roles, Ungranted, Reason, multiple: false, at, cancellationToken)
+                .AttachAsync(
+                    subject,
+                    organization,
+                    [],
+                    roles,
+                    Ungranted,
+                    Reason,
+                    AccessContext.Of(Principal),
+                    multiple: false,
+                    at,
+                    cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<MembershipId>(error, ref failure));
 

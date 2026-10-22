@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Authorization;
@@ -52,6 +52,7 @@ internal static class GrantEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GrantDuplicate, ErrorCodes.GrantExpired,
                     ErrorCodes.GrantReasonRequired, ErrorCodes.GrantUnresolved))
+            .Accepts<GrantBody>(MediaTypeNames.Application.Json)
             .Produces<CreatedGrantView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id}", RevokeAsync))
             .Declares(EndpointDeclaration
@@ -59,6 +60,7 @@ internal static class GrantEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GrantNotFound, ErrorCodes.GrantReasonRequired)
                 .Binding<GrantId>("id"))
+            .Accepts<GrantRevocationBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -108,14 +110,18 @@ internal static class GrantEndpoints
     }
 
     private static async Task<IResult> GrantAsync(
-        GrantBody body,
         IGrants grants,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        GrantBody body = await JsonBody
+            .ReadAsync<GrantBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // API-CONV-002, X4: a reason absent or blank is refused with its own code, and one
         // past 1024 characters after trimming is malformed, both before the service is
@@ -155,15 +161,19 @@ internal static class GrantEndpoints
     // A revocation carries its reason, which is free text and goes in the body rather
     // than in an address a log keeps.
     private static async Task<IResult> RevokeAsync(
-        [FromBody] GrantRevocationBody body,
         IGrants grants,
         RequestSession browser,
         GrantId id,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        GrantRevocationBody body = await JsonBody
+            .ReadAsync<GrantRevocationBody>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {

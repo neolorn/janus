@@ -76,4 +76,11 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("erasure-replay")]
     ErasureReplay = 9,
+
+    /// <summary>
+    /// Defining a host's declared roles at a start, inside the start step alone
+    /// (AUTHZ-GRANT-004, D-204).
+    /// </summary>
+    [JsonStringEnumMemberName("role-seeding")]
+    RoleSeeding = 10,
 }

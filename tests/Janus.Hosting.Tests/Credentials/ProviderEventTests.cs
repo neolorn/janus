@@ -704,6 +704,42 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a provider event, whose rejection keeps
+    /// its record and its counts, taken inside a unit of work another opened is a fault
+    /// of the calling code, answered as every fault is (BFF-ERR-002): the intake ends the
+    /// level it joined before it counts or records anything, so nothing of the outer
+    /// unit of work commits.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AProviderEventInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        int live = Live(subject).Count;
+        int committed = _deployment.Work.OutermostCommitted;
+
+        _ = await _deployment.Work.BeginAsync(TestContext.Current.CancellationToken);
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Forged(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), answered.Text("code"));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _deployment.Work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(committed, _deployment.Work.OutermostCommitted);
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        Assert.Empty(_deployment.CredentialAudit.ProviderEvents);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a AC2, IDN-LIFE-013, CONV-DESIGN-003 AC6: a deletion begun while the
     /// withdrawal waited for the account's row is found under the lock, so the account
     /// is left to its deletion and no suspension is made or announced.

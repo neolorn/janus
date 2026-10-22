@@ -5,6 +5,7 @@ using Janus.Core;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Organizations;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -116,6 +117,9 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
         MembershipId attached = (await new MembershipAttachment(
                     new MembershipStore(writing),
                     new GrantStore(writing, new DataConnections(writing)),
+                    new GrantAudit(
+                        new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness),
+                        TimeProvider.System),
                     new DataConnections(writing),
                     TimeProvider.System)
                 .AttachAsync(
@@ -125,6 +129,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
                     [],
                     subject,
                     "invitation:reason",
+                    AccessContext.Of(subject),
                     multiple: false,
                     at,
                     TestContext.Current.CancellationToken))

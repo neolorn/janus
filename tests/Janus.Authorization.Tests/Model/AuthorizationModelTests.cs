@@ -13,7 +13,7 @@ namespace Janus.Authorization.Tests.Model;
 /// <summary>
 /// The model a host declares and what building it refuses
 /// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
-/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006, INT-HOST-002).
+/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006, INT-HOST-002, IDN-PRIN-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -81,7 +81,8 @@ public sealed class AuthorizationModelTests
             new EncryptedFieldDeclaration(
                 nameof(HostDomain.Article.Body),
                 nameof(HostDomain.Article.Author),
-                "content"),
+                "content",
+                nameof(HostDomain.Article.Body)),
             article.EncryptedFields.Single());
         Assert.Equal(
             nameof(HostDomain.Folder.Reviewer),
@@ -233,7 +234,7 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup()
     {
         StartupException refused = Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "", "identity"))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "", "identity", "Body"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -250,9 +251,9 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup(string column)
     {
         Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column, "identity"))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column, "identity", "Body"))));
 
-        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity", "Body"))));
     }
 
     /// <summary>
@@ -265,12 +266,268 @@ public sealed class AuthorizationModelTests
     public void PRIV_PRIN_001_AC2_AnEncryptedFieldWhoseCategoryNoPurposeNamesFailsStartup()
     {
         StartupException refused = Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "health"))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "health", "Body"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
         Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
         Assert.Equal("Body", refused.Failure?.Details["field"].GetString());
-        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity", "Body"))));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC22 (D-206): a host's value is bound to its type's and its field's
+    /// declared names, so two encrypted fields of one type under one declared name, the
+    /// name one is given or the member's own another is given, stop the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming the type and the name; the same
+    /// fields under names of their own build.
+    /// </summary>
+    /// <param name="first">The name the first field is bound to: its member's own, or one it is given.</param>
+    /// <param name="given">The name the second field is given.</param>
+    [Theory]
+    [InlineData("notes", "notes")]
+    [InlineData("Body", "Body")]
+    public void PRIV_RIGHT_005a_AC22_TwoEncryptedFieldsOfOneTypeUnderOneNameFailStartup(string first, string given)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(
+                new EncryptedFieldDeclaration("Body", "Author", "identity", first),
+                new EncryptedFieldDeclaration("FolderId", "Author", "identity", given))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(given, refused.Failure?.Details["field"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(
+            new EncryptedFieldDeclaration("Body", "Author", "identity", first),
+            new EncryptedFieldDeclaration("FolderId", "Author", "identity", "FolderId"))));
+    }
+
+    /// <summary>
+    /// BFF-CAP-002 AC4 (D-202): a type declaring as a capability a permission the model
+    /// does not declare stops the deployment with <c>model.startup.declarationinvalid</c>,
+    /// naming the type and <c>capabilities</c>, and one whose capabilities are declared
+    /// permissions starts with them.
+    /// </summary>
+    [Fact]
+    public void BFF_CAP_002_AC4_ACapabilityTheModelDoesNotDeclareFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Capable("article:read", "article:publish")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("draft", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("capabilities", refused.Failure?.Details["field"].GetString());
+        Assert.Equal(
+            [Permission.Parse("article:read"), Permission.Parse("article:edit")],
+            AuthorizationModel.Of(Capable("article:read", "article:edit"))
+                .Find(ResourceType.Parse("draft"))?.Capabilities);
+    }
+
+    /// <summary>
+    /// BFF-CAP-002 AC4 (D-206): a type declaring as capabilities two permissions of one
+    /// action stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// the type and <c>capabilities</c>, since the browser reads a capability by its
+    /// action alone; one permission named twice is still one capability.
+    /// </summary>
+    [Fact]
+    public void BFF_CAP_002_AC4_TwoCapabilitiesOfOneActionFailStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Capable("article:read", "folder:read")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("draft", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("capabilities", refused.Failure?.Details["field"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Capable("article:read", "article:read", "article:edit")));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC7 (D-204): a declared role named as a role chapter 10 section 3
+    /// seeds stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>role.&lt;name&gt;</c> and <c>name</c>.
+    /// </summary>
+    /// <param name="name">The administrative role's name.</param>
+    [Theory]
+    [InlineData("system-administrator")]
+    [InlineData("auditor")]
+    [InlineData("support")]
+    public void AUTHZ_GRANT_004_AC7_ADeclaredRoleNamedAsAnAdministrativeRoleFailsStartup(string name)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(HostDomain.Declared().Role(name, "article:read").Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("role." + name, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004, AUTHZ-MODEL-004 (D-204): a declared role naming a permission the
+    /// model does not declare, or <c>system:administer</c>, is refused naming
+    /// <c>permissions</c>; one whose name breaks the rule of <c>POST /admin/roles</c>, or
+    /// declared twice, naming <c>name</c>; each with <c>role.&lt;name&gt;</c>.
+    /// </summary>
+    /// <param name="first">The first role's name.</param>
+    /// <param name="permission">The permission it grants.</param>
+    /// <param name="second">A second role's name, or nothing where there is none.</param>
+    /// <param name="field">The field the refusal names.</param>
+    [Theory]
+    [InlineData("editor", "ledger:close", null, "permissions")]
+    [InlineData("editor", "system:administer", null, "permissions")]
+    [InlineData("Editor", "article:read", null, "name")]
+    [InlineData("editor--chief", "article:read", null, "name")]
+    [InlineData("editor", "article:read", "editor", "name")]
+    public void AUTHZ_GRANT_004_ADeclaredRoleOutsideItsRuleFailsStartup(
+        string first,
+        string permission,
+        string? second,
+        string field)
+    {
+        AuthorizationDeclarationBuilder declared = HostDomain.Declared().Role(first, "article:edit", permission);
+
+        if (second is not null)
+        {
+            declared.Role(second, "article:read");
+        }
+
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(declared.Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("role." + (second ?? first), refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal(field, refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 (D-204): a declared role may grant the host's permissions and the
+    /// library's own short of system administration, and the model keeps the declared
+    /// roles in the order declared.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GRANT_004_TheModelKeepsTheDeclaredRolesInOrder()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Role("writer", "article:read", "article:edit", "article:edit")
+            .Role("reviewer", "article:read", Permissions.AuditRead.ToString())
+            .Build());
+
+        Assert.Equal(
+            [
+                (RoleName.Parse("writer"), "article:edit article:read"),
+                (RoleName.Parse("reviewer"), "article:read audit:read"),
+            ],
+            model.DeclaredRoles.Select(role => (
+                role.Name,
+                string.Join(' ', role.Permissions.Select(held => held.ToString()).Order(StringComparer.Ordinal)))));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC7, OPS-ALERT-006 (D-202): a job declared with a permission the
+    /// model does not declare, one of the library's own, one bound to a step-up gate or
+    /// one whose action is <c>export</c> stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming <c>job.&lt;name&gt;</c> and
+    /// <c>permissions</c>.
+    /// </summary>
+    /// <param name="permission">The permission the job is declared with.</param>
+    [Theory]
+    [InlineData("ledger:close")]
+    [InlineData("audit:read")]
+    [InlineData("system:administer")]
+    [InlineData("article:publish")]
+    [InlineData("article:export")]
+    public void IDN_PRIN_001_AC7_AJobDeclaredWithAPermissionItMayNotExerciseFailsStartup(string permission)
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(Jobbed()
+            .Job("nightly-digest", "article:read", permission)
+            .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("job.nightly-digest", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("permissions", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC7 (D-206): a job declared under a principal's name of chapter 10
+    /// section 5.29, or under <c>migrate</c>, stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming <c>job.&lt;name&gt;</c> and
+    /// <c>name</c>.
+    /// </summary>
+    /// <param name="name">The reserved name.</param>
+    [Theory]
+    [InlineData("expiry-sweep")]
+    [InlineData("registration-sweep")]
+    [InlineData("invitation-sweep")]
+    [InlineData("account-deletion")]
+    [InlineData("organization-erasure")]
+    [InlineData("privacy-deadlines")]
+    [InlineData("loss-reports")]
+    [InlineData("recovery-code-reminder")]
+    [InlineData("domain-reverification")]
+    [InlineData("outbox")]
+    [InlineData("events")]
+    [InlineData("sends")]
+    [InlineData("mailbox-provisioning")]
+    [InlineData("alert-dispatch")]
+    [InlineData("mail-reconciliation")]
+    [InlineData("derivation-driftcheck")]
+    [InlineData("location-database")]
+    [InlineData("datacenter-ranges")]
+    [InlineData("read-volume-baseline")]
+    [InlineData("holiday-list")]
+    [InlineData("emergency-credential")]
+    [InlineData("clock-drift")]
+    [InlineData("certificate-renewal")]
+    [InlineData("restore-test")]
+    [InlineData("audit-partitions")]
+    [InlineData("licence-expiry")]
+    [InlineData("envelope-rotation")]
+    [InlineData("sms-balance")]
+    [InlineData("bootstrap")]
+    [InlineData("configure")]
+    [InlineData("register-client")]
+    [InlineData("rotate-kek")]
+    [InlineData("rotate-fingerprint-key")]
+    [InlineData("replay-erasures")]
+    [InlineData("role-declaration")]
+    [InlineData("migrate")]
+    public void IDN_PRIN_001_AC7_AJobDeclaredUnderAReservedNameFailsStartup(string name)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Jobbed().Job(name, "article:read").Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("job." + name, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001, LIB-HOST-001 (D-206): a job declared twice under one name stops the
+    /// deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>job.&lt;name&gt;</c> and <c>name</c>.
+    /// </summary>
+    [Fact]
+    public void IDN_PRIN_001_AJobDeclaredTwiceFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(Jobbed()
+            .Job("nightly-digest", "article:read")
+            .Job("nightly-digest", "article:edit")
+            .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("job.nightly-digest", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001, LIB-HOST-001 (D-202): jobs declared with the host permissions they
+    /// exercise, a reading and a modifying one among them, build.
+    /// </summary>
+    [Fact]
+    public void IDN_PRIN_001_JobsDeclaredWithinTheirRuleBuild()
+    {
+        Assert.Null(Record.Exception(() => AuthorizationModel.Of(Jobbed()
+            .Job("nightly-digest", "article:read", "article:edit")
+            .Job("archive", "article:read")
+            .Build())));
     }
 
     /// <summary>
@@ -310,6 +567,44 @@ public sealed class AuthorizationModelTests
         Assert.NotNull(AuthorizationModel.Of(Naming("draft")));
 
         static AuthorizationDeclaration Naming(string type) =>
+            HostDomain.Declared()
+                .Resource<HostDomain.Draft>(type, draft => draft
+                    .ContainedIn("folder")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build();
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-004 AC1 (D-206): a host's encrypted value is bound to its type's
+    /// declared name, so a resource type declared twice under one name, over another
+    /// entity or the same one, stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming the type and <c>name</c>; the
+    /// second declaration under a name of its own builds.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_004_AC1_AResourceTypeDeclaredTwiceUnderOneNameFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Twice("article")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+
+        StartupException again = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(HostDomain.Declared()
+                .Resource<HostDomain.Folder>("folder", folder => folder
+                    .ContainedIn("workspace")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, again.Failure?.Code);
+        Assert.Equal("folder", again.Failure?.Details["declaration"].GetString());
+        Assert.Equal("name", again.Failure?.Details["field"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Twice("draft")));
+
+        static AuthorizationDeclaration Twice(string type) =>
             HostDomain.Declared()
                 .Resource<HostDomain.Draft>(type, draft => draft
                     .ContainedIn("folder")
@@ -518,10 +813,27 @@ public sealed class AuthorizationModelTests
         Assert.Throws<ArgumentException>(
             () => new AuthorizationDeclarationBuilder().Permission(permission));
 
+    // The domain with an action bound to a step-up gate and an export beside its two
+    // permissions, which a job may not be declared with.
+    private static AuthorizationDeclarationBuilder Jobbed() =>
+        HostDomain.Declared()
+            .Permission("article:publish")
+            .StepUpGate("article:publish", "publishing")
+            .Permission("article:export");
+
     // The builder takes an expression for each side of an encrypted field, so what it
     // produces always names members that exist. A host writing the declaration itself
     // does not, which is what the startup check is there for.
-    private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
+    private static AuthorizationDeclaration Capable(params string[] capabilities) =>
+        HostDomain.Declared()
+            .Permission("folder:read")
+            .Resource<HostDomain.Draft>("draft", draft => draft
+                .ContainedIn("folder")
+                .Purpose("collaboration", "contract", data: ["identity"])
+                .Capabilities(capabilities))
+            .Build();
+
+    private static AuthorizationDeclaration Encrypting(params EncryptedFieldDeclaration[] fields)
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
@@ -533,7 +845,7 @@ public sealed class AuthorizationModelTests
 
         return declared with
         {
-            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = [field] }],
+            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = fields }],
         };
     }
 

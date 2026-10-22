@@ -10,6 +10,7 @@ using Janus.Cli.Bootstrap;
 using Janus.Cli.Clients;
 using Janus.Cli.Configuration;
 using Janus.Cli.Erasures;
+using Janus.Cli.Migration;
 using Janus.Cli.Rotation;
 using Janus.Core;
 using Janus.Storage;
@@ -20,8 +21,8 @@ namespace Janus.Cli;
 /// Entry point of the command-line application of CONV-LAYOUT-001.
 /// </summary>
 /// <remarks>
-/// Implements OPS-BOOT-001, OPS-SEC-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
-/// goes to standard output; a refusal goes to standard error as the code and the
+/// Implements OPS-BOOT-001, OPS-MIG-001, OPS-SEC-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
+/// goes to standard output; a refusal or a fault goes to standard error as the code and the
 /// structured data the API carries, never as a sentence.
 /// </remarks>
 internal static class Program
@@ -32,7 +33,7 @@ internal static class Program
     private const int SucceededExitCode = 0;
 
     /// <summary>
-    /// The exit code of a command that refused.
+    /// The exit code of a command that refused, or that a fault ended.
     /// </summary>
     private const int RefusedExitCode = 1;
 
@@ -41,16 +42,25 @@ internal static class Program
     /// </summary>
     private const int UnknownCommandExitCode = 1;
 
+    // Each command the executable carries, under the contract it declares (LIB-API-001).
+    private static readonly (CommandContract Contract, Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>> Run)[] Carried =
+    [
+        (BootstrapCommand.Contract, BootstrapCommand.RunAsync),
+        (RotateKeyEncryptionKeyCommand.Contract, RotateKeyEncryptionKeyCommand.RunAsync),
+        (RotateFingerprintKeyCommand.Contract, RotateFingerprintKeyCommand.RunAsync),
+        (ConfigureCommand.Contract, ConfigureCommand.RunAsync),
+        (ReplayErasuresCommand.Contract, ReplayErasuresCommand.RunAsync),
+        (RegisterClientCommand.Contract, RegisterClientCommand.RunAsync),
+        (MigrateCommand.Contract, MigrateCommand.RunAsync),
+    ];
+
     private static readonly Dictionary<string, Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>>> Commands =
-        new(StringComparer.Ordinal)
-        {
-            [BootstrapCommand.Name] = BootstrapCommand.RunAsync,
-            [RotateKeyEncryptionKeyCommand.Name] = RotateKeyEncryptionKeyCommand.RunAsync,
-            [RotateFingerprintKeyCommand.Name] = RotateFingerprintKeyCommand.RunAsync,
-            [ConfigureCommand.Name] = ConfigureCommand.RunAsync,
-            [ReplayErasuresCommand.Name] = ReplayErasuresCommand.RunAsync,
-            [RegisterClientCommand.Name] = RegisterClientCommand.RunAsync,
-        };
+        Carried.ToDictionary(command => command.Contract.Name, command => command.Run, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The contract of every command the executable carries (LIB-API-001, D-206).
+    /// </summary>
+    public static IReadOnlyList<CommandContract> Contracts { get; } = [.. Carried.Select(command => command.Contract)];
 
     /// <summary>
     /// Runs the command the arguments name.
@@ -90,7 +100,11 @@ internal static class Program
             .Match(
                 async produced =>
                 {
-                    await terminal.Output.WriteLineAsync(produced).ConfigureAwait(false);
+                    // OPS-MIG-001: a command that produces nothing, as migrate, writes nothing.
+                    if (produced.Length is not 0)
+                    {
+                        await terminal.Output.WriteLineAsync(produced).ConfigureAwait(false);
+                    }
 
                     return SucceededExitCode;
                 },
@@ -104,7 +118,10 @@ internal static class Program
     }
 
     // OPS-SEC-003 AC3 (D-183): a fault that carries a code ends the command with that
-    // code, written as a refusal is.
+    // code, written as a refusal is. OPS-SEC-001 (D-207): any other fault ends it with
+    // system.fault and nothing of the fault itself, whose message is not known to carry
+    // no value of the document; the command's keys are cleared on the way out. A
+    // cancellation is the caller's own only when the caller cancelled.
     private static async Task<Result<string>> RanAsync(
         Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>> command,
         IReadOnlyList<string> arguments,
@@ -118,6 +135,11 @@ internal static class Program
         catch (CodedFault fault)
         {
             return Result.Failure<string>(fault.Failure);
+        }
+        catch (Exception fault)
+            when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            return Result.Failure<string>(Error.From(ErrorCodes.SystemFault));
         }
     }
 

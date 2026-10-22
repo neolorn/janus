@@ -311,15 +311,17 @@ physically deleted (IDN-PRIN-003).
 | Cancelled | Memberships and grants restored in full, no data loss; the sessions the request ended stay ended |
 | Window elapsed | **Erasure executes**: every current membership ends; the organization's name, and every domain it listed, is replaced by its identifier and each domain is marked removed; the grants scoped to it stay unrevoked and confer nothing, as from the request; no account is erased. **No row is removed** (IDN-PRIN-003) |
 
-*Source: D-038, D-090, D-166*
+*Source: D-038, D-090, D-166, D-207*
 
 A deletion request and its cancellation SHALL be asked of `organization:manage` in the
-administrative organization, SHALL be the `organization:delete` step-up action, and SHALL
-carry a `reason` (a free-text member, API-CONV-002); each, and the creation of an
-organization, SHALL be recorded under the organization. A request for an organization
-already being deleted, and a cancellation where none is pending, SHALL change and record
-nothing. A cancellation at or after `organization.deletion.grace` from the request, or
-after the erasure, SHALL be refused with `identity.deletion.windowelapsed`. A request or
+administrative organization, SHALL be the `organization:delete` step-up action, and
+SHALL carry a `reason` (a free-text member, API-CONV-002); each, and the creation of an
+organization, SHALL be recorded under the organization. An organization so created holds
+no grant until a holder of `system:administer` in the administrative organization writes
+its first (AUTHZ-SCOPE-001, D-207). A request for an organization already being deleted,
+and a cancellation where none is pending, SHALL change and record nothing. A
+cancellation at or after `organization.deletion.grace` from the request, or after the
+erasure, SHALL be refused with `identity.deletion.windowelapsed`. A request or
 cancellation whose path names no organization the deployment holds SHALL be refused with
 404 `identity.organization.notfound` (D-166).
 
@@ -413,13 +415,15 @@ their own step (`16` section 3 step 4), and no grant row is removed (IDN-PRIN-00
 grant in the administrative organization SHALL confer only while its holder holds a
 current membership of that organization.
 
-*Source: D-002, D-003, D-166*
+*Source: D-002, D-003, D-166, D-202*
 
 An administrator ends a membership under `membership:manage` in the organization, as the
 `membership:end` step-up action; where the path names no organization the deployment
 holds, the request is refused with `identity.organization.notfound` (404), and where the
 account holds no current membership of the organization, with
 `identity.membership.notfound` (404), each before anything is written (`09` section 8a).
+Ending the reserved account's membership of the administrative organization is refused
+with 403 `authz.denied`, for anyone (OPS-BOOT-002, D-202).
 
 **Acceptance criteria**
 1. Ending a membership leaves both the account and the organization intact.
@@ -430,6 +434,8 @@ account holds no current membership of the organization, with
    holds there confers.
 5. Ending a membership without the `membership:end` step-up is refused with
    `auth.stepup.required`, and the membership stays current.
+6. Ending the reserved account's membership is refused with `authz.denied`, and it stays
+   current.
 
 ---
 
@@ -459,9 +465,13 @@ later would be a model change to something that assumed one-to-one.
 ---
 
 **IDN-MEM-003** — Authorization SHALL evaluate against the organization owning the
-resource in question. The session SHALL NOT carry an "active organization."
+resource in question, save as AUTHZ-SCOPE-001 states: an operation on the deployment or
+an account is evaluated in the administrative organization, and a grant in another
+organization, and its revocation, are also admitted under `system:administer` held in
+the administrative organization (D-207). The session SHALL NOT carry an "active
+organization."
 
-*Source: D-003*
+*Source: D-003, D-207*
 
 No organization switcher, unless multi-membership is later enabled and a UI needs
 one.
@@ -718,10 +728,11 @@ changes freely.
 ---
 
 **IDN-LIFE-003a** — Erasure, restriction and takedown SHALL be delivered by a
-**transactional outbox**, and SHALL be **generic** — the library publishes facts about
-identity and knows nothing of who consumes them.
+**transactional outbox**, and so SHALL a purpose handler's consent and objection changes
+(PRIV-RIGHT-001a), and SHALL be **generic** — the library publishes facts about identity
+and knows nothing of who consumes them.
 
-*Source: D-148; D-090, D-102, D-166, D-168, D-186*
+*Source: D-148; D-090, D-102, D-166, D-168, D-186, D-203*
 
 **The flow:**
 
@@ -753,10 +764,11 @@ subscriber and the library changes not at all.
   the row's attempt is counted once for the pass and the next scheduled under the
   backoff below (CONV-DESIGN-003, D-186); the fault ends nothing for another subscriber
   or another delivery
-- **Subscriber names SHALL be distinct**, each following the name rule of INT-SMS-003
-  (a name that breaks it is refused at startup with `model.startup.declarationinvalid`),
-  and `erasure-ledger` is the library's own (DR-016): startup refuses two subscribers
-  under one name, or one under `erasure-ledger`, with `model.startup.subscribername`
+- **Subscriber names SHALL be distinct**, a purpose handler's among them (PRIV-RIGHT-001a,
+  D-203), each following the name rule of INT-SMS-003 (a name that breaks it is refused
+  at startup with `model.startup.declarationinvalid`), and `erasure-ledger` is the
+  library's own (DR-016): startup refuses two subscribers or handlers under one name, or
+  one under `erasure-ledger`, with `model.startup.subscribername`
 - **Retries SHALL use exponential backoff with jitter**, bounded — not indefinite. A
   request failing from a defect fails identically at every interval. The publisher runs
   every `outbox.poll.interval`; the schedule is `outbox.retry.initial` multiplied by
@@ -765,7 +777,12 @@ subscriber and the library changes not at all.
 - **Exhausted retries SHALL alert immediately.** The failed record is a diagnostic
   signal, not somewhere failures go quietly
 - **A manual completion path SHALL exist** for the permanent failure of an erasure,
-  restriction or takedown delivery, itself recorded
+  restriction or takedown delivery, and of a purpose handler's (`ConsentChanged`,
+  `ObjectionChanged`, PRIV-RIGHT-001a), which the same outbox delivers, itself recorded.
+  Every incomplete delivery of each kind is listed with its `kind` (`10` section 5.50),
+  its status and its attempts, and named by the identifier of the outbox record it
+  travels on, which a takedown's read carries too, and the path closes any of them by it
+  (`09` `/admin/erasures`, D-203)
 - **Subscribers SHALL be marked required or optional.** An optional subscriber failing
   does not hold a takedown open
 - **Key destruction and fingerprint neutralisation are inline, never subscribers.**
@@ -797,8 +814,10 @@ erasure pass; what a host derived from the subject's fields is the host's to cle
 8. A subscriber that throws leaves its delivery unconfirmed and is retried under the
    backoff; the other subscribers' deliveries go on, and the pass counts one attempt for
    the row.
-9. A takedown or restriction delivery whose retries are spent is closed by the manual
-   completion path, and the takedown's progress then reads complete.
+9. A takedown or restriction delivery whose retries are spent is listed with its kind,
+   is closed by the manual completion path, and the takedown's progress then reads
+   complete; a consent or objection delivery whose retries are spent is listed and closed
+   likewise.
 
 ---
 
@@ -1400,12 +1419,48 @@ to where it goes: the outboxes, mailbox provisioning and raised alerts), monitor
 (reading the state of something the deployment depends on and raising what the reading
 calls for), bootstrap (OPS-BOOT-001), key rotation (OPS-SEC-003), configuration from
 the server (a protected key, OPS-CFG-004, or the provider's client registry,
-AUTH-OIDC-001) and the replay of the erasure ledger after a restore (DR-016). It is
-restricted to the operations of `10` section 5.28. Each scheduled job of INF-BG-001 and
-each server command runs as a principal of its own (`10` section 5.29), naming exactly
-one of those operations and stating as its reason the item that requires it.
+AUTH-OIDC-001), the replay of the erasure ledger after a restore (DR-016) and seeding a
+host's declared roles at a start (AUTHZ-GRANT-004). It is restricted to the operations
+of `10` section 5.28. Each scheduled job of INF-BG-001, each server command but
+`migrate`, which writes no audit row and runs as no principal (OPS-MIG-001), and each
+start step runs as a principal of its own (`10` section 5.29), naming exactly one of
+those operations and stating as its reason the item that requires it.
 
-*Source: D-079b, D-166*
+**A host's jobs (D-202).** A host declares each of its background jobs
+(`AuthorizationDeclarationBuilder.Job(name, permissions)`, LIB-HOST-001): a name under
+INT-SMS-003's rule, distinct from every other job, from every name of `10` section 5.29
+and from `migrate` (D-206), and the host permissions it exercises. Its principal is
+organization-scoped, `SystemPrincipal.ForOrganization(name, reason, organization)`
+naming a declared job. The gate admits it for the host permissions its declaration
+names, on the records of its organization and on the organization itself (the
+organization-wide check), as an organization-wide grant of them admits a person, with
+the consent the permission's purpose asks of the record's data subject (AUTHZ-GATE-005),
+a consent-based purpose being refused `privacy.consent.required` on the
+organization-wide check, which names no data subject. The gate judges no restriction for
+it: a restriction is the acting account's (AUTHZ-GATE-006), and a job acts for none; a
+record's data subject's restriction reaches a host's job as it reaches the host's own
+processing, through `RestrictionChanged` (PRIV-RIGHT-004) and the reads of round H2
+(D-203, D-207). The check, the list filter and the fragment take its context, and so do
+the operations called in process only (`IReadVolume`, `IDerivationMaterialiser`,
+LIB-API-005). It is refused `authz.denied` for anything else: the capability page and
+the explanation, which serve a person's surface and answer a person's question (its
+recorded refusals stay resolvable by their correlation identifier, AUTHZ-CONCEAL-004,
+D-207); every library operation that meets a gate, since each that changes a person's
+account is a person's step-up action; any permission while a request is being served,
+and a materialiser's refresh then too, since a job is background work, the gate telling
+the two apart by whether an HTTP request is being served on the calling flow, in every
+scope opened within it, whoever built the context (`08` CONV-DESIGN-007, D-206), so a
+host's webhook that needs a host permission records what arrived and hands the work to a
+declared job; and any permission in an organization whose deletion is requested or which
+has been erased (IDN-ORG-003), each evaluation reading that state live. A principal
+naming no declared job is refused for every host permission. A job is never declared
+with a permission not declared, a library-owned one, one bound to a step-up gate (no
+session proves a person) or one whose action is `export` (OPS-ALERT-006): startup fails
+with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`,
+`details.field` `permissions`; nor under a name of `10` section 5.29 or `migrate`
+(`details.field` `name`, D-206).
+
+*Source: D-079b, D-166, D-202, D-204, D-206, D-207*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.
@@ -1414,6 +1469,17 @@ one of those operations and stating as its reason the item that requires it.
    cannot serve a request.
 4. Actions taken by either are audited with the reason.
 5. Every scheduled job refuses to run under a principal that may not run its operation.
+6. A host's declared job is admitted for the host permissions its declaration names on
+   its organization's records and on its organization, a modifying permission on a
+   record whose data subject is restricted included, and refused `authz.denied` for any
+   other, for the capability page and the explanation, for every library operation that
+   meets a gate, for any permission and a materialiser's refresh while a request is
+   served (through either profile or neither, and in a scope opened within the request),
+   and in an organization whose deletion is requested; on the organization-wide check a
+   consent-based purpose is refused `privacy.consent.required` (D-207).
+7. A job declared with a permission not declared, a library-owned one, one bound to a
+   step-up gate or one whose action is `export`, or under a name of `10` section 5.29 or
+   `migrate`, fails startup with `model.startup.declarationinvalid`.
 
 ---
 

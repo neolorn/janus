@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -52,6 +53,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.ChallengeRequired, ErrorCodes.RegistrationSignedIn,
                     ErrorCodes.InvitationExpired, ErrorCodes.InvitationIdentifierMismatch,
                     ErrorCodes.Throttled))
+            .Accepts<BeginRegistrationRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status201Created);
         _ = group.MapGet("/", StateAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
@@ -61,18 +63,21 @@ internal static class RegistrationEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
                     ErrorCodes.ProfileUnderage))
+            .Accepts<AgeRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>();
         _ = group.MapPut("/email", EmailAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded))
+            .Accepts<IdentifierValueRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapPut("/phone", PhoneAsync)
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Accepts<IdentifierValueRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapPost("/phone/skip", SkipPhoneAsync)
             .Declares(EndpointDeclaration
@@ -85,6 +90,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierDomainNotAllowed,
                     ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
+            .Accepts<AddIdentifierRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapPut("/identifiers/{id}", ChangeAsync)
             .Declares(EndpointDeclaration
@@ -93,6 +99,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.IdentifierLocked, ErrorCodes.IdentifierDomainNotAllowed,
                     ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
                 .Binding<IdentifierId>("id"))
+            .Accepts<IdentifierValueRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>(StatusCodes.Status202Accepted);
         _ = group.MapDelete("/identifiers/{id}", DiscardAsync)
             .Declares(EndpointDeclaration
@@ -112,6 +119,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.SessionExpired,
                     ErrorCodes.RegistrationIncomplete, ErrorCodes.PasswordBlocklisted,
                     ErrorCodes.PasswordTooShort, ErrorCodes.PasswordTooLong))
+            .Accepts<SecurityRequest>(MediaTypeNames.Application.Json)
             .Produces<RegistrationStateView>();
         _ = group.MapPost("/terms", TermsAsync)
             .Declares(EndpointDeclaration
@@ -119,6 +127,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
                     ErrorCodes.NoticeUnpublished, ErrorCodes.AffirmationRequired,
                     ErrorCodes.PurposeNoConsent))
+            .Accepts<TermsRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status201Created);
         _ = group.MapPost("/verify/{id}", VerifyAsync)
             .Declares(EndpointDeclaration
@@ -126,6 +135,7 @@ internal static class RegistrationEndpoints
                     ErrorCodes.SessionExpired, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired,
                     ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
                 .Binding<IdentifierId>("id"))
+            .Accepts<VerifyRequest>(MediaTypeNames.Application.Json)
             .Produces<LinkLandingView>()
             .Produces(StatusCodes.Status204NoContent);
         _ = group.MapGet("/events", EventsAsync)
@@ -133,6 +143,7 @@ internal static class RegistrationEndpoints
             .Produces<string>(StatusCodes.Status200OK, "text/event-stream");
         _ = group.MapPost("/abandon", AbandonAsync)
             .Declares(EndpointDeclaration.Answering())
+            .Accepts<AbandonRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
@@ -143,18 +154,20 @@ internal static class RegistrationEndpoints
     // account document is the account application's to fetch behind its own gate; a
     // registration route does not hand it out.
     private static async Task<IResult> BeginAsync(
-        BeginRegistrationRequest request,
         IRegistration registration,
         RequestSession browser,
         PreAuthenticationService contacts,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
+
+        BeginRegistrationRequest request = await JsonBody
+            .ReadAsync<BeginRegistrationRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (browser.Context is null)
         {
@@ -228,13 +241,17 @@ internal static class RegistrationEndpoints
     }
 
     private static async Task<IResult> AgeAsync(
-        AgeRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AgeRequest request = await JsonBody
+            .ReadAsync<AgeRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Carried(browser) is not RegistrationSessionId session)
         {
@@ -251,20 +268,18 @@ internal static class RegistrationEndpoints
     }
 
     private static Task<IResult> EmailAsync(
-        IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken) =>
-        StageAsync(request, IdentifierKind.Email, registration, browser, context, cancellationToken);
+        StageAsync(IdentifierKind.Email, registration, browser, context, cancellationToken);
 
     private static Task<IResult> PhoneAsync(
-        IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken) =>
-        StageAsync(request, IdentifierKind.Phone, registration, browser, context, cancellationToken);
+        StageAsync(IdentifierKind.Phone, registration, browser, context, cancellationToken);
 
     private static async Task<IResult> SkipPhoneAsync(
         IRegistration registration,
@@ -281,14 +296,16 @@ internal static class RegistrationEndpoints
     }
 
     private static async Task<IResult> AddAsync(
-        AddIdentifierRequest request,
         IRegistration registration,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+
+        AddIdentifierRequest request = await JsonBody
+            .ReadAsync<AddIdentifierRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Carried(browser) is not RegistrationSessionId session)
         {
@@ -306,14 +323,16 @@ internal static class RegistrationEndpoints
 
     private static async Task<IResult> ChangeAsync(
         IdentifierId id,
-        IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+
+        IdentifierValueRequest request = await JsonBody
+            .ReadAsync<IdentifierValueRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Carried(browser) is not RegistrationSessionId session)
         {
@@ -364,13 +383,17 @@ internal static class RegistrationEndpoints
     // ceremony the frontend runs next; what the library holds of it is what that
     // ceremony enrolled, which the state reports.
     private static async Task<IResult> SecurityAsync(
-        SecurityRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+
+        SecurityRequest request = await JsonBody
+            .ReadAsync<SecurityRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Carried(browser) is not RegistrationSessionId session)
         {
@@ -387,7 +410,6 @@ internal static class RegistrationEndpoints
     }
 
     private static async Task<IResult> TermsAsync(
-        TermsRequest request,
         RegistrationService registration,
         RequestSession browser,
         PreAuthenticationService contacts,
@@ -397,13 +419,16 @@ internal static class RegistrationEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(cookies);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(context);
+
+        TermsRequest request = await JsonBody
+            .ReadAsync<TermsRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Carried(browser) is not RegistrationSessionId session)
         {
@@ -471,14 +496,16 @@ internal static class RegistrationEndpoints
 
     private static async Task<IResult> VerifyAsync(
         IdentifierId id,
-        VerifyRequest request,
         IRegistration registration,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+
+        VerifyRequest request = await JsonBody
+            .ReadAsync<VerifyRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         // API-LAND-001: a link merely opened, or opened somewhere else, changes
         // nothing and is answered with the code to type instead.
@@ -513,13 +540,17 @@ internal static class RegistrationEndpoints
     // REG-SESS-001: a token that resolves to no live session is answered identically,
     // so the answer says nothing about whether one existed.
     private static async Task<IResult> AbandonAsync(
-        AbandonRequest request,
         IRegistration registration,
         RequestSession browser,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AbandonRequest request = await JsonBody
+            .ReadAsync<AbandonRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         return Answers.Of(
             await registration
@@ -546,15 +577,18 @@ internal static class RegistrationEndpoints
                 cancellationToken);
 
     private static async Task<IResult> StageAsync(
-        IdentifierValueRequest request,
         IdentifierKind kind,
         IRegistration registration,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+
+        IdentifierValueRequest request = await JsonBody
+            .ReadAsync<IdentifierValueRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
 
         if (Carried(browser) is not RegistrationSessionId session)
         {

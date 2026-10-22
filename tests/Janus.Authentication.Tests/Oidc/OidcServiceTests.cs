@@ -25,6 +25,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
     private const string Language = "en";
     private const string Address = "person@example.test";
     private const string Protocol = "mail-server";
+    private const string Grant = "0199a1b2-0c3d-7e4f-8a5b-6c7d8e9f0a1b";
 
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -42,15 +43,21 @@ public sealed class OidcServiceTests : IAsyncDisposable
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly OidcAuditInMemory _audit = new();
+    private readonly OidcGrantStoreInMemory _grants;
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly SigningProcess _signing;
 
     /// <summary>
-    /// Starts the credential source the service reads the key set from.
+    /// Starts the credential source the service reads the key set from, and the store
+    /// it revokes a grant in.
     /// </summary>
-    public OidcServiceTests() => _signing = new SigningProcess(_keys, _configuration, _clock);
+    public OidcServiceTests()
+    {
+        _signing = new SigningProcess(_keys, _configuration, _clock);
+        _grants = new OidcGrantStoreInMemory(_work);
+    }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -177,7 +184,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
         SessionId session = await SignedInAsync();
         SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
 
-        await Service.ReuseAsync(subject, session, Protocol, Cancellation);
+        await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation);
 
         Assert.NotNull(_sessions.All.Single(live => live.Id == session).EndedAt);
         Assert.Equal(
@@ -196,12 +203,88 @@ public sealed class OidcServiceTests : IAsyncDisposable
         SessionId session = await SignedInAsync();
         SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
 
-        await Service.ReuseAsync(subject, session, Protocol, Cancellation);
+        await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation);
 
         (SubjectId Subject, string ClientId, SessionId Session, DateTimeOffset At) recorded =
             _audit.Reuses.Single();
 
         Assert.Equal((subject, Protocol, session), (recorded.Subject, recorded.ClientId, recorded.Session));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a reuse, whose revocation stands
+    /// whatever follows, called inside a unit of work another opened is a fault of the
+    /// calling code: it ends the level it joined before it writes anything, so nothing
+    /// of the outer unit of work commits and the record stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_AReuseInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SessionId session = await SignedInAsync();
+        SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
+
+        _work.Reset();
+        _ = await _work.BeginAsync(Cancellation);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(Cancellation));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Null(_sessions.All.Single(live => live.Id == session).EndedAt);
+        Assert.Empty(_grants.Revoked);
+        Assert.Empty(_audit.Reuses);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-207): a reuse revokes the whole family, the spine's sessions,
+    /// the provider's grant with its tokens, and writes its audit record, all inside the
+    /// one outermost unit of work it begins, committed once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AReuseRevokesTheFamilyAndRecordsItInOneCommitAsync()
+    {
+        SessionId session = await SignedInAsync();
+        SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
+
+        _work.Reset();
+
+        await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation);
+
+        Assert.Equal([(Grant, true)], _grants.Revoked);
+        Assert.NotNull(_sessions.All.Single(live => live.Id == session).EndedAt);
+        _ = Assert.Single(_audit.Reuses);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-207): where the commit fails, the revocation of the grant and
+    /// its tokens does not stand, and the reuse is a fault, so the next presentation of
+    /// the redeemed copy revokes again.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AFailedCommitLeavesTheGrantStandingAsync()
+    {
+        SessionId session = await SignedInAsync();
+        SubjectId subject = _sessions.All.Single(live => live.Id == session).Subject;
+
+        _work.Reset();
+        _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation));
+
+        Assert.Empty(_grants.Revoked);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.False(_work.Open);
     }
 
     /// <summary>
@@ -253,14 +336,14 @@ public sealed class OidcServiceTests : IAsyncDisposable
         SubjectId other = await AccountAsync();
 
         OidcClaims own = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid", Cancellation))!;
-        OidcClaims effective = Value(await Service.ClaimsAsync(AccessContext.Of(other, subject), "openid", Cancellation))!;
+        OidcClaims others = Value(await Service.ClaimsAsync(AccessContext.Of(other), "openid", Cancellation))!;
         ErrorCode principal = Refused(await Service.ClaimsAsync(
             AccessContext.Of(SystemPrincipal.ForDeployment("claims-reader", "LIB-API-005", SystemOperation.Configuration)),
             "openid",
             Cancellation));
 
         Assert.Equal(subject, own.Subject);
-        Assert.Equal(subject, effective.Subject);
+        Assert.Equal(other, others.Subject);
         Assert.Equal(ErrorCodes.Denied, principal);
     }
 
@@ -278,6 +361,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
         _sessions,
         _identifiers,
         _accounts,
+        _grants,
         _audit,
         _configuration,
         _work,

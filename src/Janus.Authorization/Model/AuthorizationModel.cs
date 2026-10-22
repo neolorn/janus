@@ -46,6 +46,26 @@ internal sealed class AuthorizationModel
     // no host type may take.
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
+    // AUTHZ-GRANT-004 (D-204): the roles bootstrap seeds (chapter 10 section 3), which
+    // no declared role may take, since a role is seeded once and these are seeded first.
+    private static readonly string[] Administrative = ["system-administrator", "auditor", "support"];
+
+    // IDN-PRIN-001 (D-206): the principals chapter 10 section 5.29 names, and `migrate`,
+    // the command that runs as none, which no host job may take, so no audit row names
+    // a host's job as the library's own work.
+    private static readonly string[] Reserved =
+    [
+        "expiry-sweep", "registration-sweep", "invitation-sweep", "account-deletion",
+        "organization-erasure", "privacy-deadlines", "loss-reports", "recovery-code-reminder",
+        "domain-reverification", "outbox", "events", "sends", "mailbox-provisioning",
+        "alert-dispatch", "mail-reconciliation", "derivation-driftcheck", "location-database",
+        "datacenter-ranges", "read-volume-baseline", "holiday-list", "emergency-credential",
+        "clock-drift", "certificate-renewal", "restore-test", "audit-partitions",
+        "licence-expiry", "envelope-rotation", "sms-balance", "bootstrap", "configure",
+        "register-client", "rotate-kek", "rotate-fingerprint-key", "replay-erasures",
+        "role-declaration", "migrate",
+    ];
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
@@ -57,6 +77,8 @@ internal sealed class AuthorizationModel
     private readonly IReadOnlyDictionary<Permission, string> _stepUpGates;
     private readonly IReadOnlyDictionary<Permission, string> _actionPurposes;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
+    private readonly IReadOnlyList<DefinedRole> _declaredRoles;
+    private readonly Dictionary<string, HashSet<Permission>> _jobs;
 
     private AuthorizationModel(
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
@@ -68,7 +90,9 @@ internal sealed class AuthorizationModel
         IReadOnlyDictionary<Permission, string> actionPurposes,
         Dictionary<string, LawfulBasisDeclaration> bases,
         IReadOnlyList<string> sensitiveCategories,
-        DeclaredProcessing processing)
+        DeclaredProcessing processing,
+        IReadOnlyList<DefinedRole> declaredRoles,
+        Dictionary<string, HashSet<Permission>> jobs)
     {
         _types = types;
         _entities = entities;
@@ -86,6 +110,8 @@ internal sealed class AuthorizationModel
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
         _processing = processing;
+        _declaredRoles = declaredRoles;
+        _jobs = jobs;
     }
 
     /// <summary>
@@ -104,6 +130,12 @@ internal sealed class AuthorizationModel
     public IReadOnlyCollection<RelationshipDeclaration> Relationships => _relationships.Values;
 
     /// <summary>
+    /// The roles the deployment starts with, in the order declared, each seeded once at
+    /// a start (AUTHZ-GRANT-004, D-204).
+    /// </summary>
+    public IReadOnlyList<DefinedRole> DeclaredRoles => _declaredRoles;
+
+    /// <summary>
     /// Builds the model from what the host declared, refusing a declaration that
     /// could not behave correctly.
     /// </summary>
@@ -117,6 +149,7 @@ internal sealed class AuthorizationModel
 
         Dictionary<string, LawfulBasisDeclaration> bases = Bases(declaration);
         Dictionary<ResourceType, ResourceTypeDeclaration> types = Types(declaration);
+        HashSet<Permission> permissions = Permissions(declaration);
         var categories = new HashSet<string>(declaration.SensitiveCategories, StringComparer.Ordinal);
         var entities = new Dictionary<Type, ResourceTypeDeclaration>();
         var relationships = new Dictionary<string, RelationshipDeclaration>(StringComparer.Ordinal);
@@ -141,6 +174,7 @@ internal sealed class AuthorizationModel
         foreach (ResourceTypeDeclaration type in types.Values)
         {
             Check(type, types, relationships, bases, categories, declaration.RetentionFloors);
+            CheckCapabilities(type, permissions);
 
             if (!entities.TryAdd(type.Entity, type))
             {
@@ -150,18 +184,24 @@ internal sealed class AuthorizationModel
 
         var processing = DeclaredProcessing.Of(declaration);
         CheckFloors(declaration, processing);
+        CheckJobs(declaration);
 
         return new AuthorizationModel(
             types,
             entities,
             relationships,
-            Permissions(declaration),
+            permissions,
             new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
             declaration.StepUpGates,
             Purposes(declaration, processing),
             bases,
             declaration.SensitiveCategories,
-            processing);
+            processing,
+            Roles(declaration, permissions),
+            declaration.Jobs.ToDictionary(
+                job => job.Name,
+                job => new HashSet<Permission>(job.Permissions),
+                StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -170,6 +210,20 @@ internal sealed class AuthorizationModel
     /// <param name="permission">The permission a role would grant.</param>
     /// <returns>Whether it is declared.</returns>
     public bool Declares(Permission permission) => _permissions.Contains(permission);
+
+    /// <summary>
+    /// Whether the host declared a job of that name whose declaration names the
+    /// permission.
+    /// </summary>
+    /// <param name="job">The name the job's principal carries.</param>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>Whether the job is declared and exercises the permission.</returns>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 (D-202): a principal naming no declared job exercises no
+    /// host permission, and a declared job none its declaration does not name.
+    /// </remarks>
+    public bool Exercises(string job, Permission permission) =>
+        _jobs.TryGetValue(job, out HashSet<Permission>? permissions) && permissions.Contains(permission);
 
     /// <summary>
     /// The export operations: every permission the host declares whose action is
@@ -463,9 +517,11 @@ internal sealed class AuthorizationModel
                     "the library reserves the name for the whole organization");
             }
 
+            // PRIV-RIGHT-005a (D-206): a host's encrypted value is bound to its type's
+            // declared name, so two types under one name could swap values unnoticed.
             if (!types.TryAdd(type.Name, type))
             {
-                throw Malformed("the resource type " + type.Name + " is declared twice");
+                throw Invalid(type.Name.ToString(), "name", "the resource type " + type.Name + " is declared twice");
             }
         }
 
@@ -580,6 +636,7 @@ internal sealed class AuthorizationModel
         var held = new HashSet<string>(
             type.Purposes.SelectMany(purpose => purpose.DataCategories),
             StringComparer.Ordinal);
+        var named = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
         {
@@ -590,6 +647,16 @@ internal sealed class AuthorizationModel
                     "key",
                     type.Name + "." + field.Field,
                     "an encrypted field is declared with the column naming its subject");
+            }
+
+            // PRIV-RIGHT-005a (D-206): a value is bound to its field's declared name, so
+            // two fields of one type under one name could swap values unnoticed.
+            if (!named.Add(field.Name))
+            {
+                throw Invalid(
+                    type.Name.ToString(),
+                    field.Name,
+                    "the type " + type.Name + " declares two encrypted fields under the name " + field.Name);
             }
 
             Held(type, field.Field);
@@ -816,6 +883,139 @@ internal sealed class AuthorizationModel
         }
     }
 
+    // BFF-CAP-002 (D-202): a capability is a permission a page of the type's records is
+    // asked about, so one no declaration names could never be answered by any rule. A
+    // capability reaches the browser as its action alone (D-206), so two permissions of
+    // one action could not be told apart there.
+    private static void CheckCapabilities(ResourceTypeDeclaration type, HashSet<Permission> permissions)
+    {
+        var actions = new Dictionary<string, Permission>(StringComparer.Ordinal);
+
+        foreach (Permission capability in type.Capabilities)
+        {
+            if (!permissions.Contains(capability))
+            {
+                throw Invalid(
+                    type.Name.ToString(),
+                    "capabilities",
+                    "the type " + type.Name + " declares " + capability
+                    + " as a capability, which the model does not declare");
+            }
+
+            if (actions.TryGetValue(capability.Action, out Permission held) && held != capability)
+            {
+                throw Invalid(
+                    type.Name.ToString(),
+                    "capabilities",
+                    "the type " + type.Name + " declares " + held + " and " + capability
+                    + " as capabilities, two of the action " + capability.Action);
+            }
+
+            actions[capability.Action] = capability;
+        }
+    }
+
+    // AUTHZ-GRANT-004 (D-204): a declared role is defined as POST /admin/roles would
+    // define it, so its name keeps that rule and takes no role bootstrap seeds, and it
+    // grants what the model declares short of system administration (OPS-CFG-007).
+    private static List<DefinedRole> Roles(
+        AuthorizationDeclaration declaration,
+        HashSet<Permission> permissions)
+    {
+        var declared = new List<DefinedRole>(declaration.Roles.Count);
+        var names = new HashSet<RoleName>();
+
+        foreach (RoleDeclaration role in declaration.Roles)
+        {
+            string at = "role." + role.Name;
+
+            if (!RoleName.TryParse(role.Name, out RoleName name))
+            {
+                throw Invalid(at, "name", "the declared role " + role.Name + " is not a role name");
+            }
+
+            if (Administrative.Contains(role.Name, StringComparer.Ordinal))
+            {
+                throw Invalid(at, "name", "the declared role " + role.Name + " is a role bootstrap seeds");
+            }
+
+            if (!names.Add(name))
+            {
+                throw Invalid(at, "name", "the role " + role.Name + " is declared twice");
+            }
+
+            foreach (Permission permission in role.Permissions)
+            {
+                if (!permissions.Contains(permission) || permission == Core.Permissions.SystemAdminister)
+                {
+                    throw Invalid(
+                        at,
+                        "permissions",
+                        "the declared role " + role.Name + " grants " + permission
+                        + ", which is not declared or is system administration");
+                }
+            }
+
+            declared.Add(new DefinedRole(name, [.. role.Permissions.Distinct()]));
+        }
+
+        return declared;
+    }
+
+    // IDN-PRIN-001, OPS-ALERT-006 (D-202, D-206): a job exercises the host's own
+    // permissions with no person present, so it takes none of the library's, none a
+    // step-up gate asks a session to prove and no export; and its name is its own, never
+    // another job's, a library principal's or `migrate`. A host redeclares none of the
+    // library's permissions, so one of its own is never one of those. The rule a name
+    // keeps is judged where the other names of INT-SMS-003 are.
+    private static void CheckJobs(AuthorizationDeclaration declaration)
+    {
+        var hosts = new HashSet<Permission>(declaration.Permissions);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (JobDeclaration job in declaration.Jobs)
+        {
+            string at = "job." + job.Name;
+
+            if (Reserved.Contains(job.Name, StringComparer.Ordinal))
+            {
+                throw Invalid(at, "name", "the job " + job.Name + " is named as a principal of the library");
+            }
+
+            if (!names.Add(job.Name))
+            {
+                throw Invalid(at, "name", "the job " + job.Name + " is declared twice");
+            }
+
+            foreach (Permission permission in job.Permissions)
+            {
+                if (!hosts.Contains(permission)
+                    || declaration.StepUpGates.ContainsKey(permission)
+                    || string.Equals(permission.Action, Export, StringComparison.Ordinal))
+                {
+                    throw Invalid(
+                        at,
+                        "permissions",
+                        "the job " + job.Name + " exercises " + permission
+                        + ", which is not a host permission it may exercise");
+                }
+            }
+        }
+    }
+
+    // `10` section 1.5: a declaration that is present but malformed names the
+    // declaration and the member of it to change.
+    private static StartupException Invalid(string declaration, string field, string why) =>
+        new(
+            "The authorization model is refused, because " + why + ".",
+            new Error(
+                ErrorCodes.StartupDeclarationInvalid,
+                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                {
+                    ["declaration"] = JsonSerializer.SerializeToElement(declaration),
+                    ["field"] = JsonSerializer.SerializeToElement(field),
+                }));
+
     // What a refusal of the model reads as, wherever it is raised: the value at fault,
     // why it is at fault, and the code of `10` section 1.5 that names the condition.
     internal static StartupException Refused(ErrorCode code, string name, string value, string why) =>
@@ -824,15 +1024,10 @@ internal sealed class AuthorizationModel
             Error.From(code, name, JsonSerializer.SerializeToElement(value)));
 
     private static StartupException Unlisted(string field) =>
-        new(
-            "The authorization model is refused, because the lawful basis list names a key twice or a basis with an empty key or label.",
-            new Error(
-                ErrorCodes.StartupDeclarationInvalid,
-                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
-                {
-                    ["declaration"] = JsonSerializer.SerializeToElement("lawfulBases"),
-                    ["field"] = JsonSerializer.SerializeToElement(field),
-                }));
+        Invalid(
+            "lawfulBases",
+            field,
+            "the lawful basis list names a key twice or a basis with an empty key or label");
 
     private static StartupException Malformed(string why) =>
         new("The authorization model is refused, because " + why + ".");

@@ -4,4 +4,10 @@
     <ProjectReference Include="..\..\src\Janus.Identity\Janus.Identity.csproj" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-001: a package the shared framework serves resolves from the
+       framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
 </Project>

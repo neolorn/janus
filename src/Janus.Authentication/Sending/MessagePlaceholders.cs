@@ -20,9 +20,9 @@ namespace Janus.Authentication.Sending;
 /// per place, here, beside the messages themselves. A value whose width the library
 /// fixes carries that width; a name a deployment or a host chooses is held to the rule
 /// of its place where it is written or declared, and carries the width that rule
-/// bounds. The subscribers still to confirm an erasure, the categories a key is named
-/// after and the origins a link lands on are the deployment's, so those three widths are
-/// measured at startup from what it registered and declared.
+/// bounds. The subscribers or purpose handlers still to confirm a delivery, the
+/// categories a key is named after and the origins a link lands on are the
+/// deployment's, so those widths are measured at startup from what it registered and declared.
 /// </remarks>
 internal sealed class MessagePlaceholders
 {
@@ -64,6 +64,10 @@ internal sealed class MessagePlaceholders
     /// <param name="required">
     /// The names of the registered subject-event subscribers an erasure waits for.
     /// </param>
+    /// <param name="handlers">
+    /// The names of the registered purpose handlers, each of which a consent or an
+    /// objection change of a purpose it names waits for.
+    /// </param>
     /// <param name="categories">
     /// The data categories the host declared a retention floor for, each of which names
     /// a key of its own.
@@ -72,10 +76,12 @@ internal sealed class MessagePlaceholders
     /// <exception cref="ArgumentNullException">One is absent.</exception>
     public MessagePlaceholders(
         IEnumerable<string> required,
+        IEnumerable<string> handlers,
         IEnumerable<string> categories,
         LandingOrigins landing)
     {
         ArgumentNullException.ThrowIfNull(required);
+        ArgumentNullException.ThrowIfNull(handlers);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(landing);
 
@@ -96,7 +102,7 @@ internal sealed class MessagePlaceholders
             new KeyValuePair<string, int>("delivery", Identifier),
             new KeyValuePair<string, int>("kind", EventKind),
             new KeyValuePair<string, int>("attempts", Count),
-            new KeyValuePair<string, int>("outstanding", Joined(required)),
+            new KeyValuePair<string, int>("outstanding", Math.Max(Joined(required), Joined(handlers))),
             new KeyValuePair<string, int>("request", Identifier),
             new KeyValuePair<string, int>("type", RequestType),
             new KeyValuePair<string, int>("status", RequestStatus),
@@ -198,11 +204,12 @@ internal sealed class MessagePlaceholders
         return widest;
     }
 
-    // The subscribers still to confirm are carried as the list the alert details hold
-    // and rendered as the alert channels render any detail, so the widest is every
-    // required subscriber outstanding at once, written the same way.
-    private static int Joined(IEnumerable<string> required) =>
-        JsonSerializer.SerializeToElement(required.ToArray()).ToString().Length;
+    // The subscribers or handlers still to confirm are carried as the list the alert
+    // details hold and rendered as the alert channels render any detail, so the widest
+    // is every one a delivery waits for outstanding at once, written the same way: the
+    // required subscribers, or every purpose handler, whichever is wider (INT-SMS-003).
+    private static int Joined(IEnumerable<string> names) =>
+        JsonSerializer.SerializeToElement(names.ToArray()).ToString().Length;
 
     private static int Widest(IEnumerable<string> written)
     {
