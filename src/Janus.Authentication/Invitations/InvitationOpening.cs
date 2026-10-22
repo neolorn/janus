@@ -61,8 +61,11 @@ internal sealed class InvitationOpening(
             return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        // REG-SESS-002 AC4, CONV-DESIGN-003 (D-207): the attachment is the kept write of
+        // the refusal identity.registration.signedin, so the opening begins the outermost
+        // unit of work and commits it with that refusal, whatever its caller does after.
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

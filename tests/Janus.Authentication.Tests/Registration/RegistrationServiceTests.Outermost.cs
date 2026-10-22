@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -96,6 +97,44 @@ public sealed partial class RegistrationServiceTests
 
         Assert.Empty(_directory.Created);
         _ = Live(session);
+    }
+
+    /// <summary>
+    /// REG-SESS-002 AC4 and CONV-DESIGN-003 AC13 (D-207): a signed-in browser's begin
+    /// carrying an invitation token is refused <c>identity.registration.signedin</c>, and
+    /// the invitation's attachment to the signed-in account, that refusal's kept write,
+    /// is committed with it in the outermost unit of work the opening begins.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_002_AC4_ASignedInBeginCommitsTheAttachmentWithItsRefusalAsync()
+    {
+        var holder = SubjectId.New(_randomness);
+        string token = Issued(email: Address);
+
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.RegistrationSignedIn, Refused(await SignedInAsync(holder, token)));
+        Assert.Equal(holder, _invitations.Held.Single().Invitee);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.False(_work.Open);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8 and AC13, AUTHZ-INHERIT-002 (D-207): a signed-in browser's begin
+    /// carrying an invitation token, whose refusal keeps the attachment, called inside a
+    /// unit of work another opened is a fault, and the invitation is not attached.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ASignedInBeginCarryingAnInvitationInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        string token = Issued(email: Address);
+
+        await InsideAsync(async () => await SignedInAsync(SubjectId.New(_randomness), token));
+
+        Assert.Null(_invitations.Held.Single().Invitee);
     }
 
     // CONV-DESIGN-003 AC8: a step called inside a unit of work the test opened faults

@@ -3941,3 +3941,7 @@ against the public contract of LIB-API-001.
   suspension in the removal's own unit of work, on the credential read under its lock,
   before answering `auth.credential.lastsecondfactor`: nothing is rolled back first, and
   a sign-in's write to the credential made meanwhile is no longer overwritten.
+- `POST /register` from a signed-in browser carrying an invitation token attaches the
+  invitation in the outermost unit of work and commits it with the
+  `identity.registration.signedin` refusal; called inside a unit of work already open,
+  the host's own included, the begin ends it and throws `InvalidOperationException`.
