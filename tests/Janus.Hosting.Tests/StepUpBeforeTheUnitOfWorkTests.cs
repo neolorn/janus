@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -230,6 +231,28 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
             await administrator.SendAsync("DELETE", "/admin/roles/editor", ("reason", "No longer used.")),
             subject);
         Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("editor"), CancellationToken.None));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC13: a change of username asks its step-up, and through it the
+    /// signal, with no unit of work begun, and the record of the signal's <c>risk</c>
+    /// stands after the step-up refuses, the account holding no username.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC13_AUsernameChangeAsksTheSignalWithNoUnitOfWorkBegunAsync()
+    {
+        _deployment.Configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+
+        Browser person = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        Texted(subject);
+
+        Refused(await person.SendAsync("PUT", "/account/profile", ("username", "kestrel")), subject);
+        Assert.Equal(
+            JsonValueKind.Null,
+            (await person.SendAsync("GET", "/account")).Json().GetProperty("identifiers").GetProperty("username").ValueKind);
     }
 
     /// <summary>

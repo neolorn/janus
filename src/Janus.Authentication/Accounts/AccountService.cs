@@ -203,6 +203,30 @@ internal sealed class AccountService(
 
         DateTimeOffset now = time.GetUtcNow();
 
+        // CONV-DESIGN-002, D-207: the username's step-up may ask the carrier's signal, so
+        // it is judged before the unit of work begins, after every refusal it must follow,
+        // each judged first without a lock and again under the lock inside. D-208: an
+        // edit naming the username the account holds at this read changes no username,
+        // whatever the locked read then finds, and its other fields are edited.
+        if (username is Username named)
+        {
+            HeldIdentifier? standing = await StandingAsync(subject, cancellationToken).ConfigureAwait(false);
+
+            if (Holds(standing, named))
+            {
+                username = null;
+            }
+            else if ((await ChangeRefusedAsync(standing, named, now, locking: false, cancellationToken)
+                        .ConfigureAwait(false)
+                    ?? await stepUp
+                        .PassedAsync(subject, session, StepUpAction.UsernameChange, cancellationToken)
+                        .ConfigureAwait(false))
+                is Error unmet)
+            {
+                return Result.Failure(unmet);
+            }
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
@@ -226,7 +250,7 @@ internal sealed class AccountService(
         }
 
         if (username is Username chosen
-            && await ChooseAsync(context, subject, session, chosen, now, cancellationToken)
+            && await ChooseAsync(context, subject, chosen, now, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -780,11 +804,11 @@ internal sealed class AccountService(
 
     // REG-IDENT-009: a username is chosen through the profile, is never verified, is
     // public by nature and so discloses its own refusals, and is held against a second
-    // change for as long as the cooling off lasts.
+    // change for as long as the cooling off lasts. The step-up the change asks was judged
+    // before the unit of work began (D-207).
     private async ValueTask<Error?> ChooseAsync(
         AccessContext context,
         SubjectId subject,
-        SessionId session,
         Username username,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -793,51 +817,19 @@ internal sealed class AccountService(
         // chosen one after the other and the second is judged against the first.
         await identifiers.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
+        HeldIdentifier? standing = await StandingAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        HeldIdentifier? standing = null;
-
-        foreach (HeldIdentifier identifier in held.OfKind(IdentifierKind.Username))
-        {
-            standing = identifier;
-        }
-
-        if (standing is not null && string.Equals(standing.Canonical, username.Value, StringComparison.Ordinal))
+        // The same name, chosen meanwhile by a change of the same account, leaves nothing
+        // to write.
+        if (Holds(standing, username))
         {
             return null;
         }
 
-        if (standing is not null
-            && await CoolingOffAsync(standing, now, cancellationToken).ConfigureAwait(false)
-                is Error waiting)
+        if (await ChangeRefusedAsync(standing, username, now, locking: true, cancellationToken)
+            .ConfigureAwait(false) is Error refused)
         {
-            return waiting;
-        }
-
-        // REG-IDENT-009, CONV-DESIGN-003: taken or held is judged under the username's
-        // lock, so of two choices of one free name the second finds it taken, and a choice
-        // made while the name's erasure commits finds it held.
-        await identifiers
-            .LockValuesAsync([(IdentifierKind.Username, username.Value)], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (await identifiers
-                .OwnerAsync(IdentifierKind.Username, username.Value, cancellationToken)
-                .ConfigureAwait(false) is not null
-            || await identifiers.IsHeldAsync(username.Value, now, cancellationToken)
-                .ConfigureAwait(false))
-        {
-            return Error.From(ErrorCodes.UsernameTaken);
-        }
-
-        // D-178: the step-up is judged after every other refusal the change can give.
-        if (await stepUp
-                .PassedAsync(subject, session, StepUpAction.UsernameChange, cancellationToken)
-                .ConfigureAwait(false)
-            is Error closed)
-        {
-            return closed;
+            return refused;
         }
 
         if (standing is null)
@@ -858,6 +850,60 @@ internal sealed class AccountService(
             .ConfigureAwait(false);
 
         return null;
+    }
+
+    // The username the account holds, read under the set's lock where the caller holds it.
+    private async ValueTask<HeldIdentifier?> StandingAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        HeldIdentifier? standing = null;
+
+        foreach (HeldIdentifier identifier in held.OfKind(IdentifierKind.Username))
+        {
+            standing = identifier;
+        }
+
+        return standing;
+    }
+
+    private static bool Holds(HeldIdentifier? standing, Username username) =>
+        standing is not null && string.Equals(standing.Canonical, username.Value, StringComparison.Ordinal);
+
+    // REG-IDENT-009: the refusals a change of username meets before its step-up (D-178),
+    // judged first without a lock and again inside the unit of work, where taken or held
+    // is judged under the username's lock, so of two choices of one free name the second
+    // finds it taken, and a choice made while the name's erasure commits finds it held
+    // (CONV-DESIGN-003).
+    private async ValueTask<Error?> ChangeRefusedAsync(
+        HeldIdentifier? standing,
+        Username username,
+        DateTimeOffset now,
+        bool locking,
+        CancellationToken cancellationToken)
+    {
+        if (standing is not null
+            && await CoolingOffAsync(standing, now, cancellationToken).ConfigureAwait(false)
+                is Error waiting)
+        {
+            return waiting;
+        }
+
+        if (locking)
+        {
+            await identifiers
+                .LockValuesAsync([(IdentifierKind.Username, username.Value)], cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return await identifiers
+                .OwnerAsync(IdentifierKind.Username, username.Value, cancellationToken)
+                .ConfigureAwait(false) is not null
+            || await identifiers.IsHeldAsync(username.Value, now, cancellationToken)
+                .ConfigureAwait(false)
+            ? Error.From(ErrorCodes.UsernameTaken)
+            : null;
     }
 
     private async ValueTask<Error?> CoolingOffAsync(

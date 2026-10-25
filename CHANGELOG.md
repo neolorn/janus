@@ -3987,3 +3987,10 @@ against the public contract of LIB-API-001.
   invitation in the outermost unit of work and commits it with the
   `identity.registration.signedin` refusal; called inside a unit of work already open,
   the host's own included, the begin ends it and throws `InvalidOperationException`.
+- A profile edit that changes the username judges the change's cooling-off, whether the
+  name is taken or held, and its step-up before its unit of work begins, and the first
+  two again under the locks inside; a carrier's signal the step-up asks is asked with no
+  unit of work begun, and a risk it answers stays recorded when the step-up refuses. An
+  edit naming the username the account holds asks no step-up and changes no username,
+  even where a change of the same account commits meanwhile, and its other fields are
+  saved.
