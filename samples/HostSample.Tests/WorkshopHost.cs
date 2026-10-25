@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -138,6 +139,7 @@ public sealed class WorkshopHost : IAsyncLifetime
 
     /// <summary>
     /// Registers a customer of the workshop through the registration endpoints, with a
+    /// phone of their own, which the deployment requires of every account, and a
     /// password, and signs the customer in.
     /// </summary>
     /// <param name="cancellationToken">Abandons the registration.</param>
@@ -151,7 +153,11 @@ public sealed class WorkshopHost : IAsyncLifetime
             throw new InvalidOperationException("The customer's address does not read as one.");
         }
 
-        return await People.CustomerAsync(email, phone: null, Convert.ToHexString(RandomNumberGenerator.GetBytes(16)), cancellationToken);
+        return await People.CustomerAsync(
+            email,
+            Phone("+2010020" + customer.ToString("D5", CultureInfo.InvariantCulture)),
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(16)),
+            cancellationToken);
     }
 
     /// <summary>
@@ -301,7 +307,7 @@ public sealed class WorkshopHost : IAsyncLifetime
             Administrator,
             Organization,
             technician,
-            phone: null,
+            Phone("+201001000001"),
             [RoleName.Parse(WorkshopRoles.Technician)],
             CancellationToken.None);
 
@@ -356,6 +362,13 @@ public sealed class WorkshopHost : IAsyncLifetime
 
         return application;
     }
+
+    // REG-IDENT-001: the phone a person registers with, since registration.phone keeps
+    // its default, required.
+    private static PhoneNumber Phone(string entered) =>
+        PhoneNumber.TryParse(entered, out PhoneNumber phone)
+            ? phone
+            : throw new InvalidOperationException("The phone " + entered + " does not read as one.");
 
     // OPS-BOOT-001: the values that name the deployment, each as its key admits it.
     private static List<string> Bootstrapped()
