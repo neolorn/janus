@@ -2333,8 +2333,8 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     /// <summary>
     /// AUTHZ-GATE-006 AC3: a restriction committed after a modifying action passed the
     /// gate step refuses it where the gate is asked again inside the action's unit of
-    /// work, on a record and on the account's own settings alike, and a reading action
-    /// stays admitted.
+    /// work, on a record and on the account's own settings alike, writing no refusal
+    /// record (D-208), and a reading action stays admitted.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -2369,16 +2369,24 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         _ = await work.BeginAsync(cancellationToken);
 
-        Assert.Equal(
-            ErrorCodes.Restricted,
-            (await gate.RequireAsync(context, HostPermissions.Edit, nested.Record, Sources(reading), cancellationToken))
-                .Match(() => (ErrorCode?)null, error => error.Code));
-        Assert.Equal(ErrorCodes.Restricted, (await settings.RefusedAsync(context, cancellationToken))?.Code);
+        Error? refused = (await gate.RequireAsync(
+                context, HostPermissions.Edit, nested.Record, Sources(reading), cancellationToken))
+            .Match(() => (Error?)null, error => error);
+        Error? settingsRefused = await settings.RefusedAsync(context, cancellationToken);
+
+        Assert.Equal(ErrorCodes.Restricted, refused?.Code);
+        Assert.Equal(ErrorCodes.Restricted, settingsRefused?.Code);
         Assert.True((await gate.RequireAsync(
                 context, HostPermissions.Read, nested.Record, Sources(reading), cancellationToken))
             .Match(() => true, _ => false));
 
         await work.RollbackAsync();
+
+        // D-208: a restriction's refusal is no refusal record's, so the refused action
+        // leaves none behind it.
+        Assert.False(refused?.Details.ContainsKey("correlation"));
+        Assert.False(settingsRefused?.Details.ContainsKey("correlation"));
+        Assert.Equal(0, await DenialsRecordedAsync(nested.Account));
     }
 
     /// <summary>
@@ -2478,6 +2486,127 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             .WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
 
         await work.RollbackAsync();
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC5, AUTHZ-GATE-006 (D-208): a restricted person's modifying
+    /// action refused <c>authz.restricted</c>, by the check on a record and on the
+    /// organization and on the account's own settings, carries no refusal record's
+    /// identifier, writes no refusal record, and so counts
+    /// nothing toward <c>alerting.denials.threshold</c>, however often it is asked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC5_ARestrictionRefusalCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+        var context = AccessContext.Of(nested.Account);
+        OrganizationId organization = nested.Deployment.Organization;
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        var refusals = new List<Error?>();
+
+        for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            refusals.Add(await RefusedWithAsync(nested.Account, nested.Record, HostPermissions.Edit));
+        }
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            refusals.Add((await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(context, HostPermissions.Edit, organization, cancellationToken))
+                .Match(() => (Error?)null, error => error));
+            refusals.Add(await scope.ServiceProvider.GetRequiredService<ISettingsRestriction>()
+                .RefusedAsync(context, cancellationToken));
+        }
+
+        Assert.All(refusals, refusal =>
+        {
+            Assert.Equal(ErrorCodes.Restricted, refusal?.Code);
+            Assert.False(refusal?.Details.ContainsKey("correlation"));
+        });
+        Assert.Equal((0, 0), (await DenialsRecordedAsync(nested.Account), await SpikesAsync(nested.Account)));
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC5, AUTH-STEP-002 (D-208): a person's action bound to a step-up
+    /// gate, on a record the grants admit, refused for a session whose proof has aged,
+    /// for one downgraded since it proved the gate, and where no assurance provider is
+    /// registered, carries no refusal record's identifier, writes no refusal record, and
+    /// so counts nothing toward <c>alerting.denials.threshold</c>, however often it is
+    /// asked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC5_AStepUpRefusalCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        var refusals = new List<Error?>();
+
+        for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            refusals.Add(await SteppedUpRefusalAsync(nested, TimeSpan.FromDays(1)));
+        }
+
+        refusals.Add(await SteppedUpRefusalAsync(
+            nested,
+            TimeSpan.FromMinutes(1),
+            downgradedAgo: TimeSpan.FromSeconds(30)));
+
+        Error? unavailable = await RefusedWithAsync(nested.Account, nested.Record, HostPermissions.Publish);
+
+        Assert.All(refusals, refusal => Assert.Equal(ErrorCodes.StepUpRequired, refusal?.Code));
+        Assert.Equal(ErrorCodes.StepUpUnavailable, unavailable?.Code);
+        Assert.All(
+            refusals.Append(unavailable),
+            refusal => Assert.False(refusal?.Details.ContainsKey("correlation")));
+        Assert.Equal((0, 0), (await DenialsRecordedAsync(nested.Account), await SpikesAsync(nested.Account)));
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC4 (D-208): a recorded refusal on a type that discloses, which
+    /// is answered <c>authz.denied</c> where a concealing type's is answered as its
+    /// absence, made inside a transaction the caller rolls back, still stands, resolves
+    /// by its identifier, and counts toward <c>alerting.denials.threshold</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC4_ADisclosedRefusalInsideATransactionThatRollsBackStandsAsync()
+    {
+        Nested nested = await NestAsync();
+
+        AuditRecordId correlation = await RefusedInRolledBackWorkAsync(nested, nested.Note, HostPermissions.ReadNote);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        DeniedAccess? found = await scope.ServiceProvider.GetRequiredService<IAccessAudit>()
+            .FindAsync(correlation, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            (nested.Account, HostPermissions.ReadNote),
+            (found?.Acting, found?.Permission));
+        Assert.Equal(1, await DenialsRecordedAsync(nested.Account));
     }
 
     // A statement is waiting on a lock of the accounts table, as the database itself
@@ -2580,11 +2709,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     // The request arrives on a session of the account's own, which proved a
-    // phishing-resistant second factor the stated time ago.
+    // phishing-resistant second factor the stated time ago, and was downgraded the
+    // stated time ago where one is given.
     private async Task<Error?> SteppedUpRefusalAsync(
         Nested nested,
         TimeSpan ago,
-        Permission? permission = null)
+        Permission? permission = null,
+        TimeSpan? downgradedAgo = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -2603,6 +2734,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             TimeSpan.FromDays(7),
             TimeSpan.FromDays(30),
             breakGlassReason: null);
+
+        if (downgradedAgo is TimeSpan downgraded)
+        {
+            session.Downgrade(services.GetRequiredService<TimeProvider>().GetUtcNow() - downgraded);
+        }
 
         IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
 
@@ -2649,6 +2785,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     private async Task<ErrorCode?> RefusalAsync(
         SubjectId account,
         ResourceReference resource,
+        Permission permission) =>
+        (await RefusedWithAsync(account, resource, permission))?.Code;
+
+    // The refusal of the check whole, with what it carries.
+    private async Task<Error?> RefusedWithAsync(
+        SubjectId account,
+        ResourceReference resource,
         Permission permission)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
@@ -2662,7 +2805,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 Sources(reading),
                 TestContext.Current.CancellationToken);
 
-        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+        return outcome.Match(() => (Error?)null, error => error);
     }
 
     private async Task<int> ExportsRecordedAsync(SubjectId account)
@@ -2799,7 +2942,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     // A refusal inside a unit of work the caller then abandons, which rolls it back.
-    private async Task<AuditRecordId> RefusedInRolledBackWorkAsync(Nested nested)
+    private async Task<AuditRecordId> RefusedInRolledBackWorkAsync(Nested nested) =>
+        await RefusedInRolledBackWorkAsync(nested, nested.Record, HostPermissions.Read);
+
+    private async Task<AuditRecordId> RefusedInRolledBackWorkAsync(
+        Nested nested,
+        ResourceReference resource,
+        Permission permission)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -2811,8 +2960,8 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(nested.Account),
-                HostPermissions.Read,
-                nested.Record,
+                permission,
+                resource,
                 Sources(reading),
                 cancellationToken);
 
