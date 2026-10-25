@@ -288,6 +288,23 @@ internal sealed class AccessGateInMemory : IAccessGate
         CancellationToken cancellationToken) =>
         CapabilitiesAsync(context, type, resources, permissions, cancellationToken);
 
+    /// <summary>
+    /// Whether the gate admits a principal's permission within an organization, asked
+    /// as the grant admission decides one permission: recording nothing.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">The permission.</param>
+    /// <param name="organization">The organization.</param>
+    /// <returns>Whether it is admitted.</returns>
+    public bool Admits(AccessContext context, Permission permission, OrganizationId organization)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return !Restricted(context, permission)
+            && context.Effective is SubjectId subject
+            && (_granted.Contains((subject, organization, permission)) || _everyone.Contains((organization, permission)));
+    }
+
     private static Result Refused() => Result.Failure(Error.From(ErrorCodes.Denied));
 
     // What a test set to follow the gate step runs once, after a modifying action is

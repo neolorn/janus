@@ -150,6 +150,53 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-SCOPE-001 AC4, IDN-ORG-003 (D-207, D-208): an organization
+    /// <c>POST /admin/organizations</c> created holds no grant, and a holder of
+    /// <c>system:administer</c> in the administrative organization writes its first and
+    /// revokes it, the admission refusing nothing and a second revocation told the grant
+    /// is not found (09 section 8); a holder of <c>grant:manage</c> in the
+    /// administrative organization alone is refused there once, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_SCOPE_001_AC4_ASystemAdministratorWritesAndRevokesTheFirstGrantOfACreatedOrganizationAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(
+            Administration,
+            Permissions.SystemAdminister,
+            Permissions.OrganizationManage);
+        Answer opened = await administrator.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Eastern branch"),
+            ("reason", "Opening a branch."));
+        var created = new OrganizationId(Guid.Parse(opened.Text("id")));
+
+        Assert.Empty(await HeldAsync(created));
+
+        int refusals = _deployment.Gate.Refusals.Count;
+        Answer first = await GrantedAsync(administrator, "organization", created.ToString());
+        Answer revoked = await RevokedAsync(administrator, first.Text("id"));
+        Answer again = await RevokedAsync(administrator, first.Text("id"));
+
+        Assert.Equal(StatusCodes.Status201Created, first.Status);
+        Assert.Equal(created, (await StoredAsync(first)).Organization);
+        Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.GrantNotFound.ToString(), again.Text("code"));
+        Assert.Equal(refusals, _deployment.Gate.Refusals.Count);
+
+        _deployment.Gate.Revoke(actor, Administration, Permissions.SystemAdminister);
+        _deployment.Gate.Grant(actor, Administration, Permissions.GrantManage);
+
+        Answer refused = await GrantedAsync(administrator, "organization", created.ToString());
+
+        Denied(refused);
+        Assert.Equal(refusals + 1, _deployment.Gate.Refusals.Count);
+        Assert.Empty(await HeldAsync(created));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-002: a deny is the same row with its flag set.
     /// </summary>
     /// <returns>The work of the test.</returns>

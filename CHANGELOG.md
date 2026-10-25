@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/grants` and `DELETE /admin/grants/{id}` admit a grant, or its revocation,
+  in an organization other than the administrative organization under `system:administer`
+  held in the administrative organization as well as under `grant:manage` held in the
+  grant's organization, so an organization `POST /admin/organizations` created can be
+  given its first grants. The two are one admission: one that either permission admits
+  records no refusal, a caller under restriction is refused `authz.restricted` with no
+  record, and where neither admits one refusal is recorded, naming `grant:manage` in the
+  grant's organization.
 - `UseUnitOfWorkAsync(work, cancellationToken)`, on the host's own context's
   `DatabaseFacade`, joins the context to the library's unit of work once it has begun:
   what the host saves and what the library writes commit together at the outermost
