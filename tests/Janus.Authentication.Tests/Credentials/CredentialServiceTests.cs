@@ -2023,6 +2023,33 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 (D-207): a text code's enrolment begun, which asks the carrier's
+    /// signal of its number, inside a unit of work another opened is a fault of the
+    /// calling code: it ends the level it joined, so nothing of the outer unit of work
+    /// commits, nothing is staged and nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ATextCodeBegunInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        IdentifierId number = await TextableAsync(subject);
+
+        _work.Reset();
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await BegunAsync(subject, session, number));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_enrolments.All);
+        Assert.Empty(_notifications.Texts);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC8, AUTHZ-INHERIT-002: a confirm code, whose wrong try keeps its
     /// count, presented inside a unit of work another opened is a fault of the calling
     /// code: it ends the level it joined before it reads or writes anything else, so

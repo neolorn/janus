@@ -133,6 +133,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 (D-207): a recovery, which may ask the carrier's signal of a
+    /// number, asked inside a unit of work another opened is a fault of the calling
+    /// code, for a number an account holds and for one none holds: it ends the level it
+    /// joined, so nothing of the outer unit of work commits and nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ARecoveryAskedInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await AccountAsync();
+        _work.Reset();
+
+        foreach (string number in new[] { Number, "+441632960099" })
+        {
+            _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await Service.BeginAsync(number, Language, Source, TestContext.Current.CancellationToken));
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+            Assert.False(_work.Open);
+        }
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_notifications.Texts);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-005 AC2: an account holding no password sets one through recovery,
     /// and the passkey it holds is still there afterwards.
     /// </summary>

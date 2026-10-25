@@ -3994,3 +3994,8 @@ against the public contract of LIB-API-001.
   edit naming the username the account holds asks no step-up and changes no username,
   even where a change of the same account commits meanwhile, and its other fields are
   saved.
+- A text code's enrolment begun, a recovery asked and a sign-in link asked, each of
+  which may ask the carrier's signal of a number, begin the outermost unit of work:
+  called inside a unit of work already open, the host's own included, the begin ends
+  it and throws `InvalidOperationException`, and nothing of the outer unit of work
+  commits. An email code asked for still joins the unit of work open.
