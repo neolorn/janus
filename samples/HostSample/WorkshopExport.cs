@@ -85,9 +85,9 @@ internal sealed class WorkshopExport(IServiceScopeFactory scopes) : IExportContr
             {
                 ["ticket"] = repair.Id,
                 ["kite"] = repair.Kite,
-                ["contactName"] = name.Value(),
-                ["followUp"] = repair.FollowUp ? "true" : "false",
-                ["releasedAt"] = repair.ReleasedAt?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty,
+                ["contact-name"] = name.Value(),
+                ["follow-up"] = repair.FollowUp ? "true" : "false",
+                ["released-at"] = repair.ReleasedAt?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty,
             }));
         }
 

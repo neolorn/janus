@@ -227,7 +227,7 @@ public sealed class WorkshopEndpointTests(WorkshopHost host) : IClassFixture<Wor
 
         Assert.Equal(HttpStatusCode.OK, exported.Status);
         Assert.Equal(ticket, record.GetProperty("ticket").GetString());
-        Assert.Equal("Yara Nabil", record.GetProperty("contactName").GetString());
+        Assert.Equal("Yara Nabil", record.GetProperty("contact-name").GetString());
     }
 
     /// <summary>
