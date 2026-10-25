@@ -165,14 +165,15 @@ public sealed class PublicSurfaceTests
 
     // CONV-DESIGN-002 AC3: the collaborators a call on which is the gate step: the gate,
     // the check asked in the administrative organization, the restriction on an
-    // account's changes to its own settings, and the refusal of what names no
-    // organization.
+    // account's changes to its own settings, the refusal of what names no
+    // organization, and the grant admission (D-208).
     private static readonly string[] GateSteps =
     [
         "IAccessGate",
         "AdministrativeScope",
         "ISettingsRestriction",
         "IUnscopedRefusal",
+        "IGrantAdmission",
     ];
 
     // CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001: the call that reads which organization a row
