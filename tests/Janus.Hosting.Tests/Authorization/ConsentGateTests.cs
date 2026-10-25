@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
 using Microsoft.EntityFrameworkCore;
@@ -654,6 +655,59 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             await ListedBothWaysAsync(jobbed.Written, host.Services, jobbed.Job));
     }
 
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC5, PRIV-SENS-002 AC1, PRIV-CONS-007 AC4 (D-208): a person's
+    /// consent-bound action refused <c>privacy.consent.required</c>,
+    /// <c>privacy.consent.writtenrequired</c> or <c>privacy.consent.superseded</c>, on a
+    /// record and on the organization, carries no refusal record's identifier, writes no
+    /// refusal record, and so counts nothing toward <c>alerting.denials.threshold</c>,
+    /// however often it is asked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC5_APersonsConsentRefusalCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Granted none = await GrantedAsync();
+        Granted ordinary = await GrantedAsync();
+        Granted superseded = await GrantedAsync();
+
+        // PRIV-SENS-002 AC6: the check naming no record is asked by an account holding the
+        // permission over the whole organization.
+        var deployment = new Deployment(host);
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Recommend], cancellationToken);
+        SubjectId wide = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.GrantAsync(GrantSubject.Of(wide), role, on: null, false, null, null, cancellationToken);
+        await RecordAsync(ordinary.Account, Held(ConsentKind.Ordinary));
+        await RecordAsync(
+            superseded.Account,
+            Held(ConsentKind.Written) with { SupersededAt = Deployment.Noon.AddDays(30) });
+
+        var refusals = new List<Error?>();
+
+        for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            refusals.Add(await RefusedWithAsync(none));
+        }
+
+        Error? organizationWide = await RefusedWithAsync(wide, HostPermissions.Recommend, deployment.Organization);
+        Error? notWritten = await RefusedWithAsync(ordinary);
+        Error? ended = await RefusedWithAsync(superseded);
+
+        Assert.All(refusals.Append(organizationWide), refusal => Assert.Equal(ErrorCodes.ConsentRequired, refusal?.Code));
+        Assert.Equal(ErrorCodes.ConsentWrittenRequired, notWritten?.Code);
+        Assert.Equal(ErrorCodes.ConsentSuperseded, ended?.Code);
+        Assert.All(
+            refusals.Append(organizationWide).Append(notWritten).Append(ended),
+            refusal => Assert.False(refusal?.Details.ContainsKey("correlation")));
+
+        foreach (SubjectId account in new[] { none.Account, ordinary.Account, superseded.Account, wide })
+        {
+            Assert.Equal(0, await PersonsDenialsAsync(account));
+        }
+    }
+
     private static ConsentRecord Held(ConsentKind kind) =>
         new(
             Recommendations,
@@ -739,6 +793,13 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     private async Task<ErrorCode?> RefusalAsync(
         Granted granted,
         Permission? permission = null,
+        IServiceProvider? deployment = null) =>
+        (await RefusedWithAsync(granted, permission, deployment))?.Code;
+
+    // The refusal of the check whole, with what it carries.
+    private async Task<Error?> RefusedWithAsync(
+        Granted granted,
+        Permission? permission = null,
         IServiceProvider? deployment = null)
     {
         await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
@@ -752,12 +813,18 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 Sources(reading),
                 TestContext.Current.CancellationToken);
 
-        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+        return outcome.Match(() => (Error?)null, error => error);
     }
 
     // The check that names no record: whether the account may do this at all within
     // the organization.
     private async Task<ErrorCode?> RefusalAsync(
+        SubjectId account,
+        Permission permission,
+        OrganizationId organization) =>
+        (await RefusedWithAsync(account, permission, organization))?.Code;
+
+    private async Task<Error?> RefusedWithAsync(
         SubjectId account,
         Permission permission,
         OrganizationId organization)
@@ -771,7 +838,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 organization,
                 TestContext.Current.CancellationToken);
 
-        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+        return outcome.Match(() => (Error?)null, error => error);
     }
 
     private async Task<IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>>
@@ -928,6 +995,21 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             WHERE action = 'authz.access.denied' AND principal = @job AND organization = @organization
             """,
             new { job = HostFixture.Digest, organization = organization.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The refusals recorded naming the account as acting, which is what its denial alert
+    // counts (AUTHZ-CONCEAL-004, OPS-ALERT-001).
+    private async Task<int> PersonsDenialsAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.denied' AND acting_subject = @account
+            """,
+            new { account = account.Value },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 

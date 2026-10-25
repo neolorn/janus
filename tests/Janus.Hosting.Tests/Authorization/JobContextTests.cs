@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -33,7 +34,7 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
     public async Task BFF_CAP_002_AC5_CapabilitiesGivenAJobsContextAreRefusedInARequestAndOutsideOneAsync()
     {
         Written written = await WriteAsync();
-        IReadOnlyList<ErrorCode?>? inRequest = null;
+        IReadOnlyList<Error?>? inRequest = null;
 
         await using (ServedRequests served = await ServedRequests.StartAsync(
             host,
@@ -45,10 +46,12 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
 
         await using AsyncServiceScope background = host.Services.CreateAsyncScope();
 
-        Assert.Equal([ErrorCodes.Denied, ErrorCodes.Denied], inRequest);
-        Assert.Equal(
+        Assert.Equal<ErrorCode?>(
             [ErrorCodes.Denied, ErrorCodes.Denied],
-            await CapabilitiesAsync(background.ServiceProvider, written));
+            inRequest?.Select(refusal => refusal?.Code));
+        Assert.Equal<ErrorCode?>(
+            [ErrorCodes.Denied, ErrorCodes.Denied],
+            (await CapabilitiesAsync(background.ServiceProvider, written)).Select(refusal => refusal?.Code));
     }
 
     /// <summary>
@@ -62,7 +65,7 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
     public async Task IDN_PRIN_001_AC6_TheExplanationGivenAJobsContextIsRefusedAsync()
     {
         Written written = await WriteAsync();
-        IReadOnlyList<ErrorCode?>? inRequest = null;
+        IReadOnlyList<Error?>? inRequest = null;
 
         await using (ServedRequests served = await ServedRequests.StartAsync(
             host,
@@ -74,10 +77,12 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
 
         await using AsyncServiceScope background = host.Services.CreateAsyncScope();
 
-        Assert.Equal([ErrorCodes.Denied, ErrorCodes.Denied], inRequest);
-        Assert.Equal(
+        Assert.Equal<ErrorCode?>(
             [ErrorCodes.Denied, ErrorCodes.Denied],
-            await ExplainedAsync(background.ServiceProvider, written));
+            inRequest?.Select(refusal => refusal?.Code));
+        Assert.Equal<ErrorCode?>(
+            [ErrorCodes.Denied, ErrorCodes.Denied],
+            (await ExplainedAsync(background.ServiceProvider, written)).Select(refusal => refusal?.Code));
     }
 
     /// <summary>
@@ -153,6 +158,69 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
             await RecordedAsync(refused.Details["correlation"].GetGuid()));
     }
 
+    /// <summary>
+    /// AUTHZ-CONCEAL-004, IDN-PRIN-001 AC6, CONV-DESIGN-002 (D-208): the refusals of a
+    /// declared job that refuse no permission asked of the gate, the capability page and
+    /// the explanation through both of their paths, and a library operation's own refusal
+    /// at its gate step, are <c>authz.denied</c> carrying no refusal record's identifier,
+    /// and write no refusal record naming the job, so they count nothing toward its
+    /// denial alert.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AJobsRefusalsAskingNoPermissionOfTheGateWriteNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Written written = await WriteAsync();
+        RoleName reading = await written.Deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        SubjectId account = await written.Deployment.AccountAsync(cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result<GrantId> granted = await scope.ServiceProvider.GetRequiredService<IGrants>().GrantAsync(
+            written.Job,
+            SessionId.New(TimeProvider.System),
+            new GrantRequest(
+                GrantSubject.Of(account),
+                reading,
+                new ResourceReference(
+                    ResourceType.Parse("organization"),
+                    ResourceId.Parse(written.Deployment.Organization.ToString())),
+                Deny: false,
+                ExpiresAt: null,
+                "The reason the grant was asked for."),
+            cancellationToken);
+
+        Error?[] refusals =
+        [
+            .. await CapabilitiesAsync(scope.ServiceProvider, written),
+            .. await ExplainedAsync(scope.ServiceProvider, written),
+            Refusal(granted),
+        ];
+
+        Assert.All(refusals, refusal =>
+        {
+            Assert.Equal(ErrorCodes.Denied, refusal?.Code);
+            Assert.False(refusal?.Details.ContainsKey("correlation"));
+        });
+        Assert.Equal(0, await JobDenialsAsync(written.Deployment.Organization));
+    }
+
+    // The refusals recorded naming the declared job in the organization, which is what
+    // the job's denial alert counts (AUTHZ-CONCEAL-004, OPS-ALERT-001).
+    private async Task<int> JobDenialsAsync(OrganizationId organization)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.denied' AND principal = @job AND organization = @organization
+            """,
+            new { job = HostFixture.Digest, organization = organization.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     // The refusal record the identifier names: its action, and the principal and reason
     // it records.
     private async Task<Recorded> RecordedAsync(Guid correlation)
@@ -177,7 +245,7 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
 
     // The page of the record asked under the job's context, through the path over the
     // stored grants and the path over the host's rows.
-    private async Task<IReadOnlyList<ErrorCode?>> CapabilitiesAsync(IServiceProvider asking, Written written)
+    private async Task<IReadOnlyList<Error?>> CapabilitiesAsync(IServiceProvider asking, Written written)
     {
         IAccessGate gate = asking.GetRequiredService<IAccessGate>();
 
@@ -202,7 +270,7 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
 
     // The explanation of the job's reading of the record, through the path over the
     // stored grants and the path over the host's rows.
-    private async Task<IReadOnlyList<ErrorCode?>> ExplainedAsync(IServiceProvider asking, Written written)
+    private async Task<IReadOnlyList<Error?>> ExplainedAsync(IServiceProvider asking, Written written)
     {
         IAccessGate gate = asking.GetRequiredService<IAccessGate>();
 
@@ -223,8 +291,8 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
         return [Refusal(stored), Refusal(sourced)];
     }
 
-    private static ErrorCode? Refusal<T>(Result<T> outcome) =>
-        outcome.Match<ErrorCode?>(_ => null, error => error.Code);
+    private static Error? Refusal<T>(Result<T> outcome) =>
+        outcome.Match<Error?>(_ => null, error => error);
 
     // A workspace of a fresh organization holding a document and a note, and the context
     // of the job the host declares, acting for that organization.
