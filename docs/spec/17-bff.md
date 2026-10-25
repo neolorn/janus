@@ -859,11 +859,12 @@ answers on each record (BFF-CAP-002).
 ## 6. Error translation
 
 **BFF-ERR-001** — Errors SHALL cross the boundary as machine-readable codes with
-structured data and a correlation identifier. Rendered prose SHALL NOT cross it, and
-the BFF SHALL NOT return HTML intended for a person to read — including framework
-default error pages.
+structured data and, where answered in a body, a correlation identifier. Rendered prose
+SHALL NOT cross it, and the BFF SHALL NOT return HTML intended for a person to read —
+including framework default error pages.
 
-*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194, D-195, D-196*
+*Source: LIB-API-003, API-CONV-002, D-054, D-166, D-192, D-193, D-194, D-195, D-196,
+D-208*
 
 A navigation route (the social provider round trip, IDN-LIFE-012, and the sign-on round
 trip, BFF-SESS-006) answers a refusal of the person's attempt by returning the browser
@@ -885,7 +886,10 @@ inside, and the value in no entry the library writes (D-196).
 
 **Acceptance criteria**
 1. No response body contains a user-facing sentence.
-2. Every error carries a correlation identifier resolving to audit and logs.
+2. Every error answered in a body carries the request's correlation identifier,
+   resolving to that request's log entries, and a refusal the gate records carries its
+   audit record's identifier in `details.correlation` as well (AUTHZ-CONCEAL-004,
+   D-208).
 3. Every code appears in `10-reference.md`.
 4. A navigation's redirect carries `error`, `retryAt` beside a throttled or restriction
    refusal, and nothing else of the refusal's `details`.

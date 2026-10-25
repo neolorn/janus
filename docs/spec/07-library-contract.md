@@ -195,7 +195,7 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207*
+*Source: D-106, D-166, D-172, D-183, D-190, D-202, D-203, D-207, D-208*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -264,9 +264,10 @@ and exports returned, which no HTTP caller has to report; derivation refresh
 (`IDerivationMaterialiser`, AUTHZ-DERIVE-005), which the host calls from its own gated
 operation that changes a relationship or from a declared job outside a request, and
 which records each grant it writes or takes back naming who called it, a job's context
-calling it while a request is served being refused `authz.denied` as the gate refuses it
-(`01` IDN-PRIN-001, D-207); and the conformance suite's provider probes (LIB-TEST-001),
-which the suite calls and which read no record of a person (D-172).
+calling it while a request is served being a fault of the calling code, as is every
+other call by a system principal AUTHZ-DERIVE-005 does not admit (`01` IDN-PRIN-001,
+D-207, D-208); and the conformance suite's provider probes (LIB-TEST-001), which the
+suite calls and which read no record of a person (D-172).
 
 **Acceptance criteria**
 1. Each endpoint in `09` other than those named above resolves to exactly one service in
@@ -631,7 +632,9 @@ short-cuts no check.
 carries:
 
 - `InMemoryMailTransport` and `InMemorySmsTransport`, which keep every message sent,
-  readable by destination, and fail a delivery only where the test says so;
+  readable by destination, and fail a delivery only where the test says so; the SMS
+  transport reports a balance of 99999999999999.9999, which the balance job records
+  (D-208);
 - `FixedSecretSource`, for tests, which answers a key-encryption key version and a
   fingerprint key version of 32 bytes each, drawn once for the instance so that each
   test's deployment starts clean (a development setup that keeps its database across
@@ -682,7 +685,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206, D-207*
+*Source: D-204, D-205, D-206, D-207, D-208*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -693,7 +696,8 @@ CONV-LAYOUT-001, D-205).
    administrative organization and meets a gate that asks for phishing resistance at
    `aal2`.
 4. A development deployment composed with the stand-ins raises no `degradation` for the
-   seams they stand in for.
+   seams they stand in for, and its balance job records the SMS transport's balance and
+   raises no `background-job-failed` (D-208).
 5. A state-changing request made through a `TestSession` passes the browser profile's
    CSRF stages.
 

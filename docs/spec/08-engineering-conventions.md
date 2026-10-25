@@ -391,7 +391,7 @@ an operation that takes only an access context cannot be given it, and over HTTP
 route hands it one (`17` BFF-ORDER-001 stage 5, D-190).
 
 *Source: LIB-API-005, AUTHZ-IMP-001, D-149, D-162, D-166, D-172, D-179, D-183, D-186,
-D-189, D-190, D-207*
+D-189, D-190, D-207, D-208*
 
 Explicit calls read top to bottom and are what a reviewer and a test can see. A
 pipeline hides the order in registration code, and the two mainstream mediator and
@@ -424,13 +424,15 @@ rule (CONV-DEP-003) would refuse in any case.
    (OPS-ALERT-005); the provider probes of the conformance suite (LIB-TEST-001), which
    read no record of a person; derivation refresh (AUTHZ-DERIVE-005), which the host
    calls from its own gated operation or from a declared job outside a request (a job's
-   context while a request is served being refused `authz.denied`, `01` IDN-PRIN-001,
-   D-207) and the daily drift check calls under its system principal
-   `derivation-driftcheck`; loss-report cancellation, whose authority is the token its
-   notice carried or the report's holder (AUTH-RECOV-007); and registration begin, which
-   precedes any account (REG-SESS-002). The read of the provider's published key set
-   (`IOidc.KeysAsync`, AUTH-KEY-001) is no operation (LIB-API-005) and meets none: it
-   answers public keys alone and takes no access context.
+   context calling it while a request is served being a fault of the calling code that
+   throws `InvalidOperationException`, as is every other call by a system principal `03`
+   AUTHZ-DERIVE-005 does not admit, `01` IDN-PRIN-001, D-207, D-208) and the daily drift
+   check calls under its system principal `derivation-driftcheck`; loss-report
+   cancellation, whose authority is the token its notice carried or the report's holder
+   (AUTH-RECOV-007); and registration begin, which precedes any account (REG-SESS-002).
+   The read of the provider's published key set (`IOidc.KeysAsync`, AUTH-KEY-001) is no
+   operation (LIB-API-005) and meets none: it answers public keys alone and takes no
+   access context.
 4. An operation on the caller's own records given a context that names no account reads
    nothing; one naming another account's record answers exactly as one naming no record.
 5. An operation that rolls back leaves no event row and no outbox row of its own, and no
@@ -519,81 +521,84 @@ signal's consideration). So an operation judges the step-up it asks, which may a
 phone signal, before its unit of work begins, each refusal the step-up must follow
 judged first without a lock and again under its lock inside; a host asks a bound
 action's gate before it begins the unit of work it joins, as an operation does (D-207).
-A refusal the gate records is written outside the operation (CONV-DESIGN-002). A
-rollback discards the transaction, every change the scope's context tracks and every
-after-commit registration, and leaves the unit of work as though no operation had begun
-it. An operation that joined a unit of work another opened (a nested `BeginAsync`) and
-rolls back ends its level and marks the whole unit of work: nothing of it commits, the
-outermost level's `RollbackAsync` rolls it back, and its `CommitAsync` rolls it back and
-throws a fault. A call an operation must be able to survive being refused begins no unit
-of work of its own; it decides in its caller's. A `CommitAsync` that fails leaves the
-unit of work rolled back. Work registered on the unit of work to run after the commit
-(`IUnitOfWork.AfterCommit`, a fault where no unit of work is in progress; a send's
-immediate attempt, AUTH-ABUSE-004) runs once the outermost level has committed, and a
-fault of the library's own inside it (a setting that does not read, the database failing
-at the claim or at the outcome) is caught and logged by that work itself, never by the
-unit of work, and left to the publisher, which carries the row at a later pass, once it
-is due and unclaimed or its claim has timed out: the commit stands and the operation
-answers what it committed (CONV-ERR-003). A later operation in the same scope SHALL open
-and commit its own. `RollbackAsync` takes no cancellation token and answers no result:
-it has no expected failure, and a database error in it is a fault (CONV-ERR-001).
-`BeginAsync` and `CommitAsync` return a result and name no failure code; a caller that
-returns a result passes their failure up, and a caller that returns none (background
-work, a hosted service) throws it as a fault naming the code its `Error` carries, as a
-configuration read throws naming its key (OPS-CFG-008). No signature gains a result only
-to carry theirs (D-171). A port that runs hand-written SQL inside a unit of work SHALL
-first save the changes the scope's context tracks, in that transaction, so that the SQL
-sees them (OPS-DATA-002): a conditional insert naming an account added in the same unit
-of work finds it. A read, decide and write on a row whose value decides a security or
-state outcome SHALL take a row lock (`SELECT ... FOR UPDATE`) inside the transaction, or
-SHALL write through one update conditional on the value read, or a constraint SHALL make
-the race impossible. A decision on a value that no one row holds (whether an
-identifier's value is held or reserved, REG-SESS-005; whether a username is taken or
-held, REG-IDENT-009) SHALL be made under a lock on that value, which every operation
-that writes the value as held or reserved takes before it judges or writes, so that no
-other transaction takes or reserves the value between the judgement and the write. The
-lock is a transaction-scoped advisory lock (OPS-DATA-003) for each fingerprint key
-version the process holds, keyed by the first eight bytes, read as a signed big-endian
-integer, of SHA-256 over the lock's name in UTF-8 (`identifier` or `username`), one zero
-byte and the value's fingerprint under that version, taken after the operation's own row
-locks and before any send's counters (AUTH-ABUSE-004), the keys of every value lock the
-operation takes in one ascending order. A lookup that judges such a value reads every
-fingerprint key version in one statement (PRIV-RIGHT-005c). The unique constraints on
-such a value remain a guard, and one met by an operation that took the lock is a fault
-(CONV-ERR-001). A row that background work carries out of the database (a message, an
-outbox or event row, a mailbox push, a raised alert) SHALL be claimed before its carrier
-is called, by one conditional update committed on its own that marks it claimed until
-`outbox.claim.timeout` from then and succeeds only where the row is due (its next
-attempt's instant, where it carries one, has come) and is unclaimed or its claim has
-timed out. A row that tracks several deliveries (an outbox row's subscribers, an event
-row's consumers; a send row tracks one, a text message owed in several languages being
-one row for each and a mail one composed row, AUTH-ABUSE-004) is claimed whole, and an
-attempt of it is one pass over its outstanding deliveries: before each delivery the pass
-renews its claim, by one update conditional on the claim still being its own that moves
-its end to `outbox.claim.timeout` from then, and stops where the renewal changes
-nothing; each delivery's outcome (a subscriber's confirmation, a consumer's take) is
-written as it happens, by one update conditional on that claim. The attempt's outcome
-for the row (its attempts, its schedule, its status, the alert at exhaustion) SHALL be
-written by one update conditional on that claim, which changes nothing where the claim
-has been taken over, and an attempt still running when its claim times out is abandoned
-as a failed attempt. A pass reads its due rows without a lock, and passes in one process
-or several may run at once; the claim alone decides who carries a row. A send's
-immediate attempt (AUTH-ABUSE-004) claims its row the same way, save that it claims
-whatever the row's due instant, since it is the row's first attempt; a new send row that
-has an immediate attempt is due `outbox.retry.initial` after its admission, with no
-jitter, so the pass takes it only once that attempt has had its chance (D-188), and one
-that has none (a message whose ask is answered before any transport is called,
-AUTH-ABUSE-003) is due at its admission (D-189). Hand-written SQL (OPS-DATA-001) lives
-in `Janus.Storage` beside the port implementation it serves, never at a call site.
-Migrations are EF Core migrations in `Janus.Storage`, applied in the pipeline by
-`migrate`, the command of the `Janus.Cli` tool built from the same commit (OPS-MIG-001,
-D-204); the destructive-operation report (OPS-DEP-002) is the idempotent SQL script of
-the migrations pending on the target database, read from its migration history table (a
-pull request reports the migrations its range adds), scanned for `DROP`,
-`ALTER ... TYPE`, `ADD CONSTRAINT`, `TRUNCATE`, `DELETE FROM`, and, on a table the same
-migrations did not create or have filled, `SET NOT NULL`, a unique index and a column
-added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's. The
-library's pipeline writes the script with `dotnet-ef`; in a host's pipeline
+The username edit changes under its lock only what its step-up judgement covered: an
+edit naming, at the unlocked read, the username the account holds (`20` REG-IDENT-009)
+asks no step-up and changes no username, whatever the locked read finds, and commits the
+rest of the edit (D-208). A refusal the gate records is written outside the operation
+(CONV-DESIGN-002). A rollback discards the transaction, every change the scope's context
+tracks and every after-commit registration, and leaves the unit of work as though no
+operation had begun it. An operation that joined a unit of work another opened (a nested
+`BeginAsync`) and rolls back ends its level and marks the whole unit of work: nothing of
+it commits, the outermost level's `RollbackAsync` rolls it back, and its `CommitAsync`
+rolls it back and throws a fault. A call an operation must be able to survive being
+refused begins no unit of work of its own; it decides in its caller's. A `CommitAsync`
+that fails leaves the unit of work rolled back. Work registered on the unit of work to
+run after the commit (`IUnitOfWork.AfterCommit`, a fault where no unit of work is in
+progress; a send's immediate attempt, AUTH-ABUSE-004) runs once the outermost level has
+committed, and a fault of the library's own inside it (a setting that does not read, the
+database failing at the claim or at the outcome) is caught and logged by that work
+itself, never by the unit of work, and left to the publisher, which carries the row at a
+later pass, once it is due and unclaimed or its claim has timed out: the commit stands
+and the operation answers what it committed (CONV-ERR-003). A later operation in the
+same scope SHALL open and commit its own. `RollbackAsync` takes no cancellation token
+and answers no result: it has no expected failure, and a database error in it is a fault
+(CONV-ERR-001). `BeginAsync` and `CommitAsync` return a result and name no failure code;
+a caller that returns a result passes their failure up, and a caller that returns none
+(background work, a hosted service) throws it as a fault naming the code its `Error`
+carries, as a configuration read throws naming its key (OPS-CFG-008). No signature gains
+a result only to carry theirs (D-171). A port that runs hand-written SQL inside a unit
+of work SHALL first save the changes the scope's context tracks, in that transaction, so
+that the SQL sees them (OPS-DATA-002): a conditional insert naming an account added in
+the same unit of work finds it. A read, decide and write on a row whose value decides a
+security or state outcome SHALL take a row lock (`SELECT ... FOR UPDATE`) inside the
+transaction, or SHALL write through one update conditional on the value read, or a
+constraint SHALL make the race impossible. A decision on a value that no one row holds
+(whether an identifier's value is held or reserved, REG-SESS-005; whether a username is
+taken or held, REG-IDENT-009) SHALL be made under a lock on that value, which every
+operation that writes the value as held or reserved takes before it judges or writes, so
+that no other transaction takes or reserves the value between the judgement and the
+write. The lock is a transaction-scoped advisory lock (OPS-DATA-003) for each
+fingerprint key version the process holds, keyed by the first eight bytes, read as a
+signed big-endian integer, of SHA-256 over the lock's name in UTF-8 (`identifier` or
+`username`), one zero byte and the value's fingerprint under that version, taken after
+the operation's own row locks and before any send's counters (AUTH-ABUSE-004), the keys
+of every value lock the operation takes in one ascending order. A lookup that judges
+such a value reads every fingerprint key version in one statement (PRIV-RIGHT-005c). The
+unique constraints on such a value remain a guard, and one met by an operation that took
+the lock is a fault (CONV-ERR-001). A row that background work carries out of the
+database (a message, an outbox or event row, a mailbox push, a raised alert) SHALL be
+claimed before its carrier is called, by one conditional update committed on its own
+that marks it claimed until `outbox.claim.timeout` from then and succeeds only where the
+row is due (its next attempt's instant, where it carries one, has come) and is unclaimed
+or its claim has timed out. A row that tracks several deliveries (an outbox row's
+subscribers, an event row's consumers; a send row tracks one, a text message owed in
+several languages being one row for each and a mail one composed row, AUTH-ABUSE-004) is
+claimed whole, and an attempt of it is one pass over its outstanding deliveries: before
+each delivery the pass renews its claim, by one update conditional on the claim still
+being its own that moves its end to `outbox.claim.timeout` from then, and stops where
+the renewal changes nothing; each delivery's outcome (a subscriber's confirmation, a
+consumer's take) is written as it happens, by one update conditional on that claim. The
+attempt's outcome for the row (its attempts, its schedule, its status, the alert at
+exhaustion) SHALL be written by one update conditional on that claim, which changes
+nothing where the claim has been taken over, and an attempt still running when its claim
+times out is abandoned as a failed attempt. A pass reads its due rows without a lock,
+and passes in one process or several may run at once; the claim alone decides who
+carries a row. A send's immediate attempt (AUTH-ABUSE-004) claims its row the same way,
+save that it claims whatever the row's due instant, since it is the row's first attempt;
+a new send row that has an immediate attempt is due `outbox.retry.initial` after its
+admission, with no jitter, so the pass takes it only once that attempt has had its
+chance (D-188), and one that has none (a message whose ask is answered before any
+transport is called, AUTH-ABUSE-003) is due at its admission (D-189). Hand-written SQL
+(OPS-DATA-001) lives in `Janus.Storage` beside the port implementation it serves, never
+at a call site. Migrations are EF Core migrations in `Janus.Storage`, applied in the
+pipeline by `migrate`, the command of the `Janus.Cli` tool built from the same commit
+(OPS-MIG-001, D-204); the destructive-operation report (OPS-DEP-002) is the idempotent
+SQL script of the migrations pending on the target database, read from its migration
+history table (a pull request reports the migrations its range adds), scanned for
+`DROP`, `ALTER ... TYPE`, `ADD CONSTRAINT`, `TRUNCATE`, `DELETE FROM`, and, on a table
+the same migrations did not create or have filled, `SET NOT NULL`, a unique index and a
+column added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's.
+The library's pipeline writes the script with `dotnet-ef`; in a host's pipeline
 `migrate --report` generates it with EF Core's migrator and reports each matched
 statement as itself, not as the block that guards it (D-206). The serialized model of
 AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source generation to
@@ -601,7 +606,7 @@ AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source generation to
 
 *Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166,
 D-171, D-173, D-181, D-183, D-186, D-187, D-188, D-189, D-190, D-198, D-204, D-206,
-D-207*
+D-207, D-208*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -907,8 +912,10 @@ judging a session (`ISessionGates`, `Janus.Authorization`), which answers from t
 request the framework tracks for that flow (`IHttpContextAccessor`, which `AddJanus`
 registers): present for the whole of any request the application serves, through either
 profile or neither and in every scope opened within it, and absent in the flow of a
-background job. The gate refuses a host job's context while one is served, and so does a
-refresh of a materialised derivation (IDN-PRIN-001, AUTHZ-DERIVE-005, D-207).
+background job. The gate refuses a host job's context while one is served, and a refresh
+of a materialised derivation asked with it then, the materialiser asking the same
+contract, throws `InvalidOperationException`, a fault of the calling code (IDN-PRIN-001,
+AUTHZ-DERIVE-005, D-207, D-208).
 
 **The host's context and the unit of work (D-206).** `UseUnitOfWorkAsync` reaches the
 open unit of work through an internal contract `Janus.Storage` declares and its unit of
@@ -920,13 +927,22 @@ returns the context to its configuration exactly, the data source its provider b
 included, and it refuses a context that owns its connection object or was taken from a
 pool (AUTHZ-INHERIT-002, D-207).
 
+**An admission of two permissions (D-208).** The grant operations ask the gate for the
+one admission of AUTHZ-SCOPE-001 (`grant:manage` in the grant's organization, or
+`system:administer` in the administrative organization) through an internal contract
+`Janus.Authorization` declares, the grant admission (`IGrantAdmission`), which
+`AccessGate` implements, as it implements the unscoped refusal: it decides each
+permission as the single check decides it, adds no rule of its own and records at most
+one refusal, so every permission evaluation stays behind the one seam (LIB-SEAM-001,
+`03` AUTHZ-SEAM-001); it has no public surface.
+
 **A contributor's names (D-206).** The export's assembly asks of each name a contributor
 answers whether it keeps the rule of PRIV-RIGHT-003 through an internal contract
 `Janus.Privacy` declares (`IExportNameRule`) and `Janus.Hosting` implements over the
 rule's check in `Janus.Core`, before it takes the answer.
 
 *Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181, D-183,
-D-187, D-188, D-189, D-190, D-203, D-204, D-206, D-207*
+D-187, D-188, D-189, D-190, D-203, D-204, D-206, D-207, D-208*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.

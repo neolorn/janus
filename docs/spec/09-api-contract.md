@@ -63,7 +63,7 @@ never rendered prose.
 }
 ```
 
-*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183, D-197*
+*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183, D-197, D-208*
 
 The host renders the message in the user's language from the code. `details` carries
 structured context: never a sentence. Every free-text request field (`reason`, `detail`,
@@ -89,7 +89,9 @@ instant the next attempt is looked at, built by one builder wherever it is answe
 
 **Acceptance criteria**
 1. No error body contains a user-facing sentence.
-2. Every error carries a correlation identifier resolving to audit and logs.
+2. Every error carries the request's correlation identifier, resolving to that request's
+   log entries, and a refusal the gate records carries its audit record's identifier in
+   `details.correlation` as well (AUTHZ-CONCEAL-004, D-208).
 3. A free-text member that is blank, or longer than 1024 characters after trimming, is
    refused 400 `api.request.malformed` naming it, or, where it is a required reason that
    is blank, with that reason's code.
@@ -1180,7 +1182,9 @@ Edits the profile fields of REG-PROF-001 and, where enabled, the username
 ```
 
 **204**
-**403**: `auth.stepup.required`, for a username change only (`username:change`)
+**403**: `auth.stepup.required`, for a username change only (`username:change`): a body
+naming the username the account held when the edit's step-up was judged is no username
+change (REG-IDENT-009, D-208)
 **409**: `identity.username.taken`, `identity.username.reserved` (disclosed by design:
 a username is public, REG-IDENT-009); `identity.username.coolingoff` where a username
 change falls inside `identifiers.username.changecooloff`, with the cooling-off end in
@@ -1190,7 +1194,7 @@ over 64 bytes, or a legal name outside its bound); `identity.profile.notaccepted
 `dateOfBirth` field, immutable to the person and corrected through support; a
 `legalName` or `username` while its key or `identifiers.username.enabled` is off)
 
-*Source: D-146; REG-PROF-001, REG-IDENT-009, D-162, D-166*
+*Source: D-146; REG-PROF-001, REG-IDENT-009, D-162, D-166, D-208*
 
 Display name and legal name need no gate and are audited. A username change is a
 step-up action and re-verifies nothing: a username is never verified.
@@ -2195,10 +2199,10 @@ declared job holds no grant and is not listed; its reach is its declaration
 type, or `resourceId` where the type is `organization` and the identifier is not a UUID
 **403**: `authz.denied` without `grant:read` in the organization the record belongs to,
 and for a record the deployment holds no registration for, which belongs to no
-organization (AUTHZ-SCOPE-001): one answer for both, recorded and counted as every
-refusal is
+organization (AUTHZ-SCOPE-001): one answer for both, recorded and counted
+(AUTHZ-CONCEAL-004)
 
-*Source: AUTHZ-GATE-004, AUTHZ-DERIVE-007, D-166, D-207*
+*Source: AUTHZ-GATE-004, AUTHZ-DERIVE-007, D-166, D-207, D-208*
 
 ---
 
@@ -2223,12 +2227,13 @@ A grant on the whole organization is written `resourceType` `organization` with
 to: the one the record was registered in, or the one named; for a grant in an
 organization other than the administrative organization, `system:administer` held in the
 administrative organization admits it too, so an organization
-`POST /admin/organizations` created receives its first grant (AUTHZ-SCOPE-001, D-207).
-`reason` is recorded. Revocation records the revoking actor; `DELETE` takes
-`{ "reason": "..." }`. A grant or revocation of a role that carries `system:administer`
-also requires `system:administer` in the administrative organization (OPS-CFG-007).
-Nothing is granted to the reserved `emergency` account, and its `system-administrator`
-grant is not revoked (OPS-BOOT-002).
+`POST /admin/organizations` created receives its first grant (AUTHZ-SCOPE-001, D-207);
+the two are one admission, refused and recorded once, only where neither admits
+(AUTHZ-SCOPE-001, D-208). `reason` is recorded. Revocation records the revoking actor;
+`DELETE` takes `{ "reason": "..." }`. A grant or revocation of a role that carries
+`system:administer` also requires `system:administer` in the administrative organization
+(OPS-CFG-007). Nothing is granted to the reserved `emergency` account, and its
+`system-administrator` grant is not revoked (OPS-BOOT-002).
 
 **201**: `{ "id": "..." }` · **204** **400**: `api.request.malformed` naming `reason`
 where it is longer than 1024 characters after trimming **403**: `authz.denied` where
@@ -2246,7 +2251,7 @@ present **422**: `authz.grant.reasonrequired`; `authz.grant.unresolved` where `r
 names no role the deployment holds, or `subjectId` names a group that does not exist or
 belongs to another organization (`details.member`)
 
-*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-SCOPE-001, D-166, D-207*
+*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-SCOPE-001, D-166, D-207, D-208*
 
 ---
 
@@ -2653,9 +2658,9 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 | Endpoint | Does |
 |---|---|
 | `GET /admin/audit?subject=...` | Every audit record naming one subject, as the acting identity or as the data subject the record concerns (`subject`), most recent first, without a full scan (PRIV-BREACH-002): each entry carries the record's identifier, category, action, occurrence, acting and effective subjects, the data subject the record concerns as `subject` (null where it concerns none, a record written before that column existed among them), organization and plain details, and never a value held under a subject's key (PRIV-RET-002), so it reads the same before and after erasure; a record of background work carries `principal` and `principalReason` (IDN-AUD-001); a record written in a break-glass session, or in a session another application opened from it, carries `breakGlassReason`, the reason given at its use (OPS-BOOT-002, D-170, D-171) |
-| `GET /admin/explanations/{correlationId}` | Resolves a concealed denial's correlation identifier to the permission and principal (AUTHZ-GATE-004, AUTHZ-CONCEAL-004), with the outcome `allowed` or `denied` (the explanation outcomes of `10`); any recorded refusal resolves |
+| `GET /admin/explanations/{correlationId}` | Resolves a concealed denial's correlation identifier to the permission and principal (AUTHZ-GATE-004, AUTHZ-CONCEAL-004), with the outcome `allowed` or `denied` (the explanation outcomes of `10`); any recorded refusal resolves; `{correlationId}` is the `details.correlation` its refusal carried (D-208) |
 
-Self-service explanation for **non-concealed** types is `GET /account/explanations/{correlationId}`, requiring only the subject's own session: it resolves a refusal whose acting and effective principal are both the caller, on a type that discloses or on no record (AUTHZ-CONCEAL-005); any other identifier answers `authz.denied` (D-166).
+Self-service explanation for **non-concealed** types is `GET /account/explanations/{correlationId}`, requiring only the subject's own session: it resolves a refusal whose acting and effective principal are both the caller, on a type that discloses or on no record (AUTHZ-CONCEAL-005); any other identifier answers `authz.denied` (D-166). `{correlationId}` is the `details.correlation` its refusal carried (D-208).
 
 ### Compliance text — `notice:publish`
 
