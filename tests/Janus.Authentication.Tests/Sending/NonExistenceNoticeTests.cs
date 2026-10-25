@@ -244,6 +244,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
             Source,
             "en",
             unheld: true,
+            outermost: true,
             TestContext.Current.CancellationToken);
 
         Assert.True(recovered.Match(() => true, _ => false));
@@ -280,6 +281,44 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
         Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 (D-207): the answer to an ask that may ask the carrier's signal
+    /// (a recovery, a sign-in link) begins the outermost unit of work, so called inside
+    /// one already open it ends that level and throws, and nothing of the outer unit of
+    /// work commits; an email code's answer joins the unit of work open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AnAnswerThatMayFollowTheSignalInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await AnswerAsync(Address("nobody@example.test"), unheld: true));
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        Result joined = await Notice.AnswerAsync(
+            Address("somebody@example.test"),
+            MessageKind.SignInCode,
+            RestrictionPurpose.SignIn,
+            Source,
+            "en",
+            unheld: false,
+            outermost: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(joined.Match(() => true, _ => false));
+        Assert.True(_work.Open);
+        Assert.True((await _work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.Equal(1, _work.OutermostCommitted);
+    }
+
     private static SendDestination Address(string address) =>
         EmailAddress.TryParse(address, out EmailAddress destination)
             ? SendDestination.Of(destination)
@@ -293,6 +332,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
             Source,
             "en",
             unheld,
+            outermost: true,
             TestContext.Current.CancellationToken);
 
     private async Task<bool> ToldAsync(string address)

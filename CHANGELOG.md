@@ -4008,3 +4008,15 @@ against the public contract of LIB-API-001.
   `details.session` only where the token names a session.
 - `InMemorySmsTransport` reports a balance of 99999999999999.9999, the largest a balance
   reading holds, so the balance job records it on every poll rather than failing.
+- A profile edit that changes the username judges the change's cooling-off, whether the
+  name is taken or held, and its step-up before its unit of work begins, and the first
+  two again under the locks inside; a carrier's signal the step-up asks is asked with no
+  unit of work begun, and a risk it answers stays recorded when the step-up refuses. An
+  edit naming the username the account holds asks no step-up and changes no username,
+  even where a change of the same account commits meanwhile, and its other fields are
+  saved.
+- A text code's enrolment begun, a recovery asked and a sign-in link asked, each of
+  which may ask the carrier's signal of a number, begin the outermost unit of work:
+  called inside a unit of work already open, the host's own included, the begin ends
+  it and throws `InvalidOperationException`, and nothing of the outer unit of work
+  commits. An email code asked for still joins the unit of work open.

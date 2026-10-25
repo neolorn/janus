@@ -4505,6 +4505,39 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 (D-207): a sign-in link, which may go by text and so ask the
+    /// carrier's signal of the number, asked inside a unit of work another opened is a
+    /// fault of the calling code, for a number an account holds and for one none holds:
+    /// it ends the level it joined, so nothing of the outer unit of work commits and
+    /// nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ALinkAskedInsideAnOpenUnitOfWorkIsAFaultAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        _work.Reset();
+
+        foreach (string number in new[] { Number, "+441632960099" })
+        {
+            _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await Service.SendLinkAsync(number, Language, Source, browser: null, TestContext.Current.CancellationToken));
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+            Assert.False(_work.Open);
+        }
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneLink, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// INT-SMS-001 AC2: with the two SMS entries off in the policy, asking for a link
     /// at a number sends nothing and leaves no sign-in in flight.
     /// </summary>

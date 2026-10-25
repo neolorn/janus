@@ -558,7 +558,13 @@ internal sealed class SignInLinks(
         IReadOnlyList<IdentifierKind> Kinds,
         MessageKind Message,
         DurationSetting Lifetime,
-        bool CarriesLink);
+        bool CarriesLink)
+    {
+        // An ask that may go by text asks the carrier's signal of the number, whose risk
+        // is a kept write, so its unit of work is the outermost and it is never called
+        // inside another's (AUTH-FACT-002b, CONV-DESIGN-003, D-207).
+        public bool Texted => Kinds.Contains(IdentifierKind.Phone);
+    }
 
     private async ValueTask<Result> AskAsync(
         string identifier,
@@ -655,6 +661,7 @@ internal sealed class SignInLinks(
             source,
             language,
             unheld,
+            ask.Texted,
             cancellationToken);
 
     private async ValueTask<Result> IssueAsync(
@@ -725,8 +732,11 @@ internal sealed class SignInLinks(
             values["link"] = landing.Of(LinkKind.SignIn, token.Value);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        Result begun = ask.Texted
+            ? await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false)
+            : (await work.BeginAsync(cancellationToken).ConfigureAwait(false)).Match(_ => Result.Success(), Result.Failure);
+
+        if (begun.Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

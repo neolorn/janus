@@ -621,8 +621,11 @@ internal sealed class CredentialService(
             return Result.Failure(failure);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        // CONV-DESIGN-003, D-207: the carrier's signal was asked, and a risk it answered
+        // recorded as a kept write, so the enrolment is never begun inside another's
+        // unit of work.
+        if ((await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
