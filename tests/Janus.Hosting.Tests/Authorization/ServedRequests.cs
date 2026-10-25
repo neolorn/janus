@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
@@ -72,10 +73,33 @@ internal sealed class ServedRequests : IAsyncDisposable
     /// <param name="endpoint">What the host's endpoint does with the request it serves.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The deployment, serving.</returns>
-    public static async Task<ServedRequests> StartAsync(
+    public static Task<ServedRequests> StartAsync(
         HostFixture fixture,
         AuthorizationDeclaration declaration,
         RequestDelegate endpoint,
+        CancellationToken cancellationToken) =>
+        StartAsync(fixture, declaration, endpoint, mountsLibrary: false, cancellationToken);
+
+    /// <summary>
+    /// Starts the deployment with the library's own endpoints mounted between the two
+    /// profiles, as a host mounts them, the host's endpoint answering every request none
+    /// of them serves.
+    /// </summary>
+    /// <param name="fixture">The database the deployment reads.</param>
+    /// <param name="endpoint">What the host's endpoint does with the request it serves.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The deployment, serving.</returns>
+    public static Task<ServedRequests> StartMountedAsync(
+        HostFixture fixture,
+        RequestDelegate endpoint,
+        CancellationToken cancellationToken) =>
+        StartAsync(fixture, HostFixture.Declaration(), endpoint, mountsLibrary: true, cancellationToken);
+
+    private static async Task<ServedRequests> StartAsync(
+        HostFixture fixture,
+        AuthorizationDeclaration declaration,
+        RequestDelegate endpoint,
+        bool mountsLibrary,
         CancellationToken cancellationToken)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
@@ -84,14 +108,39 @@ internal sealed class ServedRequests : IAsyncDisposable
         builder.Services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
         builder.Services.AddSingleton<ISecretSource>(HostFixture.Secrets(fixture.MaintenanceConnectionString));
         HostFixture.Sourced(builder.Services, fixture.ConnectionString);
+
+        // LIB-HOST-001: the library's endpoints send through the transports a host
+        // registers, and a link they send lands where the deployment declares its
+        // applications are.
+        if (mountsLibrary)
+        {
+            builder.Services.AddSingleton<IMailTransport>(new MailTransportInMemory());
+            builder.Services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+            builder.Services.AddSingleton(new LandingOrigins("https://identity.example.test", "https://accounts.example.test"));
+        }
+
         builder.Services.AddJanus(fixture.ConnectionString, declaration, ApplicationKind.Public);
 
         WebApplication application = builder.Build();
         var pipeline = (IApplicationBuilder)application;
 
         _ = pipeline.Map("/outside", outside => outside.Run(endpoint));
+
+        // A host mounts the library's endpoints between the two profiles, with routing
+        // named by hand because no web server composes it here.
+        if (mountsLibrary)
+        {
+            _ = pipeline.UseRouting();
+        }
+
         _ = pipeline.UseMachineProfile();
         _ = pipeline.UseBrowserProfile();
+
+        if (mountsLibrary)
+        {
+            _ = pipeline.UseEndpoints(endpoints => endpoints.MapIdentityEndpoints());
+        }
+
         pipeline.Run(endpoint);
 
         // CONV-DESIGN-007, AUTH-KEY-001: the key ring is filled and the provider's signing
@@ -120,6 +169,16 @@ internal sealed class ServedRequests : IAsyncDisposable
     /// <param name="path">The request's path.</param>
     /// <returns>What it came back with.</returns>
     public Task<Answer> SendAsync(string path) => _server.SendAsync("GET", path);
+
+    /// <summary>
+    /// Serves one request for the path, carrying the browser's cookies.
+    /// </summary>
+    /// <param name="path">The request's path.</param>
+    /// <param name="query">The request's query string, with its question mark, or nothing.</param>
+    /// <param name="cookie">The <c>Cookie</c> header the browser sends.</param>
+    /// <returns>What it came back with.</returns>
+    public Task<Answer> SendAsync(string path, string query, string cookie) =>
+        _server.SendAsync("GET", path, query, cookie);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
