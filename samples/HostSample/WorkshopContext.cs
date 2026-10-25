@@ -94,6 +94,7 @@ internal sealed class WorkshopContext(DbContextOptions<WorkshopContext> options)
             repair.Property(row => row.ContactName).HasColumnName("contact_name");
             repair.Property(row => row.FollowUp).HasColumnName("follow_up");
             repair.Property(row => row.ReleasedAt).HasColumnName("released_at");
+            repair.HasOne<Workshop>().WithMany().HasForeignKey(row => row.WorkshopId);
         });
 
         modelBuilder.Entity<RepairOwner>(owner =>
@@ -102,6 +103,7 @@ internal sealed class WorkshopContext(DbContextOptions<WorkshopContext> options)
             owner.HasKey(row => new { row.RepairId, row.Owner });
             owner.Property(row => row.RepairId).HasColumnName("repair_id");
             owner.Property(row => row.Owner).HasColumnName("owner").HasConversion(Subject);
+            owner.HasOne<Repair>().WithMany().HasForeignKey(row => row.RepairId);
         });
 
         modelBuilder.Entity<RepairCollector>(collector =>
@@ -110,6 +112,7 @@ internal sealed class WorkshopContext(DbContextOptions<WorkshopContext> options)
             collector.HasKey(row => new { row.RepairId, row.Collector });
             collector.Property(row => row.RepairId).HasColumnName("repair_id");
             collector.Property(row => row.Collector).HasColumnName("collector").HasConversion(Subject);
+            collector.HasOne<Repair>().WithMany().HasForeignKey(row => row.RepairId);
         });
 
         modelBuilder.Entity<Fitting>(fitting =>
@@ -120,6 +123,7 @@ internal sealed class WorkshopContext(DbContextOptions<WorkshopContext> options)
             fitting.Property(row => row.RepairId).HasColumnName("repair_id");
             fitting.Property(row => row.Customer).HasColumnName("customer").HasConversion(Subject);
             fitting.Property(row => row.Need).HasColumnName("need");
+            fitting.HasOne<Repair>().WithMany().HasForeignKey(row => row.RepairId);
         });
 
         modelBuilder.MapAuthorizationTables();
