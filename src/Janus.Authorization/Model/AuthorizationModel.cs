@@ -226,6 +226,18 @@ internal sealed class AuthorizationModel
         _jobs.TryGetValue(job, out HashSet<Permission>? permissions) && permissions.Contains(permission);
 
     /// <summary>
+    /// Whether the host declared a job of that name.
+    /// </summary>
+    /// <param name="job">The name the job's principal carries.</param>
+    /// <returns>Whether the job is declared.</returns>
+    /// <remarks>
+    /// Implements IDN-PRIN-001 and AUTHZ-DERIVE-005 (D-208): an organization-scoped
+    /// principal naming no declared job acts as nothing, so its refresh of a materialised
+    /// derivation is refused as its host permissions are.
+    /// </remarks>
+    public bool DeclaresJob(string job) => _jobs.ContainsKey(job);
+
+    /// <summary>
     /// The export operations: every permission the host declares whose action is
     /// <c>export</c>.
     /// </summary>

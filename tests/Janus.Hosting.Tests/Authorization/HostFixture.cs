@@ -300,7 +300,14 @@ public sealed class HostFixture : IAsyncLifetime
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .ServesPurpose(HostPermissions.Retain.ToString(), "keeping the books")
-            .Job(Digest, HostPermissions.Read.ToString(), HostPermissions.Edit.ToString())
+            // IDN-PRIN-001 AC6 (D-208): the job exercises a permission bound to a
+            // consent-based purpose, which the gate admits on the record's data subject's
+            // consent alone.
+            .Job(
+                Digest,
+                HostPermissions.Read.ToString(),
+                HostPermissions.Edit.ToString(),
+                HostPermissions.Recommend.ToString())
             .Relationship<HostReviewer>(
                 "reviewer",
                 "workspace",

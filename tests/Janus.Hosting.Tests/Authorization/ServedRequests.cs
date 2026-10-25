@@ -57,8 +57,24 @@ internal sealed class ServedRequests : IAsyncDisposable
     /// <param name="endpoint">What the host's endpoint does with the request it serves.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The deployment, serving.</returns>
+    public static Task<ServedRequests> StartAsync(
+        HostFixture fixture,
+        RequestDelegate endpoint,
+        CancellationToken cancellationToken) =>
+        StartAsync(fixture, HostFixture.Declaration(), endpoint, cancellationToken);
+
+    /// <summary>
+    /// Starts the deployment under the declaration given, which is how a case needing the
+    /// derivation precomputed into grant rows serves its request (AUTHZ-DERIVE-005).
+    /// </summary>
+    /// <param name="fixture">The database the deployment reads.</param>
+    /// <param name="declaration">The host's declaration.</param>
+    /// <param name="endpoint">What the host's endpoint does with the request it serves.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The deployment, serving.</returns>
     public static async Task<ServedRequests> StartAsync(
         HostFixture fixture,
+        AuthorizationDeclaration declaration,
         RequestDelegate endpoint,
         CancellationToken cancellationToken)
     {
@@ -68,7 +84,7 @@ internal sealed class ServedRequests : IAsyncDisposable
         builder.Services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
         builder.Services.AddSingleton<ISecretSource>(HostFixture.Secrets(fixture.MaintenanceConnectionString));
         HostFixture.Sourced(builder.Services, fixture.ConnectionString);
-        builder.Services.AddJanus(fixture.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+        builder.Services.AddJanus(fixture.ConnectionString, declaration, ApplicationKind.Public);
 
         WebApplication application = builder.Build();
         var pipeline = (IApplicationBuilder)application;

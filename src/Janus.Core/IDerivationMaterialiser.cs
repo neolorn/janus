@@ -11,7 +11,8 @@ namespace Janus.Core;
 /// Implements AUTHZ-DERIVE-005 (D-161). The host calls this from the operation that
 /// changes the relationship, inside the same unit of work, so the grants and the fact
 /// they were computed from are written together or not at all. The same call is what
-/// the drift check runs, and what it changes there is drift.
+/// the drift check runs, and what it changes there is drift. A host's declared job calls
+/// it outside a request only (IDN-PRIN-001, D-208).
 /// </remarks>
 public interface IDerivationMaterialiser
 {
@@ -34,6 +35,12 @@ public interface IDerivationMaterialiser
     /// <exception cref="System.ArgumentException">
     /// The relationship is undeclared, no materialised derivation follows from it, or the
     /// rows of it were not supplied.
+    /// </exception>
+    /// <exception cref="System.InvalidOperationException">
+    /// The context is a system principal's and a request is served on the calling flow,
+    /// or it is an organization-scoped principal naming no declared job, or a
+    /// deployment-scoped principal that may not run reconciliation; nothing is written
+    /// (AUTHZ-DERIVE-005, D-208).
     /// </exception>
     ValueTask<Result<DerivationRefresh>> RefreshAsync<TResource>(
         AccessContext context,
