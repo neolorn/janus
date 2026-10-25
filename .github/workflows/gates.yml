@@ -337,3 +337,20 @@ jobs:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
       - run: ./.github/gates/dependency-vulnerabilities.sh
+
+  sample-host:
+    name: The sample host builds from the packages packed from the same commit, and its tests pass
+    # CONV-GATE-002: the containerised runs are for a pull request and the default
+    # branch, not for every push to a feature branch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # The packages take their version from the tags, so the tags have to be here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: ./.github/gates/sample-host.sh

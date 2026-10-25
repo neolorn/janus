@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- LIB-TEST-004, LIB-TEST-003 (D-205): a host built on the main package alone, which
+       takes what the shared framework serves from the framework, never as a package. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Janus.Hosting" />
+  </ItemGroup>
+
+</Project>
