@@ -3898,6 +3898,11 @@ against the public contract of LIB-API-001.
   `derivation:<relationship>`, and records each as `authz.grant.materialised` or
   `authz.grant.retracted` in its transaction, naming the person who called it, or the
   principal and its stated reason. A system principal's context is no longer refused.
+- `IDerivationMaterialiser.RefreshAsync` throws `InvalidOperationException` and writes
+  nothing when called with a system principal's context while an HTTP request is
+  served on the calling flow, with an organization-scoped principal naming no declared
+  job, or with a deployment-scoped principal that may not run `reconciliation`. A
+  host's declared job refreshes outside a request only.
 - A preference declared under a name holding a `.` or a `/`, or named `language` or
   `timeZone`, the names the export gives the account's language and time zone, fails
   startup with `model.startup.preferencedeclaration` naming it.
