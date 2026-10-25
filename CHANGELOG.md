@@ -3987,3 +3987,5 @@ against the public contract of LIB-API-001.
   invitation in the outermost unit of work and commits it with the
   `identity.registration.signedin` refusal; called inside a unit of work already open,
   the host's own included, the begin ends it and throws `InvalidOperationException`.
+- `InMemorySmsTransport` reports a balance of 99999999999999.9999, the largest a balance
+  reading holds, so the balance job records it on every poll rather than failing.
