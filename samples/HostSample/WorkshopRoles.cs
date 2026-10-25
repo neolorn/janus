@@ -1,11 +1,18 @@
 namespace HostSample;
 
 /// <summary>
-/// The roles the workshop declares: the one an organization grants its staff, and the
-/// two that follow from the facts of a repair.
+/// The roles the workshop declares: the one that manages an organization's staff, the
+/// one an organization grants its technicians, and the two that follow from the facts of
+/// a repair.
 /// </summary>
 public static class WorkshopRoles
 {
+    /// <summary>
+    /// A manager of the organization that runs a workshop, who invites its staff, grants
+    /// them their roles and reads who can reach its records.
+    /// </summary>
+    public const string Manager = "workshop-manager";
+
     /// <summary>
     /// A technician of the organization that runs a workshop, who opens workshops, reads
     /// their repairs and releases repaired kites.

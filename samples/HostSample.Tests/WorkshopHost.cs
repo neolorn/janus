@@ -26,8 +26,9 @@ namespace HostSample.Tests;
 /// prepared by the library's own commands, the workshop's tables beside the library's,
 /// the application started on a web server in memory with mail and SMS taken in memory,
 /// and its people signed in through the library's own endpoints: the first
-/// administrator, who publishes the notice and the terms and opens the organization
-/// that runs the workshop, and a technician of that organization, who opens it.
+/// administrator, who publishes the notice and the terms, opens the organization that
+/// runs the workshop and gives it its first grant, and a technician of that
+/// organization, who opens it.
 /// </summary>
 /// <remarks>
 /// Implements LIB-TEST-004. One container per test class, torn down with the class.
@@ -97,6 +98,11 @@ public sealed class WorkshopHost : IAsyncLifetime
     /// The organization that runs the workshop.
     /// </summary>
     public OrganizationId Organization { get; private set; }
+
+    /// <summary>
+    /// The organization's first grant, which the first administrator wrote.
+    /// </summary>
+    public string FirstGrant { get; private set; } = string.Empty;
 
     /// <summary>
     /// The workshop the technician opened.
@@ -297,6 +303,28 @@ public sealed class WorkshopHost : IAsyncLifetime
         Organization = organization.Status is HttpStatusCode.Created
             ? OrganizationId.Parse(organization.Body!.Value.GetProperty("id").GetString()!, provider: null)
             : throw new InvalidOperationException("POST admin/organizations answered " + (int)organization.Status + " " + organization.Code + ".");
+
+        // AUTHZ-SCOPE-001 (D-207): the organization holds no grant, so the first
+        // administrator gives it its first, under system:administer held in the
+        // administrative organization, before inviting its staff.
+        Answered granted = await Exchanges.SteppedAsync(
+            Administrator,
+            HttpMethod.Post,
+            "admin/grants",
+            new
+            {
+                subjectType = "user",
+                subjectId = Administrator.Subject.Value,
+                resourceType = "organization",
+                resourceId = Organization.Value,
+                role = WorkshopRoles.Manager,
+                reason = "The first grant of the organization that runs the workshop.",
+            },
+            CancellationToken.None);
+
+        FirstGrant = granted.Status is HttpStatusCode.Created
+            ? granted.Body!.Value.GetProperty("id").GetString()!
+            : throw new InvalidOperationException("POST admin/grants answered " + (int)granted.Status + " " + granted.Code + ".");
 
         if (!EmailAddress.TryParse("technician@kites.example.test", out EmailAddress technician))
         {

@@ -111,6 +111,40 @@ public sealed class WorkshopEndpointTests(WorkshopHost host) : IClassFixture<Wor
     }
 
     /// <summary>
+    /// LIB-TEST-004 AC2: the organization the first administrator created holds the
+    /// first grant they wrote in it under system:administer held in the administrative
+    /// organization, and the workshop is registered in it, so that grant reaches it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_004_AC2_ACreatedOrganizationIsGivenItsFirstGrantsAndHoldsTheSamplesRecordsAsync()
+    {
+        Answered grants = await Exchanges.SteppedAsync(
+            host.Administrator,
+            HttpMethod.Get,
+            "admin/grants?organization=" + host.Organization.Value + "&subjectType=user&subjectId=" + host.Administrator.Subject.Value,
+            null,
+            Cancellation);
+        Answered access = await Exchanges.SteppedAsync(
+            host.Administrator,
+            HttpMethod.Get,
+            "admin/access?resourceType=workshop&resourceId=" + Uri.EscapeDataString(host.Workshop),
+            null,
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.OK, grants.Status);
+        JsonElement first = Assert.Single(grants.Body!.Value.EnumerateArray());
+        Assert.Equal(host.FirstGrant, first.GetProperty("id").GetString());
+        Assert.Equal(WorkshopRoles.Manager, first.GetProperty("role").GetString());
+        Assert.Equal(host.Organization.Value.ToString(), first.GetProperty("resourceId").GetString());
+        Assert.Equal(host.Administrator.Subject.Value.ToString(), first.GetProperty("grantedBy").GetString());
+        Assert.Equal(HttpStatusCode.OK, access.Status);
+        Assert.Contains(
+            access.Body!.Value.GetProperty("grants").EnumerateArray(),
+            grant => grant.TryGetProperty("id", out JsonElement id) && id.GetString() == host.FirstGrant);
+    }
+
+    /// <summary>
     /// LIB-TEST-004: a workshop's list is filtered by the gate in the workshop's own
     /// query, so a customer sees their own repair and not another's, and each entry
     /// carries the capabilities its reader holds, with what each still requires.

@@ -141,6 +141,11 @@ internal static class WorkshopModel
             .ServesPurpose(AddFitting.ToString(), AdaptingGrips)
             .ServesPurpose(ReadFitting.ToString(), AdaptingGrips)
             .Role(
+                WorkshopRoles.Manager,
+                Permissions.MembershipManage.ToString(),
+                Permissions.GrantManage.ToString(),
+                Permissions.GrantRead.ToString())
+            .Role(
                 WorkshopRoles.Technician,
                 OpenWorkshop.ToString(),
                 ReadRepair.ToString(),
