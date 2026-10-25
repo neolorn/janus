@@ -239,9 +239,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // reaches every record of its organization, and no restriction is judged for it, a
     // restriction being the acting account's; it is refused for any other permission,
     // in another organization, and in its own once its deletion is requested or it is
-    // erased. The lists admit the record where the check does, and a list the
-    // declaration does not reach is refused with the code the check answers
-    // (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, PRIV-RIGHT-004 AC3, D-207).
+    // erased. A permission bound to a consent-based purpose asks the record's data
+    // subject's consent of a job as of a person. The lists admit the record where the
+    // check does, and a list the declaration does not reach is refused with the code the
+    // check answers (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, PRIV-RIGHT-004 AC3, D-207,
+    // D-208).
     private static readonly (string Scenario, Decided Decided)[] Jobs =
     [
         ("a declared job asking while a request is served through the browser profile", Decided.Denied),
@@ -253,6 +255,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a declared job asking a modifying permission its declaration names, on a record whose data subject is restricted",
             Decided.Allowed),
         ("a declared job asking a permission its declaration does not name", Decided.Denied),
+        (
+            "a declared job asking a consent-bound permission its declaration names, on a record whose data subject consented",
+            Decided.Allowed),
+        (
+            "a declared job asking a consent-bound permission its declaration names, on a record whose data subject has not consented",
+            Decided.ConsentRequired),
         ("a declared job asking on a record of another organization", Decided.Denied),
         ("a declared job asking in its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking in its organization, once it is erased", Decided.Denied),
@@ -261,11 +269,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // A host's declared job asking a host permission of its organization itself, which
     // names no record and so runs through the single check alone: its declaration
     // reaches the organization as an organization-wide grant reaches a person, and the
-    // refusals are those of its records (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, D-207).
+    // refusals are those of its records; a consent-based purpose, which no data subject's
+    // consent can admit there, is refused as it is for a person (AUTHZ-TEST-001 AC1, AC2,
+    // IDN-PRIN-001 AC6, AUTHZ-GATE-005, D-207, D-208).
     private static readonly (string Scenario, Decided Decided)[] JobOrganizations =
     [
         ("a declared job asking a permission its declaration names, of its organization", Decided.Allowed),
         ("a declared job asking a permission its declaration does not name, of its organization", Decided.Denied),
+        ("a declared job asking a consent-bound permission its declaration names, of its organization", Decided.ConsentRequired),
         ("a declared job asking of another organization", Decided.Denied),
         ("a declared job asking of its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking of its organization, once it is erased", Decided.Denied),
@@ -443,7 +454,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         if (!scenario.Contains("request is served", StringComparison.Ordinal)
             && !scenario.Contains("within a request", StringComparison.Ordinal))
         {
-            Assert.Equal((decided, decided, decided), await JobListedAsync(written, scenario));
+            // AUTHZ-GATE-002 AC4: a list leaves out a record whose consent is outstanding,
+            // as it leaves out one its grants do not reach.
+            Decided listed = decided is Decided.ConsentRequired ? Decided.Denied : decided;
+
+            Assert.Equal((decided, listed, listed), await JobListedAsync(written, scenario));
 
             return;
         }
@@ -1342,9 +1357,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // A record of the case's organization whose data subject is the case's account,
     // which the host's declared job is asked a permission on: one its declaration names,
-    // the modifying one where the case says so, or one it does not name; the account
-    // restricted, and the organization's deletion requested or the organization erased,
-    // where the case says so.
+    // the modifying one or the consent-bound one where the case says so, or one it does
+    // not name; the account restricted or consenting to the consent-bound one's purpose,
+    // and the organization's deletion requested or the organization erased, where the
+    // case says so.
     private async Task<Case> WriteJobAsync(string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -1376,11 +1392,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await deployment.EraseAsync(cancellationToken);
         }
 
+        if (scenario.Contains("data subject consented", StringComparison.Ordinal))
+        {
+            await ConsentedAsync(account);
+        }
+
         Permission asked = scenario.Contains("does not name", StringComparison.Ordinal)
             ? HostPermissions.Retain
-            : scenario.Contains("modifying", StringComparison.Ordinal)
-                ? HostPermissions.Edit
-                : HostPermissions.Read;
+            : scenario.Contains("consent-bound", StringComparison.Ordinal)
+                ? HostPermissions.Recommend
+                : scenario.Contains("modifying", StringComparison.Ordinal)
+                    ? HostPermissions.Edit
+                    : HostPermissions.Read;
 
         return new Case(host, deployment, account, record, sibling, outer, outer, asked);
     }
