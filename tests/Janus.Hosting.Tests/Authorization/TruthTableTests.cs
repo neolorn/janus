@@ -142,10 +142,21 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.StepUpRequired),
         ("a role defined, on a session that has not proved its gate, by a caller managing roles", Decided.StepUpRequired),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
+        (
+            "a grant written and then revoked in another organization, by a system administrator of the administrative organization",
+            Decided.Allowed),
+        (
+            "a grant written in another organization, by a system administrator restricted since the gate step",
+            Decided.Restricted),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
         ("a fact in the host's data a declared job's refresh materialised, outside a request", Decided.Allowed),
+        ("a fact in the host's data a declared job's refresh was asked for, while a request is served", Decided.Denied),
+        ("a fact in the host's data a principal naming no declared job asked a refresh for", Decided.Denied),
+        ("a fact in the host's data a reconciling principal's refresh materialised, outside a request", Decided.Allowed),
+        ("a fact in the host's data a reconciling principal asked a refresh for, while a request is served", Decided.Denied),
+        ("a fact in the host's data a principal that may not reconcile asked a refresh for", Decided.Denied),
         ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
         ("a type declaring as capabilities two permissions of one action", Decided.Raised),
         ("a role defined with the context of the start principal role-declaration", Decided.Denied),
@@ -234,9 +245,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // reaches every record of its organization, and no restriction is judged for it, a
     // restriction being the acting account's; it is refused for any other permission,
     // in another organization, and in its own once its deletion is requested or it is
-    // erased. The lists admit the record where the check does, and a list the
-    // declaration does not reach is refused with the code the check answers
-    // (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, PRIV-RIGHT-004 AC3, D-207).
+    // erased. A permission bound to a consent-based purpose asks the record's data
+    // subject's consent of a job as of a person. The lists admit the record where the
+    // check does, and a list the declaration does not reach is refused with the code the
+    // check answers (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, PRIV-RIGHT-004 AC3, D-207,
+    // D-208).
     private static readonly (string Scenario, Decided Decided)[] Jobs =
     [
         ("a declared job asking while a request is served through the browser profile", Decided.Denied),
@@ -248,6 +261,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a declared job asking a modifying permission its declaration names, on a record whose data subject is restricted",
             Decided.Allowed),
         ("a declared job asking a permission its declaration does not name", Decided.Denied),
+        (
+            "a declared job asking a consent-bound permission its declaration names, on a record whose data subject consented",
+            Decided.Allowed),
+        (
+            "a declared job asking a consent-bound permission its declaration names, on a record whose data subject has not consented",
+            Decided.ConsentRequired),
         ("a declared job asking on a record of another organization", Decided.Denied),
         ("a declared job asking in its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking in its organization, once it is erased", Decided.Denied),
@@ -256,15 +275,41 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // A host's declared job asking a host permission of its organization itself, which
     // names no record and so runs through the single check alone: its declaration
     // reaches the organization as an organization-wide grant reaches a person, and the
-    // refusals are those of its records (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001 AC6, D-207).
+    // refusals are those of its records; a consent-based purpose, which no data subject's
+    // consent can admit there, is refused as it is for a person (AUTHZ-TEST-001 AC1, AC2,
+    // IDN-PRIN-001 AC6, AUTHZ-GATE-005, D-207, D-208).
     private static readonly (string Scenario, Decided Decided)[] JobOrganizations =
     [
         ("a declared job asking a permission its declaration names, of its organization", Decided.Allowed),
         ("a declared job asking a permission its declaration does not name, of its organization", Decided.Denied),
+        ("a declared job asking a consent-bound permission its declaration names, of its organization", Decided.ConsentRequired),
         ("a declared job asking of another organization", Decided.Denied),
         ("a declared job asking of its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking of its organization, once it is erased", Decided.Denied),
         ("a declared job asking of its organization while a request is served", Decided.Denied),
+    ];
+
+    // A grant written in an organization, which names no record of a list and so runs
+    // through the grant admission alone: in an organization other than the
+    // administrative organization, grant:manage held there or system:administer held in
+    // the administrative organization admits it, either recording no refusal, and where
+    // neither does one refusal is recorded, naming grant:manage in the grant's
+    // organization; a restriction is judged first and records nothing; in the
+    // administrative organization grant:manage alone admits (AUTHZ-TEST-001 AC1, AC2,
+    // AUTHZ-SCOPE-001 AC4, AUTHZ-CONCEAL-004 AC5, D-207, D-208).
+    private static readonly (string Scenario, Decided Decided)[] GrantAdmissions =
+    [
+        ("a grant in another organization, by a caller managing grants there", Decided.Allowed),
+        ("a grant in another organization, by a system administrator of the administrative organization", Decided.Allowed),
+        ("a grant in another organization, by a caller managing grants in the administrative organization alone", Decided.Denied),
+        (
+            "a grant in another organization, by a system administrator holding no membership of the administrative organization",
+            Decided.Denied),
+        ("a grant in another organization, by a system administrator denied grant management there", Decided.Allowed),
+        ("a grant in another organization, by a restricted system administrator", Decided.Restricted),
+        ("a grant in another organization, by a restricted caller managing grants there", Decided.Restricted),
+        ("a grant in another organization, by background work", Decided.Denied),
+        ("a grant in the administrative organization, by a system administrator holding nothing else there", Decided.Denied),
     ];
 
     /// <summary>
@@ -301,6 +346,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The jobs' organization table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> JobOrganizationCases => Read(JobOrganizations);
+
+    /// <summary>
+    /// The grant admissions' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> GrantAdmissionCases => Read(GrantAdmissions);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -438,7 +488,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         if (!scenario.Contains("request is served", StringComparison.Ordinal)
             && !scenario.Contains("within a request", StringComparison.Ordinal))
         {
-            Assert.Equal((decided, decided, decided), await JobListedAsync(written, scenario));
+            // AUTHZ-GATE-002 AC4: a list leaves out a record whose consent is outstanding,
+            // as it leaves out one its grants do not reach.
+            Decided listed = decided is Decided.ConsentRequired ? Decided.Denied : decided;
+
+            Assert.Equal((decided, listed, listed), await JobListedAsync(written, scenario));
 
             return;
         }
@@ -517,6 +571,44 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
 
         Assert.Equal(decided, answered);
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-SCOPE-001 AC4, AUTHZ-CONCEAL-004 AC5 (D-207, D-208):
+    /// every case of the grant admissions' table decides the way the table says through
+    /// the grant admission, the one path a grant written in an organization runs
+    /// through, and a refusal is recorded once, naming <c>grant:manage</c> in the grant's
+    /// organization, where it is denied, and nothing is recorded otherwise.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(GrantAdmissionCases))]
+    public async Task AUTHZ_TEST_001_AC2_EveryGrantAdmissionCaseDecidesTheWayTheTableSaysThroughTheAdmissionAsync(
+        string scenario,
+        Decided decided)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (AccessContext context, OrganizationId organization) = await AdmittingAsync(scenario);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result admitted = await scope.ServiceProvider.GetRequiredService<IGrantAdmission>()
+            .AdmitAsync(context, organization, cancellationToken);
+
+        Assert.Equal(decided, admitted.Match(() => Decided.Allowed, Refused));
+        Assert.Equal(decided is Decided.Denied ? 1 : 0, await GrantRefusalsAsync(context, organization));
+
+        if (admitted.Match<Error?>(() => null, error => error) is Error refusal && refusal.Code == ErrorCodes.Denied)
+        {
+            DeniedAccess? recorded = await scope.ServiceProvider.GetRequiredService<IAccessAudit>().FindAsync(
+                new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+                cancellationToken);
+
+            Assert.Equal(Permissions.GrantManage, recorded?.Permission);
+            Assert.Equal(organization, recorded?.Organization);
+        }
     }
 
     /// <summary>
@@ -1219,6 +1311,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a grant written and then revoked, by a caller managing grants":
                 return await GrantedAndRevokedAsync(deployment, role, caller);
 
+            case "a grant written and then revoked in another organization, by a system administrator of the administrative organization":
+            case "a grant written in another organization, by a system administrator restricted since the gate step":
+                return await AdministeredGrantAsync(
+                    deployment,
+                    role,
+                    restricted: scenario.EndsWith("since the gate step", StringComparison.Ordinal));
+
             case "a member a group does not hold taken out, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: false);
 
@@ -1245,7 +1344,37 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     supported: scenario.StartsWith("a fact", StringComparison.Ordinal));
 
             case "a fact in the host's data a declared job's refresh materialised, outside a request":
-                return await JobRefreshedAsync(deployment);
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForOrganization(HostFixture.Digest, "the nightly digest", deployment.Organization),
+                    inRequest: false);
+
+            // AUTHZ-DERIVE-005 AC7 (D-208): a refresh the chapters do not admit throws and
+            // writes nothing, so the fact confers nothing until a refresh they admit.
+            case "a fact in the host's data a declared job's refresh was asked for, while a request is served":
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForOrganization(HostFixture.Digest, "the nightly digest", deployment.Organization),
+                    inRequest: true);
+
+            case "a fact in the host's data a principal naming no declared job asked a refresh for":
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForOrganization("import", "the nightly import", deployment.Organization),
+                    inRequest: false);
+
+            case "a fact in the host's data a reconciling principal's refresh materialised, outside a request":
+            case "a fact in the host's data a reconciling principal asked a refresh for, while a request is served":
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForDeployment("mail-reconciliation", "INT-MAIL-007", SystemOperation.Reconciliation),
+                    inRequest: scenario.EndsWith("while a request is served", StringComparison.Ordinal));
+
+            case "a fact in the host's data a principal that may not reconcile asked a refresh for":
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForDeployment("retention-purge", "OPS-DATA-003", SystemOperation.RetentionPurge),
+                    inRequest: false);
 
             case "a page asked for a declared permission its type does not list as a capability":
                 return await RaisedOrAsync(async () =>
@@ -1307,9 +1436,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // A record of the case's organization whose data subject is the case's account,
     // which the host's declared job is asked a permission on: one its declaration names,
-    // the modifying one where the case says so, or one it does not name; the account
-    // restricted, and the organization's deletion requested or the organization erased,
-    // where the case says so.
+    // the modifying one or the consent-bound one where the case says so, or one it does
+    // not name; the account restricted or consenting to the consent-bound one's purpose,
+    // and the organization's deletion requested or the organization erased, where the
+    // case says so.
     private async Task<Case> WriteJobAsync(string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -1341,11 +1471,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await deployment.EraseAsync(cancellationToken);
         }
 
+        if (scenario.Contains("data subject consented", StringComparison.Ordinal))
+        {
+            await ConsentedAsync(account);
+        }
+
         Permission asked = scenario.Contains("does not name", StringComparison.Ordinal)
             ? HostPermissions.Retain
-            : scenario.Contains("modifying", StringComparison.Ordinal)
-                ? HostPermissions.Edit
-                : HostPermissions.Read;
+            : scenario.Contains("consent-bound", StringComparison.Ordinal)
+                ? HostPermissions.Recommend
+                : scenario.Contains("modifying", StringComparison.Ordinal)
+                    ? HostPermissions.Edit
+                    : HostPermissions.Read;
 
         return new Case(host, deployment, account, record, sibling, outer, outer, asked);
     }
@@ -1480,10 +1617,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             .Match(() => Decided.Allowed, Refused);
     }
 
-    // AUTHZ-DERIVE-005 AC7 (D-207): a record under a workspace someone reviews, in the
-    // deployment with the derivation materialised, the grant written by a refresh a
-    // declared job called outside a request; the grant confers what any refresh's does.
-    private async Task<Decided> JobRefreshedAsync(Deployment deployment)
+    // AUTHZ-DERIVE-005 AC7 (D-207, D-208): a record under a workspace someone reviews, in
+    // the deployment with the derivation materialised, and a refresh the system principal
+    // given calls, outside a request or while one is served. A refresh the chapters admit
+    // writes the grant, which confers what any refresh's does; one they do not throws,
+    // which is the case's expected fault, and writes nothing, so the fact confers nothing.
+    private async Task<Decided> RefreshedByAsync(Deployment deployment, SystemPrincipal principal, bool inRequest)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         ResourceReference workspace = Reference(Workspace);
@@ -1495,27 +1634,52 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await deployment.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
         await deployment.ReviewAsync(workspace, reviewing, cancellationToken);
 
-        await using ServiceProvider materialised = Materialised();
-
-        await using (AsyncServiceScope refreshing = materialised.CreateAsyncScope())
+        async Task RefreshAsync(IServiceProvider services)
         {
             await using HostContext reading = host.Context();
 
-            IUnitOfWork work = refreshing.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
 
-            await work.BeginAsync(cancellationToken);
+            await work.BeginAsync(CancellationToken.None);
 
-            Rendered(await refreshing.ServiceProvider.GetRequiredService<IDerivationMaterialiser>().RefreshAsync(
-                AccessContext.Of(SystemPrincipal.ForOrganization(
-                    HostFixture.Digest,
-                    "the nightly digest",
-                    deployment.Organization)),
-                "reviewer",
-                workspace.Id,
-                Sources(reading),
-                cancellationToken));
+            Result<DerivationRefresh>? answered = null;
 
-            await work.CommitAsync(cancellationToken);
+            try
+            {
+                answered = await services.GetRequiredService<IDerivationMaterialiser>().RefreshAsync(
+                    AccessContext.Of(principal),
+                    "reviewer",
+                    workspace.Id,
+                    Sources(reading),
+                    CancellationToken.None);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            Rendered(answered.Value);
+
+            await work.CommitAsync(CancellationToken.None);
+        }
+
+        await using ServiceProvider materialised = Materialised();
+
+        if (inRequest)
+        {
+            await using ServedRequests served = await ServedRequests.StartAsync(
+                host,
+                HostFixture.Declaration(materialised: true),
+                async context => await RefreshAsync(context.RequestServices),
+                cancellationToken);
+
+            _ = await served.SendAsync(ServedRequests.Browser);
+        }
+        else
+        {
+            await using AsyncServiceScope refreshing = materialised.CreateAsyncScope();
+
+            await RefreshAsync(refreshing.ServiceProvider);
         }
 
         await using AsyncServiceScope scope = materialised.CreateAsyncScope();
@@ -1918,6 +2082,169 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 "No longer needed.",
                 cancellationToken))
             .Match(() => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-SCOPE-001 AC4, AUTHZ-GATE-006 AC3 (D-207, D-208): a grant across an
+    // organization other than the administrative organization, written and revoked
+    // through the library's operations by a member of the administrative organization
+    // holding system:administer there and nothing in the grant's, on a session that meets
+    // the gate. Each operation asks the admission at its gate step and again inside its
+    // unit of work, and neither ask records a refusal. Where the case restricts the caller
+    // between the two, the grant is refused there, records nothing and writes nothing.
+    private async Task<Decided> AdministeredGrantAsync(Deployment deployment, RoleName role, bool restricted)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName administering = await deployment.RoleAsync([Permissions.SystemAdminister], cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        var context = AccessContext.Of(caller);
+
+        await deployment.MemberAsync(caller, administrative, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), administering, null, false, null, administrative, cancellationToken);
+
+        // The session is kept by the deployment that reads it, under its own keys, before
+        // anything is interleaved.
+        bool kept = false;
+
+        await using ServiceProvider interleaved = Interleaved(
+            async cancelled =>
+            {
+                if (kept && restricted)
+                {
+                    await deployment.RestrictAsync(caller, cancelled);
+                }
+            });
+
+        SessionId session;
+
+        await using (AsyncServiceScope keeping = interleaved.CreateAsyncScope())
+        {
+            session = await SteppedUpAsync(keeping.ServiceProvider, caller);
+            kept = true;
+        }
+
+        await using AsyncServiceScope scope = interleaved.CreateAsyncScope();
+
+        IGrants grants = scope.ServiceProvider.GetRequiredService<IGrants>();
+
+        Result<GrantId> written = await grants.GrantAsync(
+            context,
+            session,
+            new GrantRequest(
+                GrantSubject.Of(account),
+                role,
+                new ResourceReference(
+                    ResourceType.Parse("organization"),
+                    ResourceId.Parse(deployment.Organization.ToString())),
+                Deny: false,
+                ExpiresAt: null,
+                "The organization's first grant."),
+            cancellationToken);
+
+        Decided decided = await written.Match(
+            async grant => (await grants.RevokeAsync(context, session, grant, "No longer needed.", cancellationToken))
+                .Match(() => Decided.Allowed, Refused),
+            refused => Task.FromResult(Refused(refused)));
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int held = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.grants WHERE subject_id = @account;",
+            new { account = account.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal(0, await GrantRefusalsAsync(context, deployment.Organization));
+        Assert.Equal(restricted ? 0 : 1, held);
+        Assert.False(Assert.IsType<UnitOfWorkInterleaved>(scope.ServiceProvider.GetRequiredService<IUnitOfWork>()).Open);
+
+        return decided;
+    }
+
+    // AUTHZ-SCOPE-001 (D-207, D-208): the caller of a grant admission's case and the
+    // organization its grant is in, a new one other than the administrative organization
+    // save where the case names that. A system administrator holds system:administer in
+    // the administrative organization as a member of it, save where the case says it
+    // holds no membership.
+    private async Task<(AccessContext Context, OrganizationId Organization)> AdmittingAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        OrganizationId organization = scenario.StartsWith("a grant in the administrative organization", StringComparison.Ordinal)
+            ? administrative
+            : deployment.Organization;
+
+        if (scenario == "a grant in another organization, by background work")
+        {
+            return (
+                AccessContext.Of(SystemPrincipal.ForOrganization("import", "the nightly import", organization)),
+                organization);
+        }
+
+        RoleName managing = await deployment.RoleAsync([Permissions.GrantManage], cancellationToken);
+        RoleName administering = await deployment.RoleAsync([Permissions.SystemAdminister], cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        var holder = GrantSubject.Of(caller);
+
+        if (!scenario.EndsWith("holding no membership of the administrative organization", StringComparison.Ordinal))
+        {
+            await deployment.MemberAsync(caller, administrative, cancellationToken);
+        }
+
+        if (scenario.Contains("system administrator", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(holder, administering, null, false, null, administrative, cancellationToken);
+        }
+
+        if (scenario.EndsWith("managing grants there", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(holder, managing, null, false, null, organization, cancellationToken);
+        }
+
+        if (scenario.EndsWith("denied grant management there", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(holder, managing, null, true, null, organization, cancellationToken);
+        }
+
+        if (scenario.EndsWith("in the administrative organization alone", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(holder, managing, null, false, null, administrative, cancellationToken);
+        }
+
+        if (scenario.Contains("by a restricted", StringComparison.Ordinal))
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
+        }
+
+        return (AccessContext.Of(caller), organization);
+    }
+
+    // AUTHZ-CONCEAL-004: the refusals a case's caller left recorded: a person's wherever
+    // they are, and background work's, which names the nil subject, against the grant's
+    // organization.
+    private async Task<int> GrantRefusalsAsync(AccessContext context, OrganizationId organization)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.denied'
+              AND acting_subject = @acting
+              AND (@person OR organization = @organization);
+            """,
+            new
+            {
+                organization = organization.Value,
+                acting = context.Acting?.Value ?? Guid.Empty,
+                person = context.Acting is not null,
+            },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls

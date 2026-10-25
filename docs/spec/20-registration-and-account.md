@@ -445,6 +445,11 @@ afterwards. The hold SHALL be a record of its own that names no subject and hold
 value under the erased subject's key: the username's fingerprint and the instant the
 hold ends. A choice SHALL be judged taken or held under the username's lock
 (CONV-DESIGN-003), and an erasure SHALL write its hold under that lock (PRIV-RIGHT-005).
+An edit naming the username the account held when the edit's step-up was judged (read
+before its unit of work, without a lock) asks no step-up and changes no username,
+whatever the locked read then finds, a change of the same account committed in between
+included; no taken, held or cooling-off judgement is made of it, and the rest of the
+edit commits (`08` CONV-DESIGN-003, D-208).
 
 A username SHALL contain at least one letter, so that no username is also a phone
 number under REG-IDENT-003's detection; an all-digit choice is refused with
@@ -457,7 +462,7 @@ per source" means each `taken` or `reserved` answer counts as one failure in the
 AUTH-ABUSE-001 per-source throttle. `identity.username.coolingoff` carries
 `details.retryAt`.
 
-*Source: D-146, D-162, D-166, D-187*
+*Source: D-146, D-162, D-166, D-187, D-208*
 
 Usernames are the one identifier whose existence is disclosed to anyone, because they
 are public by nature; the only other disclosure is of the email an invitation binds, to
@@ -475,6 +480,9 @@ an erased person from being impersonated at once under their former name.
    `identity.username.taken`, and two choices of one free username made at once leave it
    on exactly one account, the other answered `identity.username.taken`, never
    `system.fault`.
+6. An edit naming the username the account held when its step-up was judged, whose unit
+   of work begins after a username change of the same account has committed, asks no
+   step-up, leaves the username that change wrote and commits its other fields (D-208).
 
 ---
 

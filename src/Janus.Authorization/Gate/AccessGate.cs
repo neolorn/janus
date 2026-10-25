@@ -59,7 +59,7 @@ internal sealed class AccessGate(
     IRecordedConsents consents,
     IAdministrativeOrganization administrative,
     IOrganizationSuspensions suspensions,
-    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal
+    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission
 {
     // PRIV-CONS-001, PRIV-CONS-007: the document that governs a consent whose purpose
     // names none.
@@ -220,15 +220,103 @@ internal sealed class AccessGate(
     {
         Declared(permission);
 
+        if (await RestrictedPersonAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Restricted));
+        }
+
+        return await AnsweredAsync(
+            context,
+            permission,
+            organization,
+            await DecidedOnAsync(context, permission, organization, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Admits a grant, or its revocation, in its organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">The organization the grant is scoped to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success; <c>authz.restricted</c> for a restricted account, recording nothing;
+    /// otherwise the refusal of <c>grant:manage</c> in the grant's organization, recorded
+    /// once and only where neither permission admits.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 and AUTHZ-SEAM-001 (D-207, D-208). In the
+    /// administrative organization, and before bootstrap has marked one, the admission
+    /// is the single check of <c>grant:manage</c>. Elsewhere the acting account's
+    /// restriction is judged first, as for any modifying action, then each permission
+    /// is decided as the single check decides it, recording nothing: one that admits
+    /// admits the grant, and where neither does, the single check of
+    /// <c>grant:manage</c> in the grant's organization answers, so its refusal is the one
+    /// recorded and counted.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is not OrganizationId administering
+            || administering == organization)
+        {
+            return await RequireAsync(context, Permissions.GrantManage, organization, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (await RestrictedPersonAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Restricted));
+        }
+
+        OrganizationDecision administered = await DecidedOnAsync(
+            context,
+            Permissions.SystemAdminister,
+            administering,
+            cancellationToken).ConfigureAwait(false);
+
+        if (administered.Admits)
+        {
+            return await AnsweredAsync(
+                context,
+                Permissions.SystemAdminister,
+                administering,
+                administered,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await AnsweredAsync(
+            context,
+            Permissions.GrantManage,
+            organization,
+            await DecidedOnAsync(context, Permissions.GrantManage, organization, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTHZ-GATE-006 (D-207): the restriction judged is the acting account's, and a job
+    // acts for none, so none is judged for it.
+    private async ValueTask<bool> RestrictedPersonAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        !IsJob(context) && await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false);
+
+    // What an organization-wide check decides of one permission, recording nothing: whether
+    // a grant, or for a job its declaration, confers it, the grant that decided, and what
+    // the session's gate or a consent still asks.
+    private async ValueTask<OrganizationDecision> DecidedOnAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
         if (ServesRequestToAJob(context))
         {
-            return await RefusedAsync(
-                context,
-                permission,
-                OrganizationWide,
-                organization,
-                grant: null,
-                cancellationToken).ConfigureAwait(false);
+            return new OrganizationDecision(Conferred: false, Deciding: null, Outstanding: null);
         }
 
         // IDN-PRIN-001, AUTHZ-GATE-005 (D-207): a job's declaration reaches every record
@@ -238,36 +326,20 @@ internal sealed class AccessGate(
         {
             if (!await JobReachesAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
             {
-                return await RefusedAsync(
-                    context,
-                    permission,
-                    OrganizationWide,
-                    organization,
-                    grant: null,
-                    cancellationToken).ConfigureAwait(false);
+                return new OrganizationDecision(Conferred: false, Deciding: null, Outstanding: null);
             }
         }
         else
         {
-            if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
-            {
-                return Result.Failure(Error.From(ErrorCodes.Restricted));
-            }
-
             CandidateGrant? decided = await HoldsAsync(context, permission, organization, cancellationToken)
                 .ConfigureAwait(false);
 
-            // AUTHZ-CONCEAL-005: nothing is concealed here, so what the caller answers is
-            // that the operation is forbidden. The refusal is recorded the same way.
             if (decided is not { Deny: false })
             {
-                return await RefusedAsync(
-                    context,
-                    permission,
-                    OrganizationWide,
-                    organization,
+                return new OrganizationDecision(
+                    Conferred: false,
                     decided is null ? null : Explained(decided, resource: null),
-                    cancellationToken).ConfigureAwait(false);
+                    Outstanding: null);
             }
         }
 
@@ -276,7 +348,35 @@ internal sealed class AccessGate(
         Result outstanding = await OutstandingAsync(context, dataSubject: null, permission, cancellationToken)
             .ConfigureAwait(false);
 
-        return outstanding.Match(() => (Error?)null, error => error) is Error unmet
+        return new OrganizationDecision(
+            Conferred: true,
+            Deciding: null,
+            outstanding.Match(() => (Error?)null, error => error));
+    }
+
+    // AUTHZ-CONCEAL-005: nothing is concealed on an organization, so what the caller
+    // answers is that the operation is forbidden, and the refusal is recorded the same
+    // way (AUTHZ-CONCEAL-004). What a gate or a consent still asks is answered as itself,
+    // recording nothing, and an export is admitted under its limit last.
+    private async ValueTask<Result> AnsweredAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        OrganizationDecision decided,
+        CancellationToken cancellationToken)
+    {
+        if (!decided.Conferred)
+        {
+            return await RefusedAsync(
+                context,
+                permission,
+                OrganizationWide,
+                organization,
+                decided.Deciding,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return decided.Outstanding is Error unmet
             ? Result.Failure(unmet)
             : await exports
                 .AdmitAsync(context, permission, OrganizationWide, organization, record: null, cancellationToken)
@@ -1674,4 +1774,15 @@ internal sealed class AccessGate(
         CandidateGrant? Grant,
         OrganizationId? Organization,
         SubjectId? Subject);
+
+    // What an organization-wide check decided of one permission before anything is
+    // recorded: whether it is conferred, the grant that decided a refusal, and what a
+    // gate or a consent still asks of a conferred one.
+    private sealed record OrganizationDecision(
+        bool Conferred,
+        ExplainedGrant? Deciding,
+        Error? Outstanding)
+    {
+        public bool Admits => Conferred && Outstanding is null;
+    }
 }

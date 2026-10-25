@@ -1518,12 +1518,13 @@ than an improvisation.
 **OPS-OBS-001** — Every authorization decision SHALL be explicable without a
 debugger.
 
-*Source: P-003, AUTHZ-GATE-004, D-166, D-207*
+*Source: P-003, AUTHZ-GATE-004, D-166, D-207, D-208*
 
 A host job's decision is explained by its declaration (`07` LIB-HOST-001, Jobs) and,
-where refused, by its recorded refusal's correlation identifier, which names its
-principal and reason (AUTHZ-CONCEAL-004); the explanation operation refuses a job's
-context `authz.denied` (`01` IDN-PRIN-001, D-207).
+where the gate refused it `authz.denied`, by its recorded refusal's correlation
+identifier, which names its principal and reason; a consent refusal writes no record and
+is explained by its code (AUTHZ-CONCEAL-004, D-208); the explanation operation refuses a
+job's context `authz.denied` (`01` IDN-PRIN-001, D-207).
 
 **Acceptance criteria**
 1. A denial resolves to an explanation naming the permission and the missing grant,

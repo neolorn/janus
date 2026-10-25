@@ -20,6 +20,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="declared">Where a relationship's rows are read through the source the host declared.</param>
 /// <param name="audit">Where each grant a refresh writes or takes back is recorded.</param>
 /// <param name="work">The caller's transaction, which the refresh joins.</param>
+/// <param name="sessions">Whether a request is served on the calling flow, which a system principal's refresh is refused in.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-DERIVE-005, AUTHZ-DERIVE-002 and AUTHZ-GRANT-003 (D-161, D-166). The
@@ -33,6 +34,8 @@ namespace Janus.Authorization.Gate;
 /// <c>derivation:&lt;relationship&gt;</c>; one the drift check writes records the nil subject
 /// and the reason <c>AUTHZ-DERIVE-005</c>. Each grant a refresh writes or takes back is
 /// recorded in the trail in the refresh's transaction, naming who called it (D-187, D-207).
+/// The refresh meets no gate, so a system principal's call the chapters do not admit is a
+/// fault of the calling code, raised before anything is read or written (D-208).
 /// </remarks>
 internal sealed class DerivationMaterialiser(
     AuthorizationModel model,
@@ -41,6 +44,7 @@ internal sealed class DerivationMaterialiser(
     IRelationshipSources declared,
     IAccessAudit audit,
     IUnitOfWork work,
+    ISessionGates sessions,
     TimeProvider time) : IDerivationMaterialiser
 {
     // AUTHZ-GRANT-003, AUTHZ-DERIVE-005: what a grant the drift check writes or takes
@@ -93,6 +97,9 @@ internal sealed class DerivationMaterialiser(
     /// <exception cref="ArgumentException">
     /// The relationship is undeclared, no materialised derivation follows from it, or no
     /// source is declared for it.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The context is a system principal's the refresh does not admit.
     /// </exception>
     public async ValueTask<Result<DerivationRefresh>> RefreshAsync(
         AccessContext context,
@@ -162,11 +169,13 @@ internal sealed class DerivationMaterialiser(
                 : (default, "derivation:" + relationship);
     }
 
-    // What every refresh is asked before it reads: a declared relationship that a
-    // materialised derivation follows from, and a context its grants can be recorded
-    // under.
+    // What every refresh is asked before it reads: a caller it admits, a declared
+    // relationship that a materialised derivation follows from, and a context its grants
+    // can be recorded under.
     private Refreshing Asked(AccessContext context, string derivation)
     {
+        Admitted(context);
+
         RelationshipDeclaration relationship = model.Relationship(derivation)
             ?? throw new ArgumentException(
                 "The model declares no relationship of that name.",
@@ -184,6 +193,35 @@ internal sealed class DerivationMaterialiser(
         (SubjectId granter, string reason) = Recorded(context, derivation);
 
         return new Refreshing(relationship, following, context, granter, reason);
+    }
+
+    // AUTHZ-DERIVE-005, IDN-PRIN-001, CONV-DESIGN-007 (D-207, D-208): a person's refresh
+    // comes from the host's own gated operation. A system principal's is background work,
+    // so it is admitted only where no request is served on the calling flow, as the gate
+    // judges that, and only within the limits the principal already has: an
+    // organization-scoped one acting as a declared job, a deployment-scoped one able to
+    // run reconciliation, the drift check's operation. Any other call is the calling
+    // code's fault, since the refresh asks no permission a refusal could name.
+    private void Admitted(AccessContext context)
+    {
+        if (context.Principal is not SystemPrincipal principal)
+        {
+            return;
+        }
+
+        if (sessions.ServesRequest)
+        {
+            throw new InvalidOperationException(
+                "A system principal's refresh is background work and is not called while a request is served.");
+        }
+
+        if (principal.IsDeploymentScoped
+            ? !principal.MayRun(SystemOperation.Reconciliation)
+            : !model.DeclaresJob(principal.Name))
+        {
+            throw new InvalidOperationException(
+                "A refresh is called by a system principal only where it names a declared job or may run reconciliation.");
+        }
     }
 
     private async ValueTask<Result<DerivationRefresh>> RefreshedAsync(

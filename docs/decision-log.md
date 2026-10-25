@@ -9077,6 +9077,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** Item 264: every delivery of host-side work is listed and completed by hand, its kind one of `erasure`, `takedown`, `restriction`, `consent` and `objection`, and the reads list every kind; item 320: a purpose handler receives `ConsentChanged` and `ObjectionChanged` through the outbox as a subscriber receives the subject events; item 352: `IResources` writes in the unit of work the host's context joins through `UseUnitOfWorkAsync`, gains `RemoveAsync`, and a removal of a record that holds others is 409 `authz.resource.inuse` (D-203).
 
+> **Amended.** AUTHZ-CONCEAL-004: only a refusal the gate answers `authz.denied` to a permission it is asked for, or conceals as `authz.resource.notfound`, carries a refusal record's identifier and is recorded; a refusal answering a capability residual, an explanation's refusal and an operation's own at its gate step carry none (D-208).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -16171,6 +16173,8 @@ the frontends' server side, the known issues carried).
 
 > **Amended.** Rule 7: a job is admitted on its organization as on its records, a consent-based purpose refused there; no restriction is judged for it; the capability page and the explanation refuse it, and so does a materialiser's refresh while a request is served (D-207).
 
+> **Amended.** Rule 7: a job's context calling a materialiser's refresh while a request is served is a fault of the calling code, not a refusal (D-208).
+
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-201 (Milestone 1 closed), a host's review of the public surface · **Extends:** D-106 (the operations contract) · **Amends:** D-079b (system principals; `Janus.Hosting` beyond mounting), D-138 (what the reserved account refuses), D-162 (section B item 4, the capability query)
 
 **TL;DR.** Milestone 1 was built and tested from the inside. The library's own endpoints
@@ -17139,6 +17143,8 @@ two keys coincide); `10` section 1 (`model.startup.declarationinvalid`,
 
 ## D-207 — Round H1 questions 20 to 34, and the implementer pushes its own work
 
+> **Amended.** Answer 21: only a refusal the gate answers `authz.denied` to a permission it is asked for (or conceals) is recorded, so a job's consent refusal writes no record; answer 23: a job's refresh while a request is served is a fault of the calling code; answer 28: a reuse takes one path whatever its token names, revoking what of the family it names; answer 30: an edit naming the username the account held at the unlocked read changes no username; answer 34: the two permissions are one admission, refused and recorded once, only where neither admits (D-208).
+
 **Date:** 2026-10-22 · **Status:** accepted · **Follows from:** D-202, D-203, D-204,
 D-206 · **Amends:** D-202 (rule 7, a job's admission: the organization-wide check, no
 restriction judged, the capability page and the explanation refused), D-203 (rule 2, the
@@ -17405,6 +17411,156 @@ and 5); the working guide (sections 3, 6, 7, 8 and 9).
 
 ---
 
+## D-208 — Round H1 questions 35 to 40: one admission for a grant, a username unchanged, the stand-in's balance, what a refusal records, a refresh asked in a request, a reuse naming no session
+
+**Date:** 2026-10-22 · **Status:** accepted · **Follows from:** D-207 · **Amends:**
+D-207 (answer 21, which refusals are recorded; answer 23, a job's refresh while a
+request is served; answer 28, a reuse whose token names no session or subject; answer
+30, a step-up asked on an unlocked read; answer 34, one admission of the two
+permissions), D-202 (rule 7, the refresh in a request), D-166 (AUTHZ-CONCEAL-004, which
+refusals carry a refusal record's identifier)
+
+**TL;DR.** Building D-207, round H1 asked six more questions. In short: a grant in
+another organization is one admission of two permissions, refused and recorded once,
+only where neither admits (35); an edit naming the username the account held when its
+step-up was judged changes no username, whatever a concurrent change left (36); the
+in-memory SMS transport reports a balance the balance reading can hold (37); only a
+refusal the gate answers `authz.denied` to a permission it is asked for, or conceals, is
+recorded, so a job's consent refusal, like a person's, writes no record (38); a job's
+refresh asked while a request is served is a fault of the calling code, not a refusal
+(39); a reuse takes one path whatever its token names, revoking what of the family it
+names and recording it (40). A system principal's refresh is admitted, as D-207 answer
+23 states, within the limits a system principal already has.
+
+**The questions.** Questions 35 to 40 of the round H1 run under D-207. Questions 35, 36,
+38, 39 and 40 are Tier 3; question 37 is Tier 2.
+
+35. **One admission of two permissions (Tier 3).** D-207 admitted a grant in another
+    organization under `grant:manage` there or `system:administer` in the administrative
+    organization, and the gate is asked one permission at a time, recording each refusal
+    and counting it toward the denial alerts. Asked in turn, the two would leave a
+    refusal and a count for an operation then admitted, twice per call with the second
+    ask inside the unit of work. They are one admission: the gate judges the acting
+    account's restriction first, as for any modifying action, then both permissions
+    together, and records one refusal, naming `grant:manage` in the grant's
+    organization, only where neither admits; the second ask inside the unit of work is
+    the same one admission. An identifier naming no grant or no registered record is
+    refused as `09` section 8 states, against no organization. The grant operations ask
+    the admission through an internal contract `Janus.Authorization` declares, the grant
+    admission (`IGrantAdmission`), which `AccessGate` implements as it implements the
+    unscoped refusal: it decides each permission as the single check decides it and adds
+    no rule, so permission evaluation stays behind the one seam (AUTHZ-SEAM-001,
+    CONV-DESIGN-007). *Rejected:* each ask its own check (a system administrator's every
+    first grant would raise denial counts that mean nothing, and the alert would teach
+    staff to ignore it); a public member of `IAccessGate` for an alternative of
+    permissions (only the library's grant operations need it).
+36. **An edit naming the username already held (Tier 3).** Under D-207 answer 30 the
+    username change judges its step-up before its unit of work, and whether a step-up is
+    asked at all turns on whether the username changes, read without a lock. A
+    concurrent change by the same account can commit between that read and the lock. The
+    edit changes under its lock only what its step-up judgement covered: an edit naming
+    the username the account held at the unlocked read asks no step-up and changes no
+    username, whatever the locked read finds; no taken, held or cooling-off judgement is
+    made of that username, and the rest of the edit commits (REG-IDENT-009,
+    CONV-DESIGN-003). *Rejected:* a step-up for every edit naming a username (a profile
+    form that sends the username would ask one on every save); rolling back and judging
+    again (a loop for a case where the edit never meant to change the username).
+37. **The stand-in transport's balance.** `InMemorySmsTransport` reported
+    `decimal.MaxValue`, which the balance reading's column cannot hold, so every poll of
+    the balance job failed. It reports 99999999999999.9999, the largest value the column
+    holds, so every poll records it (LIB-TEST-003). *Rejected:* capping or refusing a
+    reading in the library (a real gateway's balance never approaches the column's
+    bound; the defect was the stand-in's); a ceiling on `abuse.sms.balancefloor` (a new
+    rule for a value no deployment sets).
+38. **Which refusals are recorded (Tier 3).** D-207 answer 21 said a job's refusals are
+    recorded as the gate records a job's, and a person's consent refusal writes no
+    record. A refusal of a permission the gate is asked for (by the check, the list
+    filter, the fragment or the grant admission) that it answers `authz.denied`, or
+    conceals as `authz.resource.notfound`, whatever its cause, carries a refusal
+    record's identifier and is recorded, for a person or a job. A refusal the gate
+    answers with a capability residual (`10` section 5.20: a step-up, the session's
+    re-authentication, a restriction, a consent, the account's state) carries none and
+    writes no record, whoever asked; so does an `authz.denied` that refuses no
+    permission asked of the gate: the explanation operations' refusals, the capability
+    page's, and an operation's own at its gate step (CONV-DESIGN-002, OPS-BOOT-002). A
+    recorded refusal carries its record's identifier in `details.correlation`, which the
+    explanation routes take; carrying none means carrying no such identifier, an answer
+    over HTTP still carrying the request's correlation identifier, as every error body
+    does (API-CONV-002). A job's consent refusal on the organization-wide check is
+    therefore answered as a person's is. This is the library as built; the chapters said
+    "every gate refusal". D-162's "every gate refusal carries `correlationId`" stands:
+    it names the body's member, which every error body carries. *Rejected:* a record for
+    a job's consent refusal (a second record shape for one refusal, and no question a
+    support role asks of it); recording every `authz.denied` whatever refuses it (an
+    operation's own refusals at its gate step name no permission a record could hold,
+    and would count toward the denial alert).
+39. **A refresh asked in a request (Tier 3).** D-207 refused a job's refresh while a
+    request is served `authz.denied`, recorded as the gate records a refusal, but the
+    refresh meets no gate and asks no permission, so no refusal record could name one or
+    resolve to an explanation. Calling it with a job's context while a request is
+    served, as the gate judges that (the materialiser asking the same contract,
+    CONV-DESIGN-007), is a fault of the calling code: it throws
+    `InvalidOperationException` and writes nothing (AUTHZ-DERIVE-005, CONV-ERR-001), as
+    the other in-process misuses do. *Rejected:* a refusal record naming the
+    relationship (a new record shape and a new explanation shape for a call only a
+    host's own code can make).
+40. **A reuse whose token names no session or no subject (Tier 3).** D-207 answer 28
+    gave the family as spine, grant and tokens, revoked by the library's own statements
+    with the audit record in one unit of work, and said nothing of a redeemed token
+    naming no session or no subject; such a token kept the provider's own path (the
+    grant and its tokens revoked by the provider's managers, no record). The library
+    issues no such token today, but a reuse is the one signal that a copy is loose, so
+    it fails closed on one path whatever the token carries: one that names no session
+    revokes no spine, one issued under no grant revokes no grant, the rest of its family
+    is revoked as always, and `auth.oidc.refreshreused` takes as acting identity and
+    `subject` the account the token names, or else the one its grant records, or else
+    the account of the session it names (the acting identity the nil subject and
+    `subject` absent where none names one), and as `details.session` the session the
+    token names, absent where it names none, all in one outermost unit of work
+    (AUTH-OIDC-003). *Rejected:* keeping the provider's path for it (the revocation
+    D-207 removed, and a reuse that leaves no record); refusing it as a fault (a reused
+    copy would leave its grant standing).
+
+**A reading confirmed, with its limits.** The run read D-207 answer 23 as admitting a
+system principal's refresh, which had been refused, its grants naming the nil subject as
+granter. That reading is right for a declared job outside a request and for the drift
+check: answer 23 covers every refresh, and a refresh writes only what the relationship's
+rows confer, whoever calls it, so the caller decides nothing but who the records name, a
+system principal by its name and reason. The limits are those a system principal already
+has: it serves no request, an organization-scoped one acts as a declared job or not at
+all (it is refused every host permission otherwise, IDN-PRIN-001, and now its refresh,
+AUTHZ-DERIVE-005), and a deployment-scoped one runs only its operations (IDN-PRIN-001),
+the refresh being `reconciliation`'s, the drift check's operation. So a system
+principal's refresh while a request is served, by an organization-scoped principal
+naming no declared job, or by a deployment-scoped principal that may not run
+`reconciliation`, is a fault of the calling code, throwing `InvalidOperationException`
+and writing nothing, as answer 39 has it for a job's refresh in a request
+(AUTHZ-DERIVE-005).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-PRIN-001 (the refresh in a request, a refresh naming no
+declared job, criterion 6); `02` AUTH-OIDC-003 (a reuse whose token names no session,
+values, criterion 4); `03` AUTHZ-PRIN-001 (criterion 1), AUTHZ-GRANT-003 (who a
+refresh's records name), AUTHZ-DERIVE-005 (the refresh in a request, a system
+principal's refresh, values, criterion 7), AUTHZ-SCOPE-001 (one admission, criterion 4),
+AUTHZ-GATE-006 (values D-183, criterion 3), AUTHZ-CONCEAL-004 (which refusals are
+recorded, criteria 4 and 5), AUTHZ-TEST-001 (criteria 1 and 2), AUTHZ-SEAM-001 (the
+grant admission); `06` OPS-OBS-001 (a job's consent refusal); `07` LIB-API-005 (the
+refresh, a system principal's), LIB-TEST-003 (the SMS transport's balance, criterion 4);
+`08` CONV-DESIGN-002 (criterion 3, the refresh's faults), CONV-DESIGN-003 (a step-up on
+an unlocked read), CONV-DESIGN-007 (the refresh in a request, the grant admission); `09`
+API-CONV-002 (criterion 2), `PUT /account/profile`, `GET /admin/access`,
+`POST /admin/grants`, `GET /admin/explanations/{correlationId}`,
+`GET /account/explanations/{correlationId}`; `10` section 1 (`authz.denied`,
+`details.correlation`), section 5a (`username:change`), section 5.24
+(`authz.access.denied`, `auth.oidc.refreshreused`, `authz.grant.materialised`,
+`authz.grant.retracted`); `17` BFF-ERR-001 (a correlation identifier where answered in a
+body, criterion 2); `20` REG-IDENT-009 (a username unchanged, criterion 6);
+`implementation-plan.md` (section 3a, round H1).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -17622,6 +17778,7 @@ and 5); the working guide (sections 3, 6, 7, 8 and 9).
 | Round H1 questions 1 to 3: test projects take the shared framework, the main package is `Janus.Hosting`, a host's request carries no assurance | D-205 |
 | Round H1 questions 4 to 19, and the subject of a grant's audit record | D-206 |
 | Round H1 questions 20 to 34, and the implementer pushes its own work | D-207 |
+| Round H1 questions 35 to 40: one admission for a grant, a username unchanged, the stand-in's balance, what a refusal records, a refresh asked in a request, a reuse naming no session | D-208 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/grants` and `DELETE /admin/grants/{id}` admit a grant, or its revocation,
+  in an organization other than the administrative organization under `system:administer`
+  held in the administrative organization as well as under `grant:manage` held in the
+  grant's organization, so an organization `POST /admin/organizations` created can be
+  given its first grants. The two are one admission: one that either permission admits
+  records no refusal, a caller under restriction is refused `authz.restricted` with no
+  record, and where neither admits one refusal is recorded, naming `grant:manage` in the
+  grant's organization.
 - `UseUnitOfWorkAsync(work, cancellationToken)`, on the host's own context's
   `DatabaseFacade`, joins the context to the library's unit of work once it has begun:
   what the host saves and what the library writes commit together at the outermost
@@ -3898,6 +3906,11 @@ against the public contract of LIB-API-001.
   `derivation:<relationship>`, and records each as `authz.grant.materialised` or
   `authz.grant.retracted` in its transaction, naming the person who called it, or the
   principal and its stated reason. A system principal's context is no longer refused.
+- `IDerivationMaterialiser.RefreshAsync` throws `InvalidOperationException` and writes
+  nothing when called with a system principal's context while an HTTP request is
+  served on the calling flow, with an organization-scoped principal naming no declared
+  job, or with a deployment-scoped principal that may not run `reconciliation`. A
+  host's declared job refreshes outside a request only.
 - A preference declared under a name holding a `.` or a `/`, or named `language` or
   `timeZone`, the names the export gives the account's language and time zone, fails
   startup with `model.startup.preferencedeclaration` naming it.
@@ -3987,3 +4000,11 @@ against the public contract of LIB-API-001.
   invitation in the outermost unit of work and commits it with the
   `identity.registration.signedin` refusal; called inside a unit of work already open,
   the host's own included, the begin ends it and throws `InvalidOperationException`.
+- A refresh token's reuse takes the same path whatever the redeemed token carries: one
+  naming no session ends no session, one issued under no grant revokes no grant, and the
+  rest of its family is revoked as always. Its `auth.oidc.refreshreused` record names the
+  account the token names, or else the one its grant records, or else the account of
+  the session it names, under the nil subject where none names one, and carries
+  `details.session` only where the token names a session.
+- `InMemorySmsTransport` reports a balance of 99999999999999.9999, the largest a balance
+  reading holds, so the balance job records it on every poll rather than failing.

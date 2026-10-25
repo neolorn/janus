@@ -16,7 +16,8 @@ namespace Janus.Authorization.Grants;
 /// Stored grants, written and revoked by an administrator, and read by one holding
 /// <c>grant:read</c>.
 /// </summary>
-/// <param name="gate">Whether the caller may manage grants where the grant is scoped.</param>
+/// <param name="gate">Whether the caller may read the grants of an organization.</param>
+/// <param name="admission">Whether the caller may manage grants where the grant is scoped.</param>
 /// <param name="unscoped">The refusal of a grant or a record the deployment holds no row for.</param>
 /// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What granting and revoking ask of the caller's session.</param>
@@ -29,14 +30,15 @@ namespace Janus.Authorization.Grants;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTHZ-GRANT-001 to AUTHZ-GRANT-004 and OPS-CFG-007. The
-/// organization a grant is scoped to is read from the record it is on, never from the
-/// caller, and the permission is asked there. A role carrying system administration is
+/// Implements LIB-API-005, AUTHZ-GRANT-001 to AUTHZ-GRANT-004, AUTHZ-SCOPE-001 and
+/// OPS-CFG-007. The organization a grant is scoped to is read from the record it is on,
+/// never from the caller, and the grant is admitted there. A role carrying system administration is
 /// granted and revoked only by a system administrator, a deny as much as an allow,
 /// since a deny takes it away.
 /// </remarks>
 internal sealed class GrantService(
     IAccessGate gate,
+    IGrantAdmission admission,
     IUnscopedRefusal unscoped,
     AdministrativeScope scope,
     IStepUpGate stepUp,
@@ -362,12 +364,15 @@ internal sealed class GrantService(
             ? await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
             : await unscoped.RefusedAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false);
 
+    // AUTHZ-SCOPE-001 (D-207, D-208): grant:manage in the grant's organization, or
+    // system:administer in the administrative organization for a grant outside it, as
+    // one admission, so an operation either admits records no refusal.
     private async ValueTask<Error?> ManagingRefusedAsync(
         AccessContext context,
         OrganizationId organization,
         CancellationToken cancellationToken) =>
-        (await gate
-            .RequireAsync(context, Permissions.GrantManage, organization, cancellationToken)
+        (await admission
+            .AdmitAsync(context, organization, cancellationToken)
             .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error);
 

@@ -1447,20 +1447,24 @@ the explanation, which serve a person's surface and answer a person's question (
 recorded refusals stay resolvable by their correlation identifier, AUTHZ-CONCEAL-004,
 D-207); every library operation that meets a gate, since each that changes a person's
 account is a person's step-up action; any permission while a request is being served,
-and a materialiser's refresh then too, since a job is background work, the gate telling
-the two apart by whether an HTTP request is being served on the calling flow, in every
-scope opened within it, whoever built the context (`08` CONV-DESIGN-007, D-206), so a
-host's webhook that needs a host permission records what arrived and hands the work to a
-declared job; and any permission in an organization whose deletion is requested or which
-has been erased (IDN-ORG-003), each evaluation reading that state live. A principal
-naming no declared job is refused for every host permission. A job is never declared
-with a permission not declared, a library-owned one, one bound to a step-up gate (no
-session proves a person) or one whose action is `export` (OPS-ALERT-006): startup fails
-with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`,
-`details.field` `permissions`; nor under a name of `10` section 5.29 or `migrate`
-(`details.field` `name`, D-206).
+since a job is background work, the gate telling the two apart by whether an HTTP
+request is being served on the calling flow, in every scope opened within it, whoever
+built the context (`08` CONV-DESIGN-007, D-206), so a host's webhook that needs a host
+permission records what arrived and hands the work to a declared job; and any permission
+in an organization whose deletion is requested or which has been erased (IDN-ORG-003),
+each evaluation reading that state live. A materialiser's refresh asked with its context
+while a request is served, as the gate judges it (`08` CONV-DESIGN-007), is a fault of
+the calling code: it throws `InvalidOperationException` and writes nothing
+(AUTHZ-DERIVE-005, D-208). A principal naming no declared job is refused for every host
+permission, and its refresh of a materialised derivation is a fault of the calling code
+that throws `InvalidOperationException` and writes nothing (AUTHZ-DERIVE-005, D-208). A
+job is never declared with a permission not declared, a library-owned one, one bound to
+a step-up gate (no session proves a person) or one whose action is `export`
+(OPS-ALERT-006): startup fails with `model.startup.declarationinvalid`,
+`details.declaration` `job.<name>`, `details.field` `permissions`; nor under a name of
+`10` section 5.29 or `migrate` (`details.field` `name`, D-206).
 
-*Source: D-079b, D-166, D-202, D-204, D-206, D-207*
+*Source: D-079b, D-166, D-202, D-204, D-206, D-207, D-208*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.
@@ -1473,10 +1477,12 @@ with `model.startup.declarationinvalid`, `details.declaration` `job.<name>`,
    its organization's records and on its organization, a modifying permission on a
    record whose data subject is restricted included, and refused `authz.denied` for any
    other, for the capability page and the explanation, for every library operation that
-   meets a gate, for any permission and a materialiser's refresh while a request is
-   served (through either profile or neither, and in a scope opened within the request),
-   and in an organization whose deletion is requested; on the organization-wide check a
-   consent-based purpose is refused `privacy.consent.required` (D-207).
+   meets a gate, for any permission while a request is served (through either profile or
+   neither, and in a scope opened within the request), and in an organization whose
+   deletion is requested; a materialiser's refresh asked with its context while a
+   request is served throws `InvalidOperationException` and writes nothing (D-208); on
+   the organization-wide check a consent-based purpose is refused
+   `privacy.consent.required`, writing no refusal record (D-207, D-208).
 7. A job declared with a permission not declared, a library-owned one, one bound to a
    step-up gate or one whose action is `export`, or under a name of `10` section 5.29 or
    `migrate`, fails startup with `model.startup.declarationinvalid`.

@@ -3101,7 +3101,7 @@ refresh token SHALL revoke the entire session family. A refresh token's lifetime
 SHALL be bounded by the session it derives from: it never outlives the record's idle or
 absolute expiry, and no separate lifetime exists to set.
 
-*Source: D-007, D-147, D-207*
+*Source: D-007, D-147, D-207, D-208*
 
 How a stolen token is caught. A refresh token is a handle on the session record
 (AUTH-SESS-001), not a credential of its own: it cannot outlive the record's idle or
@@ -3112,7 +3112,14 @@ provider's grant and every token of that grant. Their revocation and its audit r
 are one kept write, committed together in one unit of work (`08` CONV-DESIGN-003), the
 grant's and tokens' rows revoked by the library's own statements, never by a provider
 call that answers a failure as a refusal to revoke; a fault leaves none of them revoked,
-and the next presentation of a redeemed copy revokes them again.
+and the next presentation of a redeemed copy revokes them again. Every reuse takes this
+one path, whatever the redeemed token carries (D-208): one that names no session revokes
+no spine, and one issued under no grant revokes no grant, the rest of its family revoked
+as always; the audit record's acting identity and `subject` are the account the token
+names, or else the one its grant records, or else the account of the session it names,
+the acting identity the nil subject and `subject` absent where none names one, and its
+`details.session` is the session the token names, absent where it names none (`10`
+section 5.24).
 
 **Acceptance criteria**
 1. A refresh token presented twice revokes all derived sessions.
@@ -3121,7 +3128,11 @@ and the next presentation of a redeemed copy revokes them again.
    record is revoked, is refused; no refresh token is valid longer than the session.
 4. A reuse revokes the spine's sessions, the grant and its tokens and writes the
    revocation's audit record in one commit; where the commit fails, none of them is
-   revoked (D-207).
+   revoked (D-207). A reuse of a redeemed token that names no session and no subject
+   revokes its grant and every token of the grant and writes the record with the grant's
+   subject as acting identity and `subject` and no `details.session`, in one commit; one
+   issued under no grant and naming no session and no subject revokes no grant and
+   writes the record with the nil subject as acting identity and no `subject` (D-208).
 
 ---
 

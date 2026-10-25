@@ -335,8 +335,8 @@ internal sealed class RoleService(
     // The refusals a removal meets before its step-up, judged on the role as it stands
     // where it is held: a role the deployment does not hold, named by a path that names
     // no record, and under /admin nothing is concealed (X5, D-166); one that carries
-    // system administration, by a caller who is no system administrator (OPS-CFG-007);
-    // and one a grant's history, a derivation or a standing invitation names, none of
+    // system administration, by a caller who is no system administrator (OPS-CFG-007); and
+    // one a grant's history, a derivation or a standing invitation names, none of
     // which is left naming nothing (AUTHZ-GRANT-003 AC3, REG-INV-001).
     private async ValueTask<Error?> RemovalRefusedAsync(
         AccessContext context,

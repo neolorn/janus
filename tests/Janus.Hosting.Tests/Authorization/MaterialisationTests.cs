@@ -498,14 +498,107 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
-    /// AUTHZ-DERIVE-005, AUTHZ-GRANT-003 (D-207): the refresh over the source the host
-    /// declared, called with a system principal other than the drift check's, names the
-    /// nil subject as granter with the reason <c>derivation:reviewer</c> and records the
-    /// grant naming that principal; the drift check's reason is the drift check's alone.
+    /// AUTHZ-DERIVE-005 AC7, IDN-PRIN-001 AC6, CONV-DESIGN-007 (D-208): a refresh called
+    /// with a host job's context while a request is served, through either profile or
+    /// neither and in a scope opened within the request, throws
+    /// <c>InvalidOperationException</c> and writes no grant and no record.
+    /// </summary>
+    /// <param name="path">Where the request is sent.</param>
+    /// <param name="within">Whether the refresh is asked in a scope opened within the request.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(ServedRequests.Browser, false)]
+    [InlineData(ServedRequests.Machine, false)]
+    [InlineData(ServedRequests.Outside, false)]
+    [InlineData(ServedRequests.Browser, true)]
+    public async Task AUTHZ_DERIVE_005_AC7_AJobsRefreshWhileARequestIsServedThrowsAndWritesNothingAsync(
+        string path,
+        bool within)
+    {
+        Reviewed reviewed = await ReviewedAsync();
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the nightly digest",
+            reviewed.Deployment.Organization));
+
+        Exception? thrown = await RefusedInRequestAsync(reviewed, job, path, within);
+
+        Assert.IsType<InvalidOperationException>(thrown);
+        Assert.Equal(0, await MaterialisedAsync(reviewed));
+        Assert.Empty(await CorrectedAsync(reviewed));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC7 (D-208): a deployment-scoped principal that may run
+    /// <c>reconciliation</c> serves no request, so its refresh called while one is served
+    /// throws <c>InvalidOperationException</c> and writes no grant and no record.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_DERIVE_005_ASystemPrincipalsRefreshNamesTheNilGranterAndThePrincipalAsync()
+    public async Task AUTHZ_DERIVE_005_AC7_AReconcilingPrincipalsRefreshWhileARequestIsServedThrowsAndWritesNothingAsync()
+    {
+        Reviewed reviewed = await ReviewedAsync();
+        var reconciling = AccessContext.Of(SystemPrincipal.ForDeployment(
+            "mail-reconciliation",
+            "INT-MAIL-007",
+            SystemOperation.Reconciliation));
+
+        Exception? thrown = await RefusedInRequestAsync(reviewed, reconciling, ServedRequests.Browser, within: false);
+
+        Assert.IsType<InvalidOperationException>(thrown);
+        Assert.Equal(0, await MaterialisedAsync(reviewed));
+        Assert.Empty(await CorrectedAsync(reviewed));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC7, IDN-PRIN-001 (D-208): outside a request, a refresh called
+    /// with an organization-scoped principal naming no declared job, or with a
+    /// deployment-scoped principal that may not run <c>reconciliation</c>, throws
+    /// <c>InvalidOperationException</c> through both of its paths and writes no grant and
+    /// no record.
+    /// </summary>
+    /// <param name="deploymentScoped">Whether the principal is deployment-scoped rather than naming no declared job.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTHZ_DERIVE_005_AC7_ARefreshByAPrincipalTheRefreshDoesNotAdmitThrowsAndWritesNothingAsync(
+        bool deploymentScoped)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+        var asking = AccessContext.Of(deploymentScoped
+            ? SystemPrincipal.ForDeployment("retention-purge", "OPS-DATA-003", SystemOperation.RetentionPurge)
+            : SystemPrincipal.ForOrganization("import", "the nightly import", reviewed.Deployment.Organization));
+
+        await using ServiceProvider deployment = Materialised();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await RefreshAsync(deployment, reviewed, asking));
+
+        await using (AsyncServiceScope scope = deployment.CreateAsyncScope())
+        {
+            DerivationMaterialiser materialiser = scope.ServiceProvider.GetRequiredService<DerivationMaterialiser>();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await materialiser.RefreshAsync(asking, "reviewer", reviewed.Workspace.Id, cancellationToken));
+        }
+
+        Assert.Equal(0, await MaterialisedAsync(reviewed));
+        Assert.Empty(await CorrectedAsync(reviewed));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC7, AUTHZ-GRANT-003 (D-207, D-208): the refresh over the source
+    /// the host declared, called outside a request with a deployment-scoped principal
+    /// that may run <c>reconciliation</c> other than the drift check's, names the nil
+    /// subject as granter with the reason <c>derivation:reviewer</c> and records the grant
+    /// naming that principal and its reason; the drift check's reason is the drift
+    /// check's alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC7_AReconcilingPrincipalsRefreshNamesTheNilGranterAndThePrincipalAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Reviewed reviewed = await ReviewedAsync();
@@ -696,6 +789,63 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         await work.CommitAsync(cancellationToken);
 
         return refreshed;
+    }
+
+    // The host's call asked from its endpoint while a request is served, in the request's
+    // own scope or in one opened within it, inside the unit of work the host began; what
+    // it threw, or nothing where it answered (CONV-DESIGN-007, D-208).
+    private async Task<Exception?> RefusedInRequestAsync(
+        Reviewed reviewed,
+        AccessContext asking,
+        string path,
+        bool within)
+    {
+        Exception? thrown = null;
+        bool asked = false;
+
+        await using ServedRequests served = await ServedRequests.StartAsync(
+            host,
+            HostFixture.Declaration(materialised: true),
+            async context =>
+            {
+                await using AsyncServiceScope opened = context.RequestServices
+                    .GetRequiredService<IServiceScopeFactory>()
+                    .CreateAsyncScope();
+                IServiceProvider services = within ? opened.ServiceProvider : context.RequestServices;
+                await using HostContext reading = host.Context();
+
+                IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+                await work.BeginAsync(CancellationToken.None);
+
+                thrown = await Record.ExceptionAsync(async () => await services
+                    .GetRequiredService<IDerivationMaterialiser>()
+                    .RefreshAsync(asking, "reviewer", reviewed.Workspace.Id, Sources(reading), CancellationToken.None));
+
+                asked = true;
+            },
+            TestContext.Current.CancellationToken);
+
+        _ = await served.SendAsync(path);
+
+        Assert.True(asked);
+
+        return thrown;
+    }
+
+    // How many materialised grants the reviewing account holds on its workspace, live or
+    // taken back.
+    private async Task<int> MaterialisedAsync(Reviewed reviewed)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.grants
+            WHERE kind = 'materialised' AND subject_id = @account AND resource_id = @workspace;
+            """,
+            new { account = reviewed.Account.Value, workspace = reviewed.Workspace.Id.ToString() },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static async Task<bool> AdmitsAsync(IServiceProvider deployment, Reviewed reviewed)

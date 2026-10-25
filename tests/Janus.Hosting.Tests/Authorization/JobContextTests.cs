@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -116,6 +118,56 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(viewer.Value, listed.SubjectId);
     }
 
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC4, IDN-PRIN-001 AC6 (D-208): a declared job's refusal of a
+    /// permission its declaration does not name, asked inside a unit of work the job then
+    /// rolls back, carries its record's identifier, and the record stands, naming the
+    /// job's principal and stated reason, so it counts toward the job's denial alert.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC4_AJobsRefusalInsideWorkItRollsBackStandsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Written written = await WriteAsync();
+        Error refused;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            await using HostContext reading = host.Context();
+
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await work.BeginAsync(cancellationToken);
+
+            refused = (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(written.Job, HostPermissions.Retain, written.Record, Sources(reading), cancellationToken))
+                .Match(() => throw new InvalidOperationException("The permission was admitted."), error => error);
+
+            await work.RollbackAsync();
+        }
+
+        Assert.Equal(ErrorCodes.Denied, refused.Code);
+        Assert.Equal(
+            new Recorded("authz.access.denied", HostFixture.Digest, "the nightly digest"),
+            await RecordedAsync(refused.Details["correlation"].GetGuid()));
+    }
+
+    // The refusal record the identifier names: its action, and the principal and reason
+    // it records.
+    private async Task<Recorded> RecordedAsync(Guid correlation)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<Recorded>(new CommandDefinition(
+            """
+            SELECT action AS "Action", principal AS "Principal", principal_reason AS "Reason"
+            FROM identity.audit_records WHERE id = @correlation
+            """,
+            new { correlation },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
         new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
@@ -198,6 +250,8 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
 
         return new Written(deployment, job, record, note);
     }
+
+    private sealed record Recorded(string Action, string Principal, string Reason);
 
     private sealed record Written(
         Deployment Deployment,
