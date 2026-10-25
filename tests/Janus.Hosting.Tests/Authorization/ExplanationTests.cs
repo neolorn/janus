@@ -346,6 +346,50 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004, AUTHZ-GATE-004 (D-208): the explanation operations' own
+    /// refusals, which refuse no permission asked of the gate (an explanation on a type
+    /// that conceals, the caller's resolution of another's identifier, a support role's
+    /// resolution of an identifier the trail holds no refusal for), are
+    /// <c>authz.denied</c> carrying no refusal record's identifier, and write no refusal
+    /// record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AnExplanationsOwnRefusalCarriesNoIdentifierAndWritesNoRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+        AuditRecordId theirs = await RefusedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Error[] refusals =
+        [
+            Refusal(await gate.ExplainAsync(
+                AccessContext.Of(deployed.Support),
+                HostPermissions.Read,
+                deployed.Record,
+                Sources(reading),
+                cancellationToken)),
+            Refusal(await gate.ResolveOwnAsync(AccessContext.Of(deployed.Support), theirs, cancellationToken)),
+            Refusal(await gate.ResolveAsync(
+                AccessContext.Of(deployed.Support),
+                AuditRecordId.New(TimeProvider.System),
+                cancellationToken)),
+        ];
+
+        Assert.All(refusals, refusal =>
+        {
+            Assert.Equal(ErrorCodes.Denied, refusal.Code);
+            Assert.Empty(refusal.Details);
+        });
+        Assert.Equal(0, await DenialsOfAsync(deployed.Support));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC4, AUTHZ-SCOPE-001: <c>audit:read</c> held in the organization
     /// the refused record sits in, and not in the administrative one, resolves nothing.
     /// </summary>
@@ -1083,6 +1127,18 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
             "SELECT count(*) FROM identity.audit_records WHERE id = @id AND action = @action;",
             new { id = correlation.Value, action = "authz.access.denied" },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The refusals recorded naming the account as acting, which is what its denial alert
+    // counts (AUTHZ-CONCEAL-004, OPS-ALERT-001).
+    private async Task<int> DenialsOfAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.audit_records WHERE action = @action AND acting_subject = @account;",
+            new { action = "authz.access.denied", account = account.Value },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 
