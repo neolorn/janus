@@ -1,10 +1,10 @@
 # Round H1: the host's way in, its privacy duties, its setup and its tests
 
-Status: every item no question holds is built. D-206 answered Q4 to Q19 and D-207
-answered Q20 to Q34, and the items they held are built (section 1, "Built under D-206"
-and "Built under D-207"), save those Q35 to Q40 now hold. Six questions (Q35 to Q40)
-wait on the owner, and the items they hold are listed in section 2. The full gate result
-is in section 5.
+Status: every item no question holds is built. D-206 answered Q4 to Q19, D-207 answered
+Q20 to Q34 and D-208 answered Q35 to Q40, and the items they held are built (section 1,
+"Built under D-206", "Built under D-207" and "Built under D-208"), the sample host among
+them. Three questions (Q41 to Q43) wait on the owner, and the items they hold are listed
+in section 2. The full gate result is in section 5.
 
 ## 1. Items implemented
 
@@ -588,75 +588,164 @@ base".
   `InvitationServiceTests.REG_INV_001_SystemAdministrationDoesNotStandInForAnInvitationsRolesAsync`
   (the `09` row of `POST /admin/organizations/{id}/invitations`; no criterion states it).
 
-## 2. Items in the round not implemented
+**Built under D-208**
 
-- **LIB-PKG-001 AC3 and LIB-PKG-003 AC1:** proven in plan section 4, steps 1 and 2.
-- **LIB-API-001 AC1:** known issue 45 of the fourth corrections report (what
-  "documented" asks of the repository).
-- **A job's consent step (IDN-PRIN-001 AC6, AUTHZ-GATE-005):** waits on Q38. The org-wide
-  check's consent refusal for a job, and a job's admission on a permission bound to
-  consent, are not built or tested; no fixture's job declares such a permission. The
-  gate's shared consent step answers a job `privacy.consent.required` without a row, as
-  for a person, and a job's filter carries the consent condition.
-- **A refresh refused while a request is served (AUTHZ-DERIVE-005 AC7's last clause,
-  IDN-PRIN-001 AC6's refresh clause):** waits on Q39.
-- **`AccountService.EditProfileAsync`'s step-up order (CONV-DESIGN-002, CONV-DESIGN-003
-  AC13, D-207 answer 30):** waits on Q36. It still asks its step-up, and through it the
-  phone signal, inside its unit of work.
-- **CONV-DESIGN-003, the outermost begin of the operations Q30 parked
-  (`PhoneSignals.AllowsAsync`'s `risk` unit of work, `CredentialService.BeginTextCodeAsync`,
-  `RecoveryService.BeginAsync` and the text sign-in link's ask):** waits on Q36, since
-  `EditProfileAsync` still reaches `AllowsAsync` inside its own unit of work.
-- **D-207 answer 34, a grant outside the administrative organization admitted under
-  `system:administer` held there (AUTHZ-SCOPE-001 AC4, IDN-MEM-003, IDN-ORG-003):** waits
-  on Q35: `GrantService`'s admission at the gate step and the re-ask under the lock, its
-  truth-table rows and the endpoint tests.
-- **`InMemorySmsTransport`'s balance (LIB-TEST-003):** waits on Q37. Every `sms-balance`
-  poll on a deployment using it fails with `22003`, logged as an error in the testing
-  package's tests.
-- **AUTH-OIDC-003, a reused token carrying no session or no subject claim:** waits on Q40;
-  it keeps the path it had before D-207.
-- **LIB-TEST-004, the sample host, and its job in CONV-GATE-001:** held on the local
-  branch `part/sample`, unmerged and unpushed (the working guide's section 6, D-206),
-  since the sample's tests cannot pass until Q35 is answered and D-207 answer 34 is
-  built:
+- Q35, D-207 answer 34 with one grant admission, AUTHZ-SCOPE-001 AC4, AUTHZ-SEAM-001,
+  AUTHZ-TEST-001 (`4ca48d14`): `IGrantAdmission`, internal to `Janus.Authorization` and
+  implemented by `AccessGate`, judges the acting account's restriction, then
+  `system:administer` in the administrative organization and `grant:manage` in the
+  grant's organization as the single check decides each, and records one refusal naming
+  `grant:manage` in the grant's organization only where neither admits. `GrantService`
+  asks it at the gate step and again under the lock.
+  - `TruthTableTests.AUTHZ_TEST_001_AC2_EveryGrantAdmissionCaseDecidesTheWayTheTableSaysThroughTheAdmissionAsync`
+    (nine `GrantAdmissions` rows, each with its refusal count and, for a denial, the
+    record's permission and organization);
+  - `TruthTableTests.AUTHZ_TEST_001_AC1_EveryOperationCaseDecidesTheWayTheTableSaysAsync`,
+    two new `Operations` rows: a grant written and revoked in another organization by a
+    system administrator, and one by a system administrator restricted since the gate
+    step;
+  - `GrantEndpointTests.AUTHZ_SCOPE_001_AC4_ASystemAdministratorWritesAndRevokesTheFirstGrantOfACreatedOrganizationAsync`.
+  - AUTHZ-SEAM-001: by construction, the admission decides each permission through the
+    gate's own check; the seam tests pass.
+- Q36 and the outermost begins Q30 parked, REG-IDENT-009 AC6, CONV-DESIGN-002,
+  CONV-DESIGN-003, AUTH-FACT-002b (`cff1dbde`, `f6c8aae7`):
+  - `AccountServiceTests.REG_IDENT_009_AC6_AnEditNamingTheUsernameHeldLeavesAChangeCommittedMeanwhileAsync`,
+    `..._CONV_DESIGN_002_AUsernameChangeIsJudgedAgainUnderTheLockAsync` and
+    `..._CONV_DESIGN_002_AUsernameTakenIsRefusedBeforeTheUnitOfWorkBeginsAsync`;
+  - `StepUpBeforeTheUnitOfWorkTests.CONV_DESIGN_003_AC13_AUsernameChangeAsksTheSignalWithNoUnitOfWorkBegunAsync`
+    (the `risk` record standing after the step-up refuses);
+  - `CredentialServiceTests.CONV_DESIGN_003_AC8_ATextCodeBegunInsideAnOpenUnitOfWorkIsAFaultAsync`,
+    `RecoveryServiceTests.CONV_DESIGN_003_AC8_ARecoveryAskedInsideAnOpenUnitOfWorkIsAFaultAsync`,
+    `AuthenticationServiceTests.CONV_DESIGN_003_AC8_ALinkAskedInsideAnOpenUnitOfWorkIsAFaultAsync`
+    and `NonExistenceNoticeTests.CONV_DESIGN_003_AnAnswerThatMayFollowTheSignalInsideAnOpenUnitOfWorkIsAFaultAsync`.
+  - That no library caller reaches these three operations inside another's unit of work
+    was verified by review: every call site into `PhoneSignals.AllowsAsync`, direct and
+    through `StepUpGuard` and `StepUpGate.RequireAsync`, was traced. One path still
+    reaches `AllowsAsync` inside a unit of work (Q41).
+- Q37, LIB-TEST-003 AC4 (`20374808`): `InMemorySmsTransport` reports
+  99999999999999.9999.
+  - `TransportTests.LIB_TEST_003_TheSmsTransportKeepsEveryMessageByDestinationAsync`;
+  - `StandInBalanceTests.LIB_TEST_003_AC4_TheBalanceJobRecordsTheTransportsBalanceAndRaisesNoFailureAsync`
+    (PostgreSQL, the library's `sms-balance` job run twice, both readings recorded, no
+    `background-job-failed`); the first clause stays proven by
+    `StandInTests.LIB_TEST_003_AC4_TheStandInsRaiseNoDegradationAsync`.
+- Q38, a job's consent step, IDN-PRIN-001 AC6, AUTHZ-CONCEAL-004 AC4 and AC5 (`91b326d6`,
+  `013e948c`; no code changed, the library was as the chapters now read). The test
+  deployment's job `digest` also declares `document:recommend`.
+  - `ConsentGateTests.IDN_PRIN_001_AC6_AJobsConsentRefusalOnTheOrganizationWideCheckWritesNoRecordAsync`,
+    `..._AUTHZ_CONCEAL_004_AC5_AJobsConsentRefusalOnARecordCarriesNoIdentifierAndWritesNoRecordAsync`
+    and `..._IDN_PRIN_001_AC6_AJobIsAdmittedOnAConsentBoundPermissionWhereConsentIsHeldAsync`;
+  - `JobContextTests.AUTHZ_CONCEAL_004_AC4_AJobsRefusalInsideWorkItRollsBackStandsAsync`;
+  - truth table: `Jobs` rows for a consent-bound permission with and without consent, and
+    a `JobOrganizations` row.
+- Q39 and the refresh's limits, AUTHZ-DERIVE-005 AC7, IDN-PRIN-001 AC6, CONV-DESIGN-007
+  (`a12eb66c`), in `MaterialisationTests`:
+  - `AUTHZ_DERIVE_005_AC7_AJobsRefreshWhileARequestIsServedThrowsAndWritesNothingAsync`
+    (the browser profile, the machine profile, outside both, a scope opened within the
+    request);
+  - `..._AC7_AReconcilingPrincipalsRefreshWhileARequestIsServedThrowsAndWritesNothingAsync`;
+  - `..._AC7_ARefreshByAPrincipalTheRefreshDoesNotAdmitThrowsAndWritesNothingAsync` (an
+    organization-scoped principal naming no declared job, a deployment-scoped one that
+    may not run `reconciliation`, each through both overloads);
+  - `..._AC7_AReconcilingPrincipalsRefreshNamesTheNilGranterAndThePrincipalAsync` and
+    `..._AC7_AJobsRefreshOutsideARequestNamesTheNilGranterAndTheJobAsync`;
+  - truth table: five `Operations` rows for the refresh.
+- Q40, AUTH-OIDC-003 AC2 and AC4 (`86e80903`): every reuse takes the one path, by the
+  library's statements in one outermost unit of work.
+  - `OidcServiceTests.AUTH_OIDC_003_AC4_AReuseNamingNoSessionAndNoSubjectRevokesItsGrantUnderTheGrantsSubjectAsync`,
+    `..._AC4_AReuseUnderNoGrantNamingNoSessionAndNoSubjectIsRecordedUnderNoAccountAsync`,
+    `..._AC2_AReuseNamingOnlyASessionIsRecordedUnderTheSessionsAccountAsync` and
+    `..._AC2_TheTokensAccountIsRecordedBeforeTheGrantsAndTheGrantsBeforeTheSessionsAsync`;
+  - `TokenReuseStoreTests.AUTH_OIDC_003_AC4_AReuseNamingNoSessionAndNoSubjectRevokesItsGrantUnderTheGrantsSubjectAsync`
+    and `..._AC4_AReuseUnderNoGrantNamingNoSessionAndNoSubjectIsRecordedUnderTheNilSubjectAsync`
+    (PostgreSQL, the record's acting identity, `subject` and `details.session`).
+  - That the provider's revocation path is gone was verified by reading `TokenReuse`.
+- The criteria D-208 brought into line (`cef80da1`, `6c4837a8`, `dc4aff78`; tests only, the
+  library was as the chapters now read):
+  - API-CONV-002 AC2, BFF-ERR-001 AC2, `10` section 1 `authz.denied`, over HTTP:
+    `RefusalRecordTests.API_CONV_002_AC2_ARecordedRefusalCarriesItsRecordBesideTheRequestsIdentifierAsync`
+    and `..._BFF_ERR_001_AC2_AnUnrecordedRefusalCarriesTheRequestsIdentifierAndNoRecordAsync`;
+  - the explanation routes: `RefusalRecordTests.AUTHZ_CONCEAL_004_AC1_TheExplanationRoutesResolveTheIdentifierARefusalsBodyCarriedAsync`;
+  - AUTHZ-CONCEAL-004 AC5 for a person:
+    `GateBehaviourTests.AUTHZ_CONCEAL_004_AC5_ARestrictionRefusalCarriesNoIdentifierAndWritesNoRecordAsync`,
+    `..._AC5_AStepUpRefusalCarriesNoIdentifierAndWritesNoRecordAsync` and
+    `ConsentGateTests.AUTHZ_CONCEAL_004_AC5_APersonsConsentRefusalCarriesNoIdentifierAndWritesNoRecordAsync`;
+    the account's state verified by reading `AccessGate`, which answers no refusal for it;
+  - an `authz.denied` refusing no permission asked of the gate:
+    `ExplanationTests.AUTHZ_CONCEAL_004_AnExplanationsOwnRefusalCarriesNoIdentifierAndWritesNoRecordAsync`
+    and `JobContextTests.AUTHZ_CONCEAL_004_AJobsRefusalsAskingNoPermissionOfTheGateWriteNoRecordAsync`;
+  - AUTHZ-CONCEAL-004 AC4, the disclosed answer:
+    `GateBehaviourTests.AUTHZ_CONCEAL_004_AC4_ADisclosedRefusalInsideATransactionThatRollsBackStandsAsync`;
+  - AUTHZ-GATE-006 AC3:
+    `GateBehaviourTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedAfterTheGateStepRefusesInsideTheUnitOfWorkAsync`
+    now also asserts no refusal record; the endpoint tests under AC3 run on the fake gate,
+    which forms no record, and cannot decide it;
+  - AUTHZ-PRIN-001 AC1: `TruthTableTests.AUTHZ_PRIN_001_AC1_*`, at base, with the grant
+    admission's rows above.
+- The test servers (`36b09de3`, `24f066ea`, and the sample's in `f52c180a`): the in-memory
+  servers of `Janus.Conformance.Tests`, `Janus.Hosting.Tests` and the sample's tests never
+  ran a response's completion callbacks, so no request's service scope was disposed and
+  each scoped context kept its pooled connection; the sample's deployment ran out of
+  PostgreSQL connections after about eight customers. Each server now runs them before the
+  request ends. No criterion states a bounded connection count, so the tests are named for
+  what they show:
+  - `ServerInMemoryTests.SendAsync_CustomersRegisteredOneAfterAnother_LeaveTheDeploymentsConnectionsBoundedAsync`
+    (conformance, PostgreSQL);
+  - `ServerInMemoryTests.SendAsync_ARequestThatResolvesFromItsScope_DisposesWhatItResolvedAsync`
+    (hosting).
+- LIB-TEST-004, the sample host, and its job in CONV-GATE-001, merged from `part/sample`
+  once its gate passed:
   - `7dd72348` feat(samples): add the kite workshop sample host;
   - `1a88bb56` test(core): check that the sample host references no library project;
   - `a1f04bfe` ci(gates): add the sample host's gate script;
   - `dae661a5` ci(gates): run the sample host in the pipeline;
-  - `9a329e12` Merge branch 'round-h1' into part/sample (at `1f48629b`);
-  - `62e6a0c0` build(samples): give the sample host the library's settings and scopes;
-  - `49a85c98` feat(samples): run the follow-up calls job under its declared permission.
-  - D-207 answer 33 (`62e6a0c0`): `samples/Directory.Build.props` imports the root one,
-    restores without a lockfile and removes MinVer; the root `.editorconfig` names
-    `samples/HostSample` among the source projects and `samples/HostSample.Tests` among
-    the test projects; `sample-host.sh` runs `dotnet format --verify-no-changes` over
-    `HostSample.slnx` once its packages are restored.
+  - `62e6a0c0` build(samples): give the sample host the library's settings and scopes
+    (D-207 answer 33);
+  - `49a85c98` feat(samples): run the follow-up calls job under its declared permission;
+  - `553f5258`, `79939d0d`, `138d363b` and `f52c180a`: the sample's own faults its gate
+    showed (a phone for each person, as `registration.phone` requires by default; the
+    workshop's foreign keys; the export's value names under the library's name rule;
+    its server's completion callbacks);
+  - `e9adae95` test(samples): give the sample's organization its first grants.
+  - D-207 answer 33: `samples/Directory.Build.props` imports the root one, restores without
+    a lockfile and removes MinVer; the root `.editorconfig` names `samples/HostSample` among
+    the source projects and `samples/HostSample.Tests` among the test projects;
+    `sample-host.sh` runs `dotnet format --verify-no-changes` over `HostSample.slnx`.
     - `LibraryStructureTests.CONV_LAYOUT_001_TheSampleHostTakesTheLibrarysSettingsWithoutALockfileOrMinVer`;
     - `..._CONV_SETUP_004_AC3_NoRuleButTheFiveOfTheTableIsSetBelowError`,
       `..._CONV_SETUP_004_AC2_TheEditorconfigIsTheOnlyPlaceARuleIsConfigured` and
       `..._CONV_SETUP_001_AC1_NoProjectOverridesTheInheritedProperties`, widened to the
-      sample.
-    - The format step was verified to fail on a whitespace fault put into a sample file
-      and taken out again.
+      sample;
+    - the format step verified to fail on a whitespace fault put into a sample file and
+      taken out again.
   - AC1: `.github/gates/sample-host.sh` and the `sample-host` job; no test decides it.
-  - AC2, in `samples/HostSample.Tests`, each failing in its fixture's setup on Q34's
-    answer, which waits on Q35 (the staff invitation into the sample's organization
-    answers 403 `authz.denied`):
+  - AC2, in `samples/HostSample.Tests`:
     - `WorkshopEndpointTests.LIB_TEST_004_AC2_ARecordIsWrittenAndReadWithItsPersonalFieldEncryptedAsync`,
       `..._AnEndpointIsRefusedWithoutASessionAndOneMarkedAsAnsweringAnyoneIsReachedAsync`,
       `..._ABoundActionIsRefusedWithoutItsStepUpAsync`,
       `..._ARecordRegisteredAndRolledBackLeavesNeitherAsync`,
       `..._ARegistrationIsRemovedAsync`, `..._AnExportCarriesTheHostsSectionAsync`,
-      `..._AWithdrawalIsHandledByTheHandlerAsync` and
-      `..._AnObjectionIsHandledByTheHandlerAsync`;
+      `..._AWithdrawalIsHandledByTheHandlerAsync`, `..._AnObjectionIsHandledByTheHandlerAsync`
+      and `..._ACreatedOrganizationIsGivenItsFirstGrantsAndHoldsTheSamplesRecordsAsync`
+      (the first administrator writes the first grant, the sample's role
+      `workshop-manager`, through `POST /admin/grants` under `system:administer`);
     - `WorkshopEndpointTests.LIB_TEST_004_AWorkshopsListIsFilteredByTheGateAndCarriesCapabilitiesAsync`;
     - `ErasureTests.LIB_TEST_004_AC2_AnErasedCustomersHostFieldNoLongerDecryptsAsync`;
     - `FollowUpCallsTests.LIB_TEST_004_AC2_AJobIsAdmittedForItsDeclaredPermissionAndRefusedForAnotherAsync`
-      (D-207 answer 20; the job `follow-up-calls` declares `repair:read` alone, no
-      permission bound to consent, Q38).
-  - AC3: `LibraryStructureTests.LIB_TEST_004_AC3_TheSampleHostReferencesNoProjectOfTheLibrarysSolution`,
-    passing on the branch.
+      (the job `follow-up-calls`, `repair:read` alone).
+  - AC3: `LibraryStructureTests.LIB_TEST_004_AC3_TheSampleHostReferencesNoProjectOfTheLibrarysSolution`.
+
+## 2. Items in the round not implemented
+
+- **LIB-PKG-001 AC3 and LIB-PKG-003 AC1:** proven in plan section 4, steps 1 and 2.
+- **LIB-API-001 AC1:** known issue 45 of the fourth corrections report (what
+  "documented" asks of the repository).
+- **CONV-DESIGN-003, the outermost begin of `PhoneSignals.AllowsAsync`'s `risk` unit of
+  work:** waits on Q41. Until it is answered, a `risk` answer reached inside an open unit
+  of work joins it rather than faulting.
+- **INF-BG-001, the background worker's wait:** waits on Q42. A wait past
+  `Task.Delay`'s largest delay throws and stops the host; seen once per sample run, after
+  a fixture whose clock moves 31 days was torn down, failing no test.
 - **CONV-DEP-004:** carried into Milestone 2 as a known issue (plan section 4); no code.
 - **`11` section 5, `13` R-M20, `15` sections 3.7 and 6.3, and `19` INF-HOST-003:**
   documentation, runbook and infrastructure; no code in this round. INF-HOST-003's
@@ -769,6 +858,18 @@ base".
     - Governing: CONV-DESIGN-003, under which a success that wrote nothing rolls back.
     - Rule: they answer success before any unit of work begins, and one seen under the
       lock rolls back and answers success; no answer changes.
+18. **`PublicSurfaceTests.GateSteps` (`4ca48d14`).**
+    - Out of step: the list of gate steps lacked `IGrantAdmission`.
+    - Governing: D-208 answer 35 and CONV-DESIGN-007.
+    - Rule: a gate step D-208 introduces is listed beside the other gate steps.
+19. **`tests/Janus.Hosting.Tests/Authorization/GrantAdmissionInMemory.cs`, a
+    non-recording `Admits` on `AccessGateInMemory`, and its registration in
+    `tests/Janus.Hosting.Tests/Deployment.cs` (`4ca48d14`).**
+    - Out of step: the in-memory deployment resolved no grant admission, so the
+      AUTHZ-SCOPE-001 AC4 endpoint test could not exist.
+    - Governing: the working guide's section 3 (test infrastructure).
+    - Rule: the deployment registers a fake for every gate step the endpoints resolve;
+      test fixtures only.
 
 ## 4. Open questions
 
@@ -805,8 +906,8 @@ base".
     - LIB-TEST-003 AC1, AC3 and AC5;
     - LIB-TEST-004;
     - the sample host's row of CONV-GATE-001.
-  - Answered by D-206 answer 5; built (section 1), save LIB-TEST-004, which Q33 and Q34
-    now hold (section 2).
+  - Answered by D-206 answer 5; built (section 1). LIB-TEST-004, which Q33 and Q34 held,
+    is built under D-208 (section 1).
 - **Q6 (Tier 2). `migrate --report`.**
   - OPS-MIG-001 states neither its output form nor its exit code where a destructive
     statement is found.
@@ -929,16 +1030,17 @@ base".
   context.**
   - Neither the item nor the gate says how a job's context answers the org-wide question.
   - Parked: both; the org-wide check refuses a job's context.
-  - Answered by D-207 answer 21; built (section 1), save a job's consent step, which
-    Q38 holds (section 2).
+  - Answered by D-207 answer 21; built (section 1). A job's consent step, which Q38
+    held, is proven under D-208 (section 1).
 - **Q22 (Tier 3). `ExplainAsync` and `WhoCanAccessAsync` for a job's context.**
   - Parked: both for a job's context.
   - Answered by D-207 answer 22; built (section 1).
 - **Q23 (Tier 3). `IDerivationMaterialiser` with a job's context.**
   - The granter, the reason and the principal of what it writes are not stated.
   - Parked: the materialiser for a job's context.
-  - Answered by D-207 answer 23; built (section 1), save a refresh refused while a
-    request is served, which Q39 holds (section 2).
+  - Answered by D-207 answer 23; built (section 1). A refresh asked while a request is
+    served, which Q39 held, and the limits on a system principal's refresh are built
+    under D-208 (section 1).
 - **Q24 (Tier 2). `UseUnitOfWorkAsync` on a context configured with a connection object
   it owns.**
   - EF Core 10's `SetDbConnection` disposes a connection the context owns when it replaces
@@ -980,8 +1082,8 @@ base".
     `OidcService.ReuseAsync` ends the session family and writes the audit record in a unit
     of work of its own; CONV-DESIGN-003 commits a refusal's kept writes together.
   - Parks nothing; `TokenReuse` is unchanged.
-  - Answered by D-207 answer 28; built (section 1), save a reused token carrying no
-    session or no subject claim, which Q40 holds (section 2).
+  - Answered by D-207 answer 28; built (section 1). A reused token carrying no session
+    or no subject claim, which Q40 held, is built under D-208 (section 1).
 - **Q29 (Tier 2). "A rejected callback's count and record" (INT-SMS-005).**
   - The callback guards and the provider-event intake write the rejection as the
     `CallbackLog.Refused` line; `DeliveryReports.ReportAsync` writes no record of it.
@@ -1001,7 +1103,9 @@ base".
     callers of `StepUpGuard.PassedAsync` take this path.
   - Parked: as section 2 states.
   - Answered by D-207 answer 30; built for seven of the eight operations (section 1).
-    `EditProfileAsync` and the outermost begins Q30 parked wait on Q36 (section 2).
+    `EditProfileAsync` and the outermost begins Q30 parked are built under D-208 (Q36),
+    save the outermost begin of `AllowsAsync`'s `risk` unit of work, which Q41 holds
+    (section 2).
 - **Q31 (Tier 2). A write kept on a refusal that CONV-DESIGN-003's list does not name:
   `CredentialService.RemoveAsync`.**
   - `LossReports.SuspendAsync` commits the suspension, the report and its audit record,
@@ -1029,7 +1133,7 @@ base".
       `samples/.editorconfig` holding only the table's five rules;
     - **C:** as B, on the SDK's default analysis.
   - Parked: the sample's build files.
-  - Answered by D-207 answer 33; built on `part/sample` (section 2).
+  - Answered by D-207 answer 33; built (section 1, "Built under D-208").
 - **Q34 (Tier 3). No public path gives anyone a grant in an organization that
   `POST /admin/organizations` creates.**
   - AUTHZ-SCOPE-001 evaluates invitations and grants in the organization they belong to,
@@ -1038,8 +1142,8 @@ base".
     gated and seeds no grant or membership. A grant in the administrative organization
     confers only on its members.
   - Parked: every LIB-TEST-004 AC2 test, and so the sample host's gate run (section 2).
-  - Answered by D-207 answer 34; waits on Q35, save the invitation's roles in the
-    organization itself (section 1).
+  - Answered by D-207 answer 34; built (section 1), the sample host's tests through
+    Q35's answer (section 1, "Built under D-208").
 
 Observations, not questions, answered by D-207:
 - A host's own `IUnitOfWork` implementation was treated by `UseUnitOfWorkAsync` as not
@@ -1048,7 +1152,7 @@ Observations, not questions, answered by D-207:
   `system.fault` in the staff invitation flow after two failed registrations in the same
   deployment. The testing package's tests now log errors (section 3, record 15).
 
-**Unanswered.**
+**Answered by D-208.**
 
 - **Q35 (Tier 3). What the gate records for an alternative admission (D-207 answer 34).**
   - A grant outside the administrative organization is admitted under `grant:manage` in
@@ -1065,6 +1169,7 @@ Observations, not questions, answered by D-207:
     organization that record carries.
   - Parked: D-207 answer 34 (section 2), and with it the sample host's AC2 tests (Q34's
     fixture).
+  - Answered by D-208 answer 35; built (section 1).
 - **Q36 (Tier 3). The username change in `AccountService.EditProfileAsync` under D-207
   answer 30.**
   - Whether the username changes is read once without a lock and decides whether the
@@ -1078,6 +1183,8 @@ Observations, not questions, answered by D-207:
     of work open, and on a pass the edit begins again.
   - Parked: `EditProfileAsync`'s step-up order, and the outermost begins Q30 parked
     (section 2).
+  - Answered by D-208 answer 36 (reading A); built (section 1), save the outermost
+    begin of `AllowsAsync`'s `risk` unit of work, which Q41 holds (section 2).
 - **Q37 (Tier 2). `InMemorySmsTransport.BalanceAsync` answers `decimal.MaxValue`.**
   - `identity.sms_balance_readings.balance` is `numeric(18,4)`, so every `sms-balance`
     poll on a deployment using the transport fails with `22003 numeric field overflow`.
@@ -1088,6 +1195,7 @@ Observations, not questions, answered by D-207:
     - **B:** a reading the column cannot hold is refused or capped where it is recorded
       (`SmsBalance.cs` and the column), not a fault of the job.
   - Parked: that fix.
+  - Answered by D-208 answer 37 (reading A); built (section 1).
 - **Q38 (Tier 3). Whether a job's consent refusal is recorded (D-207 answer 21).**
   - Answer 21 refuses a consent-based purpose for a job "as it is for a person" and says
     every refusal is recorded as the gate records a job's. A person's
@@ -1097,12 +1205,14 @@ Observations, not questions, answered by D-207:
     **(B)** it writes an `authz.access.denied` row, and the answer carries
     `details.correlation`.
   - Parked: a job's consent step (section 2).
+  - Answered by D-208 answer 38 (reading A); proven (section 1), no code changed.
 - **Q39 (Tier 3). What a refresh refused while a request is served records.**
   - AUTHZ-DERIVE-005 AC7 records it as the gate records a refusal of background work. The
     gate's row carries `details.permission` and `details.resourceType`, and its
     resolution builds the AUTHZ-GATE-004 explanation, whose `permission` is required. A
     refresh asks no permission; it names a relationship and a `ResourceId`.
   - Parked: that refusal (section 2).
+  - Answered by D-208 answer 39; built (section 1).
 - **Q40 (Tier 3). What a reuse writes when the redeemed token carries no session or no
   subject claim (D-207 answer 28).**
   - AUTH-OIDC-003's values and `10` 5.24 give the family as spine, grant and tokens, and
@@ -1113,6 +1223,62 @@ Observations, not questions, answered by D-207:
     in an outermost unit of work or by the provider's managers, and whether an audit
     record is written, naming the grant's subject and no session.
   - Parked: that path, which keeps its behaviour from before D-207 (section 2).
+  - Answered by D-208 answer 40; built (section 1).
+
+The refresh's reading (section 1, Q23's build): D-208 confirmed it for a declared job
+outside a request and for the drift check, within the limits a system principal has,
+which are built (section 1, "Built under D-208").
+
+**Unanswered.**
+
+- **Q41 (Tier 3). A library path reaches `PhoneSignals.AllowsAsync` inside an open unit of
+  work.**
+  - `IAccessGate.RequireAsync` → `AccessGate.UnsteppedAsync` → `StepUpGates.OutstandingAsync`
+    → `RequestGates.JudgedAsync` → `StepUpGuard.ChallengeAsync` → `AllowsAsync`, where a
+    host binds a step-up gate to a library-owned permission (for example
+    `system:administer`), the session does not meet it, a texted factor is offered and a
+    signal provider is declared. Nothing refuses such a binding:
+    `AuthorizationDeclarationBuilder.StepUpGate` and `AuthorizationModel` check gate
+    bindings only for jobs.
+  - Sites asking a library permission inside their unit of work:
+    `ConfigurationService.ChangeAsync` and `RetentionAsync`,
+    `RestrictionAdministration.EditAsync`, `AlertDestinationChange.ChangeAsync`; under a
+    race, the grant, group, role, invitation, policy and domain operations' re-asks under
+    the lock.
+  - AUTHZ-GATE-005's values (D-160) let a host bind its own actions, the library's
+    carrying theirs in `10` section 5a, and say nothing of a host binding a library
+    permission; CONV-DESIGN-003 never asks the signal inside an open transaction.
+  - Readings, with the smallest fix for each:
+    - **A:** a host's binding naming a library-owned permission is refused at startup
+      (one check and a criterion);
+    - **B:** the binding is allowed, and the operations ask the permission before their
+      unit of work, or the gate's step-up judgement is cached before it (an unlocked ask
+      in the four sites; the race sites stay open);
+    - **C:** the `risk` unit of work begins outermost and faults when reached inside one,
+      failing closed with `system.fault` on that configuration.
+  - Parked: that outermost begin (section 2).
+- **Q42 (Tier 2). The background worker's wait past `Task.Delay`'s largest delay
+  (INF-BG-001).**
+  - `BackgroundWorker.RunDueAsync` waits until the soonest due job among those not
+    running; `Task.Delay` accepts at most about 49.7 days, so while every job still
+    waiting is due later than that (a job of a long period while the short ones run),
+    `ExecuteAsync` throws `ArgumentOutOfRangeException` and, under `StopHost`, the host
+    stops.
+  - Readings, with the smallest fix for each:
+    - **A:** the wait is capped at the largest delay `Task.Delay` accepts, the loop
+      running a round early and waiting again;
+    - **B:** it is capped at a stated longest wait between rounds (a `10` row or a fixed
+      value the chapters name).
+  - Parked: that fix (section 2).
+- **Q43 (Tier 3). A restricted account's list filter and fragment for a modifying
+  permission.**
+  - `FilterAsync` and `FragmentAsync` answer a rule matching nothing (`AccessGate.cs`,
+    about line 589), where the check refuses `authz.restricted`. AUTHZ-GATE-006's values
+    say the gate "refuses every modifying one with `authz.restricted`" and do not say
+    how a filter or a fragment answers it. No record is written either way.
+  - Readings: **A:** a filter matching nothing is how a list refuses; **B:** the filter
+    and the fragment refuse `authz.restricted` as the check does.
+  - Parks nothing; the behaviour predates the round.
 
 ## 5. Gate result
 
@@ -1123,30 +1289,31 @@ Fast checks on every commit, and after each merge of a part:
   the contract test `ProductNameTests.CONV_NAME_001_AC2` reads the checkout's `.git` file,
   which names the clone's path, and fails there alone.
 
-The full gate ran on the development machine, job by job as `.github/workflows/gates.yml`
-runs it, over the merge base with `main` (`b6d14fe`) to `HEAD`. At `1f48629b`, after the
-last merge of a part, every job was green but "Forbidden markers", which read a comment of
-`RoleService.cs` ending in a semicolon as commented-out code. `c7edaf35` rewrapped it, and
-the gate ran again at `c7edaf35`:
+The pipeline's runs on `07fb7831`, the tip of the last push, were green: the push run
+39716104173 and the pull request run 39716105180. Nothing failed, so nothing was fixed.
+
+The full gate ran once on the development machine at `bc39d890`, after the last merge of
+a part, job by job as `.github/workflows/gates.yml` runs it, over the merge base with
+`main` (`b6d14fe`) to `HEAD`:
 
 | Job | Result |
 |---|---|
 | Locked restore, build, public surface, format | green |
-| Unit tests | 4618 of 4618 |
-| Contract tests | 175 of 175 |
+| Unit tests | 4632 of 4632 |
+| Contract tests | 177 of 177 |
 | Unicode tables run and diff, tool restore | green |
-| Integration tests | 1275 of 1275 |
+| Integration tests | 1318 of 1318 |
 | Policy coverage | 3 of 3 |
-| Truth-table change, truth-table suite | green, 151 of 151 |
+| Truth-table change, truth-table suite | green, 170 of 170 |
 | Analyser rules, permitted outcome, forbidden log values | 23 of 23, 4 of 4, 4 of 4 |
 | Dependency allow-list, internals allow-list | 2 of 2, 1 of 1 |
 | Forbidden markers, acceptance test names, commit message, changelog | green |
 | Destructive operations | reported only (the gate is disabled) |
 | Dependency vulnerabilities | green, no package with a known vulnerability |
 | Double migration | both runs applied through `migrate` |
-| The sample host builds from the packages packed from the same commit, and its tests pass | red, run from `part/sample` (`49a85c98`) with the job's own steps: the pack, the sample's restore from the folder feed, the tool install, its build with warnings as errors and `dotnet format --verify-no-changes` over `HostSample.slnx` green; its 11 tests each fail in their fixture's setup, the staff invitation into the sample's organization answered 403 `authz.denied` (Q34's answer, waiting on Q35) |
+| The sample host builds from the packages packed from the same commit, and its tests pass | green, `.github/gates/sample-host.sh` after a locked restore: the pack, the sample's restore from the folder feed, the tool install, its build with warnings as errors, `dotnet format --verify-no-changes` over `HostSample.slnx`, and its tests, 12 of 12 |
 
 - The full-history secret scan (OPS-DEP-004) ran after the gate, gitleaks 8.30.1 under
-  `.gitleaks.toml` over every commit of every branch and tag (1516 commits): no finding.
-- The pipeline run, the gate of record, runs on the push of this commit. The round's
-  pull request cannot merge until `part/sample` is merged (section 2).
+  `.gitleaks.toml` over every commit of every branch and tag (1536 commits): no finding.
+  It runs again before the push of this commit.
+- The pipeline run, the gate of record, runs on the push of this commit.
