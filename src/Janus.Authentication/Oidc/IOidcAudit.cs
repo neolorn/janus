@@ -16,16 +16,16 @@ internal interface IOidcAudit
     /// Records that a refresh token was presented after it had already been used, and
     /// that everything derived from the session went with it.
     /// </summary>
-    /// <param name="subject">Whose account.</param>
+    /// <param name="subject">Whose account, or nothing where neither the token, its grant nor its session names one.</param>
     /// <param name="clientId">Which client presented it.</param>
-    /// <param name="session">The session record the family stood on.</param>
+    /// <param name="session">The session record the family stood on, or nothing where the token names none.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
     ValueTask ReusedAsync(
-        SubjectId subject,
+        SubjectId? subject,
         string clientId,
-        SessionId session,
+        SessionId? session,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
