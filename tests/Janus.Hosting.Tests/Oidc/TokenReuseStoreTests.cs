@@ -22,7 +22,8 @@ namespace Janus.Hosting.Tests.Oidc;
 /// <summary>
 /// A refresh token's reuse over the database: the session record's spine, the
 /// provider's grant and every token of it revoked, with the revocation's audit record,
-/// in one commit, and none of them where the commit fails (AUTH-OIDC-003, D-207).
+/// in one commit, and none of them where the commit fails, whatever the token names
+/// (AUTH-OIDC-003, D-207, D-208).
 /// </summary>
 /// <param name="host">The deployment the cases run against.</param>
 [Trait("kind", "integration")]
@@ -88,6 +89,80 @@ public sealed class TokenReuseStoreTests(HostFixture host) : IClassFixture<HostF
             await TokenStatusesAsync(connection, grant));
         Assert.Equal(0, await RecordedAsync(connection, subject));
     }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-208): a reuse of a redeemed token naming no session and no
+    /// subject revokes its grant and every token of it, ends no session, and writes the
+    /// record under the grant's subject with no session, in one commit.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AReuseNamingNoSessionAndNoSubjectRevokesItsGrantUnderTheGrantsSubjectAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (SubjectId subject, SessionId session, Guid grant, Guid other) = await FamilyAsync(cancellationToken);
+        string presenting = Presenting();
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<OidcService>()
+                .ReuseAsync(subject: null, session: null, presenting, grant.ToString(), cancellationToken);
+        }
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.False(await EndedAsync(connection, session));
+        Assert.Equal(OpenIddictConstants.Statuses.Revoked, await GrantStatusAsync(connection, grant));
+        Assert.Equal([OpenIddictConstants.Statuses.Revoked], await TokenStatusesAsync(connection, grant));
+        Assert.Equal(OpenIddictConstants.Statuses.Valid, await GrantStatusAsync(connection, other));
+        Assert.Equal(
+            (subject.Value, subject.Value, (Guid?)subject.Value, false),
+            await RecordOfAsync(connection, presenting));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-208): a reuse of a redeemed token issued under no grant and
+    /// naming no session and no subject revokes no grant and ends no session, and writes
+    /// the record under the nil subject with no subject and no session, in one commit.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AReuseUnderNoGrantNamingNoSessionAndNoSubjectIsRecordedUnderTheNilSubjectAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (_, SessionId session, Guid grant, Guid other) = await FamilyAsync(cancellationToken);
+        string presenting = Presenting();
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<OidcService>()
+                .ReuseAsync(subject: null, session: null, presenting, grant: null, cancellationToken);
+        }
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.False(await EndedAsync(connection, session));
+        Assert.Equal(OpenIddictConstants.Statuses.Valid, await GrantStatusAsync(connection, grant));
+        Assert.Equal(
+            [OpenIddictConstants.Statuses.Redeemed, OpenIddictConstants.Statuses.Valid],
+            await TokenStatusesAsync(connection, grant));
+        Assert.Equal(OpenIddictConstants.Statuses.Valid, await GrantStatusAsync(connection, other));
+        Assert.Equal((Guid.Empty, Guid.Empty, (Guid?)null, false), await RecordOfAsync(connection, presenting));
+    }
+
+    // A client name of the test's own, so the one record it writes is found by it.
+    private static string Presenting() => $"{Client}-{Guid.NewGuid():N}";
+
+    private static async Task<(Guid Acting, Guid Effective, Guid? Subject, bool Session)> RecordOfAsync(
+        NpgsqlConnection connection,
+        string client) =>
+        await connection.QuerySingleAsync<(Guid, Guid, Guid?, bool)>(
+            """
+            SELECT acting_subject, effective_subject, subject, details ->> 'session' IS NOT NULL
+            FROM identity.audit_records
+            WHERE action = @action AND details ->> 'client' = @client
+            """,
+            new { action = AuditActions.RefreshTokenReused.ToString(), client });
 
     private static async Task<bool> EndedAsync(NpgsqlConnection connection, SessionId session) =>
         await connection.ExecuteScalarAsync<bool>(

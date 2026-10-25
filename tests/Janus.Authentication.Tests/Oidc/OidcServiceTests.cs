@@ -205,10 +205,12 @@ public sealed class OidcServiceTests : IAsyncDisposable
 
         await Service.ReuseAsync(subject, session, Protocol, Grant, Cancellation);
 
-        (SubjectId Subject, string ClientId, SessionId Session, DateTimeOffset At) recorded =
+        (SubjectId? Subject, string ClientId, SessionId? Session, DateTimeOffset At) recorded =
             _audit.Reuses.Single();
 
-        Assert.Equal((subject, Protocol, session), (recorded.Subject, recorded.ClientId, recorded.Session));
+        Assert.Equal<(SubjectId?, string, SessionId?)>(
+            (subject, Protocol, session),
+            (recorded.Subject, recorded.ClientId, recorded.Session));
     }
 
     /// <summary>
@@ -285,6 +287,98 @@ public sealed class OidcServiceTests : IAsyncDisposable
         Assert.Empty(_grants.Revoked);
         Assert.Equal(0, _work.OutermostCommitted);
         Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-208): a redeemed token naming no session and no subject
+    /// revokes its grant and every token of it, ends no session, and is recorded under
+    /// the account its grant records and no session, in one commit.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AReuseNamingNoSessionAndNoSubjectRevokesItsGrantUnderTheGrantsSubjectAsync()
+    {
+        SessionId standing = await SignedInAsync();
+        SubjectId granted = _sessions.All.Single(live => live.Id == standing).Subject;
+        _grants.Hold(Grant, granted);
+
+        _work.Reset();
+
+        await Service.ReuseAsync(subject: null, session: null, Protocol, Grant, Cancellation);
+
+        Assert.Equal([(Grant, true)], _grants.Revoked);
+        Assert.Null(_sessions.All.Single(live => live.Id == standing).EndedAt);
+        Assert.Equal<(SubjectId?, string, SessionId?)>(
+            (granted, Protocol, null),
+            Recorded());
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC4 (D-208): a redeemed token issued under no grant and naming no
+    /// session and no subject revokes no grant and ends no session, and is recorded
+    /// naming no account and no session, in one commit.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC4_AReuseUnderNoGrantNamingNoSessionAndNoSubjectIsRecordedUnderNoAccountAsync()
+    {
+        SessionId standing = await SignedInAsync();
+
+        _work.Reset();
+
+        await Service.ReuseAsync(subject: null, session: null, Protocol, grant: null, Cancellation);
+
+        Assert.Empty(_grants.Revoked);
+        Assert.Null(_sessions.All.Single(live => live.Id == standing).EndedAt);
+        Assert.Equal<(SubjectId?, string, SessionId?)>((null, Protocol, null), Recorded());
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC2 (D-208): a redeemed token naming a session but no subject,
+    /// issued under no grant, ends the session's spine and is recorded under the account
+    /// of that session, naming it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC2_AReuseNamingOnlyASessionIsRecordedUnderTheSessionsAccountAsync()
+    {
+        SessionId session = await SignedInAsync();
+        SubjectId holder = _sessions.All.Single(live => live.Id == session).Subject;
+
+        await Service.ReuseAsync(subject: null, session, Protocol, grant: null, Cancellation);
+
+        Assert.NotNull(_sessions.All.Single(live => live.Id == session).EndedAt);
+        Assert.Empty(_grants.Revoked);
+        Assert.Equal<(SubjectId?, string, SessionId?)>((holder, Protocol, session), Recorded());
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-003 AC2 (D-208): the account the token names is recorded before the one
+    /// its grant records, and the grant's before the session's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_003_AC2_TheTokensAccountIsRecordedBeforeTheGrantsAndTheGrantsBeforeTheSessionsAsync()
+    {
+        SessionId session = await SignedInAsync();
+        var granted = new SubjectId(Guid.NewGuid());
+        var named = new SubjectId(Guid.NewGuid());
+        _grants.Hold(Grant, granted);
+
+        await Service.ReuseAsync(named, session, Protocol, Grant, Cancellation);
+        await Service.ReuseAsync(subject: null, session, Protocol, Grant, Cancellation);
+
+        Assert.Equal<SubjectId?[]>(
+            [named, granted],
+            [.. _audit.Reuses.Select(reuse => reuse.Subject)]);
     }
 
     /// <summary>
@@ -366,6 +460,15 @@ public sealed class OidcServiceTests : IAsyncDisposable
         _configuration,
         _work,
         _clock);
+
+    // The one reuse recorded: whose account, which client and which session it names.
+    private (SubjectId? Subject, string ClientId, SessionId? Session) Recorded()
+    {
+        (SubjectId? Subject, string ClientId, SessionId? Session, DateTimeOffset At) recorded =
+            _audit.Reuses.Single();
+
+        return (recorded.Subject, recorded.ClientId, recorded.Session);
+    }
 
     private async ValueTask<SubjectId> AccountAsync()
     {

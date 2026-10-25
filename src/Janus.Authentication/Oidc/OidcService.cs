@@ -80,36 +80,53 @@ internal sealed class OidcService(
     /// Ends everything derived from a session record because a token standing on it
     /// was presented a second time, and records that it happened.
     /// </summary>
-    /// <param name="subject">Whose account.</param>
-    /// <param name="session">The record everything derived from.</param>
+    /// <param name="subject">The account the token names, or nothing where it names none.</param>
+    /// <param name="session">The record everything derived from, or nothing where the token names none.</param>
     /// <param name="clientId">Which client presented it.</param>
     /// <param name="grant">The provider's grant the token was issued under, or nothing where it names none.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of ending them.</returns>
     public async ValueTask ReuseAsync(
-        SubjectId subject,
-        SessionId session,
+        SubjectId? subject,
+        SessionId? session,
         string clientId,
         string? grant,
         CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        // AUTH-OIDC-003 AC1, AC2 and AC4 (D-207): a token presented twice means a copy is
-        // in someone's hands and there is no telling whose, so the whole family goes (the
-        // session record's spine, the grant and every token of it) and is recorded, in
-        // the outermost unit of work and one commit, so the revocation stands whatever a
-        // caller does after it and a fault leaves none of it (CONV-DESIGN-003).
+        // AUTH-OIDC-003 AC1, AC2 and AC4 (D-207, D-208): a token presented twice means a
+        // copy is in someone's hands and there is no telling whose, so the whole family
+        // goes (the session record's spine, the grant and every token of it) and is
+        // recorded, in the outermost unit of work and one commit, so the revocation
+        // stands whatever a caller does after it and a fault leaves none of it
+        // (CONV-DESIGN-003). Whatever the token carries takes this one path: what of the
+        // family it names no part of is left alone, and the rest goes all the same.
         (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-        await sessions.EndSpineAsync(session, now, cancellationToken).ConfigureAwait(false);
+
+        // `10` section 5.24 (D-208): the record names the account the token names, or
+        // else the one its grant records, or else the account of the session it names.
+        SubjectId? recorded = subject;
 
         if (grant is not null)
         {
+            recorded ??= await grants.SubjectAsync(grant, cancellationToken).ConfigureAwait(false);
             await grants.RevokeAsync(grant, cancellationToken).ConfigureAwait(false);
         }
 
-        await audit.ReusedAsync(subject, clientId, session, now, cancellationToken).ConfigureAwait(false);
+        if (session is SessionId spine)
+        {
+            if (recorded is null
+                && await sessions.FindAsync(spine, cancellationToken).ConfigureAwait(false) is Session named)
+            {
+                recorded = named.Subject;
+            }
+
+            await sessions.EndSpineAsync(spine, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        await audit.ReusedAsync(recorded, clientId, session, now, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }

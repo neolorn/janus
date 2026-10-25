@@ -15,7 +15,7 @@ internal sealed class OidcAuditInMemory : IOidcAudit
     /// <summary>
     /// The reuses recorded.
     /// </summary>
-    public List<(SubjectId Subject, string ClientId, SessionId Session, DateTimeOffset At)> Reuses { get; } = [];
+    public List<(SubjectId? Subject, string ClientId, SessionId? Session, DateTimeOffset At)> Reuses { get; } = [];
 
     /// <summary>
     /// The registrations recorded.
@@ -24,9 +24,9 @@ internal sealed class OidcAuditInMemory : IOidcAudit
 
     /// <inheritdoc/>
     public ValueTask ReusedAsync(
-        SubjectId subject,
+        SubjectId? subject,
         string clientId,
-        SessionId session,
+        SessionId? session,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {

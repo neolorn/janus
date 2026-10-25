@@ -3987,3 +3987,9 @@ against the public contract of LIB-API-001.
   invitation in the outermost unit of work and commits it with the
   `identity.registration.signedin` refusal; called inside a unit of work already open,
   the host's own included, the begin ends it and throws `InvalidOperationException`.
+- A refresh token's reuse takes the same path whatever the redeemed token carries: one
+  naming no session ends no session, one issued under no grant revokes no grant, and the
+  rest of its family is revoked as always. Its `auth.oidc.refreshreused` record names the
+  account the token names, or else the one its grant records, or else the account of
+  the session it names, under the nil subject where none names one, and carries
+  `details.session` only where the token names a session.

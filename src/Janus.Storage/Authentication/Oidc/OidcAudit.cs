@@ -18,10 +18,10 @@ namespace Janus.Storage.Authentication.Oidc;
 /// <remarks>
 /// Implements AUTH-OIDC-001, AUTH-OIDC-003, IDN-AUD-001 and CONV-DESIGN-003. A
 /// registration made from the server is recorded under the command's principal, naming
-/// the client and no account. A reuse is recorded
-/// against the account whose session it was, with the client that presented the token
-/// and the session everything derived from, because that is what an investigation
-/// afterwards needs and nothing narrower would identify what was revoked.
+/// the client and no account. A reuse is recorded against the account the token, its
+/// grant or its session names, with the client that presented the token and the session
+/// everything derived from, because that is what an investigation afterwards needs and
+/// nothing narrower would identify what was revoked.
 /// </remarks>
 internal sealed class OidcAudit(IAuditStore records, TimeProvider time) : IOidcAudit
 {
@@ -36,29 +36,42 @@ internal sealed class OidcAudit(IAuditStore records, TimeProvider time) : IOidcA
     private const string Changed = "changed";
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Where no account is named, the acting identity is the nil subject and the record
+    /// has no subject; where no session is named, the record names none (chapter 10
+    /// section 5.24, D-208).
+    /// </remarks>
     public async ValueTask ReusedAsync(
-        SubjectId subject,
+        SubjectId? subject,
         string clientId,
-        SessionId session,
+        SessionId? session,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            [Client] = JsonSerializer.SerializeToElement(clientId),
+        };
+
+        if (session is SessionId named)
+        {
+            details[Session] = JsonSerializer.SerializeToElement(named.ToString());
+        }
+
         await records.AppendAsync(
                 AuditRecord.Of(
                     AuditRecordId.New(time),
                     AuditCategory.Security,
                     Reused,
                     at,
-                    subject,
+                    actingSubject: subject ?? default,
                     subject,
                     breakGlassReason: null,
                     organization: null,
-                    new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
-                    {
-                        [Client] = JsonSerializer.SerializeToElement(clientId),
-                        [Session] = JsonSerializer.SerializeToElement(session.ToString()),
-                    }),
+                    details),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask RegisteredAsync(
