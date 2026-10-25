@@ -10,8 +10,8 @@ namespace Janus.Testing;
 
 /// <summary>
 /// An SMS transport that keeps every message it takes, readable by destination, fails a
-/// delivery only where the test says so, holds a balance no floor reaches, and is sent
-/// no delivery report.
+/// delivery only where the test says so, reports a balance of 99999999999999.9999, which
+/// the balance job records, and is sent no delivery report.
 /// </summary>
 /// <remarks>
 /// Implements LIB-TEST-003. A delivery that fails is not kept, and the library retries
@@ -58,9 +58,17 @@ public sealed class InMemorySmsTransport : ISmsTransport
         return ValueTask.FromResult(Result.Success());
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Reports a balance of 99999999999999.9999, which the balance job records.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The balance.</returns>
+    /// <remarks>
+    /// LIB-TEST-003 (D-208): the largest value a balance reading holds, so every poll
+    /// records it.
+    /// </remarks>
     public ValueTask<Result<decimal>> BalanceAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Result.Success(decimal.MaxValue));
+        ValueTask.FromResult(Result.Success(99999999999999.9999m));
 
     /// <inheritdoc/>
     public Result<SmsDeliveryReport> ReadReport(IReadOnlyDictionary<string, string> parameters) =>

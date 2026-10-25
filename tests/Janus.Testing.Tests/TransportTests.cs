@@ -71,8 +71,8 @@ public sealed class TransportTests
 
     /// <summary>
     /// LIB-TEST-003: the SMS transport keeps every message it takes by destination, fails
-    /// a delivery only where the test says so, holds a balance no floor reaches, and
-    /// reads no delivery report.
+    /// a delivery only where the test says so, reports a balance of 99999999999999.9999,
+    /// and reads no delivery report.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -96,7 +96,7 @@ public sealed class TransportTests
         Assert.True(Succeeded(again));
         Assert.Equal(["code"], transport.SentTo(CustomerPhone).Select(message => message.Text));
         Assert.Equal(["again"], transport.SentTo(StaffPhone).Select(message => message.Text));
-        Assert.Equal(decimal.MaxValue, balance.Match(value => value, _ => 0m));
+        Assert.Equal(99999999999999.9999m, balance.Match(value => value, _ => 0m));
         Assert.False(transport.ReadReport(new Dictionary<string, string>(StringComparer.Ordinal)).Match(_ => true, _ => false));
     }
 

@@ -3993,3 +3993,5 @@ against the public contract of LIB-API-001.
   account the token names, or else the one its grant records, or else the account of
   the session it names, under the nil subject where none names one, and carries
   `details.session` only where the token names a session.
+- `InMemorySmsTransport` reports a balance of 99999999999999.9999, the largest a balance
+  reading holds, so the balance job records it on every poll rather than failing.
