@@ -34,18 +34,14 @@ public sealed class MigrateDocumentTests
     }
 
     /// <summary>
-    /// OPS-SEC-001 AC4, OPS-MIG-001: a document that carries no connection is refused
-    /// with <c>model.startup.secretunavailable</c> naming the input, and so is one whose
-    /// connection is supplied empty or not as text, or that is no object at all.
+    /// OPS-SEC-001 AC4, OPS-MIG-001: a document that carries no connection member is
+    /// refused with <c>model.startup.secretunavailable</c> naming the input, and so is
+    /// one that is no object at all.
     /// </summary>
     /// <param name="document">What is piped in.</param>
     /// <returns>The work of the test.</returns>
     [Theory]
     [InlineData("{}")]
-    [InlineData("""{"connection": ""}""")]
-    [InlineData("""{"connection": "  "}""")]
-    [InlineData("""{"connection": 5432}""")]
-    [InlineData("""{"connection": null}""")]
     [InlineData("""["Host=nowhere.invalid"]""")]
     public async Task OPS_SEC_001_AC4_MigrateRefusesADocumentCarryingNoConnectionAsync(string document)
     {
@@ -53,6 +49,27 @@ public sealed class MigrateDocumentTests
 
         Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Reported.Refusal(run));
         Assert.Equal("input", Detail(run, "key"));
+    }
+
+    /// <summary>
+    /// OPS-MIG-001 AC4, OPS-SEC-001 AC4: a connection member that is blank or not a
+    /// string is refused with <c>api.request.malformed</c> naming the connection, as the
+    /// other commands answer it (D-209).
+    /// </summary>
+    /// <param name="document">What is piped in.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("""{"connection": ""}""")]
+    [InlineData("""{"connection": "  "}""")]
+    [InlineData("""{"connection": 5432}""")]
+    [InlineData("""{"connection": null}""")]
+    [InlineData("""{"connection": {"host": "nowhere.invalid"}}""")]
+    public async Task OPS_MIG_001_AC4_ABlankOrNonStringConnectionIsRefusedAsMalformedAsync(string document)
+    {
+        Invocation run = await Invocation.WrittenAsync([Migrate], document);
+
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Reported.Refusal(run));
+        Assert.Equal("connection", Detail(run, "member"));
     }
 
     /// <summary>

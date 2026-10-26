@@ -60,6 +60,9 @@ against the public contract of LIB-API-001.
   database refuses exits 1 with `system.fault` on standard error, the migrations
   before it applied and nothing after. A pipeline runs it before deploying.
   It runs as no system principal: it asks no gate and writes no audit record.
+- `migrate` refuses a `connection` member that is blank or not a string with
+  `api.request.malformed` naming `connection`, as the other commands do; a document with
+  no `connection` member is still refused with `model.startup.secretunavailable`.
 - `migrate --report` applies nothing and writes the destructive-operation report of the
   migrations pending on its target: one JSON line for each statement the scan matches,
   in the order they apply, with `migration`, the statement itself and `destructive`, and
