@@ -116,6 +116,10 @@ against the public contract of LIB-API-001.
   a request that reaches one without it is answered 401 `auth.session.expired` before
   the endpoint runs. `AllowNoSession()` on an endpoint marks one that answers anyone,
   which is still issued the pre-authentication session and held to its token.
+- A host that adds its routing after the browser profile is held to the same rule: an
+  endpoint that needs a live sign-in session is answered 401 `auth.session.expired`
+  before it runs, and the host's middleware after that routing runs for the refusal
+  with no host endpoint serving the request.
 - No public member makes an `AccessContext` whose acting and effective identities
   differ: `AccessContext.Of(SubjectId, SubjectId)` is no longer public, and a person's
   context is made with `AccessContext.Of(SubjectId)`, one identity standing for both.

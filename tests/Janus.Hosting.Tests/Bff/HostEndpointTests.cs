@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -125,6 +128,112 @@ public sealed class HostEndpointTests : IAsyncDisposable
             Assert.Equal(StatusCodes.Status200OK, begun.Status);
             Assert.NotEmpty(begun.Text("challengeId"));
         }
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC5 (D-209): with the host's routing added after the browser profile,
+    /// a request carrying no session to a host endpoint left unmarked is answered 401
+    /// <c>auth.session.expired</c> with the code alone, before the endpoint runs, and one
+    /// to an endpoint marked as answering anyone reaches it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_HOST_002_AC5_WithRoutingAfterTheProfileAnUnmarkedHostEndpointStillRefusesABrowserHoldingNoSessionAsync()
+    {
+        var host = new HostEndpoints();
+        await using var deployment = new Deployment(host: host.Map, routing: mount => _ = mount.UseRouting());
+
+        Flow.Prepare(deployment);
+        var browser = new Browser(deployment);
+
+        Answer held = await browser.SendAsync("GET", HostEndpoints.Workspaces);
+        Answer open = await browser.SendAsync("GET", HostEndpoints.Catalogue);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, held.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), held.Text("code"));
+        Assert.Empty(held.Json().GetProperty("details").EnumerateObject());
+        Assert.Equal(StatusCodes.Status200OK, open.Status);
+        Assert.Equal(["GET " + HostEndpoints.Catalogue], host.Reached);
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC5: with the host's routing added after the browser profile, a
+    /// request whose sign-in session has ended is answered 401
+    /// <c>auth.session.expired</c> with <c>details.reauthenticate</c> before an unmarked
+    /// host endpoint runs, where the same session reached it while it was live.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_HOST_002_AC5_WithRoutingAfterTheProfileAnEndedSessionIsAnsweredWithWhatMustBeRedoneAsync()
+    {
+        var host = new HostEndpoints();
+        await using var deployment = new Deployment(host: host.Map, routing: mount => _ = mount.UseRouting());
+
+        Flow.Prepare(deployment);
+        Browser browser = await Flow.SignedInAsync(deployment);
+
+        Answer live = await browser.SendAsync("GET", HostEndpoints.Workspaces);
+
+        deployment.Clock.Advance(TimeSpan.FromDays(100));
+
+        Answer ended = await browser.SendAsync("GET", HostEndpoints.Workspaces);
+
+        Assert.Equal(StatusCodes.Status200OK, live.Status);
+        Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), ended.Text("code"));
+        Assert.NotEmpty(ended.Json().GetProperty("details").GetProperty("reauthenticate").GetString()!);
+        Assert.Equal(["GET " + HostEndpoints.Workspaces], host.Reached);
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC2 (D-209): where the host's routing comes after the browser
+    /// profile, the host's middleware between the two runs before the endpoint is known,
+    /// the endpoint routing then selects is judged before it runs, and the host's
+    /// middleware after that routing runs for a request whose endpoint was replaced with
+    /// the refusal, no host endpoint running for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC2_MiddlewareAfterLateRoutingRunsForTheRefusalAndNoHostEndpointRunsAsync()
+    {
+        var host = new HostEndpoints();
+        var between = new List<Endpoint?>();
+        var after = new List<Endpoint?>();
+
+        await using var deployment = new Deployment(
+            host: host.Map,
+            routing: mount =>
+            {
+                _ = mount.Use(next => context =>
+                {
+                    between.Add(context.GetEndpoint());
+
+                    return next(context);
+                });
+                _ = mount.UseRouting();
+                _ = mount.Use(next => context =>
+                {
+                    after.Add(context.GetEndpoint());
+
+                    return next(context);
+                });
+            });
+
+        Flow.Prepare(deployment);
+        var browser = new Browser(deployment);
+
+        Answer held = await browser.SendAsync("GET", HostEndpoints.Workspaces);
+        Answer open = await browser.SendAsync("GET", HostEndpoints.Catalogue);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, held.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), held.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, open.Status);
+        Assert.Equal([null, null], between);
+        Assert.Equal(2, after.Count);
+        Assert.NotNull(after[0]);
+        Assert.IsNotType<RouteEndpoint>(after[0]);
+        Assert.Equal(HostEndpoints.Catalogue, Assert.IsType<RouteEndpoint>(after[1]).RoutePattern.RawText);
+        Assert.Equal(["GET " + HostEndpoints.Catalogue], host.Reached);
     }
 
     /// <summary>

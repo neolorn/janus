@@ -15,6 +15,7 @@ using Janus.Hosting.Callbacks;
 using Janus.Hosting.Tests.Authorization;
 using Janus.Hosting.Tests.Bff;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -355,6 +356,22 @@ public sealed class PublicSurfaceTests
         Assert.Equal(
             [typeof(AccessContext), typeof(SessionId)],
             typeof(RequestAccess).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(property => property.PropertyType));
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC5 (D-209): the entry point registers the matcher policy that judges
+    /// the endpoint routing selects after the browser profile, once and for the whole
+    /// application, as routing reads its policies.
+    /// </summary>
+    [Fact]
+    public void BFF_HOST_002_AC5_TheEntryPointRegistersTheMatcherPolicyOfStageEight()
+    {
+        ServiceDescriptor policy = Assert.Single(
+            Registered(),
+            service => service.ServiceType == typeof(MatcherPolicy));
+
+        Assert.Equal(ServiceLifetime.Singleton, policy.Lifetime);
+        Assert.Equal(typeof(SessionRequirementPolicy), policy.ImplementationType);
     }
 
     /// <summary>

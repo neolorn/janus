@@ -143,6 +143,10 @@ public static class HostingRegistration
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
         services.AddScoped<SessionRequirement>();
+
+        // BFF-HOST-002 (D-209): stage 8 holds whatever the order in which the host adds
+        // routing, so the endpoint routing selects after the profile is judged by it too.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<MatcherPolicy, SessionRequirementPolicy>());
         services.AddScoped<MachineProfile>();
 
         // BFF-LOG-002: whatever request logging the host turns on, a marked body

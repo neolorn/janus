@@ -576,16 +576,17 @@ public sealed class BrowserProfileTests : IDisposable
     /// <summary>
     /// AUTH-SESS-007 AC2: enforcement is the pipeline's, so nothing an endpoint
     /// carries and no key of chapter 10 section 4 takes it out of the layer. What an
-    /// endpoint carries is read for enforcement in two files, and only for whether stage
-    /// 8 holds it to a session (BFF-STEP-001, BFF-HOST-002): an endpoint marked as
-    /// answering anyone still passes every stage that establishes and checks what the
-    /// browser carries. The third reader is the
-    /// logging of BFF-LOG-002, which only ever takes a body out of a log, and the
-    /// fourth is error translation, which asks only whether routing found an endpoint,
-    /// once every stage has run, to answer a path none serves. The fifth is the
-    /// declaration of CONV-DESIGN-006, which the stage that answers a request the
+    /// endpoint carries is read for enforcement in three files, and only for whether
+    /// stage 8 holds it to a session (BFF-STEP-001, BFF-HOST-002): the mark, the stage,
+    /// and the matcher policy that judges as the stage does the endpoint routing selects
+    /// after the profile (D-209). An endpoint marked as answering anyone still passes
+    /// every stage that establishes and checks what the browser carries. The fourth
+    /// reader is the logging of BFF-LOG-002, which only ever takes a body out of a log,
+    /// and the fifth is error translation, which asks only whether routing found an
+    /// endpoint, once every stage has run, to answer a path none serves. The sixth is
+    /// the declaration of CONV-DESIGN-006, which the stage that answers a request the
     /// framework could not bind reads after the endpoint was reached, to name the value
-    /// that did not parse; it enforces nothing and excuses nothing. The sixth is the
+    /// that did not parse; it enforces nothing and excuses nothing. The seventh is the
     /// mark of a route an enrolment session reaches, which stage 5 reads to resolve
     /// that session there and nowhere else (BFF-ORDER-001); a route without it is
     /// given less, and none is taken out of a stage by it. The one stage that
@@ -606,6 +607,7 @@ public sealed class BrowserProfileTests : IDisposable
                 "SensitiveBodyLogging.cs",
                 "SessionRequired.cs",
                 "SessionRequirement.cs",
+                "SessionRequirementPolicy.cs",
                 "SessionResolution.cs",
             ],
             Reading("GetEndpoint", "Metadata"));
@@ -728,7 +730,9 @@ public sealed class BrowserProfileTests : IDisposable
     /// framework could not bind, after the endpoint was reached, to name the value that
     /// did not parse; it enforces no token and excuses none. The mark of a route an
     /// enrolment session reaches is read by stage 5 to resolve that session there and
-    /// nowhere else (BFF-ORDER-001); the token is checked on it as on any other.
+    /// nowhere else (BFF-ORDER-001); the token is checked on it as on any other. Stage 8
+    /// and the matcher policy that makes its judgement after a late routing read whether
+    /// an endpoint needs a session, after the token was checked (BFF-HOST-002, D-209).
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
@@ -743,6 +747,7 @@ public sealed class BrowserProfileTests : IDisposable
                 "SensitiveBodyLogging.cs",
                 "SessionRequired.cs",
                 "SessionRequirement.cs",
+                "SessionRequirementPolicy.cs",
                 "SessionResolution.cs",
             ],
             Reading("GetEndpoint", "Metadata"));

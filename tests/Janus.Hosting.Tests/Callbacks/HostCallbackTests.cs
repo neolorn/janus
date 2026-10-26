@@ -55,6 +55,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly LogInMemory<SignedCallbackGuard> _signedLog = new();
     private readonly LogInMemory<UnsignedCallbackGuard> _unsignedLog = new();
+    private readonly LogsInMemory _logs = new();
     private readonly SignedHostCallback _signed = new();
     private readonly UnsignedHostCallback _unsigned = new();
     private readonly ServiceProvider _provider;
@@ -90,8 +91,8 @@ public sealed class HostCallbackTests : IAsyncDisposable
         services.AddTransient<IMiddlewareFactory, MiddlewareFactory>();
 
         // The writer logs every refusal it answers (BFF-LOG-001), through the logging
-        // every host registers.
-        services.AddLogging();
+        // every host registers, which here keeps every line it is handed.
+        services.AddLogging(logging => logging.AddProvider(_logs));
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
@@ -114,6 +115,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
         await _provider.DisposeAsync();
         await _work.DisposeAsync();
         _randomness.Dispose();
+        _logs.Dispose();
     }
 
     /// <summary>
@@ -429,7 +431,8 @@ public sealed class HostCallbackTests : IAsyncDisposable
     /// <summary>
     /// BFF-MACH-003 AC2 and chapter 09 section 10 AC1: a forged callback carrying a
     /// reference of the right shape that was never issued, or one issued for another
-    /// callback, is rejected, logged, and never put to the provider.
+    /// callback, is rejected, recorded as a rejection against its source, logged with no
+    /// line naming the source (INT-GEN-003, D-207), and never put to the provider.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -455,6 +458,13 @@ public sealed class HostCallbackTests : IAsyncDisposable
         Assert.Equal(0, forged.Response.Headers.RetryAfter.Count);
         Assert.Equal(0, misdirected.Response.Headers.RetryAfter.Count);
         Assert.Equal(2, _unsignedLog.Entries.Count(entry => entry is (LogLevel.Warning, 1)));
+        Assert.Equal(2, _callbacks.Counted.Count(callback => callback.Rejected && callback.Source == Provider.ToString()));
+        Assert.DoesNotContain(_callbacks.Counted, callback => callback.Rejected && callback.Source != Provider.ToString());
+        Assert.DoesNotContain(
+            _unsignedLog.Carried.SelectMany(carried => carried.Values),
+            value => value?.Contains(Provider.ToString(), StringComparison.Ordinal) ?? false);
+        Assert.NotEmpty(_logs.Lines);
+        Assert.DoesNotContain(_logs.Lines, line => line.Contains(Provider.ToString(), StringComparison.Ordinal));
         Assert.Equal(0, _unsigned.Asked);
         Assert.Equal(0, _reached);
     }
