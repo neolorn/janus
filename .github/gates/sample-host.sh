@@ -11,6 +11,11 @@
 # given to its evaluation through the environment, as dotnet format takes no property.
 # Its packages are restored into a folder of the run's own, so a package of an earlier
 # commit packed under the same version is never taken from the machine's cache.
+# LIB-TEST-004, CONV-LAYOUT-001: the restore and the tool's installation read a NuGet
+# configuration written into the run's folder, never the repository, whose source
+# mapping takes each of the five packages the library packs from the folder feed alone
+# and every other package from nuget.org, so a package of the same identifier and
+# version on nuget.org is never built in place of this commit's.
 
 set -euo pipefail
 
@@ -23,6 +28,32 @@ rm -rf "$work"
 mkdir -p "$feed"
 work=$(cd "$work" && pwd)
 feed=$work/feed
+sources=$work/nuget.config
+
+# The feed is named relative to the configuration, as NuGet reads a local source.
+cat > "$sources" <<'CONFIG'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+    <add key="feed" value="feed" />
+  </packageSources>
+  <packageSourceMapping>
+    <clear />
+    <packageSource key="feed">
+      <package pattern="Janus.Hosting" />
+      <package pattern="Janus.Testing" />
+      <package pattern="Janus.Cli" />
+      <package pattern="Janus.Conformance" />
+      <package pattern="Janus.Analyzers" />
+    </packageSource>
+    <packageSource key="nuget.org">
+      <package pattern="*" />
+    </packageSource>
+  </packageSourceMapping>
+</configuration>
+CONFIG
 
 # The tool's installation writes its entry into the sample's committed manifest, which
 # is put back as committed once the run ends.
@@ -40,12 +71,11 @@ export NUGET_PACKAGES=$work/packages
 
 dotnet restore "$samples/HostSample.slnx" \
   -p:LibraryVersion="$version" \
-  --source https://api.nuget.org/v3/index.json \
-  --source "$feed"
+  --configfile "$sources"
 
 (
   cd "$samples"
-  dotnet tool install Janus.Cli --local --version "$version" --add-source "$feed"
+  dotnet tool install Janus.Cli --local --version "$version" --configfile "$sources"
   dotnet build HostSample.slnx --no-restore -p:LibraryVersion="$version"
   LibraryVersion="$version" dotnet format HostSample.slnx --verify-no-changes --no-restore
   dotnet test --solution HostSample.slnx --no-build
