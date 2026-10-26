@@ -102,7 +102,7 @@ breaking.
 | **Testing package** | The public types of `Janus.Testing` (LIB-TEST-003, D-204) |
 | **Command-line tool** | The commands of `Janus.Cli`, their arguments, their standard input, standard output and standard error, and their exit codes (OPS-BOOT-001, OPS-MIG-001, OPS-SEC-001, D-204, D-207) |
 | **Conformance suite** | The public types of `Janus.Conformance` (LIB-TEST-001): the suite's four calls, the report, the finding, the check, the truth-table case and scenario, the host-rows seam and the deployment factory delegate the step-up scenarios run through (LIB-TEST-001 criterion 2); and the contract in `Janus.Core` through which the suite asks for its provider probes (LIB-TEST-001) |
-| **BFF middleware pipeline** | Mounting API and stage ordering (D-052), and what a host's own endpoints use: `AllowNoSession`, `Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` (`17` section 2a and BFF-CAP-002, `03` AUTHZ-INHERIT-002, D-202, D-203) |
+| **BFF middleware pipeline** | Mounting API and stage ordering (D-052), and what a host's own endpoints use: `AllowNoSession` (the convention and `AllowNoSessionAttribute`), `Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` (`17` section 2a and BFF-CAP-002, `03` AUTHZ-INHERIT-002, D-202, D-203, D-211) |
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 

@@ -154,34 +154,45 @@ the session's (AUTHZ-GATE-005).
 where it is mounted that it answers anyone, and the pipeline SHALL refuse it as it
 refuses the library's own.
 
-**Values (D-202).** Every endpoint the host maps after the browser profile requires a
-live sign-in session: stage 8 refuses a request that reaches it without one with 401
-`auth.session.expired`, carrying `details.reauthenticate` where a sign-in session ended
-(BFF-STEP-001) and the code alone where none was held, before the endpoint runs.
-`AllowNoSession()` (`Janus.Hosting`), on an endpoint's convention builder, marks one
-that answers anyone (a catalogue page, a checkout open to everyone). A marked endpoint
-still passes stages 2 to 6: it is a pre-session endpoint, so the browser profile issues
-the pre-authentication session to a request that reaches it carrying none
-(BFF-CSRF-005a), and a state-changing request to it carries that session's synchronizer
-token or is refused at stage 6 (BFF-CSRF-001). The library's own endpoints keep their
-own marks. **Step-up stays on the action, never on the endpoint:** a host binds a gate
-to its permission (`StepUpGate`, AUTHZ-GATE-005), and `IAccessGate` answers
-`auth.stepup.required` with its `details` when the endpoint asks for that permission
-(`RequireAsync`, `FilterAsync`, `FragmentAsync`) on a record its grants admit and the
-request's session does not meet the gate. A host asks a bound permission of the gate
-before it begins the unit of work its context joins (`UseUnitOfWorkAsync`), since the
-step-up may ask the phone signal, a host callback that never runs inside an open
-transaction (`08` CONV-DESIGN-003, D-207). `IStepUpGate` is the gate one library area
-asks of another (LIB-API-001) and names only the library's actions. Stage 8 judges the
-endpoint routing matched for the request, and SHALL hold whatever the order in which the
-host adds routing (BFF-OWN-001): where the host's routing runs after the browser
-profile, so that a request passes stage 8 with no endpoint matched yet, the endpoint
-routing then selects is judged as stage 8 judges it, before it runs, by a matcher policy
-`AddJanus` registers (an `IEndpointSelectorPolicy` of ASP.NET Core's routing), which
-replaces an endpoint the request may not reach with the profile's refusal
-(BFF-ORDER-001, D-209).
+**Values (D-202, D-211).** Every endpoint the host maps after the browser profile
+requires a live sign-in session, whatever routing selects it: a route the host maps, and
+an endpoint MVC or Razor Pages resolves a dynamic route to (`MapDynamicControllerRoute`,
+`MapFallbackToController`, `MapDynamicPageRoute`, `MapFallbackToPage`), alike: stage 8
+refuses a request that reaches it without one with 401 `auth.session.expired`, carrying
+`details.reauthenticate` where a sign-in session ended (BFF-STEP-001) and the code alone
+where none was held, before the endpoint runs. `AllowNoSession()` (`Janus.Hosting`), on
+an endpoint's convention builder, or `[AllowNoSession]` (`AllowNoSessionAttribute`,
+`Janus.Hosting`) on a controller, an action or a Razor page, marks one that answers
+anyone (a catalogue page, a checkout open to everyone); stage 8 reads the mark of the
+endpoint routing selects, the nearer mark standing. The only endpoints stage 8 holds to
+no session are those ASP.NET Core's matcher policies make themselves for a path routing
+matched with a method or a content type the path does not take
+(`HttpMethodMatcherPolicy`'s 405 endpoint, `AcceptsMatcherPolicy`'s 415), each an
+`Endpoint` with no metadata, recognised by that and by the display name the framework
+gives it: they answer as they do today (API-CONV-003), and one the framework renamed
+would ask for a session, which fails closed. A marked endpoint still passes stages 2 to
+6: it is a pre-session endpoint, so the browser profile issues the pre-authentication
+session to a request that reaches it carrying none (BFF-CSRF-005a), and a state-changing
+request to it carries that session's synchronizer token or is refused at stage 6
+(BFF-CSRF-001). The library's own endpoints keep their own marks. **Step-up stays on the
+action, never on the endpoint:** a host binds a gate to its permission (`StepUpGate`,
+AUTHZ-GATE-005), and `IAccessGate` answers `auth.stepup.required` with its `details`
+when the endpoint asks for that permission (`RequireAsync`, `FilterAsync`,
+`FragmentAsync`) on a record its grants admit and the request's session does not meet
+the gate. A host asks a bound permission of the gate before it begins the unit of work
+its context joins (`UseUnitOfWorkAsync`), since the step-up may ask the phone signal, a
+host callback that never runs inside an open transaction (`08` CONV-DESIGN-003, D-207).
+`IStepUpGate` is the gate one library area asks of another (LIB-API-001) and names only
+the library's actions. Stage 8 judges the endpoint routing matched for the request, and
+SHALL hold whatever the order in which the host adds routing (BFF-OWN-001): where the
+host's routing runs after the browser profile, so that a request passes stage 8 with no
+endpoint matched yet, the endpoint routing then selects is judged as stage 8 judges it,
+before it runs, by a matcher policy `AddJanus` registers (an `IEndpointSelectorPolicy`
+of ASP.NET Core's routing), which applies wherever the candidates hold an endpoint that
+needs a session or a dynamic one (`ContainsDynamicEndpoints`), and replaces an endpoint
+the request may not reach with the profile's refusal (BFF-ORDER-001, D-209, D-211).
 
-*Source: D-202, D-207, D-209*
+*Source: D-202, D-207, D-209, D-211*
 
 A forgotten mark fails closed: a host endpoint left unmarked answers 401, never anyone
 (P-003; protection comes from where an endpoint is mounted, D-070). A step-up mark on the
@@ -204,6 +215,11 @@ two could disagree, and an endpoint asking two permissions could not express it.
    sign-in session to an unmarked host endpoint is answered 401 `auth.session.expired`
    before the endpoint runs, and one to an endpoint marked with `AllowNoSession()`
    reaches it (D-209).
+6. With the host's routing before the browser profile and after it, a request without a
+   live sign-in session to an unmarked controller action reached through
+   `MapFallbackToController` is answered 401 `auth.session.expired` before it runs, one
+   to an action marked with `[AllowNoSession]` reaches it, and one with a method a
+   served host path does not take is answered 404 `authz.resource.notfound` (D-211).
 
 ---
 
@@ -835,7 +851,23 @@ with `model.startup.declarationinvalid`, `details.declaration` the type and
 `details.field` `capabilities`. A host's record carries the two as its members `can` and
 `requires` (D-206). A type that declares none answers none.
 
-*Source: D-052, AUTHZ-MODEL-003, D-202, D-206, D-207*
+An organization's capabilities are read with the organization as the resource (D-202,
+D-211): `CapabilitiesAsync` given the type `organization`, which no host declares, and
+organization identifiers as the resources answers, for each, which of the permissions
+asked the organization-wide check admits for the caller: a grant whose resource is the
+whole organization, through roles and groups, denies applied, as `RequireAsync` judges
+it on the organization. Any declared permission may be asked, the library's included,
+since the organization declares no capabilities of its own; the permissions are judged
+in one statement however many are asked, no refusal is recorded and nothing counts
+toward the denial spike (OPS-ALERT-001). `requires` holds what remains as for a record
+(`stepup`, `reauthenticate`, `restricted`, `accountstate`), and never `consent`, since
+the check names no data subject; consent is asked of each record. A host job's context
+is refused as for any capability page. A host names each of these capabilities in its
+own words for the browser: `CapabilityFields` writes a record's actions, and two
+permissions of one action would read alike, while no permission name reaches the browser
+(BFF-SESS-001).
+
+*Source: D-052, AUTHZ-MODEL-003, D-202, D-206, D-207, D-211*
 
 The library cannot know that a document has a "share" action. The host declares it;
 the library computes and attaches it.
@@ -849,6 +881,10 @@ the library computes and attaches it.
    capabilities of one action, fails startup with `model.startup.declarationinvalid`.
 5. `CapabilitiesAsync` given a host job's context is refused `authz.denied`, in a
    request and outside one (D-207).
+6. `CapabilitiesAsync` on the type `organization` answers, for a caller holding a role
+   granted on the whole organization, each permission the role allows with its
+   `requires` and no other, a deny on the whole organization taking its permission out,
+   in one statement for every permission asked, and records no refusal (D-211).
 
 
 ---
@@ -1116,7 +1152,7 @@ reads or changes the account's state.
 | 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189). Where the host's routing runs after the profile, no route is known yet, so an enrolment session is resolved on none (D-210) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
-| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked with `AllowNoSession()`, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
+| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked as answering anyone, whatever routing selected it, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
 | 9 | Host endpoint | |
 | 10 | Capability projection | Requires the result set. A host endpoint places what `CapabilityFields` answers on its records itself (BFF-CAP-002); the stage adds nothing to its answer |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |

@@ -127,13 +127,14 @@ or test with, `Janus.Conformance` and `Janus.Testing`. Types in other projects S
 internal.
 
 `Janus.Hosting` is public because the middleware pipeline and its ordering are part of
-the public contract (LIB-API-001, BFF-OWN-003) — a host must be able to mount it.
-Public in that project are exactly the mounting types, the `MapAuthorizationTables`
-model-builder extension (AUTHZ-GATE-002, D-159), the `AddJanus` registration
-entry point (CONV-DESIGN-007), and what a host's own endpoints use: `AllowNoSession`,
-`Answers`, `CapabilityFields`, `RequestSource` and `UseUnitOfWorkAsync` (`17` section 2a
-and BFF-CAP-002, `03` AUTHZ-INHERIT-002, D-202, D-203); request and response DTOs are `internal sealed record`,
-their wire shape being the contract, not their type.
+the public contract (LIB-API-001, BFF-OWN-003) — a host must be able to mount it. Public
+in that project are exactly the mounting types, the `MapAuthorizationTables`
+model-builder extension (AUTHZ-GATE-002, D-159), the `AddJanus` registration entry point
+(CONV-DESIGN-007), and what a host's own endpoints use: `AllowNoSession` (the convention
+and `AllowNoSessionAttribute`, D-211), `Answers`, `CapabilityFields`, `RequestSource`
+and `UseUnitOfWorkAsync` (`17` section 2a and BFF-CAP-002, `03` AUTHZ-INHERIT-002,
+D-202, D-203); request and response DTOs are `internal sealed record`, their wire shape
+being the contract, not their type.
 
 Where one area needs a rule another area owns, the contract SHALL be a public interface
 in `Janus.Core` that the owning area implements: `IAccessGate` (`Janus.Authorization`),
@@ -972,14 +973,17 @@ answers whether it keeps the rule of PRIV-RIGHT-003 through an internal contract
 `Janus.Privacy` declares (`IExportNameRule`) and `Janus.Hosting` implements over the
 rule's check in `Janus.Core`, before it takes the answer.
 
-**A contributor's fault (D-210).** The export's assembly keeps a contributor's fault in
-the log by its type and frames, never its message (BFF-ERR-002 criterion 2,
+**A contributor's fault (D-210, D-211).** The export's assembly keeps a contributor's
+fault in the log by its type and frames, never its message (BFF-ERR-002 criterion 2,
 CONV-LOG-003), through an internal contract `Janus.Privacy` declares, the fault entry
-(`IFaultEntry`), which `Janus.Hosting` implements over the entry every other fault the
-library catches is kept as, so the export keeps a fault as the pipeline does.
+(`IFaultEntry`), which `Janus.Hosting` implements by writing the entry every other fault
+the library catches is kept as (`FaultLog`) as one log event of its own, at the error
+level, naming the contributor, under the request's logging scope, so it carries the
+correlation identifier; the error the export answers is unchanged, naming the
+contributor and holding no fault.
 
 *Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181, D-183,
-D-187, D-188, D-189, D-190, D-203, D-204, D-206, D-207, D-208, D-210*
+D-187, D-188, D-189, D-190, D-203, D-204, D-206, D-207, D-208, D-210, D-211*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.

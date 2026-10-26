@@ -17814,6 +17814,101 @@ criterion 2); `implementation-plan.md` (section 3a, round H1).
 
 ---
 
+## D-211 — Round H1 questions 49 to 52, and an organization's capabilities
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** D-210 · **Extends:**
+D-202 (rule 3, a host endpoint needs a session whatever routing selects it; rule 9, an
+organization's capabilities), D-210 (answer 47, the fault entry; the servicing release)
+
+**TL;DR.** The run under D-210 asked four more questions. The servicing release of
+2026-10-25 is a security release and is taken now (49). A contributor's fault in an
+export is kept as a log line of its own, and the export's error stays as it was (50).
+The scan's criteria are decided by running its script, as before (51). An endpoint MVC
+or Razor Pages resolves a dynamic route to was served with no session, because stage 8
+held only route endpoints to one; every endpoint routing selects now needs a session
+unless it is marked, save the framework's own answers for a method or a content type a
+path does not take (52). A host's review found that D-202's organization capabilities
+were never built; `CapabilitiesAsync` now answers them.
+
+**The questions.** Questions 49 to 52 of the round H1 run under D-210. Questions 49 to
+51 are Tier 2; question 52 is Tier 3.
+
+49. **The servicing release of 2026-10-25 (Tier 2).** .NET 10.0.14 (SDK 10.0.403) is a
+    security release, which `08` takes as a security update as soon as it lands
+    (CONV-DEP-004, D-205): `global.json` moves to SDK 10.0.403, and the packages and the
+    tool CONV-DESIGN-008 holds at one version, with every other Microsoft package that
+    follows the runtime, to their 10.0.14 releases, in one change, each listing checked
+    first. No chapter changes. *Rejected:* 10.0.13 kept for the round (a known security
+    release left for later).
+50. **What the fault entry does (Tier 2).** `IFaultEntry` keeps the entry in the log:
+    `Janus.Hosting`'s implementation writes `FaultLog`'s entry (type and frames, never
+    the message) as one log event of its own at the error level, naming the contributor,
+    under the request's logging scope, so it carries the correlation identifier, and the
+    error `IExports.AssembleAsync` returns stays as documented, naming the contributor
+    and holding no fault (`08` section 1a). *Rejected:* the entry as a detail of the
+    operation's error (a public operation's error would carry type names and frames,
+    which an in-process caller writing its own answer could pass on where the pipeline's
+    refusal withholds them).
+51. **A committed test of the scan's one allow-list (Tier 2).** OPS-DEP-004's criteria
+    are decided by running the step's script against repositories built at run time, as
+    criteria 1 to 6 already are, and the report names them as verified so; a change to
+    the script is checked in review. No chapter changes. *Rejected:* a container image,
+    a test project for the gates and a test reaching the network (infrastructure `08`
+    does not hold, for one script whose failing cases a run decides).
+52. **An endpoint a dynamic route resolves to (Tier 3).** A host's unmarked controller
+    action reached through `MapFallbackToController` answered a browser holding no
+    session, whatever the routing order: MVC resolves a dynamic route to an endpoint
+    that is not a `RouteEndpoint`, and stage 8 held only a `RouteEndpoint` to a session,
+    so that the framework's own answers for a method a path does not take would answer
+    as API-CONV-003 gives. That fails open. Stage 8 now holds every endpoint routing
+    selects to a session unless the endpoint carries the mark, whatever its type, the
+    endpoints of `MapDynamicControllerRoute`, `MapFallbackToController`,
+    `MapDynamicPageRoute` and `MapFallbackToPage` included, and the matcher policy of
+    D-209 applies wherever the candidates hold a dynamic endpoint
+    (`ContainsDynamicEndpoints`, the review's finding 1). The only endpoints it holds to
+    none are those ASP.NET Core's matcher policies make themselves for a matched path
+    with a method or a content type it does not take (the 405 endpoint of
+    `HttpMethodMatcherPolicy`, the 415 of `AcceptsMatcherPolicy`), each an `Endpoint`
+    with no metadata, recognised by that and by the display name the framework gives it
+    (its source: `AcceptsMatcherPolicy` makes its 415 as
+    `new Endpoint(..., EndpointMetadataCollection.Empty, Http415EndpointDisplayName)`);
+    one the framework renamed would then ask for a session, which fails closed, and a
+    test pins each. A controller, an action or a Razor page is marked with
+    `[AllowNoSession]` (`AllowNoSessionAttribute`, `Janus.Hosting`), read as
+    `AllowNoSession()` is, since an action a dynamic route resolves to is reached
+    through no convention builder of its own (`17` BFF-HOST-002 criterion 6).
+    *Rejected:* every non-route endpoint left unheld (the case found); every endpoint
+    held, the framework's 405 included (a method a public path does not take would
+    answer 401, against API-CONV-003); a non-route endpoint held only where it carries
+    an action descriptor (an endpoint made another way would still answer anyone).
+
+**An organization's capabilities (a host's review).** D-202 rule 9 answers that the
+capabilities an organization grants are read with the organization as the resource, and
+no chapter or code carried it: `CapabilitiesAsync` refused the type `organization`, so a
+host shaping its menus asked `RequireAsync` once per permission, each refusal recorded
+and counted toward the denial spike. `CapabilitiesAsync` given the type `organization`
+and organization identifiers answers, for each, which of the permissions asked the
+organization-wide check admits, any declared permission, the library's included, in one
+statement, recording no refusal; `requires` never holds `consent`, which is asked of
+each record; a host job is refused as for any capability page; and the host names these
+capabilities in its own words for the browser (`17` BFF-CAP-002 criterion 6).
+*Rejected:* a declared list of organization capabilities (the call already names the
+permissions, each a declared one, and the organization has no type for a host to
+declare); `CapabilityFields` for the organization (two permissions of one action would
+read alike).
+
+**The run's security changes, checked in review:** the scan's flags and its refusal of a
+`.gitleaksignore`; a step-up gate judged once a request through the request's scope,
+from the session and from the host's assurance provider alike.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `17` BFF-HOST-002 (values, criterion 6), section 4 stage 8,
+BFF-CAP-002 (an organization's capabilities, criterion 6); `08` section 1a (a
+contributor's fault); `implementation-plan.md` (section 3a, round H1).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18034,6 +18129,7 @@ criterion 2); `implementation-plan.md` (section 3a, round H1).
 | Round H1 questions 35 to 40: one admission for a grant, a username unchanged, the stand-in's balance, what a refusal records, a refresh asked in a request, a reuse naming no session | D-208 |
 | Round H1 questions 41 to 43 and the round's review: a host binds only its own actions, the worker's longest wait, a restricted account's list | D-209 |
 | Round H1 questions 46 and 47 and the review of its run under D-209: a gate judged once a request, a contributor's fault, the scan's one allow-list | D-210 |
+| Round H1 questions 49 to 52, and an organization's capabilities | D-211 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
