@@ -116,13 +116,13 @@ public sealed class PeopleTests(SampleHost host) : IClassFixture<SampleHost>, ID
     }
 
     /// <summary>
-    /// LIB-TEST-003 AC1: a customer, the first administrator and a staff member are each
-    /// signed in as their own subject, and each calls the host's endpoints with what the
-    /// session grants: the auditor reads the audit, the customer does not.
+    /// LIB-TEST-003: a customer, the first administrator and a staff member are each
+    /// signed in as their own subject, and each session reaches the library's routes
+    /// with what it grants: the auditor reads the audit, the customer does not.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task LIB_TEST_003_AC1_ACustomerAnAdministratorAndAStaffMemberAreSignedInAndCallTheHostsEndpointsAsync()
+    public async Task LIB_TEST_003_EachPersonIsSignedInAsTheirOwnSubjectAndReachesTheLibrarysRoutesItGrantsAsync()
     {
         await PublishedAsync();
         using TestSession customer = await host.People.CustomerAsync(
