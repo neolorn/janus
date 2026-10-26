@@ -152,6 +152,11 @@ public sealed class AuthorizationDeclarationBuilder
     /// The permission is not well-formed, the gate is absent or blank, or the
     /// permission is already bound to a gate.
     /// </exception>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-005 (D-160, D-209). A permission of the library's own carries
+    /// its gate in chapter 10 section 5a, so binding one is refused as the deployment
+    /// starts.
+    /// </remarks>
     public AuthorizationDeclarationBuilder StepUpGate(string permission, string gate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
@@ -181,6 +186,11 @@ public sealed class AuthorizationDeclarationBuilder
     /// The permission is not well-formed, the purpose is absent or blank, or the
     /// permission already serves a purpose.
     /// </exception>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-005 (D-162, D-209). Only the host's own actions are bound to
+    /// a purpose, so binding a permission of the library's own is refused as the
+    /// deployment starts.
+    /// </remarks>
     public AuthorizationDeclarationBuilder ServesPurpose(string permission, string purpose)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(purpose);

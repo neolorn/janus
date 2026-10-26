@@ -4020,3 +4020,7 @@ against the public contract of LIB-API-001.
   called inside a unit of work already open, the host's own included, the begin ends
   it and throws `InvalidOperationException`, and nothing of the outer unit of work
   commits. An email code asked for still joins the unit of work open.
+- A host's declaration binding a step-up gate or a purpose to one of the library's own
+  permissions stops the deployment at startup with `model.startup.declarationinvalid`,
+  `details.declaration` `binding.<permission>` and `details.field` `stepUpGate` or
+  `purpose`: a host binds only its own actions.

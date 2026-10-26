@@ -159,6 +159,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data a principal that may not reconcile asked a refresh for", Decided.Denied),
         ("a page asked for a declared permission its type does not list as a capability", Decided.Raised),
         ("a type declaring as capabilities two permissions of one action", Decided.Raised),
+        ("a step-up gate the host bound to a library-owned permission", Decided.Raised),
+        ("a purpose the host bound to a library-owned permission", Decided.Raised),
         ("a role defined with the context of the start principal role-declaration", Decided.Denied),
     ];
 
@@ -923,10 +925,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
     }
 
-    // BFF-CAP-002 AC4: a declaration the model refuses at the start is the declaring
-    // code's fault, raised before any question is asked of it; the model's other
-    // refusals are no decision the table states, and fail the case that met them.
-    private static Decided Started(AuthorizationDeclaration declaration)
+    // BFF-CAP-002 AC4, AUTHZ-GATE-005 AC6: a declaration the model refuses at the start
+    // is the declaring code's fault, raised before any question is asked of it; the
+    // model's refusals of any other member are no decision the case states, and fail it.
+    private static Decided Started(AuthorizationDeclaration declaration, string field)
     {
         try
         {
@@ -935,11 +937,30 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             return Decided.Allowed;
         }
         catch (StartupException refused) when (refused.Failure?.Code == ErrorCodes.StartupDeclarationInvalid
-            && refused.Failure.Details["field"].GetString() == "capabilities")
+            && refused.Failure.Details["field"].GetString() == field)
         {
             return Decided.Raised;
         }
     }
+
+    // The host's declaration binding system administration, one of the library's own
+    // permissions, to a gate of chapter 10 section 5a or to a purpose its types declare.
+    private static AuthorizationDeclaration BoundToTheLibrary(AuthorizationDeclaration declared, bool purpose) =>
+        purpose
+            ? declared with
+            {
+                ActionPurposes = new Dictionary<Permission, string>(declared.ActionPurposes)
+                {
+                    [Permissions.SystemAdminister] = "running the host",
+                },
+            }
+            : declared with
+            {
+                StepUpGates = new Dictionary<Permission, string>(declared.StepUpGates)
+                {
+                    [Permissions.SystemAdminister] = "config:loosen",
+                },
+            };
 
     // The host's declaration, its document type naming as a capability beside reading a
     // document the reading of a note, which is a second permission of the action read.
@@ -1391,7 +1412,16 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             // model whose type declares two capabilities of one action never starts to
             // answer a page of it.
             case "a type declaring as capabilities two permissions of one action":
-                return Started(Doubled(HostFixture.Declaration()));
+                return Started(Doubled(HostFixture.Declaration()), "capabilities");
+
+            // AUTHZ-GATE-005 AC6 (D-209): a host binds only its own actions, so a model
+            // binding a gate or a purpose to one of the library's never starts to decide
+            // anything of it.
+            case "a step-up gate the host bound to a library-owned permission":
+                return Started(BoundToTheLibrary(HostFixture.Declaration(), purpose: false), "stepUpGate");
+
+            case "a purpose the host bound to a library-owned permission":
+                return Started(BoundToTheLibrary(HostFixture.Declaration(), purpose: true), "purpose");
 
             // AUTHZ-GRANT-004 AC7 (D-204): a declared role is defined by the start step
             // alone, and IRoles admits no system principal, the start's own included.

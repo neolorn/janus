@@ -184,6 +184,7 @@ internal sealed class AuthorizationModel
 
         var processing = DeclaredProcessing.Of(declaration);
         CheckFloors(declaration, processing);
+        CheckBindings(declaration);
         CheckJobs(declaration);
 
         return new AuthorizationModel(
@@ -972,6 +973,32 @@ internal sealed class AuthorizationModel
         }
 
         return declared;
+    }
+
+    // AUTHZ-GATE-005, AUTHZ-MODEL-004 (D-209): a host binds only its own actions. The
+    // library's carry their gates in chapter 10 section 5a and are asked inside the
+    // library's units of work, where a gate of the host's would judge a step-up with a
+    // transaction open, so a binding to one of them is a declaration to fix.
+    private static void CheckBindings(AuthorizationDeclaration declaration)
+    {
+        foreach (Permission permission in Core.Permissions.All)
+        {
+            if (declaration.StepUpGates.ContainsKey(permission))
+            {
+                throw Invalid(
+                    "binding." + permission,
+                    "stepUpGate",
+                    "the library's permission " + permission + " is bound to a step-up gate");
+            }
+
+            if (declaration.ActionPurposes.ContainsKey(permission))
+            {
+                throw Invalid(
+                    "binding." + permission,
+                    "purpose",
+                    "the library's permission " + permission + " is bound to a purpose");
+            }
+        }
     }
 
     // IDN-PRIN-001, OPS-ALERT-006 (D-202, D-206): a job exercises the host's own
