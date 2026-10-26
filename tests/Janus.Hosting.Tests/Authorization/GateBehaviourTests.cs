@@ -2364,6 +2364,58 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004 AC3, IDN-PRIN-001 (D-207): a record's data subject's restriction is
+    /// not the gate's for a host's declared job, which acts for no account, so the job is
+    /// admitted for a modifying permission its declaration names on a record whose data
+    /// subject is restricted, through the check and the list alike, while the subject's
+    /// own modifying check on it is refused <c>authz.restricted</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AC3_ADeclaredJobIsAdmittedToModifyARestrictedSubjectsRecordAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Edit], cancellationToken);
+        SubjectId subject = await deployment.AccountAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken, subject: subject);
+        await deployment.GrantAsync(GrantSubject.Of(subject), role, record, false, null, null, cancellationToken);
+        await deployment.RestrictAsync(subject, cancellationToken);
+
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the nightly digest",
+            deployment.Organization));
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result checkedByJob = await gate.RequireAsync(job, HostPermissions.Edit, record, Sources(reading), cancellationToken);
+        Expression<Func<HostDocument, bool>> listedByJob = Rendered(await gate.FilterAsync(
+            job,
+            HostPermissions.Edit,
+            Document,
+            deployment.Organization,
+            Sources(reading),
+            cancellationToken));
+
+        Assert.True(checkedByJob.Match(() => true, _ => false));
+        Assert.Equal(
+            [record.Id.ToString()],
+            await reading.Documents
+                .Where(listedByJob)
+                .Select(document => document.Id)
+                .ToListAsync(cancellationToken));
+        Assert.Equal(ErrorCodes.Restricted, await RefusalAsync(subject, record, HostPermissions.Edit));
+    }
+
+    /// <summary>
     /// AUTHZ-CACHE-001 AC8: restricting an account decides the next request, with no
     /// wait and nothing to invalidate.
     /// </summary>
