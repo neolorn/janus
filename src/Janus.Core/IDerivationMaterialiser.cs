@@ -12,7 +12,8 @@ namespace Janus.Core;
 /// changes the relationship, inside the same unit of work, so the grants and the fact
 /// they were computed from are written together or not at all. The same call is what
 /// the drift check runs, and what it changes there is drift. A host's declared job calls
-/// it outside a request only (IDN-PRIN-001, D-208).
+/// it outside a request only, on a record of the organization it acts for
+/// (IDN-PRIN-001, D-208, D-209).
 /// </remarks>
 public interface IDerivationMaterialiser
 {
@@ -38,9 +39,10 @@ public interface IDerivationMaterialiser
     /// </exception>
     /// <exception cref="System.InvalidOperationException">
     /// The context is a system principal's and a request is served on the calling flow,
-    /// or it is an organization-scoped principal naming no declared job, or a
-    /// deployment-scoped principal that may not run reconciliation; nothing is written
-    /// (AUTHZ-DERIVE-005, D-208).
+    /// or it is an organization-scoped principal naming no declared job, or a declared
+    /// job's on a record of an organization other than the one it acts for, or a
+    /// deployment-scoped principal's that may not run reconciliation; nothing is written
+    /// (AUTHZ-DERIVE-005, IDN-PRIN-001, D-208, D-209).
     /// </exception>
     ValueTask<Result<DerivationRefresh>> RefreshAsync<TResource>(
         AccessContext context,

@@ -759,6 +759,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             ]);
         Assert.Equal(0, await GrantRefusalsAsync(context, deployment.Organization));
         Assert.Equal(2, await GrantsInAsync(deployment.Organization));
+        Assert.Equal(1, await StandingAsync(standing));
     }
 
     /// <summary>
@@ -2660,6 +2661,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
             "SELECT count(*)::int FROM identity.grants WHERE organization = @organization;",
             new { organization = organization.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The grant's row, read without the library: one that was not revoked.
+    private async Task<int> StandingAsync(GrantId grant)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.grants WHERE id = @id AND revoked_at IS NULL;",
+            new { id = grant.Value },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 
