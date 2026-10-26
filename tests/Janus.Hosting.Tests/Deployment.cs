@@ -75,6 +75,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -162,6 +163,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// How the host sets the application's JSON options for its own endpoints; as the
     /// framework sets them, unless it says otherwise.
     /// </param>
+    /// <param name="routing">
+    /// How the host adds routing after the browser profile, with any middleware of its
+    /// own around it; routing comes before the profiles, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -176,7 +181,8 @@ internal sealed class Deployment : IAsyncDisposable
         PhoneSignalProvider? signals = null,
         ChallengeVerifier? verifier = null,
         Action<IEndpointRouteBuilder>? host = null,
-        Action<JsonOptions>? json = null)
+        Action<JsonOptions>? json = null,
+        Action<IApplicationBuilder>? routing = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -254,11 +260,11 @@ internal sealed class Deployment : IAsyncDisposable
             // answers and every address its document publishes carries the prefix
             // (API-CONV-001, LIB-HOST-003). The two documents of REG-PM-001 are the
             // exception: they belong to the site and stay at its root.
-            _ = ((IApplicationBuilder)_application).Map(prefix, mount => Mounted(mount, host));
+            _ = ((IApplicationBuilder)_application).Map(prefix, mount => Mounted(mount, host, routing));
         }
         else
         {
-            Mounted(_application, host);
+            Mounted(_application, host, routing);
         }
 
         _ = ((IApplicationBuilder)_application).UseRouting();
@@ -863,12 +869,21 @@ internal sealed class Deployment : IAsyncDisposable
     }
 
     // What a host mounts: the two profiles around the library's endpoints and its own,
-    // with routing named by hand because no web server composes it here.
-    private static void Mounted(IApplicationBuilder mount, Action<IEndpointRouteBuilder>? host)
+    // with routing named by hand because no web server composes it here, before the
+    // profiles or where the host adds it after them.
+    private static void Mounted(
+        IApplicationBuilder mount,
+        Action<IEndpointRouteBuilder>? host,
+        Action<IApplicationBuilder>? routing)
     {
-        _ = mount.UseRouting();
+        if (routing is null)
+        {
+            _ = mount.UseRouting();
+        }
+
         _ = mount.UseMachineProfile();
         _ = mount.UseBrowserProfile();
+        routing?.Invoke(mount);
         _ = mount.UseEndpoints(endpoints =>
         {
             _ = endpoints.MapIdentityEndpoints();
@@ -1282,6 +1297,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();
         _ = services.AddScoped<SessionRequirement>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<MatcherPolicy, SessionRequirementPolicy>());
         _ = services.AddScoped<MachineProfile>();
 
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);

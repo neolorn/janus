@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -65,4 +66,22 @@ internal sealed class SessionRequired
     /// <returns>Whether it needs a session.</returns>
     public static bool Asks(Endpoint? endpoint) =>
         endpoint is RouteEndpoint && (endpoint.Metadata.GetMetadata<SessionRequired>()?._needs ?? true);
+
+    /// <summary>
+    /// What stage 8 answers a request to the endpoint with, where the request may not
+    /// reach it: the end of the sign-in session it carried, with what has to be done
+    /// again, or the code alone where it held none (BFF-STEP-001 AC3).
+    /// </summary>
+    /// <param name="resolved">What the session resolution stage established.</param>
+    /// <param name="endpoint">The endpoint, or nothing where routing matched none.</param>
+    /// <returns>The refusal, or nothing where the request may reach the endpoint.</returns>
+    /// <exception cref="ArgumentNullException">The resolution is absent.</exception>
+    public static Error? Refuses(RequestSession resolved, Endpoint? endpoint)
+    {
+        ArgumentNullException.ThrowIfNull(resolved);
+
+        return resolved.Live is null && Asks(endpoint)
+            ? resolved.Expiry ?? Error.From(ErrorCodes.SessionExpired)
+            : null;
+    }
 }
