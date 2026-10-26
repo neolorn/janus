@@ -4027,3 +4027,6 @@ against the public contract of LIB-API-001.
 - `IDerivationMaterialiser.RefreshAsync` called with a declared job's context on a record
   of an organization other than the one the job acts for throws
   `InvalidOperationException` and writes nothing.
+- A declared job's refused check on a record the library holds no row for reads its
+  organization's deletion state as one on a registered record does, so the two run the
+  same statements.

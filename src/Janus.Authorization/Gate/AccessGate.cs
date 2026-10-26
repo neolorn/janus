@@ -1505,9 +1505,13 @@ internal sealed class AccessGate(
             .FindAsync(resource, cancellationToken)
             .ConfigureAwait(false);
 
-        if (registered is null
-            || !await JobReachesAsync(context, permission, registered.Organization, cancellationToken)
-                .ConfigureAwait(false))
+        // AUTHZ-CONCEAL-002 AC3: a record the library holds no row for is judged as a
+        // registered one is, against no organization, so a refusal of either runs the
+        // same statements.
+        bool reaches = await JobReachesAsync(context, permission, registered?.Organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (registered is null || !reaches)
         {
             return await RefusedAsync(
                 context,

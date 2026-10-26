@@ -269,6 +269,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a declared job asking a consent-bound permission its declaration names, on a record whose data subject has not consented",
             Decided.ConsentRequired),
         ("a declared job asking on a record of another organization", Decided.Denied),
+        ("a declared job asking on a record the library holds no row for", Decided.Denied),
         ("a declared job asking in its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking in its organization, once it is erased", Decided.Denied),
     ];
@@ -1509,7 +1510,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ResourceReference sibling = Reference(Document);
 
         await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
-        await deployment.RegisterAsync(record, outer, cancellationToken, subject: account);
+        // AUTHZ-CONCEAL-002 AC3: a record the library holds no row for is refused as one
+        // the job's declaration does not reach.
+        if (!scenario.EndsWith("the library holds no row for", StringComparison.Ordinal))
+        {
+            await deployment.RegisterAsync(record, outer, cancellationToken, subject: account);
+        }
+
         await deployment.RegisterAsync(sibling, outer, cancellationToken);
 
         if (scenario.Contains("data subject is restricted", StringComparison.Ordinal))
