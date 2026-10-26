@@ -7,8 +7,7 @@ using Xunit;
 namespace Janus.Testing.Tests;
 
 /// <summary>
-/// The software passkey's private key, cleared when the passkey is disposed
-/// (LIB-TEST-003, CONV-CODE-007).
+/// A disposed software passkey, which answers no ceremony (LIB-TEST-003, CONV-CODE-007).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SoftwarePasskeyTests : IDisposable
@@ -19,11 +18,11 @@ public sealed class SoftwarePasskeyTests : IDisposable
 
     /// <summary>
     /// LIB-TEST-003, CONV-CODE-007: a passkey that answered a sign-in's request options
-    /// answers none once it is disposed, since its private key is cleared, and creates no
-    /// credential either.
+    /// answers none once it is disposed, and creates no credential either. That disposal
+    /// clears its private key is verified by review.
     /// </summary>
     [Fact]
-    public void LIB_TEST_003_ADisposedPasskeyAnswersNoCeremonyAsItsKeyIsCleared()
+    public void LIB_TEST_003_ADisposedPasskeyAnswersNoCeremony()
     {
         using var passkey = new SoftwarePasskey(Origin, _randomness);
 
