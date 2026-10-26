@@ -13,7 +13,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// What considering a number leaves in the audit trail before a restricted factor
 /// goes to it.
 /// </summary>
-/// <param name="context">The context whose transaction is the scope's unit of work.</param>
+/// <param name="work">The scope's unit of work, the one the library registered.</param>
 /// <param name="records">Where the trail is appended to.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// provider this record is the whole of what happens, so it is what an operator reads
 /// to decide whether to register one.
 /// </remarks>
-internal sealed class PhoneSignalAudit(StoreContext context, IAuditStore records, TimeProvider time) : IPhoneSignalAudit
+internal sealed class PhoneSignalAudit(IUnitOfWork work, IAuditStore records, TimeProvider time) : IPhoneSignalAudit
 {
     private const string Absent = "unavailable";
 
@@ -30,10 +30,16 @@ internal sealed class PhoneSignalAudit(StoreContext context, IAuditStore records
 
     /// <inheritdoc/>
     /// <remarks>
-    /// The transaction is the scope's, whoever opened it: an operation of the library, or
-    /// a host that began the unit of work its own action writes in.
+    /// The unit of work is the scope's, whoever began it: an operation of the library, or
+    /// a host that began the unit of work its own action writes in. No host implements
+    /// the unit of work (D-207), so one that is not the library's is a fault of the
+    /// calling code.
     /// </remarks>
-    public bool UnitOfWorkOpen => context.Database.CurrentTransaction is not null;
+    /// <exception cref="InvalidOperationException">The unit of work is not the one the library registered.</exception>
+    public bool UnitOfWorkOpen => work is IJoinableUnitOfWork joinable
+        ? joinable.Begun
+        : throw new InvalidOperationException(
+            "The unit of work is not the one the library registered, so whether it has begun cannot be asked.");
 
     /// <inheritdoc/>
     public async ValueTask ConsideredAsync(
