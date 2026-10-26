@@ -886,6 +886,70 @@ base".
 - Not built: D-210 answer 47's fault entry (Q50), and the review's finding on
   `SessionRequirementPolicy`'s dynamic endpoints (Q52).
 
+**Built under D-211**
+
+- Q49, CONV-DEP-004 (`f05bcbe7`): SDK 10.0.403 in `global.json`;
+  `Microsoft.EntityFrameworkCore`, its relational and design packages and `dotnet-ef` at
+  10.0.14, each listing checked on nuget.org first (published 2026-10-25); the lockfiles
+  regenerated. The gates ran on SDK 10.0.403 of the machine's system install (section 5).
+  The two Microsoft packages that follow the runtime and reach the solution only
+  transitively are not moved (Q53).
+- Q50, PRIV-RIGHT-003 AC5, BFF-ERR-002 AC2 (`9609c95e`):
+  - `IFaultEntry`, internal to `Janus.Privacy`, which `Janus.Hosting`'s `FaultEntry`
+    implements by writing `FaultLog`'s entry as one event of its own at Error, naming the
+    contributor; the export keeps a contributor's fault through it, and the error
+    `IExports.AssembleAsync` returns is unchanged;
+  - `ExportServiceTests.PRIV_RIGHT_003_AC5_WhatAContributorThrewIsKeptByTheFaultEntryAndNotInTheErrorAsync`,
+    and every faulted export of those tests held to an error carrying the `contributor`
+    detail alone;
+  - `ExportEndpointTests.PRIV_RIGHT_003_AC5_AFaultingContributorsFaultIsLoggedByItsTypeAndFramesUnderItsRequestAsync`:
+    the entry's `RequestId` scope is the correlation identifier the 500 answers with, and
+    no line of the log holds the exception's message.
+  - The test deployment runs its pipeline without a server, so it opens the scope the
+    server opens around a request, carrying its `RequestId`;
+    `StartupValidationTests.BFF_LOG_002_AC4_WithNoOtherRuleNoRequestEntryIsWrittenAndEachEntryCarriesItsRequestAsync`
+    proves the server opens it.
+- Q52, BFF-HOST-002 AC6, BFF-ORDER-001 stage 8 (`0e75e020`):
+  - stage 8 holds every endpoint routing selects to a session unless it carries the
+    mark, whatever its type. The two it holds to none are `HttpMethodMatcherPolicy`'s 405
+    endpoint and `AcceptsMatcherPolicy`'s 415, each with no metadata and the display name
+    ASP.NET Core 10.0.14 gives it, `405 HTTP Method Not Supported` and
+    `415 HTTP Unsupported Media Type`, read in both policies' source at the tag `v10.0.14`
+    of `dotnet/aspnetcore` and in the installed `Microsoft.AspNetCore.Routing.dll` 10.0.14;
+  - `AllowNoSessionAttribute` (public, sealed) in `Janus.Hosting`, read as
+    `AllowNoSession()` is, the nearer mark standing, in `PublicAPI.Unshipped.txt` and in
+    `PublicSurfaceTests.LIB_API_002_AC1_InternalTypesAreNotPubliclyAccessible`;
+  - `SessionRequirementPolicy.AppliesToEndpoints` answers true where the candidates hold
+    a dynamic endpoint (the review's finding 1);
+  - `HostEndpointTests.BFF_HOST_002_AC6_AnUnmarkedActionAFallbackResolvesToRefusesABrowserHoldingNoSessionWhereverRoutingIsAddedAsync`,
+    `..._AC6_AnActionMarkedWithAllowNoSessionIsReachedWithoutASessionWhereverRoutingIsAddedAsync`
+    (the mark on the action and on its controller),
+    `..._AC6_AMethodAServedHostPathDoesNotTakeIsNotFoundWhereverRoutingIsAddedAsync` and
+    `..._AC6_TheFrameworksOwnRejectionsAreTheEndpointsStageEightHoldsToNoSessionAsync`,
+    each with routing before the browser profile and after it. Run against the rule
+    before the change, and against the new rule without the framework's two endpoints
+    set apart, the first and the third failed as they should.
+  - Not built: the tests of a Razor page reached through `MapFallbackToPage` (Q54).
+- An organization's capabilities, BFF-CAP-002 AC6 and AC5, AUTHZ-GATE-005 AC1
+  (`bd065aee`):
+  - `CapabilitiesAsync` given the type `organization` answers, for each organization,
+    the permissions its organization-wide grants allow, any declared permission asked,
+    every one judged in one statement (`PermissionRule.ToOrganizationPage`); no refusal
+    recorded and none counted; `requires` as for a record, never `consent`; a host job's
+    context refused `authz.denied`;
+  - `GateBehaviourTests.BFF_CAP_002_AC6_AnOrganizationsCapabilitiesAreWhatItsWholeOrganizationGrantsAllowAsync`
+    (two organizations, a host permission behind a step-up gate, one bound to a
+    consent-based purpose and one of the library's; one statement over the grants; no
+    refusal recorded, no spike);
+  - `PermissionRuleTests.BFF_CAP_002_AC6_APageOfOrganizationsIsOneStatementOverTheGrantsNamingNoRecord`;
+  - `JobContextTests.BFF_CAP_002_AC5_CapabilitiesGivenAJobsContextAreRefusedInARequestAndOutsideOneAsync`
+    asks the organization's page beside the record's;
+  - truth table: three rows of `Operations` (a role granted on the whole organization, a
+    deny there, a grant on a record of it alone), each the page and the
+    organization-wide single check agreeing.
+- Q51, OPS-DEP-004 AC7: decided by running the step's script against repositories built
+  at run time, as criteria 1 to 6 are; verified so under D-210 (above). No committed test.
+
 **Items the round proves that this section did not list**
 
 - AUTH-SESS-005b:
@@ -1148,8 +1212,8 @@ base".
 - CONV-SETUP-003 AC2: `release.sh` in the "Public surface files up to date" job, which
   fails a range that changes a `PublicAPI.Shipped.txt` outside a release commit.
 - CONV-SETUP-004 AC1: the "Format" job.
-- OPS-DEP-004 AC7: no committed test (Q51); verified by running the changed script
-  against scratch repositories (section 1, under D-210).
+- OPS-DEP-004 AC7: verified by running the changed script against repositories built at
+  run time, as D-211 answer 51 decides (section 1, under D-210 and D-211).
 - CONV-TEST-001 AC1: verified by review of the tree: each test project is named for its
   source project and mirrors its folders; no job decides it.
 - CONV-VCS-004 AC1: `truth-table-change.sh` in the "Truth-table suite" job.
@@ -1746,7 +1810,7 @@ base".
       `IExports` throws);
     - **D:** a formatter private to `Janus.Privacy` (a second way of logging a fault).
   - Parked: that finding alone.
-  - Answered by D-210 answer 47 (reading A); its build waits on Q50.
+  - Answered by D-210 answer 47 (reading A); built under D-211 answer 50 (section 1).
 
 - **Q48 (Tier 3). D-209's first case of a step-up inside a host's unit of work (`08`
   CONV-DESIGN-003 AC13).**
@@ -1760,7 +1824,7 @@ base".
     cannot arise, and criterion 13's first case reads a host's bound action whose gate the
     host first asks inside its own unit of work; built (section 1).
 
-**Unanswered.**
+**Answered by D-211.**
 
 - **Q49 (Tier 2). The servicing release of 2026-10-25 (CONV-DEP-004, D-205, D-210).**
   - D-210 takes the servicing release of 2026-10-13 (.NET 10.0.13, SDK 10.0.402), built
@@ -1773,6 +1837,9 @@ base".
     - **B:** 10.0.14 and SDK 10.0.403 are taken now, in one change over `global.json`,
       `Directory.Packages.props`, `.config/dotnet-tools.json` and the lockfiles.
   - Parks nothing: D-210's move is built as it reads.
+  - Answered by D-211 answer 49 (reading B), the other Microsoft packages that follow the
+    runtime with it; built (section 1), save those that reach the solution only
+    transitively (Q53).
 - **Q50 (Tier 2). What the fault entry of D-210 answer 47 does (`08` CONV-DESIGN-007,
   BFF-ERR-002 AC2, PRIV-RIGHT-003, CONV-LOG-003).**
   - `FaultLog.Of` builds the fault's text and logs nothing. Every other caller keeps it
@@ -1793,7 +1860,7 @@ base".
       event of its own; the operation's result is unchanged, and the entry is a second
       log line beside the refusal's, tied to the request by its scope.
   - Parked: the review finding on `ExportService.cs`, Q47's build.
-
+  - Answered by D-211 answer 50 (reading B); built (section 1).
 - **Q51 (Tier 2). A committed test of the scan's one allow-list (`06` OPS-DEP-004 AC7).**
   - Running `.github/gates/secret-scanning.sh` takes bash, git, curl, `sha256sum` and tar
     on Linux, a download of the gitleaks release, and a scratch repository holding a
@@ -1807,6 +1874,7 @@ base".
     - **B:** a committed integration test, `08` naming the image, the test project and
       whether a test may reach the network.
   - Parked: the committed test alone; the script is built.
+  - Answered by D-211 answer 51 (reading A); verified so (section 1).
 - **Q52 (Tier 3). A host action a dynamic route resolves to holds no session
   (BFF-HOST-002 AC1 and AC5, BFF-ORDER-001 stage 8, D-202 rule 3, D-209).**
   - A host's unmarked controller action reached through `MapFallbackToController`, with
@@ -1822,32 +1890,66 @@ base".
     (`ContainsDynamicEndpoints`) is needed and does not decide the criterion alone.
   - Parked: that finding whole (the change, its test, its fixture), kept out of every
     commit.
+  - Answered by D-211 answer 52; built (section 1), save the tests of a Razor page
+    (Q54).
+
+**Unanswered.**
+
+- **Q53 (Tier 2). The Microsoft packages that follow the runtime and reach the solution
+  only transitively (CONV-DESIGN-008 AC1, CONV-DEP-004, D-211 answer 49).**
+  - D-211 answer 49 moves "every other Microsoft package that follows the runtime" to
+    its 10.0.14 release. Two reach the solution only through a package of the table:
+    `Microsoft.Bcl.Cryptography`, resolved at 10.0.2 through `Fido2`, and
+    `Microsoft.Extensions.Http.Polly`, resolved at 10.0.11 through
+    `OpenIddict.Validation.SystemNetHttp`.
+  - Moving either needs a `PackageVersion` entry and a direct reference, or transitive
+    pinning; CONV-DESIGN-008 AC1 holds the direct references to the table, and `08`
+    names no pin. The vulnerability gate reports neither package.
+  - Readings, with the smallest fix for each:
+    - **A:** they stay where their parents put them, and D-211 answer 49 reads as the
+      packages the solution references;
+    - **B:** they are pinned at 10.0.14 with `CentralPackageTransitivePinningEnabled`,
+      `08` naming the pins and AC1 setting them apart from the direct references.
+  - Parked: the move of those two packages alone.
+- **Q54 (Tier 2). The tests of a Razor page under stage 8 (BFF-HOST-002, D-211 answer
+  52).**
+  - D-211 answer 52 and BFF-HOST-002's values name `MapFallbackToPage` and a Razor page
+    marked with `[AllowNoSession]`; criterion 6 names a controller action through
+    `MapFallbackToController` alone.
+  - A test of a page needs the Razor SDK (`Microsoft.NET.Sdk.Razor`) on
+    `Janus.Hosting.Tests` and a `.cshtml` fixture. That is not one of the changes to test
+    infrastructure Tier 1 lists, and `08` does not name it.
+  - Readings, with the smallest fix for each:
+    - **A:** `Janus.Hosting.Tests` moves to the Razor SDK with one page fixture, `08`
+      naming it: an unmarked page through `MapFallbackToPage` answers 401, and a page
+      marked `[AllowNoSession]` is reached;
+    - **B:** no page test: the rule reads the endpoint's metadata whatever its type,
+      criterion 6 names the controller case, and the page case is verified by review.
+  - Parked: the two page tests alone; the rule they would test is built.
 
 ## 5. Gate result
 
-Fast checks on every commit, and after each merge of a part: build with warnings as
-errors, the analysers and `dotnet format --verify-no-changes` over `Janus.slnx`, the unit
-and contract tests, all green.
+Fast checks on every commit: build with warnings as errors, the analysers and
+`dotnet format --verify-no-changes` over `Janus.slnx`, the unit and contract tests, all
+green.
 
-The pipeline's runs on `281df27c`, the tip of the last push, were green: the push run
-40261700394 and the pull request run 40261701812.
+The pipeline's runs on `c82b09ad`, the tip of the push before this run, were green: the
+push run 40285851951 and the pull request run 40285853376.
 
-The full gate ran once on the development machine at `12a1d22c`, after the last merge of
-a part, on SDK 10.0.402 installed under `tmp/tools/dotnet` by Microsoft's
-`dotnet-install.ps1` (its Authenticode signature valid, Microsoft Corporation; the
-installed `dotnet.exe` signed by Microsoft) with its own runtimes, 10.0.13, job by job as
+The full gate ran once on the development machine at `bd065aee`, the last commit of code,
+on SDK 10.0.403 of the machine's system install, with its runtimes 10.0.14, job by job as
 `.github/workflows/gates.yml` runs it, over the merge base with `main` (`b6d14fe`) to
 `HEAD`:
 
 | Job | Result |
 |---|---|
 | Locked restore, build, public surface, format | green |
-| Unit tests | 4711 of 4711 |
+| Unit tests | 4719 of 4719 |
 | Contract tests | 211 of 211 |
 | Unicode tables run and diff, tool restore | green |
-| Integration tests | 1341 of 1341 |
+| Integration tests | 1345 of 1345 |
 | Policy coverage | 3 of 3 |
-| Truth-table change, truth-table suite | green, 187 of 187 |
+| Truth-table change, truth-table suite | green, 190 of 190 |
 | Analyser rules, permitted outcome, forbidden log values | 23 of 23, 4 of 4, 4 of 4 |
 | Dependency allow-list, internals allow-list | 2 of 2, 1 of 1 |
 | Forbidden markers, acceptance test names, commit message, changelog | green |
@@ -1857,8 +1959,8 @@ installed `dotnet.exe` signed by Microsoft) with its own runtimes, 10.0.13, job 
 | The sample host builds from the packages packed from the same commit, and its tests pass | green, on the same SDK: `.github/gates/sample-host.sh` after a locked restore, its build with warnings as errors and `dotnet format --verify-no-changes` over `HostSample.slnx`, and its tests, 14 of 14 |
 
 - The full-history secret scan (OPS-DEP-004) ran after the gate, gitleaks 8.30.1 as the
-  changed script runs it (`.gitleaks.toml`, `--ignore-gitleaks-allow`, an empty ignore
-  path, no baseline, no `.gitleaksignore` in the tree), over every commit of every branch
-  and tag (1578 commits): no finding. It runs again before the push of this commit.
+  script runs it (`.gitleaks.toml`, `--ignore-gitleaks-allow`, an empty ignore path, no
+  baseline, no `.gitleaksignore` in the tree), over every commit of every branch and tag
+  (1584 commits): no finding. It runs again before the push of this commit.
 - The protection of `main` requires 23 checks, the sample host's job among them.
 - The pipeline run, the gate of record, runs on the push of this commit.
