@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Recovery;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
@@ -19,6 +21,10 @@ namespace Janus.Hosting.Tests.Bff;
 [Trait("kind", "unit")]
 public sealed class HostEndpointTests : IAsyncDisposable
 {
+    private const string Link = "the-approver-sent-this-one";
+
+    private const string Replacement = "quincejellyonasaucer";
+
     private readonly HostEndpoints _host = new();
 
     private readonly Deployment _deployment;
@@ -237,6 +243,86 @@ public sealed class HostEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ORDER-001 AC2 (D-210): with the host's routing added after the browser
+    /// profile, an enrolment route answers a browser holding the enrolment session an
+    /// approved recovery opened as it answers one that carried no enrolment session, and
+    /// the enrolment is left standing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC2_WithRoutingAfterTheProfileAnEnrolmentRouteAnswersAsForNoEnrolmentSessionAsync()
+    {
+        await using var deployment = new Deployment(host: new HostEndpoints().Map, routing: mount => _ = mount.UseRouting());
+
+        Flow.Prepare(deployment);
+        _ = await Flow.SignedInAsync(deployment);
+        Browser enrolling = await EnrollingAsync(deployment);
+        var carryingNone = new Browser(deployment);
+
+        _ = await carryingNone.SendAsync("GET", "/auth/session");
+
+        Answer enrolment = await enrolling.SendAsync("POST", "/account/password", ("password", Replacement));
+        Answer none = await carryingNone.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, none.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), none.Text("code"));
+        Assert.Equal(none.Status, enrolment.Status);
+        Assert.Equal(none.Text("code"), enrolment.Text("code"));
+        Assert.Equal(
+            none.Json().GetProperty("details").GetRawText(),
+            enrolment.Json().GetProperty("details").GetRawText());
+        Assert.NotEmpty(deployment.Links.Held);
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC2 (D-210), API-CONV-002: with the host's routing added after the
+    /// browser profile, a request the framework cannot bind (a route value that does not
+    /// read as its type, a body the reader cannot turn into the endpoint's, a host
+    /// endpoint's query value that does not read) is refused 400
+    /// <c>api.request.malformed</c> with the details it carries with routing before the
+    /// profile.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC2_WithRoutingAfterTheProfileAnUnboundRequestIsMalformedAsBeforeAsync()
+    {
+        await using var before = new Deployment(host: new HostEndpoints().Map);
+        await using var after = new Deployment(host: new HostEndpoints().Map, routing: mount => _ = mount.UseRouting());
+        var answered = new List<Answer[]>();
+
+        foreach (Deployment deployment in new[] { before, after })
+        {
+            Flow.Prepare(deployment);
+            Browser browser = await Flow.SignedInAsync(deployment);
+
+            answered.Add(
+            [
+                await browser.SendAsync("DELETE", "/account/sessions/not-an-identifier"),
+                await browser.SendAsync("PATCH", "/account/credentials/" + Guid.NewGuid(), "{ \"label\": 7 }"),
+                await browser.SendAsync("GET", HostEndpoints.Unlisted + "?typed=perhaps"),
+            ]);
+        }
+
+        Assert.Equal("id", answered[0][0].Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal("label", answered[0][1].Json().GetProperty("details").GetProperty("member").GetString());
+
+        for (int asked = 0; asked < answered[0].Length; asked++)
+        {
+            Answer early = answered[0][asked];
+            Answer late = answered[1][asked];
+
+            Assert.Equal(StatusCodes.Status400BadRequest, early.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), early.Text("code"));
+            Assert.Equal(early.Status, late.Status);
+            Assert.Equal(early.Text("code"), late.Text("code"));
+            Assert.NotEmpty(late.Text("correlationId"));
+            Assert.Equal(
+                early.Json().GetProperty("details").GetRawText(),
+                late.Json().GetProperty("details").GetRawText());
+        }
+    }
+
+    /// <summary>
     /// BFF-CSRF-005a AC1: first contact with a host endpoint marked as answering anyone
     /// issues the pre-authentication session, as first contact with any pre-session
     /// endpoint does.
@@ -279,4 +365,30 @@ public sealed class HostEndpointTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync() => _deployment.DisposeAsync();
+
+    // A browser holding the enrolment session an approved recovery opened for the person
+    // last signed in, the first person registered having approved it.
+    private static async Task<Browser> EnrollingAsync(Deployment deployment)
+    {
+        await deployment.Links.ReplaceAsync(
+            RecoveryLink.Issue(
+                OpaqueToken.Of(Link),
+                deployment.Directory.Created[^1].Subject,
+                RecoveryPurpose.Enrolment,
+                deployment.Clock.GetUtcNow(),
+                TimeSpan.FromHours(1),
+                approver: deployment.Directory.Created[0].Subject,
+                mailboxLost: false),
+            TestContext.Current.CancellationToken);
+
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("POST", "/enrol/begin", ("token", Link))).Status);
+
+        return browser;
+    }
 }
