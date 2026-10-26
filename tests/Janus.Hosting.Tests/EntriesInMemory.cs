@@ -28,6 +28,16 @@ internal sealed class EntriesInMemory : ILoggerProvider, ISupportExternalScope
     /// <inheritdoc/>
     public void SetScopeProvider(IExternalScopeProvider scopeProvider) => _scopes = scopeProvider;
 
+    /// <summary>
+    /// Opens the scope the web server opens around a request, carrying its
+    /// <c>RequestId</c>, for a deployment that runs its pipeline without a server
+    /// (CONV-LOG-002).
+    /// </summary>
+    /// <param name="requestId">The request's identifier.</param>
+    /// <returns>What closes the scope.</returns>
+    public IDisposable? Request(string requestId) =>
+        _scopes.Push(new[] { new KeyValuePair<string, object>("RequestId", requestId) });
+
     /// <inheritdoc/>
     public void Dispose()
     {

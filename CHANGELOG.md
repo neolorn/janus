@@ -4070,3 +4070,8 @@ against the public contract of LIB-API-001.
   is judged once a request for each person asking, as one judged from the library's
   session already was: a later ask in the same request, under the host's lock or
   otherwise, answers as the first did and does not ask the provider again.
+- What an export contributor throws is written to the log as one entry of its own at
+  Error, naming the contributor, by the exception's type and stack frames and never its
+  message, under the request's logging scope, so the correlation identifier the 500
+  `system.fault` answers with finds it. The error `IExports.AssembleAsync` returns is
+  unchanged: it names the contributor and holds no fault.

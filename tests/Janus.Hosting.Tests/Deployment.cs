@@ -187,7 +187,7 @@ internal sealed class Deployment : IAsyncDisposable
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
-        builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
+        builder.Logging.SetMinimumLevel(logging).AddProvider(Logs).AddProvider(Entries);
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Considered = new PhoneSignalAuditInMemory(Work);
@@ -577,6 +577,12 @@ internal sealed class Deployment : IAsyncDisposable
     public LogsInMemory Logs { get; } = new();
 
     /// <summary>
+    /// Every entry the deployment wrote, each with the values of the scopes open around
+    /// it, so a test can say which request an entry was written under.
+    /// </summary>
+    public EntriesInMemory Entries { get; } = new();
+
+    /// <summary>
     /// What authentication wrote to the audit trail: each combination presented and
     /// each factor refused (AUTH-SESS-002, CONV-LOG-005).
     /// </summary>
@@ -851,6 +857,7 @@ internal sealed class Deployment : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(context);
 
         await using AsyncServiceScope scope = _application.Services.CreateAsyncScope();
+        using IDisposable? request = Entries.Request(context.TraceIdentifier);
 
         context.RequestServices = scope.ServiceProvider;
 
@@ -1149,6 +1156,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddSingleton<IExportContributor>(ExportContributor);
         _ = services.AddSingleton<IExportNameRule, ExportNames>();
+        _ = services.AddSingleton<IFaultEntry, FaultEntry>();
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);

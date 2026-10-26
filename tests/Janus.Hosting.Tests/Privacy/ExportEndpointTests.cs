@@ -7,6 +7,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Outbox;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Privacy;
@@ -246,6 +247,38 @@ public sealed class ExportEndpointTests : IAsyncDisposable
             line => line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal)
                 && line.Contains("contributor", StringComparison.Ordinal)
                 && line.Contains("host", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-003 AC5, BFF-ERR-002 AC2 (D-210, D-211): what a faulting contributor
+    /// threw is one entry at Error naming the contributor, written under the request
+    /// whose correlation identifier the fault answers with, holding the fault's type and
+    /// frames and never its message, which no line of the log holds.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_AFaultingContributorsFaultIsLoggedByItsTypeAndFramesUnderItsRequestAsync()
+    {
+        const string message = "The contributor's own store answered nothing.";
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.ExportContributor.Faults = true;
+
+        Answer refused = await browser.SendAsync("GET", "/privacy/export?format=human");
+
+        EntriesInMemory.Entry kept = Assert.Single(
+            _deployment.Entries.Written,
+            entry => entry.Category == typeof(Janus.Hosting.Privacy.FaultEntry).FullName);
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, refused.Status);
+        Assert.Equal(LogLevel.Error, kept.Level);
+        Assert.Equal(refused.Text("correlationId"), kept.Scope["RequestId"]);
+        Assert.Contains("Contributor=host", kept.Line, StringComparison.Ordinal);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, kept.Line, StringComparison.Ordinal);
+        Assert.Contains(nameof(Janus.Privacy.Tests.Exports.ExportContributorInMemory.SectionsAsync), kept.Line, StringComparison.Ordinal);
+        Assert.DoesNotContain(_deployment.Entries.Written, entry => entry.Line.Contains(message, StringComparison.Ordinal));
+        Assert.DoesNotContain(_deployment.Logs.Lines, line => line.Contains(message, StringComparison.Ordinal));
     }
 
     /// <summary>

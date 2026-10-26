@@ -19,6 +19,7 @@ namespace Janus.Privacy.Exports;
 /// <param name="source">Where the parts the other areas hold are read.</param>
 /// <param name="contributors">The export contributors the host registered, which answer what it holds.</param>
 /// <param name="names">The rule the names a contributor answers are held to.</param>
+/// <param name="faults">Where what a contributor threw is kept.</param>
 /// <param name="ledger">Where the exports already taken are counted.</param>
 /// <param name="consents">Where the consent and objection records are.</param>
 /// <param name="stepUp">The gate the account's own assurance is asked at.</param>
@@ -27,14 +28,15 @@ namespace Janus.Privacy.Exports;
 /// <param name="work">The one transaction the export is counted in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003, LIB-API-005, D-086, D-141, D-203 and D-206. One routine
-/// and not two: two routines are two answers to the same legal question, and the second
-/// one is the one nobody maintains.
+/// Implements PRIV-RIGHT-003, LIB-API-005, D-086, D-141, D-203, D-206 and D-211. One
+/// routine and not two: two routines are two answers to the same legal question, and the
+/// second one is the one nobody maintains.
 /// </remarks>
 internal sealed class ExportService(
     IExportSource source,
     IEnumerable<IExportContributor> contributors,
     IExportNameRule names,
+    IFaultEntry faults,
     IExportLedger ledger,
     IConsentStore consents,
     IStepUpGate stepUp,
@@ -192,7 +194,9 @@ internal sealed class ExportService(
 
     // A contributor that throws has failed as one that answered a failure has: the
     // export names it to the log and is refused, never returned short of what it holds.
-    private static async ValueTask<Result<IReadOnlyList<ExportSection>>> AnsweredAsync(
+    // What it threw is kept by its type and frames beside the refusal, and never in the
+    // error, which an in-process caller could pass on (D-211).
+    private async ValueTask<Result<IReadOnlyList<ExportSection>>> AnsweredAsync(
         IExportContributor contributor,
         SubjectId subject,
         CancellationToken cancellationToken)
@@ -206,6 +210,8 @@ internal sealed class ExportService(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            faults.Keep(contributor.Name, fault);
+
             return Result.Failure<IReadOnlyList<ExportSection>>(Faulted(contributor));
         }
     }

@@ -37,6 +37,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
     private readonly FixedClock _clock = new(Noon);
     private readonly List<IExportContributor> _contributors = [];
     private readonly ExportNameRuleInMemory _names = new();
+    private readonly FaultEntryInMemory _faults = new();
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
@@ -45,6 +46,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
         _source,
         _contributors,
         _names,
+        _faults,
         _ledger,
         _consents,
         _stepUp,
@@ -404,6 +406,47 @@ public sealed class ExportServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-003 AC5 (D-210, D-211): what a contributor threw is kept by the fault
+    /// entry, once and naming the contributor, and the error the export answers names
+    /// the contributor and holds no fault; a contributor that answered a failure threw
+    /// nothing, and nothing is kept.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_AC5_WhatAContributorThrewIsKeptByTheFaultEntryAndNotInTheErrorAsync()
+    {
+        ExportContributorInMemory orders = Contributor("orders", "orders");
+        ExportContributorInMemory tickets = Contributor("tickets", "support-tickets");
+
+        orders.Fails = Error.From(ErrorCodes.Denied);
+        _contributors.Add(orders);
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "orders");
+        Assert.Empty(_faults.Kept);
+
+        orders.Fails = null;
+        tickets.Faults = true;
+        _contributors.Add(tickets);
+
+        AssertFaulted(
+            Refused(await Exports.AssembleAsync(
+                AccessContext.Of(Ahmed),
+                Browser,
+                TestContext.Current.CancellationToken)),
+            "tickets");
+
+        (string contributor, Exception fault) = Assert.Single(_faults.Kept);
+
+        Assert.Equal("tickets", contributor);
+        Assert.IsType<InvalidOperationException>(fault);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-003 (D-203): a section named as a library section, or as another
     /// contributor's, is a fault of the contributor that answered it second, and fails
     /// the export uncounted.
@@ -565,6 +608,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
     private void AssertFaulted(Error refused, string contributor)
     {
         Assert.Equal(ErrorCodes.SystemFault, refused.Code);
+        Assert.Equal("contributor", Assert.Single(refused.Details).Key);
         Assert.Equal(contributor, refused.Details["contributor"].GetString());
         Assert.Empty(_ledger.Taken);
         Assert.Empty(_audit.Entries);

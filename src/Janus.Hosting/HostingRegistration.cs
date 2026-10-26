@@ -304,6 +304,10 @@ public static class HostingRegistration
         // this project holds the check of, before the export takes them.
         services.AddSingleton<IExportNameRule, ExportNames>();
 
+        // PRIV-RIGHT-003 (D-211): what a contributor threw is kept as every other fault
+        // the library catches is, by the entry this project holds.
+        services.AddSingleton<IFaultEntry, FaultEntry>();
+
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
         // declaration the host makes, so the privacy side reads it from there rather
         // than asking the host a second time.
