@@ -786,7 +786,7 @@ D-197).
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 *Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188, D-189, D-190,
-D-191, D-192, D-193, D-197, D-205, D-206*
+D-191, D-192, D-193, D-197, D-205, D-206, D-209*
 
 Rotates the identifier the session's cookie carries on success; the record's `SessionId`
 is kept (BFF-SESS-004).
@@ -813,18 +813,20 @@ report (LIB-HOST-004), carries `required`, `outcome` `present`, empty `options` 
 ```
 
 `options` lists **every combination of the account's usable factors that reaches the
-gate** (AUTH-STEP-002 step 2); the subject picks one and presents it factor by factor.
-`enrol` means no usable combination exists and the account has never reached the level —
-the frontend offers enrolment in place (AUTH-STEP-005 AC2). `report-loss` means the
-account can reach the level but a factor that would do it is gone — the frontend offers
-`POST /recovery/report-loss`. `pending` means a loss report is already running and
-`pendingUntil` is when it completes; the answer is still a 403, since the operation did
-not proceed, and the frontend presents it as a status. `pendingUntil` is present in
-every refusal and null unless the outcome is `pending`. `maxAge` is the gate's maximum
-age in whole seconds, truncated, and null where the gate asks none (a `delegated` gate,
-AUTH-STEP-007, D-193). Factor names appear here as presentation data for the prompt,
-spelled as the catalogue spells them (AUTH-FACT-002); the session record itself stores
-properties only (AUTH-SESS-002).
+gate** (AUTH-STEP-002 step 2); the subject picks one and presents it factor by factor. A
+step-up judged while a unit of work is open offers as where no phone signal is declared;
+the signal is asked when the step-up is carried out here, before any text is sent
+(AUTH-FACT-002b, D-209). `enrol` means no usable combination exists and the account has
+never reached the level — the frontend offers enrolment in place (AUTH-STEP-005 AC2).
+`report-loss` means the account can reach the level but a factor that would do it is
+gone — the frontend offers `POST /recovery/report-loss`. `pending` means a loss report
+is already running and `pendingUntil` is when it completes; the answer is still a 403,
+since the operation did not proceed, and the frontend presents it as a status.
+`pendingUntil` is present in every refusal and null unless the outcome is `pending`.
+`maxAge` is the gate's maximum age in whole seconds, truncated, and null where the gate
+asks none (a `delegated` gate, AUTH-STEP-007, D-193). Factor names appear here as
+presentation data for the prompt, spelled as the catalogue spells them (AUTH-FACT-002);
+the session record itself stores properties only (AUTH-SESS-002).
 
 ---
 
@@ -2240,18 +2242,20 @@ where it is longer than 1024 characters after trimming **403**: `authz.denied` w
 `grant:manage` is not held in the grant's organization and, for a grant in an
 organization other than the administrative organization, `system:administer` is not held
 in the administrative organization either, where the identifier names no grant or no
-registered record (section 8), where a role carrying `system:administer` is granted or
-revoked without it, and for a grant to the reserved account or a revocation of its
-`system-administrator` grant; `auth.stepup.required` (`grant:manage`) **404**:
-`authz.grant.notfound`, to a caller the permission check admitted (`grant:manage` there,
-or `system:administer` in the administrative organization for a grant outside it), for a
-grant already revoked, or one a derivation wrote or materialised **409**:
-`authz.grant.duplicate`; `authz.grant.expired` where `expiresAt` is not after the
-present **422**: `authz.grant.reasonrequired`; `authz.grant.unresolved` where `role`
-names no role the deployment holds, or `subjectId` names a group that does not exist or
-belongs to another organization (`details.member`)
+registered record, or, for a grant on `resourceType` `organization`, its `resourceId`
+names no organization the deployment holds, recorded against no organization as section
+8 records an identifier naming no row (AUTHZ-SCOPE-001, D-209), where a role carrying
+`system:administer` is granted or revoked without it, and for a grant to the reserved
+account or a revocation of its `system-administrator` grant; `auth.stepup.required`
+(`grant:manage`) **404**: `authz.grant.notfound`, to a caller the permission check
+admitted (`grant:manage` there, or `system:administer` in the administrative
+organization for a grant outside it), for a grant already revoked, or one a derivation
+wrote or materialised **409**: `authz.grant.duplicate`; `authz.grant.expired` where
+`expiresAt` is not after the present **422**: `authz.grant.reasonrequired`;
+`authz.grant.unresolved` where `role` names no role the deployment holds, or `subjectId`
+names a group that does not exist or belongs to another organization (`details.member`)
 
-*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-SCOPE-001, D-166, D-207, D-208*
+*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-SCOPE-001, D-166, D-207, D-208, D-209*
 
 ---
 

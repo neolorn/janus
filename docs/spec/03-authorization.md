@@ -517,11 +517,12 @@ declared job, or is a deployment-scoped principal that may run `reconciliation`,
 drift check's operation (`10` section 5.28). Every other call by a system principal is a
 fault of the calling code that throws `InvalidOperationException` and writes nothing:
 one while a request is served, one by an organization-scoped principal naming no
-declared job, and one by a deployment-scoped principal that may not run
+declared job or on a record of an organization other than its own (`01` IDN-PRIN-001
+criterion 2, D-209), and one by a deployment-scoped principal that may not run
 `reconciliation`, which is restricted from the refresh as from every operation not its
 own (`01` IDN-PRIN-001 criterion 3, D-208).
 
-*Source: D-043, D-161, D-162, D-166, D-183, D-187, D-207, D-208*
+*Source: D-043, D-161, D-162, D-166, D-183, D-187, D-207, D-208, D-209*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
 synchronisation problem the design otherwise avoids. It is the last rung of the
@@ -554,12 +555,12 @@ and for the same reason.
    `authz.grant.retracted` naming the caller; a job's refresh while a request is served
    (through either profile or neither, and in a scope opened within it) throws
    `InvalidOperationException` and writes nothing (D-207, D-208); a refresh called
-   outside a request with an organization-scoped principal naming no declared job, or
-   with a deployment-scoped principal that may not run `reconciliation`, throws
-   `InvalidOperationException` and writes nothing, and one called with a
-   deployment-scoped principal that may run it records that principal's name and reason,
-   and throws `InvalidOperationException` and writes nothing while a request is served
-   (D-208).
+   outside a request with an organization-scoped principal naming no declared job, or on
+   a record of an organization other than its own (D-209), or with a deployment-scoped
+   principal that may not run `reconciliation`, throws `InvalidOperationException` and
+   writes nothing, and one called with a deployment-scoped principal that may run it
+   records that principal's name and reason, and throws `InvalidOperationException` and
+   writes nothing while a request is served (D-208).
 
 ---
 
@@ -653,16 +654,20 @@ modifying action, then both permissions together, and records one refusal, namin
 under either records no refusal and adds nothing to the count toward
 `alerting.denials.threshold` (AUTHZ-CONCEAL-004, OPS-ALERT-001). The gate's second ask
 inside the unit of work (AUTHZ-GATE-006) is the same one admission. An identifier naming
-no grant or no registered record is refused as below, against no organization. A grant
-in the administrative organization confers only on a principal holding a current
-membership of it (IDN-MEM-001). Where the organization is read from the row a request
-names, an identifier naming no row belongs to no organization, so no grant reaches it,
-and it is refused as a missing permission is (`09` section 8). A path under `/admin`
-whose `{id}` names no organization the deployment holds is answered 404
+no grant or no registered record, and an organization-wide grant whose `resourceId`
+names no organization the deployment holds, are refused as the gate refuses a row the
+deployment does not hold: the restriction first, then `authz.denied` naming the
+permission asked (`grant:manage` for a grant), recorded against no organization
+(AUTHZ-CONCEAL-004), no permission being decided (D-209). A grant in the administrative
+organization confers only on a principal holding a current membership of it
+(IDN-MEM-001). Where the organization is read from the row a request names, an
+identifier naming no row belongs to no organization, so no grant reaches it, and it is
+refused as a missing permission is (`09` section 8). A path under `/admin` whose `{id}`
+names no organization the deployment holds is answered 404
 `identity.organization.notfound`, nothing being concealed at that level (`09` section
 8a).
 
-*Source: D-003, IDN-MEM-003, D-166, D-207, D-208*
+*Source: D-003, IDN-MEM-003, D-166, D-207, D-208, D-209*
 
 **Acceptance criteria**
 1. No session field names an organization.
@@ -678,7 +683,10 @@ whose `{id}` names no organization the deployment holds is answered 404
    it, at the first ask and at the second inside its unit of work; where neither does,
    it is refused with one refusal record, naming `grant:manage` in the grant's
    organization; an acting account under restriction is refused `authz.restricted`, with
-   no record, whatever it holds (D-208).
+   no record, whatever it holds (D-208); an organization-wide grant whose `resourceId`
+   names no organization the deployment holds is refused 403 `authz.denied`, naming
+   `grant:manage` and recorded against no organization, whatever the caller holds, save
+   `authz.restricted` for an acting account under restriction (D-209).
 
 ---
 
@@ -775,8 +783,10 @@ following SHALL fail:
   organization (AUTHZ-MODEL-002)
 - A consent-based purpose named for the hosting or its cross-border transfer
   (INT-HOST-002)
+- A step-up gate or a purpose bound to a library-owned permission (AUTHZ-GATE-005,
+  D-209)
 
-*Source: D-015, D-032, D-043, D-162, D-166, D-204, D-206*
+*Source: D-015, D-032, D-043, D-162, D-166, D-204, D-206, D-209*
 
 Failing at boot rather than at first query. The same principle as the relying party
 identifier validation in `02-authentication`.
@@ -788,9 +798,11 @@ identifier validation in `02-authentication`.
    `details.permission` naming the action), `model.role.undeclaredpermission`,
    `model.derivation.undeclaredreference`, `model.derivation.unindexed`,
    `model.type.reserved` (`details.key` naming the type), `model.purpose.hostingconsent`
-   (`details.key` naming `<type>.<purpose>`), and for a resource type declared twice
+   (`details.key` naming `<type>.<purpose>`), for a resource type declared twice
    `model.startup.declarationinvalid` (`details.declaration` the type, `details.field`
-   `name`, D-206) (`10` section 1.5, D-153).
+   `name`, D-206), and for a binding to a library-owned permission
+   `model.startup.declarationinvalid` (`details.declaration` `binding.<permission>`,
+   `details.field` `stepUpGate` or `purpose`, D-209) (`10` section 1.5, D-153).
 2. Validation runs before any request is served.
 3. A new entity added without a policy fails the build via test, not only at
    startup.
@@ -990,10 +1002,13 @@ explanation.
 **Values (D-160).** The `stepup` residual comes from the **gate bound to the action**,
 not from the permission string: the model builder binds a host-declared action to a
 step-up gate name (`10` section 5a or a host-declared gate), and the library-owned
-actions carry their bindings in section 5a. `requires` lists `reauthenticate` for an
-action whose bound gate the session would satisfy but for proof last reached before its
-last downgrade (AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise does
-not currently satisfy (`10` section 5.20).
+actions carry their bindings in section 5a. A host binds only its own actions: a step-up
+gate or a purpose bound to a library-owned permission (`10` section 2.1) fails startup
+with `model.startup.declarationinvalid`, `details.declaration` `binding.<permission>`,
+`details.field` `stepUpGate` or `purpose` (D-209). `requires` lists `reauthenticate` for
+an action whose bound gate the session would satisfy but for proof last reached before
+its last downgrade (AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise
+does not currently satisfy (`10` section 5.20).
 
 **Values (D-162, D-166).** The `consent` residual comes from the **purpose bound to the
 action**, as `stepup` comes from its gate: the model builder binds a host-declared
@@ -1018,7 +1033,7 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206, D-207*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187, D-191, D-202, D-206, D-207, D-209*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
@@ -1033,17 +1048,24 @@ produces N+1 queries.
    issues one statement in the host's context and reads no grant through the library's
    own connection; a deny on a record defeats a derived grant on the page as it does in
    the check.
+6. A host's declaration binding a step-up gate or a purpose to a library-owned
+   permission fails startup with `model.startup.declarationinvalid`,
+   `details.declaration` `binding.<permission>`, `details.field` `stepUpGate` or
+   `purpose` (D-209).
 
 ---
 
 **AUTHZ-GATE-006** — A processing restriction (`01-identity`, state `restricted`)
 SHALL be evaluated wherever the gate is evaluated.
 
-**Values (D-160).** Every permission action is classified **reading** or **modifying**. An
-action named `read`, `list` or `export` is reading; every other action is modifying
+**Values (D-160).** Every permission action is classified **reading** or **modifying**.
+An action named `read`, `list` or `export` is reading; every other action is modifying
 unless the model builder declares it reading. Under restriction the gate allows the
 account's own reading actions and refuses every modifying one with `authz.restricted`.
-The library-owned actions of `10` section 2.1 follow the same rule.
+The library-owned actions of `10` section 2.1 follow the same rule. The list filter and
+the SQL fragment refuse a modifying permission under restriction with
+`authz.restricted`, as the check does, before any rule is handed out, writing no refusal
+record (AUTHZ-CONCEAL-004), rather than a rule that matches nothing (D-209).
 
 **Values (D-207).** The restriction the gate judges is the acting account's. A host
 job's context acts for no account, so the gate judges no restriction for it, a modifying
@@ -1072,7 +1094,8 @@ work rolls back. Where a host asks the gate for a modifying action inside an ope
 transaction, the gate holds the row in that transaction the same way. A host asks the
 gate of an action bound to a step-up gate before it begins the unit of work it joins, as
 a library operation judges its step-up before its own, and asks again inside it before
-its first write (`08` CONV-DESIGN-003, D-207).
+its first write (`08` CONV-DESIGN-003, D-207), a step-up judged then, with the unit of
+work open, asking no phone signal (`02` AUTH-FACT-002b, D-209).
 
 **Values (D-186).** The first write is the first write to the library's database of the
 unit of work that makes the change. Where an effect outside it must come first, the gate
@@ -1088,7 +1111,7 @@ the send in the unit of work that writes what the send carries, so the second as
 both: an approved recovery's link is undertaken in the approval's unit of work
 (AUTH-RECOV-002).
 
-*Source: D-037, D-166, D-183, D-186, D-207, D-208*
+*Source: D-037, D-166, D-183, D-186, D-207, D-208, D-209*
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.
@@ -1103,6 +1126,9 @@ both: an approved recovery's link is undertaken in the approval's unit of work
    mail server where the server answers the revocation, and returns no secret either
    way; an approved recovery refused there leaves neither the approval nor its link's
    send.
+5. A restricted account's list filter and SQL fragment for a modifying permission are
+   refused `authz.restricted`, as its check is, and write no refusal record; for a
+   reading permission each is handed its rule (D-209).
 
 ---
 
@@ -1328,7 +1354,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183, D-187, D-189, D-192, D-206, D-207, D-208*
+*Source: D-015, D-183, D-187, D-189, D-192, D-206, D-207, D-208, D-209*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1353,21 +1379,25 @@ authorization system that is trusted and one that is feared.
    (admitted under `grant:manage` held there, or under `system:administer` held in the
    administrative organization, either recording no refusal; refused, with one refusal
    recorded, under `grant:manage` held in the administrative organization alone; D-207,
-   D-208); the session's rows are the library's own, not scenarios of `10` section 5.30,
+   D-208), and **a restricted account** (a modifying permission refused
+   `authz.restricted` through the check and the filter alike, a reading one admitted;
+   D-209); the session's rows are the library's own, not scenarios of `10` section 5.30,
    since the conformance suite judges a step-up from a host's report alone
    (LIB-TEST-001), and so are the job's, since whether a request is being served is the
    library's own answer (`08` CONV-DESIGN-007), and a grant's, since `grant:manage` and
    `system:administer` are library-owned permissions no host declares (`10` section
-   2.1).
+   2.1), and a restricted account's, since a restriction is the acting account's state,
+   which the library keeps.
 2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
    step-up case agrees when the check answers the gate's outcome and the filter answers
    the same: where the gate is met, the filter lists the record; where it is not, the
    filter is refused with the code the check answers (AUTHZ-GATE-005). A host job's case
    refused while a request is served agrees when the check and the filter are both
-   refused `authz.denied` (D-206). A case that names no record runs without the list
-   filter, no list holding it: a host job's context on its organization through the
-   single check alone (D-207), and a grant written in an organization through the grant
-   admission of AUTHZ-SCOPE-001 alone (D-208).
+   refused `authz.denied` (D-206), and a restricted account's case for a modifying
+   permission when both are refused `authz.restricted` (D-209). A case that names no
+   record runs without the list filter, no list holding it: a host job's context on its
+   organization through the single check alone (D-207), and a grant written in an
+   organization through the grant admission of AUTHZ-SCOPE-001 alone (D-208).
 3. Where a derivation is materialised, the same cases pass identically before and
    after materialisation.
 

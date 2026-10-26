@@ -1457,14 +1457,15 @@ while a request is served, as the gate judges it (`08` CONV-DESIGN-007), is a fa
 the calling code: it throws `InvalidOperationException` and writes nothing
 (AUTHZ-DERIVE-005, D-208). A principal naming no declared job is refused for every host
 permission, and its refresh of a materialised derivation is a fault of the calling code
-that throws `InvalidOperationException` and writes nothing (AUTHZ-DERIVE-005, D-208). A
+that throws `InvalidOperationException` and writes nothing (AUTHZ-DERIVE-005, D-208), as
+is a declared job's refresh of a record of an organization other than its own (D-209). A
 job is never declared with a permission not declared, a library-owned one, one bound to
 a step-up gate (no session proves a person) or one whose action is `export`
 (OPS-ALERT-006): startup fails with `model.startup.declarationinvalid`,
 `details.declaration` `job.<name>`, `details.field` `permissions`; nor under a name of
 `10` section 5.29 or `migrate` (`details.field` `name`, D-206).
 
-*Source: D-079b, D-166, D-202, D-204, D-206, D-207, D-208*
+*Source: D-079b, D-166, D-202, D-204, D-206, D-207, D-208, D-209*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.

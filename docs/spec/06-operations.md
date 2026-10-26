@@ -150,28 +150,29 @@ JSON document on its standard input carries, under the `identity_migrate` creden
 (OPS-MIG-003). It writes no audit row, asks no gate and runs as no principal (D-206).
 Its document carries the connection and nothing else: `migrate` reads no key and fills
 no key ring; it is refused with `model.startup.secretunavailable`, `details.key`
-`input`, where standard input is a terminal or the document carries no connection, and,
-first, with `api.request.malformed` naming `input` where the document carries any member
-but the connection, whether or not it carries the connection, so the migration step
-never holds the key-encryption key (D-173). It runs no schema check (OPS-MIG-002), which
-needs the schema it creates, and, as no command of the tool does, none of the model's
-checks, which need the host's declaration (AUTHZ-MODEL-004). It exits 0 with nothing on
-standard output; a migration the database refuses exits 1 with one JSON line
-`system.fault` on standard error, nothing applied beyond the migrations before it.
-`migrate --report` writes to standard output the destructive-operation report
-(OPS-DEP-002) of the migrations pending on its target and applies nothing: one JSON line
-per statement of those migrations that `08` CONV-DESIGN-003's scan matches, in the order
-they apply, an object whose `migration` is the migration's identifier, `statement` the
-matched statement itself, never the block that guards it in the script, and
-`destructive` `true` where OPS-DEP-001 names the statement destructive and `false`
-otherwise; it writes nothing where nothing matches, and exits 0 whatever it found, since
-whether a destructive statement stops a deploy is the pipeline's gate (OPS-DEP-001,
-D-206), so a host's pipeline reports what a library upgrade would do before it does it.
-A host's pipeline runs `migrate` before its own migrations (OPS-MIG-004); the library's
-own pipeline applies its migrations the same way, the double run of OPS-MIG-007
-included, so there is one way to apply them.
+`input`, where standard input is a terminal or the document carries no connection
+member; with `api.request.malformed` naming `connection` where that member is blank or
+not a string (D-209); and, first, with `api.request.malformed` naming `input` where the
+document carries any member but the connection, whether or not it carries the
+connection, so the migration step never holds the key-encryption key (D-173). It runs no
+schema check (OPS-MIG-002), which needs the schema it creates, and, as no command of the
+tool does, none of the model's checks, which need the host's declaration
+(AUTHZ-MODEL-004). It exits 0 with nothing on standard output; a migration the database
+refuses exits 1 with one JSON line `system.fault` on standard error, nothing applied
+beyond the migrations before it. `migrate --report` writes to standard output the
+destructive-operation report (OPS-DEP-002) of the migrations pending on its target and
+applies nothing: one JSON line per statement of those migrations that `08`
+CONV-DESIGN-003's scan matches, in the order they apply, an object whose `migration` is
+the migration's identifier, `statement` the matched statement itself, never the block
+that guards it in the script, and `destructive` `true` where OPS-DEP-001 names the
+statement destructive and `false` otherwise; it writes nothing where nothing matches,
+and exits 0 whatever it found, since whether a destructive statement stops a deploy is
+the pipeline's gate (OPS-DEP-001, D-206), so a host's pipeline reports what a library
+upgrade would do before it does it. A host's pipeline runs `migrate` before its own
+migrations (OPS-MIG-004); the library's own pipeline applies its migrations the same
+way, the double run of OPS-MIG-007 included, so there is one way to apply them.
 
-*Source: D-018, D-204, D-206*
+*Source: D-018, D-204, D-206, D-209*
 
 Startup migration means instances racing each other on deploy, failures surfacing as
 crash loops rather than failed pipelines, and the running application holding
@@ -182,10 +183,11 @@ permission to alter the tables that authorize it.
 2. The pipeline fails before deployment if migration fails.
 3. `migrate` run twice against one database applies the migrations once and changes
    nothing the second time.
-4. `migrate` reads no key: a document carrying the connection alone is accepted and the
-   command fills no key ring; one carrying any other member, with the connection or
-   without it, is refused with `api.request.malformed` naming `input`, and nothing is
-   applied.
+4. `migrate` reads no key: a document carrying a usable connection alone (a string not
+   blank) is accepted and the command fills no key ring, and one whose connection is
+   blank or not a string is refused with `api.request.malformed` naming `connection`
+   (D-209); one carrying any other member, with the connection or without it, is refused
+   with `api.request.malformed` naming `input`, and nothing is applied.
 5. `migrate --report` applies nothing, writes one JSON line for each statement of the
    pending migrations the scan matches, its `statement` the matched statement itself and
    never the block that guards it in the script, marking as destructive exactly those
@@ -1340,7 +1342,7 @@ criterion 3), or `{"code": "system.fault", "details": {}}` for one that carries 
 `migrate` answers a database's refusal (OPS-MIG-001); nothing on standard output, exit
 code 1, its keys cleared (D-207).
 
-*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197, D-204, D-207*
+*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183, D-197, D-204, D-207, D-209*
 
 **Acceptance criteria**
 1. No secret value appears in any repository file or image layer.
@@ -1356,8 +1358,12 @@ code 1, its keys cleared (D-207).
    secrets manager.
 4. A command whose standard input is a terminal is refused with
    `model.startup.secretunavailable`, `details.key` `input`; one whose document holds no
-   usable key is refused with it naming the missing member in `details.key`, save
-   `migrate`, refused with `details.key` `input` where its document carries no connection; a document that is not JSON or exceeds 64 KiB is refused with
+   usable key is refused with it naming the missing member in `details.key`; a
+   `connection` that is absent, blank or not a string is refused with
+   `api.request.malformed` naming `connection`, save `migrate`, whose document carrying
+   any other member is refused first with `api.request.malformed` naming `input`, and
+   one carrying no member with `model.startup.secretunavailable`, `details.key` `input`
+   (OPS-MIG-001, D-209); a document that is not JSON or exceeds 64 KiB is refused with
    `api.request.malformed` naming `input`; no refusal carries anything of the document.
 5. A command whose work throws a fault that carries no code writes one JSON line
    `{"code": "system.fault", "details": {}}` on standard error and nothing on standard

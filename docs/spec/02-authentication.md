@@ -348,12 +348,18 @@ consideration is recorded in the unit of work that follows, a kept write
 (CONV-DESIGN-003). Where the signal is asked by a step-up an operation asks, the step-up
 is judged before the operation's unit of work begins, and the consideration commits in a
 unit of work of its own, before the operation's, standing whatever the step-up answers
-(D-207). A send of a `phoneCode` with a signal callback declared and no signal asked for
-the number beforehand is a fault (CONV-ERR-001), never a send: the other course would
-let a restricted factor go unconsidered (D-188).
+(D-207). A step-up judged while a unit of work is open (the gate asked again under a
+host's lock, or an operation a host calls inside its own unit of work) asks no signal
+and records no consideration: it offers as where no callback is declared, and the signal
+is asked when the step-up is carried out (`09` `POST /auth/step-up`), with no unit of
+work open, before any text is sent. The unit of work that records a consideration begins
+as the outermost, so the signal asked inside an open unit of work is a fault
+(CONV-ERR-001, D-209). A send of a `phoneCode` with a signal callback declared and no
+signal asked for the number beforehand is a fault (CONV-ERR-001), never a send: the
+other course would let a restricted factor go unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200, D-207*
+D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200, D-207, D-209*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The

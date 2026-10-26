@@ -360,11 +360,14 @@ delivery job carries is claimed row by row before it is carried (CONV-DESIGN-003
 each row is carried by one process at a time: a row is claimed by a pass only once it is
 due, a send's immediate attempt claiming its new row whatever its due instant
 (CONV-DESIGN-003, D-188), and a row that tracks several deliveries is carried under one
-claim, renewed before each delivery (D-186). The key-encryption-key re-wrap
-(OPS-SEC-003) is not background work of the worker: it runs inside the command-line
-process so that it does not depend on the application being up (D-147).
+claim, renewed before each delivery (D-186). The worker waits between rounds until the
+next job is due, or a run ends, and never longer than the longest single delay the
+runtime's timer accepts: a job due further ahead is looked at again after that delay and
+run when it is due (D-209). The key-encryption-key re-wrap (OPS-SEC-003) is not
+background work of the worker: it runs inside the command-line process so that it does
+not depend on the application being up (D-147).
 
-*Source: D-148, D-166, D-183, D-186, D-188, D-189; D-147, the items named above*
+*Source: D-148, D-166, D-183, D-186, D-188, D-189, D-209; D-147, the items named above*
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
@@ -376,6 +379,9 @@ process so that it does not depend on the application being up (D-147).
 3. No job's run delays another job's turn in the same process.
 4. Two processes running one delivery job at once carry each row once, and each delivery
    of a row that tracks several once.
+5. A worker whose every job not running is due further ahead than the longest delay the
+   runtime's timer accepts keeps running, looks again after that delay, and runs each
+   job when it is due (D-209).
 
 ---
 

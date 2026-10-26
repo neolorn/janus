@@ -16575,6 +16575,8 @@ host's fields, the seam's direction), CONV-DESIGN-007 (the seams); `09` `GET
 
 > **Amended.** Rule 4: `TestPeople` registers a customer by pressing each verification link the in-memory transports hold, with the date of birth 1990-01-01, and labels each passkey `Software passkey`; rule 5: the sample host inherits the library's build settings and `.editorconfig`, without a lockfile or MinVer, and its records live in an organization of their own, given its first grants under `system:administer` (D-207).
 
+> **Amended.** `migrate`'s document: a connection member that is blank or not a string is refused `api.request.malformed` naming `connection` (D-209).
+
 **Date:** 2026-10-19 · **Status:** accepted · **Follows from:** D-202 · **Amends:** D-018 (migrations are applied by `migrate`, not by an EF Core bundle), D-149 items 4 and 9, D-153 (the command list), D-160 item 4 (what `Janus.Cli` validates), D-184 (the repository's tools), D-028 (what bootstrap prints), D-046 and D-149 item 1 (the sample host keeps no lockfile)
 
 **TL;DR.** A host cannot stand a deployment up from the package alone. Its roles cannot
@@ -17145,6 +17147,8 @@ two keys coincide); `10` section 1 (`model.startup.declarationinvalid`,
 
 > **Amended.** Answer 21: only a refusal the gate answers `authz.denied` to a permission it is asked for (or conceals) is recorded, so a job's consent refusal writes no record; answer 23: a job's refresh while a request is served is a fault of the calling code; answer 28: a reuse takes one path whatever its token names, revoking what of the family it names; answer 30: an edit naming the username the account held at the unlocked read changes no username; answer 34: the two permissions are one admission, refused and recorded once, only where neither admits (D-208).
 
+> **Amended.** Answer 30: a step-up judged while a unit of work is open asks no phone signal and offers as where none is declared, the signal asked when the step-up is carried out; answer 34: an organization-wide grant naming no organization the deployment holds is refused as `09` section 8 refuses an identifier naming no row (D-209).
+
 **Date:** 2026-10-22 · **Status:** accepted · **Follows from:** D-202, D-203, D-204,
 D-206 · **Amends:** D-202 (rule 7, a job's admission: the organization-wide check, no
 restriction judged, the capability page and the explanation refused), D-203 (rule 2, the
@@ -17413,6 +17417,8 @@ and 5); the working guide (sections 3, 6, 7, 8 and 9).
 
 ## D-208 — Round H1 questions 35 to 40: one admission for a grant, a username unchanged, the stand-in's balance, what a refusal records, a refresh asked in a request, a reuse naming no session
 
+> **Amended.** The refresh's limits: a declared job's refresh of a record of another organization is a fault too (D-209).
+
 **Date:** 2026-10-22 · **Status:** accepted · **Follows from:** D-207 · **Amends:**
 D-207 (answer 21, which refusals are recorded; answer 23, a job's refresh while a
 request is served; answer 28, a reuse whose token names no session or subject; answer
@@ -17557,6 +17563,134 @@ API-CONV-002 (criterion 2), `PUT /account/profile`, `GET /admin/access`,
 (`authz.access.denied`, `auth.oidc.refreshreused`, `authz.grant.materialised`,
 `authz.grant.retracted`); `17` BFF-ERR-001 (a correlation identifier where answered in a
 body, criterion 2); `20` REG-IDENT-009 (a username unchanged, criterion 6);
+`implementation-plan.md` (section 3a, round H1).
+
+---
+
+## D-209 — Round H1 questions 41 to 43 and the round's review: a host binds only its own actions, the worker's longest wait, a restricted account's list
+
+**Date:** 2026-10-26 · **Status:** accepted · **Follows from:** D-208 · **Amends:**
+D-207 (answer 30, a step-up judged while a unit of work is open asks no phone signal;
+answer 34, an organization-wide grant naming no organization), D-208 (the refresh's
+limits: a declared job's on another organization's record), D-204 (`migrate`'s document:
+a connection member blank or not a string) · **Extends:** D-160 (the gate binding: a
+host binds only its own actions; under restriction the list filter and the fragment
+refuse as the check does), D-202 (stage 8 whatever the order of routing)
+
+**TL;DR.** Round H1's last run asked three more questions. A step-up gate or a purpose
+bound to a library-owned permission fails startup, and a step-up judged while a unit of
+work is open asks no phone signal, so the signal is asked only with none open and its
+own unit of work begins outermost (41); the background worker never waits longer than
+the runtime's timer allows, and looks again (42); a restricted account's list filter and
+fragment for a modifying permission are refused `authz.restricted`, as its check is
+(43). The review of the round before its merge found one defect of behaviour the
+chapters did not settle in full (a system administrator's organization-wide grant naming
+no organization faulted with 500), three more rules to state, and Tier 1 records to
+correct; its other findings are defects of the build against chapters that already state
+the rule, fixed in the same run.
+
+**The questions.** Questions 41 to 43 of the round H1 run under D-208. Questions 41 and
+43 are Tier 3; question 42 is Tier 2.
+
+41. **The phone signal reached inside an open unit of work (Tier 3).** The library asks
+    the phone signal only before an operation's unit of work (CONV-DESIGN-003, D-207
+    answer 30), but paths still reached it inside one. A host could bind a step-up gate
+    to a library-owned permission (`system:administer`, say), which the library asks
+    inside its units of work; nothing refused such a binding. AUTHZ-GATE-005 already
+    gave bindings to host-declared actions, the library's carrying theirs in `10`
+    section 5a, so a host's step-up gate or purpose bound to a library-owned permission
+    now fails startup with `model.startup.declarationinvalid`, `details.declaration`
+    `binding.<permission>`, `details.field` `stepUpGate` or `purpose` (AUTHZ-MODEL-004).
+    Other paths remain that no binding rule closes: the gate asked again under a host's
+    lock (AUTHZ-GATE-006), where the session met the gate at the first ask and no longer
+    meets it at the second (its age passed between them), and a library operation with a
+    step-up that a host calls inside its own unit of work. A step-up judged while a unit
+    of work is open therefore asks no signal and records no consideration: it makes its
+    offer as where no signal is declared, and the signal is asked when the step-up is
+    carried out (`POST /auth/step-up`), with no unit of work open, before any text is
+    sent (AUTH-FACT-002b), so no restricted entry is texted unconsidered and no offer is
+    emptied by a rule the person cannot act on. The signal is then asked only with no
+    unit of work open, so the unit of work that records its answer begins as the
+    outermost (the begin question 41 parked), and the signal asked inside an open one is
+    a fault of the calling code. *Rejected:* letting the binding stand and asking each
+    such permission before the unit of work (sites and re-asks under a race to keep in
+    step, for a binding that overrides the library's own); a fault wherever a step-up is
+    judged inside a unit of work (a host's legitimate call failing at run time,
+    depending on how fresh its session is); withholding the restricted entries from the
+    offer (an account whose only combination texts would be offered nothing it could act
+    on).
+42. **The worker's longest wait.** The worker waits until the next job is due or a run
+    ends, and the runtime's timer refuses a delay past its largest, so a worker whose
+    waiting jobs were all due further ahead threw and stopped its host. It waits at most
+    the longest delay the timer accepts and looks again, running each job when it is due
+    (INF-BG-001). *Rejected:* a configured longest wait (a key for a limit no deployment
+    chooses).
+43. **A restricted account's list (Tier 3).** Under restriction the check refuses a
+    modifying permission `authz.restricted`, but the list filter and the fragment handed
+    out a rule that matches nothing, so a list answered an empty page where the check
+    answered the restriction, and the frontend could not tell an account under
+    restriction from one with nothing to change. A restriction is the account's, not a
+    row's, as a step-up gate is: the filter and the fragment refuse a modifying
+    permission under restriction with `authz.restricted` before any rule is handed out,
+    as they refuse an unmet step-up gate (AUTHZ-GATE-005), writing no refusal record
+    (AUTHZ-CONCEAL-004, D-208); a reading permission is handed its rule as before; the
+    truth table gains the restricted account's rows (AUTHZ-GATE-006, AUTHZ-TEST-001).
+    *Rejected:* the empty rule (a list and its check answering one question two ways,
+    against AUTHZ-PRIN-001).
+
+**The round's review.** Before its merge, round H1 (`16c3d812`) was reviewed in four
+slices: the code against the chapters it builds, every acceptance criterion of the
+round's items against a test, the Tier 1 records, and the history. These need a rule:
+
+- **An organization-wide grant naming no organization.** A system administrator's grant
+  whose `resourceType` is `organization` and whose `resourceId` names no organization
+  the deployment holds was admitted under `system:administer` and then broke the grants'
+  foreign key, answering 500. It is refused as the gate refuses a row the deployment
+  does not hold (`09` section 8): the restriction first, then 403 `authz.denied` naming
+  `grant:manage`, recorded against no organization, neither permission being decided
+  (AUTHZ-SCOPE-001).
+- **A declared job's refresh of another organization's record.** An organization-scoped
+  principal acts for one organization (IDN-PRIN-001 criterion 2), so a declared job's
+  refresh of a record of an organization other than its own is a fault of the calling
+  code, as D-208's other limits are (AUTHZ-DERIVE-005).
+- **Stage 8 whatever the order of routing.** Stage 8 judged only an endpoint routing had
+  already matched, so a host whose routing ran after the browser profile served an
+  unmarked endpoint to anyone. Mounting needs nothing security-relevant to be right
+  (BFF-OWN-001): where a request passes stage 8 with no endpoint matched yet, the
+  endpoint routing then selects is judged as stage 8 judges it, before it runs, by a
+  matcher policy `AddJanus` registers (an `IEndpointSelectorPolicy` of ASP.NET Core's
+  routing), which replaces an endpoint the request may not reach with the profile's
+  refusal (BFF-HOST-002, BFF-ORDER-001).
+- **`migrate`'s blank connection.** A `connection` member blank or not a string is
+  refused `api.request.malformed` naming `connection`, as the library answers it for the
+  other commands; `model.startup.secretunavailable` `input` stays for a terminal and a
+  document with no `connection` member (OPS-MIG-001, OPS-SEC-001).
+- **Tier 1 records.** Record 1 (`migrate`'s blank connection) was no Tier 1: a second
+  reading was plausible and the library already used it; it is settled above, the other
+  way. Record 10 (the `webauthn` member of `POST /auth/begin`) changed a wire member of
+  an endpoint outside the round, which is no Tier 1 either; `09` spells it `webauthn`,
+  so the change stands and the record becomes a question this entry answers. Record 9
+  names the generator, not an item: its governing item is LIB-TEST-002, the contract
+  list being the generator's output. Record 2's rule sentence is corrected in the report
+  (the case's assertion and identifier changed with its tool, as OPS-MIG-001 asks).
+- **The sample host.** Nothing of this entry changes what the sample host builds or how
+  (LIB-TEST-004): it binds only its own actions, lists under a reading permission and
+  mounts routing before the browser profile.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-PRIN-001 (a job's refresh of another organization's record);
+`02` AUTH-FACT-002b (values D-186); `03` AUTHZ-DERIVE-005 (the refresh's limits,
+criterion 7), AUTHZ-SCOPE-001 (an organization-wide grant naming no organization,
+criterion 4), AUTHZ-MODEL-004 (a binding to a library-owned permission), AUTHZ-GATE-005
+(a host's bindings, criterion 6), AUTHZ-GATE-006 (values D-160 and D-183, criterion 5),
+AUTHZ-TEST-001 (criteria 1 and 2); `06` OPS-MIG-001 (criterion 4), OPS-SEC-001
+(criterion 4); `07` LIB-HOST-001 (roles); `08` CONV-DESIGN-003 (a step-up judged while a
+unit of work is open, criterion 13); `09` `POST /auth/step-up` (what the gate tells the
+frontend, the offer while a unit of work is open), `POST /admin/grants`; `10` section 1
+(`authz.denied`, `model.startup.declarationinvalid`, `model.startup.secretunavailable`);
+`17` BFF-HOST-002 (stage 8 whatever the order of routing, criterion 5), BFF-ORDER-001
+(stage 8, criterion 2); `19` INF-BG-001 (the worker's wait, criterion 5);
 `implementation-plan.md` (section 3a, round H1).
 
 ---
@@ -17779,6 +17913,7 @@ body, criterion 2); `20` REG-IDENT-009 (a username unchanged, criterion 6);
 | Round H1 questions 4 to 19, and the subject of a grant's audit record | D-206 |
 | Round H1 questions 20 to 34, and the implementer pushes its own work | D-207 |
 | Round H1 questions 35 to 40: one admission for a grant, a username unchanged, the stand-in's balance, what a refusal records, a refresh asked in a request, a reuse naming no session | D-208 |
+| Round H1 questions 41 to 43 and the round's review: a host binds only its own actions, the worker's longest wait, a restricted account's list | D-209 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

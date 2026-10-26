@@ -170,9 +170,16 @@ request's session does not meet the gate. A host asks a bound permission of the 
 before it begins the unit of work its context joins (`UseUnitOfWorkAsync`), since the
 step-up may ask the phone signal, a host callback that never runs inside an open
 transaction (`08` CONV-DESIGN-003, D-207). `IStepUpGate` is the gate one library area
-asks of another (LIB-API-001) and names only the library's actions.
+asks of another (LIB-API-001) and names only the library's actions. Stage 8 judges the
+endpoint routing matched for the request, and SHALL hold whatever the order in which the
+host adds routing (BFF-OWN-001): where the host's routing runs after the browser
+profile, so that a request passes stage 8 with no endpoint matched yet, the endpoint
+routing then selects is judged as stage 8 judges it, before it runs, by a matcher policy
+`AddJanus` registers (an `IEndpointSelectorPolicy` of ASP.NET Core's routing), which
+replaces an endpoint the request may not reach with the profile's refusal
+(BFF-ORDER-001, D-209).
 
-*Source: D-202, D-207*
+*Source: D-202, D-207, D-209*
 
 A forgotten mark fails closed: a host endpoint left unmarked answers 401, never anyone
 (P-003; protection comes from where an endpoint is mounted, D-070). A step-up mark on the
@@ -191,6 +198,10 @@ two could disagree, and an endpoint asking two permissions could not express it.
    session does not meet, on a record its grants admit, is answered
    `auth.stepup.required` with the gate's `details` (BFF-STEP-001).
 4. The library's own endpoints answer a request carrying no session as before.
+5. With the host's routing added after the browser profile, a request without a live
+   sign-in session to an unmarked host endpoint is answered 401 `auth.session.expired`
+   before the endpoint runs, and one to an endpoint marked with `AllowNoSession()`
+   reaches it (D-209).
 
 ---
 
@@ -1103,7 +1114,7 @@ reads or changes the account's state.
 | 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
-| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked with `AllowNoSession()`, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188) |
+| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked with `AllowNoSession()`, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
 | 9 | Host endpoint | |
 | 10 | Capability projection | Requires the result set. A host endpoint places what `CapabilityFields` answers on its records itself (BFF-CAP-002); the stage adds nothing to its answer |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |
@@ -1116,7 +1127,7 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202*
+*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209*
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because
@@ -1128,7 +1139,11 @@ which would have let an unauthenticated flood reach session resolution.
 2. Host middleware is added only before the call that mounts the browser profile or
    after it. Middleware added before it runs after stage 1 and before stage 2 and
    receives the answer the profile settled; middleware added after it runs only for a
-   request that passed stages 2 to 8, beside the host endpoint, inside stages 10 and 11.
+   request that passed stages 2 to 8, beside the host endpoint, inside stages 10 and 11;
+   where the host's routing comes after it, middleware between the two runs before the
+   endpoint is known, the endpoint routing then selects is still judged before it runs,
+   and middleware after that routing runs for a request whose endpoint was replaced with
+   the refusal, no host endpoint running for it (BFF-HOST-002, D-209).
 3. A flood of unauthenticated requests is rejected before session lookup.
 4. A request carrying the cookie of an ended session reaches an endpoint that requires
    no session; an endpoint that requires one answers 401 `auth.session.expired`.
