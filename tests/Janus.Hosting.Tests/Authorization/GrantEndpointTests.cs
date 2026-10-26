@@ -177,16 +177,18 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-SCOPE-001 AC4, IDN-ORG-003 (D-207, D-208): an organization
-    /// <c>POST /admin/organizations</c> created holds no grant, and a holder of
-    /// <c>system:administer</c> in the administrative organization writes its first and
-    /// revokes it, the admission refusing nothing and a second revocation told the grant
-    /// is not found (09 section 8); a holder of <c>grant:manage</c> in the
-    /// administrative organization alone is refused there once, and nothing is written.
+    /// AUTHZ-SCOPE-001, IDN-ORG-003 (D-207, D-208): the endpoints carry the grant
+    /// admission to an organization <c>POST /admin/organizations</c> created: a holder of
+    /// <c>system:administer</c> in the administrative organization writes its first grant
+    /// and revokes it, a second revocation told the grant is not found (09 section 8), and
+    /// a holder of <c>grant:manage</c> in the administrative organization alone is refused
+    /// once. The admission here is the test deployment's, so this proves the wiring
+    /// only; the criterion is decided on the gate's own admission, against the database
+    /// (<c>TruthTableTests</c>).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTHZ_SCOPE_001_AC4_ASystemAdministratorWritesAndRevokesTheFirstGrantOfACreatedOrganizationAsync()
+    public async Task AUTHZ_SCOPE_001_TheEndpointsCarryTheAdmissionToACreatedOrganizationAsync()
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(
             Administration,
