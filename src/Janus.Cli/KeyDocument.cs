@@ -102,10 +102,11 @@ internal sealed class KeyDocument
     /// <param name="terminal">Where it is read from.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
-    /// The connection, or the failure naming <c>input</c>: as malformed where the
-    /// document carries any member but the connection or does not read, and as
-    /// unavailable where standard input is a terminal or the document carries no
-    /// connection.
+    /// The connection, or the failure: malformed naming <c>input</c> where the document
+    /// carries any member but the connection or does not read, malformed naming
+    /// <c>connection</c> where that member is blank or not a string, and unavailable
+    /// naming <c>input</c> where standard input is a terminal or the document carries no
+    /// connection member.
     /// </returns>
     /// <exception cref="ArgumentNullException">The terminal is absent.</exception>
     /// <remarks>
@@ -221,8 +222,8 @@ internal sealed class KeyDocument
     }
 
     // OPS-MIG-001: a member beside the connection is refused first, whether or not the
-    // connection is there; a connection supplied empty or not as text is none
-    // (model.startup.secretunavailable).
+    // connection is there; a connection blank or not a string is refused as the other
+    // commands refuse it (D-209).
     private static Result<string> ConnectionAlone(ReadOnlyMemory<byte> text)
     {
         JsonDocument document;
@@ -253,11 +254,15 @@ internal sealed class KeyDocument
                 }
             }
 
-            return root.TryGetProperty("connection", out JsonElement connection)
-                && connection.ValueKind is JsonValueKind.String
+            if (!root.TryGetProperty("connection", out JsonElement connection))
+            {
+                return Result.Failure<string>(Unavailable("input"));
+            }
+
+            return connection.ValueKind is JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(connection.GetString())
                     ? Result.Success(connection.GetString()!)
-                    : Result.Failure<string>(Unavailable("input"));
+                    : Result.Failure<string>(Malformed("connection"));
         }
     }
 
