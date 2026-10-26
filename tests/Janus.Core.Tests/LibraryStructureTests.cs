@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -192,6 +194,7 @@ public sealed class LibraryStructureTests
         "EnforceCodeStyleInBuild",
         "GenerateDocumentationFile",
         "ImplicitUsings",
+        "MSBuildTreatWarningsAsErrors",
         "Nullable",
         "TargetFramework",
         "TargetFrameworks",
@@ -1195,6 +1198,62 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-SETUP-001 AC2 (D-210): a warning MSBuild raises itself, from the Warning task
+    /// of a probe that takes the settings of Directory.Build.props, fails the probe's
+    /// build, as the compiler's, the analysers' and NuGet's do.
+    /// </summary>
+    [Fact]
+    public async Task CONV_SETUP_001_AC2_AWarningMSBuildRaisesFailsTheBuildAsync()
+    {
+        const string code = "PROBE001";
+
+        string folder = Path.Combine(Path.GetTempPath(), "probe-" + Guid.NewGuid().ToString("N"));
+        string probe = Path.Combine(folder, "probe.proj");
+
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            new XDocument(new XElement(
+                "Project",
+                new XElement("Import", new XAttribute("Project", Path.Combine(Repository.Root, "Directory.Build.props"))),
+                new XElement(
+                    "Target",
+                    new XAttribute("Name", "Probe"),
+                    new XElement("Warning", new XAttribute("Code", code), new XAttribute("Text", "A warning MSBuild raises.")))))
+                .Save(probe);
+
+            var start = new ProcessStartInfo(Dotnet())
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                WorkingDirectory = folder,
+            };
+
+            foreach (string argument in new[] { "msbuild", probe, "-target:Probe", "-nologo" })
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            using Process build = Process.Start(start)
+                ?? throw new InvalidOperationException("The probe's build did not start.");
+
+            Task<string> output = build.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+            Task<string> error = build.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+
+            await build.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(0, build.ExitCode);
+            Assert.Contains("error " + code, await output + await error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// CONV-SETUP-001 AC3: global.json names an SDK of the .NET release the solution
     /// targets, and rolls forward to a later patch of its feature band and no further.
     /// </summary>
@@ -1714,6 +1773,11 @@ public sealed class LibraryStructureTests
     /// </summary>
     private static string Referenced(string include) =>
         Path.GetFileNameWithoutExtension(include.Replace('\\', '/'));
+
+    // The host the tests run under where the platform names it, and the one on the path
+    // otherwise.
+    private static string Dotnet() =>
+        Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } named ? named : "dotnet";
 
     private static bool IsTheAnalyserProject(string project) =>
         string.Equals(Path.GetFileNameWithoutExtension(project), "Janus.Analyzers", StringComparison.Ordinal);
