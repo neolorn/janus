@@ -35,7 +35,7 @@ namespace Janus.Authorization.Gate;
 /// and the reason <c>AUTHZ-DERIVE-005</c>. Each grant a refresh writes or takes back is
 /// recorded in the trail in the refresh's transaction, naming who called it (D-187, D-207).
 /// The refresh meets no gate, so a system principal's call the chapters do not admit is a
-/// fault of the calling code, raised before anything is read or written (D-208).
+/// fault of the calling code, raised before anything is written (D-208, D-209).
 /// </remarks>
 internal sealed class DerivationMaterialiser(
     AuthorizationModel model,

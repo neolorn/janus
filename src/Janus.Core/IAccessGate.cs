@@ -111,10 +111,17 @@ public interface IAccessGate
     /// <param name="sources">The contract tables and the identifier selector.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The predicate, which enumerates nothing and returns no record;
-    /// <c>auth.stepup.required</c> where the action is bound to a step-up gate the
-    /// session has not met; or <c>auth.throttled</c> carrying <c>retryAt</c> where the
-    /// action is an export the actor has no place left for this hour.
+    /// The predicate, which enumerates nothing and returns no record; or, asked in this
+    /// order before any rule is handed out: <c>authz.denied</c> carrying the correlation
+    /// identifier the audit trail records it under, for a host job's context asked while
+    /// a request is served, or for a permission or an organization its declaration does
+    /// not reach, or while its organization's deletion is requested (IDN-PRIN-001,
+    /// IDN-ORG-003); <c>authz.restricted</c>, recorded nowhere, where the account is
+    /// restricted and the permission is modifying, a reading permission being handed its
+    /// rule (AUTHZ-GATE-006, D-209); <c>auth.stepup.required</c> where the action is bound
+    /// to a step-up gate the session has not met; or <c>auth.throttled</c> carrying
+    /// <c>retryAt</c> where the action is an export the actor has no place left for this
+    /// hour.
     /// </returns>
     ValueTask<Result<Expression<Func<TResource, bool>>>> FilterAsync<TResource>(
         AccessContext context,
@@ -136,8 +143,12 @@ public interface IAccessGate
     /// <param name="column">The column of that row holding the record's identifier.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The fragment and its parameters; <c>auth.stepup.required</c> where the action is
-    /// bound to a step-up gate the session has not met; or <c>auth.throttled</c>
+    /// The fragment and its parameters; or the refusals of
+    /// <see cref="FilterAsync{TResource}"/>, in its order and on the same grounds:
+    /// <c>authz.denied</c> carrying the correlation identifier for a host job's context
+    /// the list refuses, <c>authz.restricted</c>, recorded nowhere, for a restricted
+    /// account and a modifying permission, <c>auth.stepup.required</c> where the action
+    /// is bound to a step-up gate the session has not met, or <c>auth.throttled</c>
     /// carrying <c>retryAt</c> where the action is an export the actor has no place left
     /// for this hour.
     /// </returns>
