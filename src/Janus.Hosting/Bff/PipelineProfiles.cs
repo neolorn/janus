@@ -24,9 +24,16 @@ public static class PipelineProfiles
 {
     /// <summary>
     /// Mounts the browser profile. Host middleware goes before this call or after the
-    /// endpoints, never between the stages.
+    /// endpoints, never between the stages. The host's routing goes before this call
+    /// for an enrolment session to reach the library's enrolment routes.
     /// </summary>
     /// <remarks>
+    /// Where the host's routing comes after this call, the endpoint it selects is still
+    /// held to a live sign-in session before it runs, and a request the framework cannot
+    /// bind is answered as it is with routing before this call; but no route is known
+    /// when the session is resolved, so an enrolment route answers as for a request that
+    /// carried no enrolment session, which fails closed.
+    /// <para>
     /// A processor that returns the browser by posting a form from its own site reaches
     /// a public application without the session, the cookie being lax. Such a post is
     /// never carried: the profile answers it 303 with its own address, the browser
@@ -34,6 +41,7 @@ public static class PipelineProfiles
     /// asks the processor for the outcome rather than reading it from the post
     /// (BFF-CSRF-005). A post of that kind that carries the session is refused as any
     /// cross-site change is.
+    /// </para>
     /// <para>
     /// A refusal the gate makes on a type that conceals its records is answered by the
     /// profile as the absence of the record, whatever the endpoint writes after it

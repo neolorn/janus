@@ -21,7 +21,9 @@ namespace Janus.Hosting.Bff;
 /// value the endpoint declares, in the order declared, that the request's text does
 /// not read as; where each reads, the failure is the body's, and what it says is the
 /// shape of the body and nothing of its contents: the member the reader stopped at,
-/// never the value it was reading.
+/// never the value it was reading. The refusal is made on the way out, after routing has
+/// run, so it reads the endpoint routing selected whatever the order of the host's
+/// routing (D-210).
 /// </remarks>
 internal sealed class MalformedRequest(ILogger<MalformedRequest> log) : IMiddleware
 {
