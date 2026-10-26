@@ -61,13 +61,13 @@ public sealed class CommandFaultTests : IDisposable
     }
 
     /// <summary>
-    /// OPS-SEC-001 AC5: a fault thrown while a command holds the keys its document carried
-    /// clears every one of them on its way out, so the command it ends leaves no key
-    /// behind and a read of its ring throws.
+    /// OPS-SEC-001: a fault thrown out of the scope of the holder a document's keys were
+    /// read into clears every one of them, so a read of their ring throws. It runs no
+    /// command; that each command holds its keys so is verified by review.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_001_AC5_AFaultClearsEveryKeyTheCommandReadAsync()
+    public async Task OPS_SEC_001_AFaultLeavingTheHolderOfADocumentsKeysClearsEveryOneAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         IKeyRing? ring = null;
