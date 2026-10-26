@@ -147,7 +147,7 @@ public sealed class SoftwarePasskey : IDisposable
 
     /// <summary>
     /// Answers request options, those a sign-in, a factor or a step-up carries in
-    /// <c>webAuthn</c>, with an assertion of the credential it holds.
+    /// <c>webauthn</c>, with an assertion of the credential it holds.
     /// </summary>
     /// <param name="options">The options the library answered.</param>
     /// <returns>The <c>AuthenticationResponseJSON</c> that <c>PublicKeyCredential.toJSON()</c> gives.</returns>
