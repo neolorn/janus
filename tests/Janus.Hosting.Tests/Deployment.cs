@@ -196,6 +196,7 @@ internal sealed class Deployment : IAsyncDisposable
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
+        AccessGrants.Organizations = organization => Organizations.NameOf(organization) is not null;
         Attachments = new Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory(Memberships);
         Endings = new Janus.Authentication.Tests.Invitations.MembershipEndingInMemory(Memberships);
 

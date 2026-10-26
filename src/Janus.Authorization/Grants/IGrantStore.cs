@@ -50,6 +50,20 @@ internal interface IGrantStore
     ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads whether the deployment holds an organization, which a grant on the whole
+    /// organization names by its identifier.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether a row names it, whatever its deletion's state.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 (D-209): an organization the deployment does not hold
+    /// is a row it does not hold, so a grant on it is scoped to none. No organization's
+    /// row is ever removed, so what is read here still stands when the grant commits.
+    /// </remarks>
+    ValueTask<bool> HoldsOrganizationAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new grant, and bumps the counter of every account it reaches in the
     /// same transaction.
     /// </summary>

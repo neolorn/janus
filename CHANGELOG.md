@@ -4024,3 +4024,11 @@ against the public contract of LIB-API-001.
   called inside a unit of work already open, the host's own included, the begin ends
   it and throws `InvalidOperationException`, and nothing of the outer unit of work
   commits. An email code asked for still joins the unit of work open.
+- `POST /admin/grants` on `resourceType` `organization` whose `resourceId` names no
+  organization the deployment holds is refused 403 `authz.denied` naming `grant:manage`,
+  recorded against no organization, whatever the caller holds, or `authz.restricted`
+  with no record for an account under restriction, where it answered 500.
+- `POST /admin/grants` on a record whose registration is removed between the permission
+  check and the write is refused 403 `authz.denied` recorded against no organization and
+  carrying `details.correlation`, as a record no registration names is, where the
+  refusal carried no record.
