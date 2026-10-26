@@ -4020,3 +4020,7 @@ against the public contract of LIB-API-001.
   called inside a unit of work already open, the host's own included, the begin ends
   it and throws `InvalidOperationException`, and nothing of the outer unit of work
   commits. An email code asked for still joins the unit of work open.
+- Under restriction, `FilterAsync` and `FragmentAsync` refuse a modifying permission
+  with `authz.restricted`, as `RequireAsync` does, before any rule is handed out and
+  writing no refusal record, rather than handing out a rule that matches nothing; a
+  reading permission is handed its rule as before.
