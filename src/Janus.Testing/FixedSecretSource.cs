@@ -77,16 +77,25 @@ public sealed class FixedSecretSource : ISecretSource
 
         using var buffer = new MemoryStream();
 
-        using (var json = new Utf8JsonWriter(buffer))
+        try
         {
-            json.WriteStartObject();
-            json.WriteString("connection", connection);
-            Versions(json, "keyEncryptionKeys", _keyEncryptionKey);
-            Versions(json, "fingerprintKeys", _fingerprintKey);
-            json.WriteEndObject();
-        }
+            using (var json = new Utf8JsonWriter(buffer))
+            {
+                json.WriteStartObject();
+                json.WriteString("connection", connection);
+                Versions(json, "keyEncryptionKeys", _keyEncryptionKey);
+                Versions(json, "fingerprintKeys", _fingerprintKey);
+                json.WriteEndObject();
+            }
 
-        return buffer.ToArray();
+            return buffer.ToArray();
+        }
+        finally
+        {
+            // CONV-CODE-007: the stream's buffer holds the keys too, and is cleared once
+            // the document is copied out of it.
+            CryptographicOperations.ZeroMemory(buffer.GetBuffer());
+        }
     }
 
     /// <inheritdoc/>

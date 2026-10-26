@@ -47,6 +47,8 @@ against the public contract of LIB-API-001.
   address the `auth/signon/return` route of the address the test serves the
   application at (`https`, or `http` on a loopback IP literal); it keeps the enrolment
   link and the administrative organization `bootstrap` printed.
+- `FixedSecretSource.KeyDocument` clears the buffer it writes the document in once the
+  document is copied out, so no copy of the keys is left behind but the one it returns.
 - `bootstrap` prints a second line after the enrolment address: the identifier of the
   administrative organization it created, for the host to keep in its own configuration.
 - Every `Janus.Cli` command that a fault ends, rather than a refusal, writes one JSON
