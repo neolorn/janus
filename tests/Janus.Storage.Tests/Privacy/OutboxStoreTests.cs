@@ -5,7 +5,10 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
 using Janus.Privacy.Outbox;
+using Janus.Storage.Migrations;
 using Janus.Storage.Privacy.Outbox;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Xunit;
 
@@ -536,6 +539,72 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
 
         return confirmed;
+    }
+
+    /// <summary>
+    /// OPS-MIG-001 (D-203): the migration that retires the export-requested event applies
+    /// to a database that served an export before it: each export-requested delivery and
+    /// its confirmations are removed before the event kinds are narrowed, and every
+    /// delivery of another kind stays with its confirmations.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_MIG_001_AnExportRequestedDeliveryIsRemovedBeforeItsKindIsRetiredAsync()
+    {
+        string served = await database.CreateDatabaseAsync("outbox_export_requested");
+        string retiring;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(served))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            retiring = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(OweNothingAfterAnExport), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, retiring) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(served);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        var values = new
+        {
+            subject = Subjects.New().Value,
+            exported = Guid.NewGuid(),
+            erased = Guid.NewGuid(),
+            at = Noon,
+        };
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@subject, 'active', @at);
+            INSERT INTO identity.outbox
+                (id, subject, kind, raised_at, restricted, reason, status, attempts, next_attempt_at)
+            VALUES
+                (@exported, @subject, 'export-requested', @at, false, 'erasure-request', 'awaiting-subscribers', 1, @at),
+                (@erased, @subject, 'erasure-requested', @at, false, 'erasure-request', 'awaiting-subscribers', 1, @at);
+            INSERT INTO identity.outbox_confirmations (delivery, subscriber, confirmed_at)
+            VALUES
+                (@exported, 'records', @at),
+                (@exported, 'orders', @at),
+                (@erased, 'records', @at);
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(served))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(retiring, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            [values.erased],
+            await connection.QueryAsync<Guid>("SELECT id FROM identity.outbox"));
+        Assert.Equal(
+            [(values.erased, "records")],
+            await connection.QueryAsync<(Guid, string)>("SELECT delivery, subscriber FROM identity.outbox_confirmations"));
     }
 
     // A completion as the service makes one: the delivery read before, then again under

@@ -60,6 +60,9 @@ against the public contract of LIB-API-001.
   database refuses exits 1 with `system.fault` on standard error, the migrations
   before it applied and nothing after. A pipeline runs it before deploying.
   It runs as no system principal: it asks no gate and writes no audit record.
+- The migration that retires the export-requested event removes the deliveries an
+  earlier version wrote for an export, with their confirmations, so `migrate` applies it
+  to a database that served an export.
 - The background worker no longer stops its host where every job it waits on is due
   further ahead than the runtime's timer reaches: it waits the longest delay the timer
   accepts, looks again, and runs each job when it is due.
