@@ -167,6 +167,15 @@ internal static class WorkshopEndpoints
 
                 await context.Database.UseUnitOfWorkAsync(work, cancellationToken).ConfigureAwait(false);
 
+                // CONV-DESIGN-003: the workshop's row is locked before anything is written,
+                // so a second booking waits here until the first has committed or rolled
+                // back, and then counts it. Locked after the writes, two bookings would
+                // each hold the share lock their repair's foreign key takes and wait on
+                // the other's.
+                _ = await context.Database
+                    .ExecuteSqlAsync($"SELECT 1 FROM workshop.workshops WHERE id = {taking.Id} FOR UPDATE", cancellationToken)
+                    .ConfigureAwait(false);
+
                 _ = context.Repairs.Add(new Repair
                 {
                     Id = booking.Ticket,
@@ -200,8 +209,8 @@ internal static class WorkshopEndpoints
                     return Answers.Refused(unregistered);
                 }
 
-                // The count is read inside the transaction that wrote the booking, so two
-                // bookings for the last place cannot both stand.
+                // The count is read under the workshop's lock, so two bookings for the
+                // last place cannot both stand.
                 int holding = await context.Repairs
                     .CountAsync(row => row.WorkshopId == taking.Id && row.ReleasedAt == null, cancellationToken)
                     .ConfigureAwait(false);
