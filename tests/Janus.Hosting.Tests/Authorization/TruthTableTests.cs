@@ -161,6 +161,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data a declared job's refresh materialised, outside a request", Decided.Allowed),
         ("a fact in the host's data a declared job's refresh was asked for, while a request is served", Decided.Denied),
         ("a fact in the host's data a principal naming no declared job asked a refresh for", Decided.Denied),
+        ("a fact in the host's data a declared job acting for another organization asked a refresh for", Decided.Denied),
         ("a fact in the host's data a reconciling principal's refresh materialised, outside a request", Decided.Allowed),
         ("a fact in the host's data a reconciling principal asked a refresh for, while a request is served", Decided.Denied),
         ("a fact in the host's data a principal that may not reconcile asked a refresh for", Decided.Denied),
@@ -275,6 +276,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a declared job asking a consent-bound permission its declaration names, on a record whose data subject has not consented",
             Decided.ConsentRequired),
         ("a declared job asking on a record of another organization", Decided.Denied),
+        ("a declared job asking on a record the library holds no row for", Decided.Denied),
         ("a declared job asking in its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking in its organization, once it is erased", Decided.Denied),
     ];
@@ -319,6 +321,20 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, by a system administrator holding nothing else there", Decided.Denied),
     ];
 
+    // A restricted account asking a host permission on a record of its organization, its
+    // grant on the record conferring the reading and the modifying permission save where
+    // the case names none. A restriction is the account's and not a row's, so the check,
+    // the expression and the fragment refuse a modifying permission authz.restricted
+    // before any rule is handed out, whatever the grants confer, and hand a reading one
+    // its rule; none records a refusal (AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-006 AC5,
+    // AUTHZ-CONCEAL-004, D-209).
+    private static readonly (string Scenario, Decided Decided)[] Restrictions =
+    [
+        ("a restricted account asking a modifying permission its grant confers", Decided.Restricted),
+        ("a restricted account asking a modifying permission no grant confers", Decided.Restricted),
+        ("a restricted account asking a reading permission its grant confers", Decided.Allowed),
+    ];
+
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
@@ -358,6 +374,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The grant admissions' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> GrantAdmissionCases => Read(GrantAdmissions);
+
+    /// <summary>
+    /// The restrictions' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> RestrictedCases => Read(Restrictions);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -791,6 +812,30 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "SELECT count(*)::int FROM identity.grants WHERE subject_id = @account;",
             new { account = account.Value },
             cancellationToken: cancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-PRIN-001 AC1 (D-209): every case of the
+    /// restrictions' table decides the way the table says through the single check, the
+    /// expression and the fragment alike, a modifying permission refused
+    /// <c>authz.restricted</c> by each and a reading one admitted, and none records a
+    /// refusal.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(RestrictedCases))]
+    public async Task AUTHZ_TEST_001_AC2_EveryRestrictedCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteRestrictedAsync(scenario);
+
+        Assert.Equal(decided, await ChecksAsync(written));
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written));
+        Assert.Equal(0, await GrantRefusalsAsync(AccessContext.Of(written.Account), written.Deployment.Organization));
     }
 
     /// <summary>
@@ -1555,6 +1600,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     SystemPrincipal.ForOrganization("import", "the nightly import", deployment.Organization),
                     inRequest: false);
 
+            // AUTHZ-DERIVE-005 AC7, IDN-PRIN-001 AC2 (D-209): a declared job acts for its
+            // own organization, so its refresh of another's record throws and writes nothing.
+            case "a fact in the host's data a declared job acting for another organization asked a refresh for":
+                var other = new Deployment(host);
+
+                _ = await other.BeginAsync([HostPermissions.Read], cancellationToken);
+
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForOrganization(HostFixture.Digest, "the nightly digest", other.Organization),
+                    inRequest: false);
+
             case "a fact in the host's data a reconciling principal's refresh materialised, outside a request":
             case "a fact in the host's data a reconciling principal asked a refresh for, while a request is served":
                 return await RefreshedByAsync(
@@ -1645,7 +1702,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ResourceReference sibling = Reference(Document);
 
         await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
-        await deployment.RegisterAsync(record, outer, cancellationToken, subject: account);
+        // AUTHZ-CONCEAL-002 AC3: a record the library holds no row for is refused as one
+        // the job's declaration does not reach.
+        if (!scenario.EndsWith("the library holds no row for", StringComparison.Ordinal))
+        {
+            await deployment.RegisterAsync(record, outer, cancellationToken, subject: account);
+        }
+
         await deployment.RegisterAsync(sibling, outer, cancellationToken);
 
         if (scenario.Contains("data subject is restricted", StringComparison.Ordinal))
@@ -1675,6 +1738,40 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 : scenario.Contains("modifying", StringComparison.Ordinal)
                     ? HostPermissions.Edit
                     : HostPermissions.Read;
+
+        return new Case(host, deployment, account, record, sibling, outer, outer, asked);
+    }
+
+    // A record of the case's organization, the case's account granted on it a role
+    // allowing the reading and the modifying permission save where the case names no
+    // grant, and the account then restricted; the permission asked is the one the case
+    // names.
+    private async Task<Case> WriteRestrictedAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Edit], cancellationToken);
+
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        ResourceReference outer = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        ResourceReference sibling = Reference(Document);
+
+        await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, outer, cancellationToken);
+        await deployment.RegisterAsync(sibling, outer, cancellationToken);
+
+        if (!scenario.EndsWith("no grant confers", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+        }
+
+        await deployment.RestrictAsync(account, cancellationToken);
+
+        Permission asked = scenario.Contains("modifying", StringComparison.Ordinal)
+            ? HostPermissions.Edit
+            : HostPermissions.Read;
 
         return new Case(host, deployment, account, record, sibling, outer, outer, asked);
     }

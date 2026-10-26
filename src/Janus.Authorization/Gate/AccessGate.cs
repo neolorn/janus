@@ -77,11 +77,6 @@ internal sealed class AccessGate(
     private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
         NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
 
-    // A restriction admits no modifying action, so what the host composes into its
-    // query is a fragment that matches nothing rather than a rule that cannot match.
-    private static readonly SqlFilter MatchesNothing =
-        new("false", new Dictionary<string, object>(StringComparer.Ordinal));
-
     /// <inheritdoc/>
     public async ValueTask<Result> RequireAsync(
         AccessContext context,
@@ -586,9 +581,12 @@ internal sealed class AccessGate(
                     .ConfigureAwait(false));
         }
 
+        // AUTHZ-GATE-006 (D-209): a restriction is the account's and not a row's, so a
+        // list under it is refused as its check is, before any rule is handed out, and
+        // records nothing (AUTHZ-CONCEAL-004).
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
+            return Result.Failure<Expression<Func<TResource, bool>>>(Error.From(ErrorCodes.Restricted));
         }
 
         // AUTH-STEP-001: a list exercises the permission as a check does, so the gate
@@ -630,7 +628,7 @@ internal sealed class AccessGate(
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Success(MatchesNothing);
+            return Result.Failure<SqlFilter>(Error.From(ErrorCodes.Restricted));
         }
 
         if (await ExercisedAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false)
@@ -1507,9 +1505,13 @@ internal sealed class AccessGate(
             .FindAsync(resource, cancellationToken)
             .ConfigureAwait(false);
 
-        if (registered is null
-            || !await JobReachesAsync(context, permission, registered.Organization, cancellationToken)
-                .ConfigureAwait(false))
+        // AUTHZ-CONCEAL-002 AC3: a record the library holds no row for is judged as a
+        // registered one is, against no organization, so a refusal of either runs the
+        // same statements.
+        bool reaches = await JobReachesAsync(context, permission, registered?.Organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (registered is null || !reaches)
         {
             return await RefusedAsync(
                 context,

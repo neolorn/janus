@@ -238,6 +238,16 @@ internal sealed class DerivationMaterialiser(
             return Result.Success(new DerivationRefresh(0, 0));
         }
 
+        // IDN-PRIN-001 AC2, AUTHZ-DERIVE-005 (D-209): an organization-scoped principal acts
+        // for one organization, so a declared job's refresh of another's record is the
+        // calling code's fault, raised before anything is written.
+        if (refreshing.Calling.Principal is { IsDeploymentScoped: false } job
+            && !job.ActsFor(registered.Organization))
+        {
+            throw new InvalidOperationException(
+                "A declared job's refresh is called only on a record of the organization it acts for.");
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error notBegun)
         {

@@ -4041,3 +4041,13 @@ against the public contract of LIB-API-001.
   check and the write is refused 403 `authz.denied` recorded against no organization and
   carrying `details.correlation`, as a record no registration names is, where the
   refusal carried no record.
+- Under restriction, `FilterAsync` and `FragmentAsync` refuse a modifying permission
+  with `authz.restricted`, as `RequireAsync` does, before any rule is handed out and
+  writing no refusal record, rather than handing out a rule that matches nothing; a
+  reading permission is handed its rule as before.
+- `IDerivationMaterialiser.RefreshAsync` called with a declared job's context on a record
+  of an organization other than the one the job acts for throws
+  `InvalidOperationException` and writes nothing.
+- A declared job's refused check on a record the library holds no row for reads its
+  organization's deletion state as one on a registered record does, so the two run the
+  same statements.
