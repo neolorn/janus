@@ -4056,3 +4056,13 @@ against the public contract of LIB-API-001.
 - A declared job's refused check on a record the library holds no row for reads its
   organization's deletion state as one on a registered record does, so the two run the
   same statements.
+- A host's declaration binding a step-up gate or a purpose to one of the library's own
+  permissions stops the deployment at startup with `model.startup.declarationinvalid`,
+  `details.declaration` `binding.<permission>` and `details.field` `stepUpGate` or
+  `purpose`: a host binds only its own actions.
+- A step-up judged while a unit of work is open, a host's own included, no longer asks
+  the carrier's signal or records a consideration: its `auth.stepup.required` offers
+  every combination as where no signal is declared, and the signal is asked when the
+  step-up is carried out at `POST /auth/step-up`, before any text is sent. The signal
+  asked inside an open unit of work throws `InvalidOperationException`, and a `risk`
+  answer is recorded in the outermost unit of work.

@@ -37,6 +37,14 @@ internal sealed class PhoneSignals(
     private readonly Dictionary<string, PhoneSignal> _answered = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Gets a value indicating whether the signal may be asked now: only with no unit of
+    /// work open in the scope. A step-up judged while one is open asks nothing and offers
+    /// as where no provider is declared, the signal being asked when the step-up is
+    /// carried out (CONV-DESIGN-003, AUTH-FACT-002b, D-209).
+    /// </summary>
+    public bool Askable => !audit.UnitOfWorkOpen;
+
+    /// <summary>
     /// Considers the number a sign-in is about to lean on, and answers whether the
     /// factor may still be used with it.
     /// </summary>
@@ -45,12 +53,17 @@ internal sealed class PhoneSignals(
     /// <param name="subject">Whose account it is.</param>
     /// <param name="cancellationToken">Abandons the consideration.</param>
     /// <returns>Whether the factor may be used.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// A provider is declared and a unit of work is open in the scope, or the unit of
+    /// work a refusal is recorded in is not the outermost: the signal is asked only with
+    /// none open, a fault of the calling code otherwise (CONV-ERR-001, D-209).
+    /// </exception>
     /// <remarks>
     /// Called before the operation's unit of work begins, since it asks the host. A
-    /// refusal is recorded here, in a unit of work of its own, because nothing is sent
-    /// after it and the send is where a consideration is otherwise written down
-    /// (AUTH-FACT-002b AC6). Any other answer is kept for the send that follows, which
-    /// records it, so one use of a restricted entry writes one row.
+    /// refusal is recorded here, in a unit of work of its own, the outermost, because
+    /// nothing is sent after it and the send is where a consideration is otherwise
+    /// written down (AUTH-FACT-002b AC6). Any other answer is kept for the send that
+    /// follows, which records it, so one use of a restricted entry writes one row.
     /// </remarks>
     public async ValueTask<bool> AllowsAsync(
         Factor factor,
@@ -61,6 +74,12 @@ internal sealed class PhoneSignals(
         if (provider is null)
         {
             return true;
+        }
+
+        if (!Askable)
+        {
+            throw new InvalidOperationException(
+                "The signal for a number is asked with no unit of work open, never inside one.");
         }
 
         PhoneSignal answered = await provider.Signal(number, cancellationToken)
@@ -75,8 +94,8 @@ internal sealed class PhoneSignals(
 
         _ = _answered.Remove(number);
 
-        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        (await work.BeginOutermostAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);

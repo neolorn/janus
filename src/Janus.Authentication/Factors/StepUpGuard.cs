@@ -421,12 +421,21 @@ internal sealed class StepUpGuard(
     }
 
     // The signal is asked about the entries a combination on offer would text, and
-    // about nothing else, so a gate already met or met without a text asks nothing.
+    // about nothing else, so a gate already met or met without a text asks nothing. A
+    // step-up judged while a unit of work is open (the gate asked again under a host's
+    // lock, or an operation a host calls inside its own) asks nothing and records
+    // nothing: it offers as where no signal is declared, and the signal is asked when
+    // the step-up is carried out, before any text is sent (CONV-DESIGN-003, D-209).
     private async ValueTask<IReadOnlySet<Factor>> WithheldAsync(
         SubjectId subject,
         IReadOnlyList<IReadOnlyList<Factor>> combinations,
         CancellationToken cancellationToken)
     {
+        if (!signals.Askable)
+        {
+            return FrozenSet<Factor>.Empty;
+        }
+
         Factor[] textable = [.. combinations
             .SelectMany(combination => combination)
             .Distinct()

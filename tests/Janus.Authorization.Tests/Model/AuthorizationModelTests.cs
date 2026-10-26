@@ -531,6 +531,74 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-GATE-005 AC6 (D-209): a host binds only its own actions, so a step-up gate
+    /// bound to a permission of chapter 10 section 2.1 stops the deployment with
+    /// <c>model.startup.declarationinvalid</c>, naming <c>binding.&lt;permission&gt;</c>
+    /// and <c>stepUpGate</c>, whatever the gate's name.
+    /// </summary>
+    /// <param name="permission">The library's permission the gate is bound to.</param>
+    /// <param name="gate">The gate's name.</param>
+    [Theory]
+    [InlineData("system:administer", "config:loosen")]
+    [InlineData("grant:manage", "grant:manage")]
+    [InlineData("audit:read", "reading-the-trail")]
+    public void AUTHZ_GATE_005_AC6_AStepUpGateBoundToALibraryOwnedPermissionFailsStartup(string permission, string gate)
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(HostDomain.Declared()
+            .StepUpGate(permission, gate)
+            .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("binding." + permission, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("stepUpGate", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-005 AC6 (D-209): a purpose bound to a permission of chapter 10 section
+    /// 2.1 stops the deployment with <c>model.startup.declarationinvalid</c>, naming
+    /// <c>binding.&lt;permission&gt;</c> and <c>purpose</c>, the purpose being one a type
+    /// declares.
+    /// </summary>
+    /// <param name="permission">The library's permission the purpose is bound to.</param>
+    [Theory]
+    [InlineData("system:administer")]
+    [InlineData("membership:manage")]
+    [InlineData("grant:read")]
+    public void AUTHZ_GATE_005_AC6_APurposeBoundToALibraryOwnedPermissionFailsStartup(string permission)
+    {
+        StartupException refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(HostDomain.Declared()
+            .ServesPurpose(permission, "collaboration")
+            .Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("binding." + permission, refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("purpose", refused.Failure?.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-MODEL-004 AC1 (D-209): the binding to a library-owned permission is its own
+    /// condition, named apart from the others: a host's own action bound to a gate and a
+    /// purpose builds beside it, and the refusal names the library's permission alone.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_004_AC1_ABindingToALibraryOwnedPermissionIsNamedByItsDeclarationAndField()
+    {
+        AuthorizationDeclarationBuilder own = HostDomain.Declared()
+            .StepUpGate("article:edit", "editing")
+            .ServesPurpose("article:edit", "collaboration");
+
+        Assert.Equal("editing", AuthorizationModel.Of(own.Build()).GateOf(Permission.Parse("article:edit")));
+
+        StartupException gated = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(own.StepUpGate("role:manage", "editing").Build()));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, gated.Failure?.Code);
+        Assert.Equal<string>(["declaration", "field"], gated.Failure!.Details.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("binding.role:manage", gated.Failure.Details["declaration"].GetString());
+        Assert.Equal("stepUpGate", gated.Failure.Details["field"].GetString());
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC1: each condition the chapter lists produces its own named
     /// error, identifying the declaration that has to change.
     /// </summary>
