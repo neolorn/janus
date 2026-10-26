@@ -419,15 +419,15 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC13 (D-209): a host's bound action whose gate the session meets
-    /// at the ask before the host's unit of work and no longer meets at the ask inside it,
-    /// its proof having aged between them, is refused <c>auth.stepup.required</c> with the
-    /// offer made where no signal is declared: the text code among the combinations, the
-    /// carrier not asked and no consideration recorded.
+    /// CONV-DESIGN-003 AC13 (D-209): the guard, judging a gate a host binds its own action
+    /// to while a unit of work is open, on a session whose proof met the gate before the
+    /// unit of work began and has aged past it since, refuses <c>auth.stepup.required</c>
+    /// with the offer made where no signal is declared: the text code among the
+    /// combinations, the carrier not asked and no consideration recorded.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task CONV_DESIGN_003_AC13_AHostsGateUnmetAtItsAskInsideItsUnitOfWorkAsksNoSignalAsync()
+    public async Task CONV_DESIGN_003_AC13_TheGuardJudgingAHostsGateInsideAUnitOfWorkAsksNoSignalAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -462,7 +462,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
 
     /// <summary>
     /// CONV-DESIGN-003 AC13 (D-209): a library operation with a step-up that a host calls
-    /// inside its own unit of work, the end of another person's sessions, is refused
+    /// inside its own unit of work, the end of the actor's own sessions, is refused
     /// <c>auth.stepup.required</c> with the offer made where no signal is declared, the
     /// carrier not asked and no consideration recorded; the signal is asked when the
     /// step-up is carried out, with no unit of work open and before any text is sent, and
@@ -1626,8 +1626,8 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
         return session.Id;
     }
 
-    // A gate a host binds its own action to, judged as the request's session is judged
-    // at each ask of it.
+    // A gate a host binds its own action to, judged by the guard against the session, as
+    // the request's session is judged at the first ask of it.
     private static async Task<StepUpChallenge> HostsGateAsync(StepUpGuard guard, SubjectId subject, SessionId session) =>
         (await guard.ChallengeAsync(subject, session, "document:publish", TestContext.Current.CancellationToken))
         .Match(challenge => challenge, error => throw new InvalidOperationException(error.Code.ToString()));

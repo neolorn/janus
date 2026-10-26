@@ -25,7 +25,9 @@ namespace Janus.Authorization.Gate;
 /// <remarks>
 /// Implements AUTHZ-GATE-005, AUTH-STEP-001, AUTH-STEP-002, AUTH-STEP-003 and
 /// LIB-HOST-004. An action bound to no gate asks nothing of the session; a bound one is
-/// met by what the acting person's session has proved and by nothing else.
+/// met by what the acting person's session has proved and by nothing else. One instance
+/// serves one request, so a gate judged from the host's report is judged once a request
+/// for each person asking, as one judged from the library's session is (D-210).
 /// </remarks>
 internal sealed class StepUpGates(
     ISessionGates? sessions,
@@ -34,6 +36,8 @@ internal sealed class StepUpGates(
 {
     private static readonly JsonSerializerOptions Names =
         new() { Converters = { new JsonStringEnumConverter() } };
+
+    private readonly Dictionary<(SubjectId? Acting, string Gate), Error?> _reported = [];
 
     /// <summary>
     /// What a named gate still requires, or nothing where no gate is named.
@@ -77,28 +81,19 @@ internal sealed class StepUpGates(
             return Error.From(ErrorCodes.StepUpRequired);
         }
 
-        Error? failure = null;
-
-        Core.Gate cost = (await sessions.CostAsync(context, gate, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Withheld<Core.Gate>(error, ref failure));
-
-        if (failure is not null)
+        // AUTH-STEP-002 (D-210): the request is answered on one judgement of the gate for
+        // the person asking, so an ask after the first, under a host's lock or otherwise,
+        // answers as the first did whatever the report says by then.
+        if (_reported.TryGetValue((context.Acting, gate), out Error? judged))
         {
-            return failure;
+            return judged;
         }
 
-        DateTimeOffset now = time.GetUtcNow();
+        judged = await ReportedAsync(sessions, assurance, context, gate, cancellationToken).ConfigureAwait(false);
 
-        // LIB-HOST-004 AC4: a report the provider fails to give, or one that does not
-        // read, is a gate unmet, never one assumed met.
-        AttainedAssurance? attained = (await assurance.AttainedAsync(context, cancellationToken).ConfigureAwait(false))
-            .Match<AttainedAssurance?>(value => Reads(value, now) ? value : null, _ => null);
+        _reported[(context.Acting, gate)] = judged;
 
-        AssuranceLevel required = Required(cost, attained);
-
-        return attained is not null && Meets(attained, cost, required, now)
-            ? null
-            : Refusal(cost, required);
+        return judged;
     }
 
     /// <summary>
@@ -135,6 +130,39 @@ internal sealed class StepUpGates(
         return await OutstandingAsync(context, gate, cancellationToken).ConfigureAwait(false) is null
             ? null
             : CapabilityResidual.StepUp;
+    }
+
+    // LIB-HOST-004: the gate judged from what the host reports of the caller, at what
+    // it costs a session under the acting person's policy.
+    private async ValueTask<Error?> ReportedAsync(
+        ISessionGates policies,
+        IAssuranceProvider reporting,
+        AccessContext context,
+        string gate,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        Core.Gate cost = (await policies.CostAsync(context, gate, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Core.Gate>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        // LIB-HOST-004 AC4: a report the provider fails to give, or one that does not
+        // read, is a gate unmet, never one assumed met.
+        AttainedAssurance? attained = (await reporting.AttainedAsync(context, cancellationToken).ConfigureAwait(false))
+            .Match<AttainedAssurance?>(value => Reads(value, now) ? value : null, _ => null);
+
+        AssuranceLevel required = Required(cost, attained);
+
+        return attained is not null && Meets(attained, cost, required, now)
+            ? null
+            : Refusal(cost, required);
     }
 
     // AUTH-STEP-002a: a gate asking for what the account can reach asks for what the

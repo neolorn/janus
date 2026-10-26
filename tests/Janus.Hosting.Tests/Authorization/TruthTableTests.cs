@@ -11,6 +11,7 @@ using Dapper;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Authorization.Roles;
@@ -337,6 +338,29 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a restricted account asking a reading permission its grant confers", Decided.Allowed),
     ];
 
+    // An action bound to a step-up gate asked twice in one request, first through the
+    // single check and then again, with something between the two asks that would change
+    // the gate's judgement were it judged anew: the gate is judged once a request, from
+    // the host's report or from the library's session, and the second ask answers as
+    // the first did (AUTH-STEP-002 AC10, AUTHZ-GATE-006, D-210). The record, the grant
+    // and the gate are the step-up table's. These rows are the library's own and no
+    // scenario of chapter 10 section 5.30, since the suite asks each gate once.
+    private static readonly (string Scenario, Decided Decided)[] Requests =
+    [
+        (
+            "a report that met the gate at the first ask in a request, older than its maximum age at a second ask in it",
+            Decided.Allowed),
+        (
+            "a report that did not meet the gate at the first ask in a request, meeting it at a second ask in it",
+            Decided.StepUpRequired),
+        (
+            "a session that met the gate at the first ask in a request, its proof older than its maximum age at a second ask in it",
+            Decided.Allowed),
+        (
+            "a session that did not meet the gate at the first ask in a request, lifted to it by another request's step-up before a second ask in it",
+            Decided.StepUpRequired),
+    ];
+
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
@@ -381,6 +405,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The restrictions' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> RestrictedCases => Read(Restrictions);
+
+    /// <summary>
+    /// The requests' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> RequestCases => Read(Requests);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -839,6 +868,26 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(decided, await ExpressionAdmitsAsync(written));
         Assert.Equal(decided, await FragmentAdmitsAsync(written));
         Assert.Equal(0, await GrantRefusalsAsync(AccessContext.Of(written.Account), written.Deployment.Organization));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC10, AUTHZ-TEST-001 AC1, AC2 (D-210): every case of the requests'
+    /// table decides the way the table says at both asks of one request, the second asked
+    /// through the single check, the expression and the fragment alike, and a request
+    /// begun after what came between the two is judged afresh and decides the other way.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(RequestCases))]
+    public async Task AUTH_STEP_002_AC10_EveryRequestCaseAnswersTheSecondAskAsTheFirstThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Assert.Equal(decided, await AskedTwiceAsync(scenario, ChecksInAsync));
+        Assert.Equal(decided, await AskedTwiceAsync(scenario, ExpressionAdmitsInAsync));
+        Assert.Equal(decided, await AskedTwiceAsync(scenario, FragmentAdmitsInAsync));
     }
 
     /// <summary>
@@ -3321,6 +3370,194 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
 
         return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // One request of a case of the requests' table on a deployment whose clock moves:
+    // the first ask through the single check, then what the case puts between the two
+    // asks, then the second through the path given, both in the request's one scope. A
+    // request begun afterwards is judged afresh and decides the other way, which shows
+    // that what came between would have changed the judgement.
+    private async Task<Decided> AskedTwiceAsync(
+        string scenario,
+        Func<IServiceProvider, Case, HostContext, Task<Decided>> again)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case written = await WriteBoundAsync();
+        var clock = new FixedClock(Deployment.Noon);
+        DateTimeOffset recent = Deployment.Noon - TimeSpan.FromMinutes(1);
+        DateTimeOffset aged = Deployment.Noon - TimeSpan.FromMinutes(6);
+        bool met = scenario.Contains(" that met the gate", StringComparison.Ordinal);
+        AssuranceProviderInMemory? provider = scenario.StartsWith("a report", StringComparison.Ordinal)
+            ? new AssuranceProviderInMemory(Proved(met ? recent : aged))
+            : null;
+        Session? carried = provider is null
+            ? Begun(written.Account, new Assurance(AssuranceLevel.Aal2, PhishingResistant: true), met ? recent : aged)
+            : null;
+
+        await using ServiceProvider deployment = Requesting(clock, provider);
+
+        if (carried is not null)
+        {
+            await using AsyncServiceScope keeping = deployment.CreateAsyncScope();
+
+            await KeptAsync(keeping.ServiceProvider, carried);
+        }
+
+        Decided first;
+        Decided second;
+
+        await using (AsyncServiceScope request = deployment.CreateAsyncScope())
+        {
+            await using HostContext reading = host.Context();
+
+            Arrived(request.ServiceProvider, carried);
+
+            first = await ChecksInAsync(request.ServiceProvider, written, reading);
+
+            if (met)
+            {
+                clock.Advance(TimeSpan.FromMinutes(10));
+            }
+            else if (provider is not null)
+            {
+                provider.Reports(Proved(Deployment.Noon));
+            }
+            else if (carried is not null)
+            {
+                await LiftedAsync(deployment, carried.Id, cancellationToken);
+            }
+
+            second = await again(request.ServiceProvider, written, reading);
+        }
+
+        Decided afresh = await ChecksAsync(written, deployment, carried);
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, afresh);
+
+        return second;
+    }
+
+    // What a host reports of a proof that reached the strict gate at the instant given.
+    private static AttainedAssurance Proved(DateTimeOffset at) =>
+        new(Aal1At: at, Aal2At: at, Aal3At: null, PhishingResistantAt: at, AssuranceLevel.Aal2);
+
+    // What another request's step-up writes into the session record: the gate's level,
+    // phishing-resistant, reached now (AUTH-SESS-001).
+    private static async Task LiftedAsync(IServiceProvider deployment, SessionId lifted, CancellationToken cancellationToken)
+    {
+        await using AsyncServiceScope stepping = deployment.CreateAsyncScope();
+
+        IServiceProvider services = stepping.ServiceProvider;
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+        ISessionStore store = services.GetRequiredService<ISessionStore>();
+
+        await work.BeginAsync(cancellationToken);
+
+        Session session = await store.FindAsync(lifted, cancellationToken)
+            ?? throw new InvalidOperationException("The session is not kept.");
+
+        session.Present(
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            services.GetRequiredService<TimeProvider>().GetUtcNow());
+
+        await store.RecordAsync(session, cancellationToken);
+        await work.CommitAsync(cancellationToken);
+    }
+
+    // The same deployment on a clock the case moves, with a host's assurance provider
+    // registered where the case judges from its report.
+    private ServiceProvider Requesting(FixedClock clock, IAssuranceProvider? provider)
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+
+        if (provider is not null)
+        {
+            services.AddSingleton(provider);
+        }
+
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+
+        return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // The single check asked in the scope of a request already under way.
+    private static async Task<Decided> ChecksInAsync(IServiceProvider request, Case written, HostContext reading) =>
+        (await request.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(written.Account),
+                written.Asked,
+                written.Record,
+                Sources(reading),
+                TestContext.Current.CancellationToken))
+        .Match(() => Decided.Allowed, Refused);
+
+    // The expression asked in the scope of a request already under way.
+    private static async Task<Decided> ExpressionAdmitsInAsync(IServiceProvider request, Case written, HostContext reading) =>
+        await (await request.GetRequiredService<IAccessGate>()
+            .FilterAsync(
+                AccessContext.Of(written.Account),
+                written.Asked,
+                written.Record.Type,
+                written.Deployment.Organization,
+                Sources(reading),
+                TestContext.Current.CancellationToken))
+        .Match(
+            async expression => await reading.Documents
+                .Where(expression)
+                .AnyAsync(
+                    document => document.Id == written.Record.Id.ToString(),
+                    TestContext.Current.CancellationToken)
+                ? Decided.Allowed
+                : Decided.Denied,
+            refused => Task.FromResult(Refused(refused)));
+
+    // The fragment asked in the scope of a request already under way.
+    private async Task<Decided> FragmentAdmitsInAsync(IServiceProvider request, Case written, HostContext reading)
+    {
+        Result<SqlFilter> rendered = await request.GetRequiredService<IAccessGate>()
+            .FragmentAsync(
+                AccessContext.Of(written.Account),
+                written.Asked,
+                written.Record.Type,
+                written.Deployment.Organization,
+                "identity_authz_row",
+                "id",
+                TestContext.Current.CancellationToken);
+
+        if (rendered.Match<Error?>(_ => null, refused => refused) is Error refusal)
+        {
+            return Refused(refusal);
+        }
+
+        SqlFilter fragment = Rendered(rendered);
+        var arguments = new DynamicParameters();
+
+        foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
+        {
+            arguments.Add(parameter.Key, parameter.Value);
+        }
+
+        arguments.Add("record", written.Record.Id.ToString());
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM host.documents AS identity_authz_row
+                    WHERE identity_authz_row.id = @record AND {fragment.Text});
+                """),
+            arguments,
+            cancellationToken: TestContext.Current.CancellationToken))
+            ? Decided.Allowed
+            : Decided.Denied;
     }
 
     // A record the account's grant confers the bound action on, in an organization the
