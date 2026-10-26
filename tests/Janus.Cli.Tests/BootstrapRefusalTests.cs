@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -11,13 +12,19 @@ namespace Janus.Cli.Tests;
 /// <summary>
 /// What the <c>bootstrap</c> command refuses before it reaches the database: the values
 /// the deployment has to name, the administrator's date of birth, and the keys it reads
-/// from standard input (OPS-BOOT-001, PRIV-MINOR-001, OPS-SEC-001). The connection each case names leads nowhere, so a case that reached
+/// from standard input (OPS-BOOT-001, PRIV-MINOR-001, OPS-SEC-001), with the connection
+/// every command that reads one takes from it. The connection each case names leads nowhere, so a case that reached
 /// the database would fail rather than pass.
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class BootstrapRefusalTests
+public sealed class BootstrapRefusalTests : System.IDisposable
 {
     private const string Nowhere = "Host=nowhere.invalid;Database=identity";
+
+    private readonly string _ledger = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+
+    /// <inheritdoc/>
+    public void Dispose() => File.Delete(_ledger);
 
     /// <summary>
     /// OPS-BOOT-001 AC4: bootstrap without the governing language is refused, with the
@@ -344,6 +351,51 @@ public sealed class BootstrapRefusalTests
         Assert.DoesNotContain(Invocation.KeyEncryptionKey, run.Error, System.StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// OPS-SEC-001 AC4: every command that reads its connection from the document, its
+    /// arguments read in full, refuses a connection that is absent, blank or not a string
+    /// with <c>api.request.malformed</c> naming <c>connection</c>, and writes nothing on
+    /// standard output (D-209).
+    /// </summary>
+    /// <param name="command">The command named.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("bootstrap")]
+    [InlineData("rotate-kek")]
+    [InlineData("rotate-fingerprint-key")]
+    [InlineData("configure")]
+    [InlineData("replay-erasures")]
+    [InlineData("register-client")]
+    public async Task OPS_SEC_001_AC4_EveryCommandRefusesAConnectionAbsentBlankOrNotAStringAsMalformedAsync(string command)
+    {
+        await File.WriteAllTextAsync(
+            _ledger,
+            $"2026-08-14T09:22:05Z {System.Guid.NewGuid():D} erasure-request\n",
+            TestContext.Current.CancellationToken);
+
+        JsonObject absent = Invocation.Keys(Nowhere);
+        Assert.True(absent.Remove("connection"));
+
+        List<JsonObject> documents = [absent];
+
+        foreach (JsonNode? connection in (JsonNode?[])[JsonValue.Create(string.Empty), JsonValue.Create("  "), JsonValue.Create(5432), null, new JsonObject { ["host"] = "nowhere.invalid" }])
+        {
+            JsonObject document = Invocation.Keys(Nowhere);
+            document["connection"] = connection;
+            documents.Add(document);
+        }
+
+        foreach (JsonObject document in documents)
+        {
+            Invocation run = await Invocation.PipedAsync(Arguments(command), document);
+
+            Assert.Equal(1, run.ExitCode);
+            Assert.Empty(run.Output);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
+            Assert.Equal("connection", Detail(run, "member"));
+        }
+    }
+
     private static string? Code(Invocation run)
     {
         using var refusal = JsonDocument.Parse(run.Error);
@@ -357,4 +409,23 @@ public sealed class BootstrapRefusalTests
 
         return refusal.RootElement.GetProperty("details").GetProperty(name).GetString();
     }
+
+    // The arguments each command reads in full, so its run reaches its document.
+    private IReadOnlyList<string> Arguments(string command) =>
+        command switch
+        {
+            "bootstrap" => Invocation.Bootstrap(),
+            "configure" => [command, "--abuse.throttle.enabled", "false", "--reason", "The throttle is under review."],
+            "replay-erasures" => [command, _ledger],
+            "register-client" =>
+            [
+                command,
+                "--client", "storefront",
+                "--name", "storefront",
+                "--kind", "browser-application",
+                "--redirect", "https://shop.example.test/auth/signon/return",
+                "--scopes", "openid",
+            ],
+            _ => [command],
+        };
 }
