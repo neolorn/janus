@@ -405,23 +405,29 @@ protected from pull-request modification.
 **OPS-DEP-004** — A secret-scanning step SHALL run in the pipeline over the full
 history on every push and fail the build on detection.
 
-*Source: D-042.3, D-150, D-167*
+*Source: D-042.3, D-150, D-167, D-210*
 
 GitHub's own secret scanning and push protection are unavailable on this plan for
-private repositories, so OPS-SEC-001 has no platform enforcement. The check moves
-into the pipeline. The scanner is **gitleaks**, run as its own release at a pinned
-version: the step downloads the release archive and checks it against a SHA-256
-written in the pipeline beside the version before it runs anything. The official
-action is not used, because on a push it scans only the pushed commits and it does not
-check what it downloads (D-167). The scan covers every commit of every branch and tag,
-on every push, with the default rule set and a committed `.gitleaks.toml` holding only
-allow-list entries. Each entry names one file and the one value it exempts, both of
-which must match, and gives the reason; an entry never exempts a whole file, a
-directory or a shape of value (D-150, D-167). The one exception is the offline
-leaked-password list (AUTH-PASS-004): its entry names the file and the list's line form,
-a whole line of exactly 40 upper-case hexadecimal characters, because every such line is
-the hash of a leaked password and the list is drawn again at every release (D-167). No
-other scanner is added.
+private repositories, so OPS-SEC-001 has no platform enforcement. The check moves into
+the pipeline. The scanner is **gitleaks**, run as its own release at a pinned version:
+the step downloads the release archive and checks it against a SHA-256 written in the
+pipeline beside the version before it runs anything. The official action is not used,
+because on a push it scans only the pushed commits and it does not check what it
+downloads (D-167). The scan covers every commit of every branch and tag, on every push,
+with the default rule set and a committed `.gitleaks.toml` holding only allow-list
+entries. Each entry names one file and the one value it exempts, both of which must
+match, and gives the reason; an entry never exempts a whole file, a directory or a shape
+of value (D-150, D-167). The one exception is the offline leaked-password list
+(AUTH-PASS-004): its entry names the file and the list's line form, a whole line of
+exactly 40 upper-case hexadecimal characters, because every such line is the hash of a
+leaked password and the list is drawn again at every release (D-167). No other
+allow-list reaches the scan: it runs with `--config` naming the committed
+`.gitleaks.toml`, with `--ignore-gitleaks-allow`, so a line's inline `gitleaks:allow`
+marker silences nothing, with `--gitleaks-ignore-path` naming a folder that holds no
+file and with no `--baseline-path`, and it fails where the checked-out tree holds a
+`.gitleaksignore` (a list of findings gitleaks reads at the scanned repository's root
+whatever its flags say), at its root or tracked anywhere in it (D-210). No other scanner
+is added.
 
 **Acceptance criteria**
 1. A committed credential fails the build.
@@ -436,6 +442,9 @@ other scanner is added.
 6. In the offline leaked-password list, a whole line of 40 upper-case hexadecimal
    characters passes the scan; any other matched text in that file, and the same hash in
    any other file, fails the build.
+7. A credential on a line that carries gitleaks' inline allow marker fails the build,
+   and so does a `.gitleaksignore` the checked-out tree holds, whatever it lists
+   (D-210).
 
 ---
 

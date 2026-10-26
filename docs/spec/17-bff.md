@@ -24,23 +24,25 @@ it. LIB-API-003's error codes are translated there.
 
 ## 2. Ownership
 
-**BFF-OWN-001** — The library SHALL ship the BFF pipeline as middleware the host
-mounts. The host SHALL NOT implement session handling, CSRF enforcement, capability
-projection, or error translation itself. The host mounts the browser profile with
-`UseBrowserProfile`, the machine profile (BFF-MACH-001) with `UseMachineProfile`, and the
-library's routes with `MapIdentityEndpoints` and `MapIdentityWellKnown`; nothing else is
-required to mount it. The host's own endpoints, mounted after the browser profile, read
-who is asking from the request (BFF-HOST-001), need a session unless marked as answering
-anyone (BFF-HOST-002), carry their records' capabilities through `CapabilityFields`
-(BFF-CAP-002) and answer the library's results through the library's own answers
-(BFF-HOST-003), so the host builds none of the four for them either (D-202).
+**BFF-OWN-001** — The library SHALL ship the BFF pipeline as middleware the host mounts.
+The host SHALL NOT implement session handling, CSRF enforcement, capability projection,
+or error translation itself. The host mounts the browser profile with
+`UseBrowserProfile`, the machine profile (BFF-MACH-001) with `UseMachineProfile`, and
+the library's routes with `MapIdentityEndpoints` and `MapIdentityWellKnown`; nothing
+else is required to mount it, save that the host places its routing before the browser
+profile for an enrolment session to reach the enrolment routes (BFF-ORDER-001, D-210).
+The host's own endpoints, mounted after the browser profile, read who is asking from the
+request (BFF-HOST-001), need a session unless marked as answering anyone (BFF-HOST-002),
+carry their records' capabilities through `CapabilityFields` (BFF-CAP-002) and answer
+the library's results through the library's own answers (BFF-HOST-003), so the host
+builds none of the four for them either (D-202).
 
 **Values (D-162).** Which application a process serves is declared once, at
 registration: `AddJanus` takes an `ApplicationKind` (`Management` · `Public`), and the
 mount takes nothing. It decides `SameSite` and nothing else (BFF-CSRF-005). The unset
 value is `Management`, so an undeclared kind yields `SameSite=Strict`.
 
-*Source: D-052, D-162, D-166, D-202*
+*Source: D-052, D-162, D-166, D-202, D-210*
 
 AUTH-SESS-007 requires that no endpoint can opt out of CSRF. That is achievable only
 if the library owns the middleware — a host-built BFF makes "no endpoint can forget"
@@ -1111,7 +1113,7 @@ reads or changes the account's state.
 | 2 | Fetch Metadata resource isolation | Cheapest rejection; no session lookup needed |
 | 3 | Origin validation | Same — cheap, no state |
 | 4 | Source-based rate limiting | Before any expensive work, including session lookup |
-| 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189) |
+| 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189). Where the host's routing runs after the profile, no route is known yet, so an enrolment session is resolved on none (D-210) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
 | 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session (a library endpoint marked as needing one, or a host endpoint not marked with `AllowNoSession()`, BFF-HOST-002) refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188). Where the host's routing runs after the profile, the endpoint it selects is judged then, before it runs (BFF-HOST-002, D-209) |
@@ -1127,7 +1129,16 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209*
+*Source: D-052, D-053, D-162, D-166, D-188, D-189, D-202, D-209, D-210*
+
+**Routing before the profile (D-210).** Stage 8 holds whatever the order of the host's
+routing (BFF-HOST-002). Stage 5 reads the endpoint before the request goes on, so where
+routing runs after the profile it finds none and fails closed: an enrolment route
+answers as for a request that carried no enrolment session. A host mounts its routing
+before the profile, as the sample host does (`07` LIB-TEST-004), for an enrolment
+session to reach the library's enrolment routes. The refusal of a request the framework
+cannot bind is made on the way out, after routing has run, so it is answered as
+API-CONV-002 gives, whatever the order.
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because
@@ -1143,7 +1154,11 @@ which would have let an unauthenticated flood reach session resolution.
    where the host's routing comes after it, middleware between the two runs before the
    endpoint is known, the endpoint routing then selects is still judged before it runs,
    and middleware after that routing runs for a request whose endpoint was replaced with
-   the refusal, no host endpoint running for it (BFF-HOST-002, D-209).
+   the refusal, no host endpoint running for it (BFF-HOST-002, D-209). With routing
+   after the profile, an enrolment route answers as for a request that carried no
+   enrolment session, and a request the framework cannot bind is refused 400
+   `api.request.malformed` as it is with routing before the profile (API-CONV-002,
+   D-210).
 3. A flood of unauthenticated requests is rejected before session lookup.
 4. A request carrying the cookie of an ended session reaches an endpoint that requires
    no session; an endpoint that requires one answers 401 `auth.session.expired`.

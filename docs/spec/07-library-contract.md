@@ -668,12 +668,13 @@ carries:
   identifier, `--kind browser-application`, `--redirect` that address's
   `auth/signon/return` route (`09` `GET /auth/signon/return`) and `--scopes openid`
   (AUTH-OIDC-001, D-206);
-- `TestPeople`, over a running host: a customer registered through the registration
-  endpoints with what the in-memory transports hold (each verification link, pressed,
-  REG-SESS-003), its date of birth 1990-01-01, an adult's on every host (REG-PROF-002);
-  the first administrator, enrolled with a software passkey through the enrolment link;
-  a staff member invited by an administrator into the organization the test names, with
-  the roles the test names, and enrolled through the invitation; each passkey labelled
+- `TestPeople`, over a running host whose routing comes before the browser profile (`17`
+  BFF-ORDER-001, D-210): a customer registered through the registration endpoints with
+  what the in-memory transports hold (each verification link, pressed, REG-SESS-003),
+  its date of birth 1990-01-01, an adult's on every host (REG-PROF-002); the first
+  administrator, enrolled with a software passkey through the enrolment link; a staff
+  member invited by an administrator into the organization the test names, with the
+  roles the test names, and enrolled through the invitation; each passkey labelled
   `Software passkey`; and for each a `TestSession`, an `HttpClient` that carries the
   session cookie, the synchronizer token and `X-Identity-Request` (BFF-CSRF-001,
   BFF-CSRF-003) on every request, with the person's subject, and a step-up with the
@@ -685,7 +686,7 @@ itself: the reference a package carries prunes nothing in the project that takes
 without its own the project resolves as packages what the shared framework serves (`08`
 CONV-LAYOUT-001, D-205).
 
-*Source: D-204, D-205, D-206, D-207, D-208*
+*Source: D-204, D-205, D-206, D-207, D-208, D-210*
 
 **Acceptance criteria**
 1. A test using only `Janus.Testing` and a host built on the public surface stands a
@@ -711,7 +712,8 @@ solution, in a solution of its own (`samples/HostSample`, its tests in
 `samples/HostSample.Tests`, `08` CONV-LAYOUT-001), and references only the packages
 packed from the same commit (the main package, `Janus.Hosting`, and `Janus.Testing`,
 with `Janus.Cli` as its tool), restored from a folder feed the gate fills, never a
-project of the library's solution. Its test project carries the framework reference to
+project of the library's solution. It mounts its routing before the browser profile
+(`17` BFF-ORDER-001, D-210). Its test project carries the framework reference to
 `Microsoft.AspNetCore.App`, so the packages the shared framework serves resolve from it
 (`08` CONV-LAYOUT-001, D-205). Its domain is its own invention, never a real host's. It
 is a small business application: types of its own with an encrypted personal field, a
@@ -727,7 +729,7 @@ no membership of it. An obstacle met in building it is a gap in the public surfa
 raised as a question, never closed by a project reference or an internals grant. Every
 later decision that adds to what a host meets adds to the sample.
 
-*Source: D-204, D-205, D-207*
+*Source: D-204, D-205, D-207, D-210*
 
 **Acceptance criteria**
 1. Building the sample host and running its tests is a gate of `08` CONV-GATE-001.

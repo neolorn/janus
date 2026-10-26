@@ -17569,6 +17569,8 @@ body, criterion 2); `20` REG-IDENT-009 (a username unchanged, criterion 6);
 
 ## D-209 — Round H1 questions 41 to 43 and the round's review: a host binds only its own actions, the worker's longest wait, a restricted account's list
 
+> **Amended.** Answer 41: a bound action's step-up gate asked again in the same request answers as at its first ask, and a step-up is judged while a unit of work is open where a host first asks such a gate inside one or calls inside one a library operation that asks a step-up (D-210).
+
 **Date:** 2026-10-26 · **Status:** accepted · **Follows from:** D-208 · **Amends:**
 D-207 (answer 30, a step-up judged while a unit of work is open asks no phone signal;
 answer 34, an organization-wide grant naming no organization), D-208 (the refresh's
@@ -17692,6 +17694,123 @@ frontend, the offer while a unit of work is open), `POST /admin/grants`; `10` se
 `17` BFF-HOST-002 (stage 8 whatever the order of routing, criterion 5), BFF-ORDER-001
 (stage 8, criterion 2); `19` INF-BG-001 (the worker's wait, criterion 5);
 `implementation-plan.md` (section 3a, round H1).
+
+---
+
+## D-210 — Round H1 questions 46 and 47 and the review of its run under D-209: a gate judged once a request, a contributor's fault, the scan's one allow-list
+
+**Date:** 2026-10-26 · **Status:** accepted · **Follows from:** D-209 · **Amends:**
+D-209 (answer 41, a bound action's step-up gate asked again in the same request
+answering as at its first ask) · **Extends:** D-206 (an internal contract for a
+contributor's fault), D-202 (stage 5 where routing comes after the profile), D-167 (no
+allow-list beside `.gitleaks.toml`), D-149 (MSBuild's and the SDK's own warnings)
+
+**TL;DR.** The run under D-209 asked two more questions. Where a host's routing runs
+after the browser profile, stage 5 finds no endpoint and resolves no enrolment session,
+which fails closed; routing before the profile is what serves the enrolment routes (46).
+A contributor's fault in an export is logged by its type and frames through an internal
+contract `Janus.Privacy` declares and `Janus.Hosting` implements, as the export's name
+rule is (47). The review of the run found that a bound action's gate is judged once a
+request, which D-209's first case of a step-up inside a unit of work had missed, and
+three gaps the messaging library's review showed the library shares: the scan honours
+gitleaks' inline marker and ignore file, a warning MSBuild or the SDK raises stays a
+warning, and the servicing release of 2026-10-13 was not taken. The review's other
+findings are defects of the build against chapters that already state the rule, fixed in
+the same run.
+
+**The questions.** Questions 46 and 47 of the round H1 run under D-209. Question 46 is
+Tier 3; question 47 is Tier 2.
+
+46. **The stages that read the endpoint, where routing runs after the profile (Tier
+    3).** D-209 holds stage 8 whatever the order of the host's routing, through a
+    matcher policy that judges the endpoint routing selects before it runs. Stage 5
+    reads the endpoint too: it resolves an enrolment session only on the routes
+    `POST /enrol/begin` lists, which their endpoints mark. Where routing runs after the
+    profile, no endpoint is known when stage 5 runs, so it resolves no enrolment session
+    and an enrolment route answers as for a request that carried none. That fails
+    closed, so nothing security-relevant depends on the order (BFF-OWN-001); routing
+    before the profile, as the sample host mounts it, is what serves the enrolment
+    routes, and BFF-ORDER-001 says so. The refusal of a request the framework cannot
+    bind, which the question also named, is made on the way out, after routing has run,
+    so it reads the endpoint routing selected and is answered as API-CONV-002 gives,
+    whatever the order; a test mounting routing after the profile shows it (`17`
+    BFF-ORDER-001 criterion 2). *Rejected:* routing run inside the profile (a host's
+    middleware placed before the profile that reads the endpoint would run before
+    routing, against BFF-ORDER-001 criterion 2); enrolment routes recognised by their
+    paths (a second way of knowing a route).
+47. **A contributor's fault in an export (Tier 2).** The library keeps a fault in the
+    log by its type and frames, never its message (BFF-ERR-002 criterion 2,
+    CONV-LOG-003), through an entry internal to `Janus.Hosting`, which `Janus.Privacy`,
+    where the export is assembled, cannot reach. `Janus.Privacy` declares an internal
+    contract, the fault entry (`IFaultEntry`), which `Janus.Hosting` implements over
+    that entry, as it implements the export's name rule (D-206); the export logs a
+    contributor's fault through it and answers as before (`08` CONV-DESIGN-007).
+    *Rejected:* the entry moved into `Janus.Core` (a grant to a shipped project for one
+    caller); the fault let through to the error translation (the answer would no longer
+    name the contributor, and the export's operation would throw for an expected
+    outcome); a formatter of `Janus.Privacy`'s own (a second way of keeping a fault).
+
+**The review of the run.** The run (`281df27c`) was reviewed in two slices, the code and
+the tests with the report, against D-209 and the findings its prompt listed. These need a
+rule:
+
+- **A bound action's step-up gate is judged once a request.** The library judges the
+  step-up gate bound to a host's action at the first ask of its permission in a request,
+  and answers every later ask in the same request as it did then, whether it judged the
+  gate from the library's session or from the host's assurance provider, so one request
+  is answered on one judgement. It already did so for the session; it judged the
+  provider's path at each ask, which changes in the same run. So the second ask under a
+  host's lock (AUTHZ-GATE-006) never judges a step-up gate anew, and D-209's case of a
+  gate met at the first ask and unmet at the second cannot arise; a step-up is judged
+  while a unit of work is open where a host first asks a bound action's gate inside its
+  own unit of work, or calls inside one a library operation that asks a step-up; the
+  step-up `POST /auth/step-up` carries out is no such ask (`02` AUTH-STEP-002,
+  AUTH-FACT-002b; `08` CONV-DESIGN-003 criterion 13). A library operation's own step-up
+  is judged once, before its unit of work, as before. *Rejected:* judging the gate again
+  at each ask (one request's answer would turn on the time between two asks of one
+  gate).
+- **The scan's one allow-list.** gitleaks also skips a line carrying its inline
+  `gitleaks:allow` marker, and the findings a `.gitleaksignore` lists, which it reads
+  from its ignore path and from the scanned repository's root whatever its flags say
+  (`cmd/root.go` of 8.30.1), so the scan runs with `--config` naming `.gitleaks.toml`
+  (gitleaks reads a configuration from its environment first otherwise), with
+  `--ignore-gitleaks-allow`, an ignore path holding no file and no `--baseline-path`,
+  and fails where the checked-out tree holds a `.gitleaksignore`, at its root or tracked
+  anywhere in it, whatever the history once held (`06` OPS-DEP-004 criterion 7).
+  *Rejected:* a `.gitleaksignore` test beside the scan (the scan alone then would not
+  keep the rule).
+- **MSBuild's and the SDK's own warnings fail the build.** `TreatWarningsAsErrors` makes
+  the compiler's, the analysers' and NuGet's warnings errors and leaves a warning
+  MSBuild or the SDK raises a warning (a probe build with a `Warning` task passes with
+  it alone and fails with `MSBuildTreatWarningsAsErrors`), so both are set (`08`
+  CONV-SETUP-001). A setting that turns warnings off or keeps them from failing the
+  build, MSBuild's and the SDK's or the analysers' warning level or the restore's audit
+  among them, is a configuration below error that CONV-SETUP-004 criterion 3 refuses,
+  and `08` now names each.
+- **The servicing release of 2026-10-13** (.NET 10.0.13, SDK 10.0.402, a security
+  release) is taken, as `08` takes a servicing release as a security update
+  (CONV-DEP-004, D-205): the SDK of `global.json` and the packages and tool
+  CONV-DESIGN-008 holds at one version move together, in one change. No chapter changes.
+- **Tier 1 records.** Record 22 (the sample host's gate maps the five packed identifiers
+  to the folder feed, the product-name test refusing the pattern `Janus.*` in a source)
+  stands: the five are every package the library packs (CONV-LAYOUT-001), and a package
+  of another identifier comes from nuget.org or fails the restore. Records 19 to 21
+  stand. Questions 44 and 45 of the report are records 1 and 10, which D-209 answered,
+  moved to the questions.
+- **The sample host.** Nothing of this entry changes what the sample host builds or how
+  (LIB-TEST-004); it mounts routing before the browser profile.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `02` AUTH-STEP-002 (a bound action's gate judged once a request,
+criterion 10), AUTH-FACT-002b (values D-186); `03` AUTHZ-GATE-006 (the second ask's
+step-up); `06` OPS-DEP-004 (the scan's one allow-list, criterion 7); `07` LIB-TEST-003
+(`TestPeople`), LIB-TEST-004 (routing before the profile); `08` CONV-SETUP-001
+(MSBuild's warnings, criterion 2), CONV-SETUP-004 (the settings below error),
+CONV-DESIGN-003 (a step-up judged while a unit of work is open, criterion 13),
+CONV-DESIGN-007 (a contributor's fault); `17` BFF-OWN-001 (routing before the profile),
+BFF-ORDER-001 (stage 5 and the answers that read the endpoint under late routing,
+criterion 2); `implementation-plan.md` (section 3a, round H1).
 
 ---
 
@@ -17914,6 +18033,7 @@ frontend, the offer while a unit of work is open), `POST /admin/grants`; `10` se
 | Round H1 questions 20 to 34, and the implementer pushes its own work | D-207 |
 | Round H1 questions 35 to 40: one admission for a grant, a username unchanged, the stand-in's balance, what a refusal records, a refresh asked in a request, a reuse naming no session | D-208 |
 | Round H1 questions 41 to 43 and the round's review: a host binds only its own actions, the worker's longest wait, a restricted account's list | D-209 |
+| Round H1 questions 46 and 47 and the review of its run under D-209: a gate judged once a request, a contributor's fault, the scan's one allow-list | D-210 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

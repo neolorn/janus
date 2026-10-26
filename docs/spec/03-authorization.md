@@ -1094,8 +1094,9 @@ work rolls back. Where a host asks the gate for a modifying action inside an ope
 transaction, the gate holds the row in that transaction the same way. A host asks the
 gate of an action bound to a step-up gate before it begins the unit of work it joins, as
 a library operation judges its step-up before its own, and asks again inside it before
-its first write (`08` CONV-DESIGN-003, D-207), a step-up judged then, with the unit of
-work open, asking no phone signal (`02` AUTH-FACT-002b, D-209).
+its first write (`08` CONV-DESIGN-003, D-207), where the step-up gate answers as at the
+first ask (`02` AUTH-STEP-002, D-210); a step-up first judged with a unit of work open
+asks no phone signal (`02` AUTH-FACT-002b, D-209).
 
 **Values (D-186).** The first write is the first write to the library's database of the
 unit of work that makes the change. Where an effect outside it must come first, the gate
@@ -1111,7 +1112,7 @@ the send in the unit of work that writes what the send carries, so the second as
 both: an approved recovery's link is undertaken in the approval's unit of work
 (AUTH-RECOV-002).
 
-*Source: D-037, D-166, D-183, D-186, D-207, D-208, D-209*
+*Source: D-037, D-166, D-183, D-186, D-207, D-208, D-209, D-210*
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.

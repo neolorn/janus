@@ -348,18 +348,21 @@ consideration is recorded in the unit of work that follows, a kept write
 (CONV-DESIGN-003). Where the signal is asked by a step-up an operation asks, the step-up
 is judged before the operation's unit of work begins, and the consideration commits in a
 unit of work of its own, before the operation's, standing whatever the step-up answers
-(D-207). A step-up judged while a unit of work is open (the gate asked again under a
-host's lock, or an operation a host calls inside its own unit of work) asks no signal
-and records no consideration: it offers as where no callback is declared, and the signal
-is asked when the step-up is carried out (`09` `POST /auth/step-up`), with no unit of
-work open, before any text is sent. The unit of work that records a consideration begins
-as the outermost, so the signal asked inside an open unit of work is a fault
-(CONV-ERR-001, D-209). A send of a `phoneCode` with a signal callback declared and no
-signal asked for the number beforehand is a fault (CONV-ERR-001), never a send: the
-other course would let a restricted factor go unconsidered (D-188).
+(D-207). A step-up judged while a unit of work is open (where a host first asks a bound
+action's gate inside its own unit of work, or calls inside one a library operation that
+asks a step-up) asks no signal and records no consideration: it offers as where no
+callback is declared, and the signal is asked when the step-up is carried out (`09`
+`POST /auth/step-up`), with no unit of work open, before any text is sent. The unit of
+work that records a consideration begins as the outermost, so the signal asked inside an
+open unit of work is a fault (CONV-ERR-001, D-209). A bound action's step-up gate asked
+again in the same request, under a host's lock or otherwise, answers as at its first ask
+and asks no phone signal (AUTH-STEP-002, D-210). A send of a `phoneCode` with a signal
+callback declared and no signal asked for the number beforehand is a fault
+(CONV-ERR-001), never a send: the other course would let a restricted factor go
+unconsidered (D-188).
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200, D-207, D-209*
+D-183, D-186, D-188, D-190, D-197, D-198, D-199, D-200, D-207, D-209, D-210*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -1767,7 +1770,7 @@ split across two apps or folded into another.
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
 *Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183, D-190, D-191,
-D-192, D-197, D-198, D-207*
+D-192, D-197, D-198, D-207, D-210*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If a level at or above the gate's, and
@@ -1832,18 +1835,29 @@ field. Where no session of the library carries the request, the host's assurance
 provider (LIB-HOST-004) reports the instant each level was last reached, the instant
 phishing resistance was last reached and the account's reachable assurance, and the
 gate, its values resolved as for a session, is judged from those as step 1 judges a
-session (D-191). The gate SHALL be met only where the provider answers, its report reads
-(no instant after now), a level at or above the gate's (the reachable assurance read
-from the report, floor `aal1`) was last reached within the maximum age before now, and
-phishing resistance was too where the gate requires it; anything else, a provider
-failure included, is refused with `auth.stepup.required` carrying `required`, `outcome`
-`present`, empty `options` and a null `pendingUntil`: the proof is the host's to obtain
-through its own sign-in, so the answer offers no factor of the library's (LIB-HOST-004).
-Where no assurance provider is registered, no report is asked and the action is refused
-with `auth.stepup.unavailable` (AUTH-STEP-003). A session of the library that is the
-acting person's own is judged in place of the provider. A host asks such a gate before
-it begins the unit of work it joins, as a library operation judges its step-up before
-its own (`08` CONV-DESIGN-003, D-207).
+session (D-191). At its first ask in a request (below), the gate SHALL be met only where
+the provider answers, its report reads (no instant after now), a level at or above the
+gate's (the reachable assurance read from the report, floor `aal1`) was last reached
+within the maximum age before now, and phishing resistance was too where the gate
+requires it; anything else, a provider failure included, is refused with
+`auth.stepup.required` carrying `required`, `outcome` `present`, empty `options` and a
+null `pendingUntil`: the proof is the host's to obtain through its own sign-in, so the
+answer offers no factor of the library's (LIB-HOST-004). Where no assurance provider is
+registered, no report is asked and the action is refused with `auth.stepup.unavailable`
+(AUTH-STEP-003). A session of the library that is the acting person's own is judged in
+place of the provider. A host asks such a gate before it begins the unit of work it
+joins, as a library operation judges its step-up before its own (`08` CONV-DESIGN-003,
+D-207).
+
+**A bound action's step-up gate is judged once a request (D-210).** The step-up gate
+bound to a host's action (AUTHZ-GATE-005) is judged at the first ask of that action's
+permission in a request, from the library's session or from the host's assurance
+provider, and every later ask in the same request answers as the first did, the second
+ask inside a unit of work under its lock included (`03` AUTHZ-GATE-006): the request is
+answered on one judgement, not on the time that passed between two asks of one gate. A
+library operation judges its own step-up before its unit of work begins, as `08`
+CONV-DESIGN-003 gives, and the step-up `POST /auth/step-up` carries out judges the gates
+it raises the session for as that route gives (`09`).
 
 **Why "reaches the level", not "strongest held".** A person who enrolled a second
 factor did so to protect exactly these actions. That protection is expressed by the
@@ -1900,6 +1914,12 @@ this design's own extension, recorded as a choice (D-125).
 9. A factor the policy's `loginFactors` does not permit is not offered at a gate, and
    presenting it at a gate is refused with `auth.factor.notpermitted`, whether the
    factor is right or wrong, and counted.
+10. A bound action's step-up gate met at its first ask in a request is met at a second
+    ask in the same request after the evidence it was judged on passed the gate's
+    maximum age between the two, whether it was judged from the library's session or
+    from the host's assurance provider; one unmet at its first ask is unmet at the
+    second, though between the two a step-up of another request lifted the session to
+    the gate, or the provider's report changed to meet it (D-210).
 
 ---
 
