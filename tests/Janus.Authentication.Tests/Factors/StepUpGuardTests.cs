@@ -40,8 +40,8 @@ public sealed class StepUpGuardTests : IAsyncDisposable
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
-    private readonly PhoneSignalAuditInMemory _considered = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly PhoneSignalAuditInMemory _considered;
     private readonly FixedClock _clock = new(Noon);
     private readonly SubjectId _person;
     private PhoneSignalProvider? _provider;
@@ -51,6 +51,7 @@ public sealed class StepUpGuardTests : IAsyncDisposable
     /// </summary>
     public StepUpGuardTests()
     {
+        _considered = new PhoneSignalAuditInMemory(_work);
         _person = SubjectId.New(_randomness);
         _passwords.Hold(_person, Noon);
 
@@ -101,6 +102,48 @@ public sealed class StepUpGuardTests : IAsyncDisposable
         Assert.Equal(StepUpOutcome.Present, risky.Outcome);
         Assert.DoesNotContain(risky.Combinations, combination => combination.Contains(Factor.PhoneCode));
         Assert.Contains(risky.Combinations, combination => combination.Contains(Factor.Totp));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)_person)], _considered.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b (D-209): a step-up judged while a unit of work is open asks no
+    /// signal and records no consideration, whatever the carrier would answer: it offers
+    /// the text code as where no signal is declared, and the same judgement with none
+    /// open asks the signal and withholds it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AStepUpJudgedWhileAUnitOfWorkIsOpenOffersAsWhereNoSignalIsDeclaredAsync()
+    {
+        TwoStep();
+        Holds(Factor.PhoneCode);
+        Holds(Factor.Totp);
+
+        StepUpChallenge undeclared = await ChallengedAsync(Opened(Noon), "account:suspend");
+        bool askedInside = false;
+
+        _provider = new PhoneSignalProvider((_, _) =>
+        {
+            askedInside |= _work.Open;
+
+            return ValueTask.FromResult(PhoneSignal.Risk);
+        });
+
+        _ = await _work.BeginAsync(TestContext.Current.CancellationToken);
+
+        StepUpChallenge inside = await ChallengedAsync(Opened(Noon), "account:suspend");
+
+        await _work.RollbackAsync();
+
+        Assert.False(askedInside);
+        Assert.Empty(_considered.Records);
+        Assert.Equal(StepUpOutcome.Present, inside.Outcome);
+        Assert.Equal(undeclared.Combinations, inside.Combinations);
+        Assert.Contains(inside.Combinations, combination => combination.Contains(Factor.PhoneCode));
+
+        StepUpChallenge outside = await ChallengedAsync(Opened(Noon), "account:suspend");
+
+        Assert.DoesNotContain(outside.Combinations, combination => combination.Contains(Factor.PhoneCode));
         Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)_person)], _considered.Records);
     }
 

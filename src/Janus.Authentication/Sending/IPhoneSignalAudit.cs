@@ -17,6 +17,13 @@ namespace Janus.Authentication.Sending;
 internal interface IPhoneSignalAudit
 {
     /// <summary>
+    /// Gets a value indicating whether a unit of work is open in the scope, which a
+    /// consideration recorded now would join. The signal is asked only with none open, so
+    /// a step-up judged while one is open asks nothing (CONV-DESIGN-003, D-209).
+    /// </summary>
+    bool UnitOfWorkOpen { get; }
+
+    /// <summary>
     /// Records what was known about the number a restricted factor was about to go to.
     /// </summary>
     /// <param name="factor">The entry the message amounts to.</param>

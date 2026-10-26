@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests;
@@ -395,6 +398,172 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
         Assert.False(_deployment.Work.Open);
         Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("writer"), CancellationToken.None));
     }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC13 (D-209): a host's bound action whose gate the session meets
+    /// at the ask before the host's unit of work and no longer meets at the ask inside it,
+    /// its proof having aged between them, is refused <c>auth.stepup.required</c> with the
+    /// offer made where no signal is declared: the text code among the combinations, the
+    /// carrier not asked and no consideration recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC13_AHostsGateUnmetAtItsAskInsideItsUnitOfWorkAsksNoSignalAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        _ = await Flow.SignedInAsync(_deployment);
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        Texted(subject);
+
+        SessionId proved = await ProvedAsync(subject);
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        StepUpGuard guard = scope.ServiceProvider.GetRequiredService<StepUpGuard>();
+
+        Assert.True(StepUpRefusal.Met(await HostsGateAsync(guard, subject, proved)));
+
+        _deployment.Clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+        _ = await _deployment.Work.BeginAsync(cancellationToken);
+
+        StepUpChallenge inside = await HostsGateAsync(guard, subject, proved);
+
+        await _deployment.Work.RollbackAsync();
+
+        Error refused = StepUpRefusal.Of(inside);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("present", refused.Details["outcome"].GetString());
+        Offered(refused.Details["options"]);
+        Assert.False(_askedInside);
+        Assert.Empty(_deployment.Considered.Records);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC13 (D-209): a library operation with a step-up that a host calls
+    /// inside its own unit of work, the end of another person's sessions, is refused
+    /// <c>auth.stepup.required</c> with the offer made where no signal is declared, the
+    /// carrier not asked and no consideration recorded; the signal is asked when the
+    /// step-up is carried out, with no unit of work open and before any text is sent, and
+    /// its <c>risk</c> withholds the text code there.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC13_AnOperationAHostCallsInsideItsUnitOfWorkAsksNoSignalAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        (Browser administrator, SubjectId subject) = await AuthorisedAsync(
+            Administration,
+            Permissions.SessionRevokeAccount);
+        SessionId session = _deployment.Sessions.All.Single(held => held.Subject == subject && held.EndedAt is null).Id;
+
+        Texted(subject);
+        _deployment.Authenticators.Hold(Generator(subject));
+
+        Result outcome;
+
+        await using (AsyncServiceScope scope = _deployment.Scope())
+        {
+            _ = await _deployment.Work.BeginAsync(cancellationToken);
+
+            outcome = await scope.ServiceProvider.GetRequiredService<ISessions>()
+                .RevokeAccountAsync(AccessContext.Of(subject), session, subject, cancellationToken);
+
+            await _deployment.Work.RollbackAsync();
+        }
+
+        Error refused = outcome.Match<Error>(
+            () => throw new InvalidOperationException("The operation was admitted."),
+            error => error);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("present", refused.Details["outcome"].GetString());
+        Offered(refused.Details["options"]);
+        Assert.False(_askedInside);
+        Assert.Empty(_deployment.Considered.Records);
+        Assert.False(_deployment.Work.Open);
+
+        string challenge = (await administrator.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address)))
+            .Text("challengeId");
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer asked = await administrator.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        Assert.Equal(StatusCodes.Status200OK, asked.Status);
+        Assert.DoesNotContain(
+            "phoneCode",
+            asked.Json().GetProperty("required").EnumerateArray().Select(factor => factor.GetString()));
+        Assert.Equal(sent, _deployment.Sms.Taken.Count);
+        Assert.False(_askedInside);
+        Assert.Equal(
+            [(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)],
+            _deployment.Considered.Records);
+    }
+
+    // The offer made where no signal is declared: the password and the text code among
+    // the combinations, the text code not withheld.
+    private static void Offered(JsonElement options) =>
+        Assert.Contains(
+            options.EnumerateArray(),
+            combination => combination.EnumerateArray().Any(factor => factor.GetString() == "phoneCode"));
+
+    // A time-based code generator beside the password, which reaches what the text code
+    // reaches, so a step-up the signal withholds the text code from still offers it.
+    private Authenticator Generator(SubjectId subject) =>
+        Authenticator.Existing(
+            AuthenticatorId.New(_deployment.Clock),
+            subject,
+            Factor.Totp,
+            CredentialLabel.TryParse("Generator", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _deployment.Clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            new TotpMaterial(new byte[20], null),
+            null,
+            isPreferred: false,
+            number: null);
+
+    // A session of the person's own that reached two factors now, which meets every gate
+    // of the system policy until its proof ages past the recency.
+    private async Task<SessionId> ProvedAsync(SubjectId subject)
+    {
+        var session = Session.Begin(
+            SessionId.New(_deployment.Clock),
+            subject,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: false),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            _deployment.Clock.GetUtcNow(),
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        await _deployment.Sessions.AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            TestContext.Current.CancellationToken);
+
+        return session.Id;
+    }
+
+    // A gate a host binds its own action to, judged as the request's session is judged
+    // at each ask of it.
+    private static async Task<StepUpChallenge> HostsGateAsync(StepUpGuard guard, SubjectId subject, SessionId session) =>
+        (await guard.ChallengeAsync(subject, session, "document:publish", TestContext.Current.CancellationToken))
+        .Match(challenge => challenge, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private static string PolicyOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
 

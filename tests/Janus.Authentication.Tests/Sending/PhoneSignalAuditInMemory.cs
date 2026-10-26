@@ -23,6 +23,13 @@ internal sealed class PhoneSignalAuditInMemory(UnitOfWorkInMemory? work = null) 
     public List<(Factor Factor, PhoneSignal? Signal, SubjectId? Subject)> Records { get; } = [];
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Read from the transaction the fake was given, and none open where it was given
+    /// none.
+    /// </remarks>
+    public bool UnitOfWorkOpen => work?.Open ?? false;
+
+    /// <inheritdoc/>
     public ValueTask ConsideredAsync(
         Factor factor,
         PhoneSignal? signal,

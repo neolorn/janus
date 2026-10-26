@@ -13,6 +13,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// What considering a number leaves in the audit trail before a restricted factor
 /// goes to it.
 /// </summary>
+/// <param name="context">The context whose transaction is the scope's unit of work.</param>
 /// <param name="records">Where the trail is appended to.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -20,12 +21,19 @@ namespace Janus.Storage.Authentication.Sending;
 /// provider this record is the whole of what happens, so it is what an operator reads
 /// to decide whether to register one.
 /// </remarks>
-internal sealed class PhoneSignalAudit(IAuditStore records, TimeProvider time) : IPhoneSignalAudit
+internal sealed class PhoneSignalAudit(StoreContext context, IAuditStore records, TimeProvider time) : IPhoneSignalAudit
 {
     private const string Absent = "unavailable";
 
     private static readonly AuditAction Considered =
         AuditActions.PhoneSignalConsidered;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The transaction is the scope's, whoever opened it: an operation of the library, or
+    /// a host that began the unit of work its own action writes in.
+    /// </remarks>
+    public bool UnitOfWorkOpen => context.Database.CurrentTransaction is not null;
 
     /// <inheritdoc/>
     public async ValueTask ConsideredAsync(
