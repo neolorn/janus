@@ -4086,3 +4086,11 @@ against the public contract of LIB-API-001.
 - `[AllowNoSession]` (`AllowNoSessionAttribute`) marks a host's controller, action or
   Razor page as one that answers anyone, as `AllowNoSession()` marks an endpoint where
   it is mapped; the nearer mark stands.
+- `IAccessGate.CapabilitiesAsync` given the type `organization` and organization
+  identifiers answers, for each organization, which of the permissions asked a grant on
+  the whole organization allows the caller, a deny there taking its permission out, with
+  what each still requires and never `consent`. Any declared permission may be asked,
+  the library's included; every permission is judged in one statement, and nothing is
+  recorded as a refusal or counted toward the denial spike. A host job's context is
+  refused `authz.denied`, as for any capability page. Before, the type `organization`
+  was refused as one the model does not declare.

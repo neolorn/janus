@@ -24,10 +24,11 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
 
     /// <summary>
-    /// BFF-CAP-002 AC5, AUTHZ-GATE-005, IDN-PRIN-001 AC6 (D-207): the capability page
-    /// asked with a declared job's context, for a permission its declaration names on a
-    /// record of its organization, is refused <c>authz.denied</c> through both of its
-    /// paths, in background work and while a request is served.
+    /// BFF-CAP-002 AC5, AUTHZ-GATE-005, IDN-PRIN-001 AC6 (D-207, D-211): the capability
+    /// page asked with a declared job's context, for a permission its declaration names on
+    /// a record of its organization, is refused <c>authz.denied</c> through both of its
+    /// paths, and so is the page of its organization itself, in background work and while
+    /// a request is served.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -47,10 +48,10 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
         await using AsyncServiceScope background = host.Services.CreateAsyncScope();
 
         Assert.Equal<ErrorCode?>(
-            [ErrorCodes.Denied, ErrorCodes.Denied],
+            [ErrorCodes.Denied, ErrorCodes.Denied, ErrorCodes.Denied],
             inRequest?.Select(refusal => refusal?.Code));
         Assert.Equal<ErrorCode?>(
-            [ErrorCodes.Denied, ErrorCodes.Denied],
+            [ErrorCodes.Denied, ErrorCodes.Denied, ErrorCodes.Denied],
             (await CapabilitiesAsync(background.ServiceProvider, written)).Select(refusal => refusal?.Code));
     }
 
@@ -244,7 +245,7 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
     // The page of the record asked under the job's context, through the path over the
-    // stored grants and the path over the host's rows.
+    // stored grants and the path over the host's rows, and the page of its organization.
     private async Task<IReadOnlyList<Error?>> CapabilitiesAsync(IServiceProvider asking, Written written)
     {
         IAccessGate gate = asking.GetRequiredService<IAccessGate>();
@@ -264,8 +265,14 @@ public sealed class JobContextTests(HostFixture host) : IClassFixture<HostFixtur
             [HostPermissions.Read],
             Sources(reading),
             CancellationToken.None);
+        Result<IReadOnlyList<Capability>> organization = await gate.CapabilitiesAsync(
+            written.Job,
+            ResourceType.Parse("organization"),
+            [ResourceId.Parse(written.Deployment.Organization.ToString())],
+            [HostPermissions.Read],
+            CancellationToken.None);
 
-        return [Refusal(stored), Refusal(sourced)];
+        return [Refusal(stored), Refusal(sourced), Refusal(organization)];
     }
 
     // The explanation of the job's reading of the record, through the path over the

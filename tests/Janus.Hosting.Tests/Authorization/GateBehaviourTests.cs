@@ -1066,6 +1066,74 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC6 (D-211): the capabilities of two organizations, asked for host
+    /// permissions and one of the library's, are what each organization's own
+    /// organization-wide grants allow: the role granted on the whole organization gives
+    /// its permissions with what they still require, a step-up and never a consent; a
+    /// deny on the whole organization takes its permission out; a grant on a record of it
+    /// gives the organization nothing. Every permission of both is read in one statement
+    /// over the grants, and nothing is recorded or counted as a refusal.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC6_AnOrganizationsCapabilitiesAreWhatItsWholeOrganizationGrantsAllowAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing:
+        [
+            HostPermissions.Read,
+            HostPermissions.Edit,
+            HostPermissions.Publish,
+            HostPermissions.Recommend,
+        ]);
+        RoleName editing = await nested.Deployment.RoleAsync([HostPermissions.Edit], cancellationToken);
+        RoleName exporting = await nested.Deployment.RoleAsync([HostPermissions.Export], cancellationToken);
+        var elsewhere = new Deployment(host);
+        RoleName reading = await elsewhere.BeginAsync([HostPermissions.Read], cancellationToken);
+        var caller = GrantSubject.Of(nested.Account);
+
+        await nested.Deployment.GrantAsync(caller, nested.Role, null, false, null, null, cancellationToken);
+        await nested.Deployment.GrantAsync(caller, editing, null, true, null, null, cancellationToken);
+        await nested.Deployment.GrantAsync(caller, exporting, nested.Top, false, null, null, cancellationToken);
+        await elsewhere.GrantAsync(caller, reading, null, false, null, null, cancellationToken);
+
+        var organization = ResourceId.Parse(nested.Deployment.Organization.ToString());
+        var other = ResourceId.Parse(elsewhere.Organization.ToString());
+        int denials = await DenialsRecordedAsync(nested.Account);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        using var traced = new TracedStatements();
+
+        IReadOnlyList<Capability> capabilities = Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    ResourceType.Parse("organization"),
+                    [organization, other],
+                    [
+                        HostPermissions.Read,
+                        HostPermissions.Edit,
+                        HostPermissions.Publish,
+                        HostPermissions.Recommend,
+                        HostPermissions.Export,
+                        Permissions.GrantRead,
+                    ],
+                    cancellationToken));
+
+        Assert.Equal(1, GrantReads(traced));
+        Assert.Equal([organization, other], capabilities.Select(capability => capability.Resource));
+        Assert.True(capabilities[0].Can.SetEquals([HostPermissions.Read, HostPermissions.Publish, HostPermissions.Recommend]));
+        Assert.Equal(
+            [CapabilityResidual.StepUp],
+            Assert.Contains(HostPermissions.Publish, capabilities[0].Requires));
+        Assert.Single(capabilities[0].Requires);
+        Assert.True(capabilities[1].Can.SetEquals([HostPermissions.Read]));
+        Assert.Empty(capabilities[1].Requires);
+        Assert.Equal(denials, await DenialsRecordedAsync(nested.Account));
+        Assert.Equal(0, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
     /// BFF-CAP-002 AC3: the capabilities the gate reads for a host's record, written
     /// through <see cref="CapabilityFields"/>, carry <c>can</c> and <c>requires</c> as
     /// API-CAP-001 writes them: the actions in ordinal order, and only the gated one

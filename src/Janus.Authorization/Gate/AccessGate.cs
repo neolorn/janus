@@ -654,13 +654,25 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
         Declared(permissions);
-        Capable(type, permissions);
+
+        // BFF-CAP-002 (D-211): the organization declares no capabilities of its own, so
+        // any declared permission may be asked of it.
+        if (type != OrganizationWide)
+        {
+            Capable(type, permissions);
+        }
 
         // BFF-CAP-002, AUTHZ-GATE-005 (D-207): the capability page is a person's surface,
         // which no job reads, in a request or outside one.
         if (IsJob(context))
         {
             return Result.Failure<IReadOnlyList<Capability>>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (type == OrganizationWide)
+        {
+            return await OrganizationPageAsync(context, resources, permissions, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (FollowsFromTheHostsData(type))
@@ -802,23 +814,8 @@ internal sealed class AccessGate(
         IReadOnlySet<Permission> nobody = await UnconsentedAsync(
             dataSubject: null, permissions, cancellationToken).ConfigureAwait(false);
 
-        // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record,
-        // so it is judged once for the page rather than once per row.
-        var unstepped = new Dictionary<Permission, CapabilityResidual>();
-
-        foreach (Permission permission in permissions)
-        {
-            if (await gates
-                    .ResidualAsync(
-                        context,
-                        model.GateOf(permission)
-                            ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
-                        cancellationToken)
-                    .ConfigureAwait(false) is CapabilityResidual unmet)
-            {
-                unstepped.Add(permission, unmet);
-            }
-        }
+        Dictionary<Permission, CapabilityResidual> unstepped = await UnsteppedAsync(
+            context, permissions, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<SubjectId, IReadOnlySet<Permission>> unconsented = await UnconsentedAsync(
             [.. whose.Values.OfType<SubjectId>().Distinct()], permissions, cancellationToken)
@@ -840,6 +837,75 @@ internal sealed class AccessGate(
         Dictionary<ResourceId, SubjectId?> held,
         ResourceId resource) =>
         held.TryGetValue(resource, out SubjectId? subject) ? subject : null;
+
+    // BFF-CAP-002, AUTHZ-GATE-005 AC1 (D-202, D-211): what each organization asked
+    // confers is what its organization-wide check confers, read for every organization
+    // and permission in one statement. Nothing is refused, so nothing is recorded or
+    // counted toward the denial spike; and the check names no data subject, so no
+    // consent is outstanding: consent is asked of each record. An identifier that is not
+    // an organization's is one no grant reaches.
+    private async ValueTask<Result<IReadOnlyList<Capability>>> OrganizationPageAsync(
+        AccessContext context,
+        IReadOnlyList<ResourceId> resources,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        ResourceId[] organizations =
+        [
+            .. resources.Where(resource => Guid.TryParseExact(resource.ToString(), "D", out _)).Distinct(),
+        ];
+
+        if (organizations.Length == 0 || permissions.Count == 0)
+        {
+            return Nothing(resources);
+        }
+
+        SubjectSet set = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<PageCapability> conferred = await evaluator
+            .PageAsync(PermissionRule.ToOrganizationPage(permissions, set, time.GetUtcNow()), organizations, cancellationToken)
+            .ConfigureAwait(false);
+
+        Dictionary<Permission, CapabilityResidual> unstepped = await UnsteppedAsync(
+            context, permissions, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success<IReadOnlyList<Capability>>(
+        [
+            .. resources.Select(resource => Held(
+                resource,
+                conferred,
+                new Dictionary<Permission, IReadOnlySet<string>>(),
+                set.Restricted,
+                unstepped,
+                new HashSet<Permission>())),
+        ]);
+    }
+
+    // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record, so it
+    // is judged once for the page rather than once per row.
+    private async ValueTask<Dictionary<Permission, CapabilityResidual>> UnsteppedAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        var unstepped = new Dictionary<Permission, CapabilityResidual>();
+
+        foreach (Permission permission in permissions)
+        {
+            if (await gates
+                    .ResidualAsync(
+                        context,
+                        model.GateOf(permission)
+                            ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
+                        cancellationToken)
+                    .ConfigureAwait(false) is CapabilityResidual unmet)
+            {
+                unstepped.Add(permission, unmet);
+            }
+        }
+
+        return unstepped;
+    }
 
     private async ValueTask<IReadOnlySet<Permission>> UnconsentedAsync(
         SubjectId? dataSubject,

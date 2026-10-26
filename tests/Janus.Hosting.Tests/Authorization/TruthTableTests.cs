@@ -114,6 +114,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
+        ("an organization's capability, by a caller granted a role on the whole organization", Decided.Allowed),
+        ("an organization's capability, under a deny on the whole organization", Decided.Denied),
+        ("an organization's capability, by a caller granted the role on a record of it alone", Decided.Denied),
         ("a page's record under a bound action, on a session that proved its gate", Decided.Allowed),
         ("a page's record under a bound action, on a session whose proof has aged", Decided.StepUpRequired),
         (
@@ -1550,6 +1553,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     consented: scenario == "a page's record whose subject gave the consent its purpose asks");
 
+            case "an organization's capability, by a caller granted a role on the whole organization":
+            case "an organization's capability, under a deny on the whole organization":
+            case "an organization's capability, by a caller granted the role on a record of it alone":
+                return await OrganizationPagedAsync(deployment, role, caller, scenario);
+
             case "a page's record under a bound action, on a session that proved its gate":
                 return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: false);
 
@@ -2930,6 +2938,61 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             .Match(() => Decided.Allowed, Refused);
 
         Assert.Equal(checkedAlone, Paged(paged));
+
+        return checkedAlone;
+    }
+
+    // BFF-CAP-002 AC6 (D-211): the capability page of the organization itself, which the
+    // organization-wide single check is asked beside and must match: a role granted on
+    // the whole organization admits, a deny there defeats it, and a grant on a record of
+    // it reaches nothing above that record.
+    private async Task<Decided> OrganizationPagedAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+
+        if (scenario.EndsWith("on a record of it alone", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(
+                GrantSubject.Of(caller), role, workspace, false, null, null, cancellationToken);
+        }
+        else
+        {
+            await deployment.GrantAsync(
+                GrantSubject.Of(caller), role, null, false, null, null, cancellationToken);
+        }
+
+        if (scenario.EndsWith("under a deny on the whole organization", StringComparison.Ordinal))
+        {
+            await deployment.GrantAsync(
+                GrantSubject.Of(caller), role, null, true, null, null, cancellationToken);
+        }
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Capability paged = Assert.Single(Rendered(await gate.CapabilitiesAsync(
+            AccessContext.Of(caller),
+            ResourceType.Parse("organization"),
+            [ResourceId.Parse(deployment.Organization.ToString())],
+            [HostPermissions.Read],
+            cancellationToken)));
+
+        Decided checkedAlone = (await gate.RequireAsync(
+                AccessContext.Of(caller),
+                HostPermissions.Read,
+                deployment.Organization,
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        Assert.Empty(paged.Requires);
+        Assert.Equal(checkedAlone, paged.Can.Contains(HostPermissions.Read) ? Decided.Allowed : Decided.Denied);
 
         return checkedAlone;
     }

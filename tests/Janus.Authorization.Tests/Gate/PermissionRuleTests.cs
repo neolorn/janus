@@ -108,6 +108,42 @@ public sealed class PermissionRuleTests
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC6, AUTHZ-GATE-005 AC1 (D-211): a page of organizations is one
+    /// statement naming every organization and every permission by parameter, reading
+    /// only the grants that name no record and no ancestry, the deciding clause written
+    /// as every rendering writes it; where the account holds no current membership of
+    /// the administrative organization, that organization's grants are set aside.
+    /// </summary>
+    [Fact]
+    public void BFF_CAP_002_AC6_APageOfOrganizationsIsOneStatementOverTheGrantsNamingNoRecord()
+    {
+        var administrative = new OrganizationId(Guid.NewGuid());
+        IReadOnlyList<Permission> asked = [Permission.Parse("article:read"), Permission.Parse("grant:read")];
+
+        SqlFilter member = PermissionRule.ToOrganizationPage(
+            asked,
+            SubjectSet.Of(Subject(), [GroupId.New(TimeProvider.System)], 3, restricted: false),
+            DateTimeOffset.UnixEpoch);
+        SqlFilter unheld = PermissionRule.ToOrganizationPage(
+            asked,
+            SubjectSet.Of(Subject(), [], 3, restricted: false, withoutMembership: administrative),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(1, member.Text.Count(character => character == ';'));
+        Assert.Contains("unnest(CAST(@identity_authz_page_ids AS text[]))", member.Text, StringComparison.Ordinal);
+        Assert.Contains("resource_type IS NULL", member.Text, StringComparison.Ordinal);
+        Assert.Contains(".organization = CAST(identity_authz_page.id AS uuid)", member.Text, StringComparison.Ordinal);
+        Assert.All(
+            Deciding.Where(clause => !clause.StartsWith(".organization", StringComparison.Ordinal)),
+            clause => Assert.Contains(clause, member.Text, StringComparison.Ordinal));
+        Assert.DoesNotContain("identity.ancestry", member.Text, StringComparison.Ordinal);
+        Assert.Equal(["article:read", "grant:read"], (string[])member.Parameters["identity_authz_permissions"]);
+        Assert.DoesNotContain("identity_authz_without", member.Text, StringComparison.Ordinal);
+        Assert.Contains(".organization <> @identity_authz_without", unheld.Text, StringComparison.Ordinal);
+        Assert.Equal(administrative.Value, unheld.Parameters["identity_authz_without"]);
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-002 AC1: the predicate the three renderings ask is written once, so
     /// every one of them carries the same set of values.
     /// </summary>

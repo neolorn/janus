@@ -43,6 +43,9 @@ internal sealed class PermissionRule
 
     private const string Prefix = "identity_authz_";
 
+    // The parameter every rendering but the organization page names its organization by.
+    private const string Scoped = "@" + Prefix + "organization";
+
     // The kind column of a written consent, as the consent records spell it.
     private const string WrittenKind = "written";
 
@@ -171,6 +174,64 @@ internal sealed class PermissionRule
 
         return candidates.FirstOrDefault(candidate => candidate.Deny)
             ?? (candidates.Count == 0 ? null : candidates[0]);
+    }
+
+    /// <summary>
+    /// What each organization of a page confers across the whole of it, for every
+    /// permission asked, in one query rather than one per organization or permission.
+    /// </summary>
+    /// <param name="permissions">What is being asked for.</param>
+    /// <param name="subjects">Who holds grants for the principal.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <returns>
+    /// The statement and its parameters, naming the page of organizations, each an
+    /// identifier, by parameter.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The permissions or the subjects are absent.</exception>
+    /// <remarks>
+    /// Implements BFF-CAP-002 and AUTHZ-GATE-005 AC1 (D-202, D-211). An organization is
+    /// reached as <see cref="ToOrganizationCandidates"/> reaches it: only by a grant naming
+    /// no record, a deny defeating every allow, and nothing confers in the organization
+    /// the principal holds no current membership of (IDN-LIFE-009a).
+    /// </remarks>
+    public static SqlFilter ToOrganizationPage(
+        IReadOnlyList<Permission> permissions,
+        SubjectSet subjects,
+        DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        var parameters = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [Prefix + "permissions"] = permissions.Select(permission => permission.ToString()).ToArray(),
+            [Prefix + "accounts"] = subjects.Accounts,
+            [Prefix + "groups"] = subjects.Groups,
+            [Prefix + "at"] = at,
+        };
+
+        string unheld = string.Empty;
+
+        if (subjects.WithoutMembership is OrganizationId without)
+        {
+            parameters[Prefix + "without"] = without.Value;
+            unheld = "\n AND " + Prefix + "grant.organization <> @" + Prefix + "without";
+        }
+
+        return new SqlFilter(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                SELECT {PageAlias}.{PageColumn} AS "{nameof(PageCapability.Resource)}",
+                       {Prefix}grant.permission AS "{nameof(PageCapability.Permission)}",
+                       bool_or({Prefix}grant.deny) AS "{nameof(PageCapability.Denied)}"
+                FROM unnest(CAST(@{PageParameter} AS text[])) AS {PageAlias}({PageColumn})
+                JOIN identity.effective_grants AS {Prefix}grant
+                  ON {Live(Prefix + "grant", "CAST(" + PageAlias + "." + PageColumn + " AS uuid)")}
+                 AND {Prefix}grant.resource_type IS NULL{unheld}
+                GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
+                """),
+            parameters);
     }
 
     /// <summary>
@@ -853,7 +914,7 @@ internal sealed class PermissionRule
     private static string Matches(string grant, string row) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {Live(grant)}
+        {Live(grant, Scoped)}
                   AND ({grant}.resource_type IS NULL OR EXISTS (
                       SELECT 1
                       FROM identity.ancestry AS {grant}_above
@@ -869,16 +930,17 @@ internal sealed class PermissionRule
     private static string MatchesOrganization(string grant) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {Live(grant)}
+        {Live(grant, Scoped)}
                   AND {grant}.resource_type IS NULL
         """);
 
-    // What every rendering asks of a grant before it asks what the grant reaches.
-    private static string Live(string grant) => string.Create(
+    // What every rendering asks of a grant before it asks what the grant reaches, within
+    // the organization the rendering names as SQL.
+    private static string Live(string grant, string within) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         {grant}.permission = ANY(@{Prefix}permissions)
-                  AND {grant}.organization = @{Prefix}organization
+                  AND {grant}.organization = {within}
                   AND {grant}.revoked_at IS NULL
                   AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
                   AND (({grant}.subject_type = 'user'

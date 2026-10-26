@@ -320,15 +320,27 @@ public interface IAccessGate
     /// once rather than a query per row.
     /// </summary>
     /// <param name="context">Who is asking.</param>
-    /// <param name="type">The kind of thing the records are.</param>
-    /// <param name="resources">The records of the page.</param>
+    /// <param name="type">
+    /// The kind of thing the records are, or <c>organization</c>, which no host declares,
+    /// for what the caller may do across the whole of each organization named.
+    /// </param>
+    /// <param name="resources">The records of the page, or the organizations' identifiers.</param>
     /// <param name="permissions">
     /// The permissions the caller's surface offers on them, each one the host declared as
-    /// a capability of the type; naming any other is the calling code's fault, and raises
+    /// a capability of the type, or, of an organization, any declared permission, the
+    /// library's included; naming any other is the calling code's fault, and raises
     /// (BFF-CAP-002).
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>One capability per record, in the order the records were given.</returns>
+    /// <remarks>
+    /// BFF-CAP-002 (D-211): an organization's capabilities are what its organization-wide
+    /// check admits, through a grant naming no record, a deny there defeating it, every
+    /// permission judged in one statement. No refusal is recorded or counted, and what a
+    /// capability still requires never holds a consent, since the check names no data
+    /// subject; consent is asked of each record. A host job's context is refused as for
+    /// any page.
+    /// </remarks>
     ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync(
         AccessContext context,
         ResourceType type,
