@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Recovery;
@@ -7,8 +8,12 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -192,6 +197,143 @@ public sealed class HostEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-HOST-002 AC6 (D-211): with the host's routing before the browser profile and
+    /// after it, an unmarked controller action reached through
+    /// <c>MapFallbackToController</c>, the fallback itself marked as answering anyone, is
+    /// refused 401 <c>auth.session.expired</c> with the code alone for a browser holding
+    /// no session, before it runs, and reached by a signed-in one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_HOST_002_AC6_AnUnmarkedActionAFallbackResolvesToRefusesABrowserHoldingNoSessionWhereverRoutingIsAddedAsync()
+    {
+        foreach (Action<IApplicationBuilder>? routing in Routings())
+        {
+            (Answer held, Answer reached) = await FallenBackAsync(routing, nameof(ArchiveController.Shelf), "Archive");
+
+            Assert.Equal(StatusCodes.Status401Unauthorized, held.Status);
+            Assert.Equal(ErrorCodes.SessionExpired.ToString(), held.Text("code"));
+            Assert.Empty(held.Json().GetProperty("details").EnumerateObject());
+            Assert.Equal(StatusCodes.Status200OK, reached.Status);
+            Assert.Equal(ArchiveController.Shelved, reached.Body);
+        }
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC6 (D-211): with the host's routing before the browser profile and
+    /// after it, a controller action reached through <c>MapFallbackToController</c> and
+    /// marked with <c>[AllowNoSession]</c>, on the action or on its controller, is reached
+    /// by a browser holding no session.
+    /// </summary>
+    /// <param name="action">The action the fallback resolves to.</param>
+    /// <param name="controller">Its controller.</param>
+    /// <param name="answered">What the action answers with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(nameof(ArchiveController.Notice), "Archive", ArchiveController.Noticed)]
+    [InlineData(nameof(NoticeboardController.Board), "Noticeboard", NoticeboardController.Boarded)]
+    public async Task BFF_HOST_002_AC6_AnActionMarkedWithAllowNoSessionIsReachedWithoutASessionWhereverRoutingIsAddedAsync(
+        string action,
+        string controller,
+        string answered)
+    {
+        foreach (Action<IApplicationBuilder>? routing in Routings())
+        {
+            (Answer held, _) = await FallenBackAsync(routing, action, controller);
+
+            Assert.Equal(StatusCodes.Status200OK, held.Status);
+            Assert.Equal(answered, held.Body);
+        }
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC6 (D-211): with the host's routing before the browser profile and
+    /// after it, a request carrying no session with a method a served host path does not
+    /// take, a path marked as answering anyone and an unmarked one alike, is answered 404
+    /// <c>authz.resource.notfound</c>, as no path is, and no host endpoint runs.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_HOST_002_AC6_AMethodAServedHostPathDoesNotTakeIsNotFoundWhereverRoutingIsAddedAsync()
+    {
+        foreach (Action<IApplicationBuilder>? routing in Routings())
+        {
+            var host = new HostEndpoints();
+            await using var deployment = new Deployment(host: host.Map, routing: routing);
+
+            Flow.Prepare(deployment);
+            var browser = new Browser(deployment);
+
+            foreach (string path in new[] { HostEndpoints.Views, HostEndpoints.Sessions + "/unknown" })
+            {
+                Answer answered = await browser.SendAsync("GET", path);
+
+                Assert.Equal(StatusCodes.Status404NotFound, answered.Status);
+                Assert.Equal(ErrorCodes.ResourceNotFound.ToString(), answered.Text("code"));
+            }
+
+            Assert.Empty(host.Reached);
+        }
+    }
+
+    /// <summary>
+    /// BFF-HOST-002 AC6 (D-211): the endpoints ASP.NET Core's routing makes itself for a
+    /// method and for a content type a matched path does not take carry no metadata and
+    /// the display names stage 8 recognises them by, so they are held to no session; an
+    /// endpoint alike in all but its name is held to one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_HOST_002_AC6_TheFrameworksOwnRejectionsAreTheEndpointsStageEightHoldsToNoSessionAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var selected = new List<Endpoint?>();
+
+        using var server = new ServerInMemory();
+        using IHost routed = new HostBuilder()
+            .ConfigureWebHost(web => web
+                .UseServer(server)
+                .ConfigureServices(services => services.AddRouting())
+                .Configure(application => application
+                    .Use(next => context =>
+                    {
+                        // A request carrying no content type is not judged by its type.
+                        context.Request.ContentType = "text/plain";
+
+                        return next(context);
+                    })
+                    .UseRouting()
+                    .Use(next => context =>
+                    {
+                        selected.Add(context.GetEndpoint());
+
+                        return next(context);
+                    })
+                    .UseEndpoints(endpoints => endpoints
+                        .MapPost("/parcels", () => Results.NoContent())
+                        .Accepts<string>("application/json"))))
+            .Build();
+
+        await routed.StartAsync(cancellationToken);
+
+        _ = await server.SendAsync("GET", "/parcels");
+        _ = await server.SendAsync("POST", "/parcels");
+
+        await routed.StopAsync(cancellationToken);
+
+        Assert.Collection(
+            selected,
+            method => Assert.Equal(SessionRequired.MethodNotTaken, method?.DisplayName),
+            media => Assert.Equal(SessionRequired.MediaTypeNotTaken, media?.DisplayName));
+        Assert.All(selected, rejection => Assert.Empty(rejection!.Metadata));
+        Assert.All(selected, rejection => Assert.False(SessionRequired.Asks(rejection)));
+        Assert.True(SessionRequired.Asks(new Endpoint(
+            context => Task.CompletedTask,
+            EndpointMetadataCollection.Empty,
+            "405 HTTP Method Not Allowed")));
+    }
+
+    /// <summary>
     /// BFF-ORDER-001 AC2 (D-209): where the host's routing comes after the browser
     /// profile, the host's middleware between the two runs before the endpoint is known,
     /// the endpoint routing then selects is judged before it runs, and the host's
@@ -365,6 +507,37 @@ public sealed class HostEndpointTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync() => _deployment.DisposeAsync();
+
+    // Where the host adds its routing: before the profiles, and after the browser profile.
+    private static IEnumerable<Action<IApplicationBuilder>?> Routings() =>
+        [null, mount => _ = mount.UseRouting()];
+
+    // What a browser holding no session and a signed-in one are answered at an action the
+    // host reaches only through a fallback to it, the fallback marked as answering anyone,
+    // with routing where the host adds it.
+    private static async Task<(Answer Held, Answer Reached)> FallenBackAsync(
+        Action<IApplicationBuilder>? routing,
+        string action,
+        string controller)
+    {
+        await using var deployment = new Deployment(
+            host: endpoints => _ = endpoints.MapFallbackToController(action, controller).AllowNoSession(),
+            routing: routing,
+            services: services => _ = services
+                .AddControllers()
+                .ConfigureApplicationPartManager(parts =>
+                {
+                    parts.ApplicationParts.Clear();
+                    parts.ApplicationParts.Add(new AssemblyPart(typeof(ArchiveController).Assembly));
+                }));
+
+        Flow.Prepare(deployment);
+
+        Answer held = await new Browser(deployment).SendAsync("GET", "/archive/shelf");
+        Browser signedIn = await Flow.SignedInAsync(deployment);
+
+        return (held, await signedIn.SendAsync("GET", "/archive/shelf"));
+    }
 
     // A browser holding the enrolment session an approved recovery opened for the person
     // last signed in, the first person registered having approved it.

@@ -4075,3 +4075,14 @@ against the public contract of LIB-API-001.
   message, under the request's logging scope, so the correlation identifier the 500
   `system.fault` answers with finds it. The error `IExports.AssembleAsync` returns is
   unchanged: it names the contributor and holds no fault.
+- Every endpoint routing selects after the browser profile needs a live sign-in session
+  unless it is marked, whatever its type: an unmarked controller action or Razor page
+  reached through `MapDynamicControllerRoute`, `MapFallbackToController`,
+  `MapDynamicPageRoute` or `MapFallbackToPage` now answers a request carrying no session
+  with 401 `auth.session.expired` before it runs, where it answered anyone before, with
+  the host's routing before the browser profile or after it. A method a matched path
+  does not take still answers 404 `authz.resource.notfound`, and a content type it does
+  not take still answers 415.
+- `[AllowNoSession]` (`AllowNoSessionAttribute`) marks a host's controller, action or
+  Razor page as one that answers anyone, as `AllowNoSession()` marks an endpoint where
+  it is mapped; the nearer mark stands.

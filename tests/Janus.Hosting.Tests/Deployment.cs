@@ -167,6 +167,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// How the host adds routing after the browser profile, with any middleware of its
     /// own around it; routing comes before the profiles, unless it says otherwise.
     /// </param>
+    /// <param name="services">
+    /// What the host registers for its own endpoints beside what the library registers;
+    /// nothing, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -182,7 +186,8 @@ internal sealed class Deployment : IAsyncDisposable
         ChallengeVerifier? verifier = null,
         Action<IEndpointRouteBuilder>? host = null,
         Action<JsonOptions>? json = null,
-        Action<IApplicationBuilder>? routing = null)
+        Action<IApplicationBuilder>? routing = null,
+        Action<IServiceCollection>? services = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -249,6 +254,8 @@ internal sealed class Deployment : IAsyncDisposable
         {
             _ = builder.Services.ConfigureHttpJsonOptions(json);
         }
+
+        services?.Invoke(builder.Services);
 
         _application = builder.Build();
 

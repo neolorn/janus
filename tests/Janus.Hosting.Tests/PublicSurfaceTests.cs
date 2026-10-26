@@ -295,6 +295,7 @@ public sealed class PublicSurfaceTests
             typeof(IUnsignedCallback),
             typeof(HostingRegistration),
             typeof(IdentityEndpoints),
+            typeof(AllowNoSessionAttribute),
             typeof(Answers),
             typeof(CapabilityFields),
             typeof(RequestSource),

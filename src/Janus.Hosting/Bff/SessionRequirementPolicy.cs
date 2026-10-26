@@ -15,7 +15,7 @@ namespace Janus.Hosting.Bff;
 /// endpoint routing then selects is judged as the stage judges it, before it runs.
 /// </summary>
 /// <remarks>
-/// Implements BFF-HOST-002 and BFF-ORDER-001 (D-209). Mounting needs nothing
+/// Implements BFF-HOST-002 and BFF-ORDER-001 (D-209, D-211). Mounting needs nothing
 /// security-relevant to be right (BFF-OWN-001), so a host whose routing comes after the
 /// browser profile is held to stage 8 as one whose routing comes before it: each
 /// endpoint the request may not reach is replaced among the candidates with the
@@ -32,8 +32,15 @@ internal sealed class SessionRequirementPolicy : MatcherPolicy, IEndpointSelecto
     public override int Order => int.MaxValue;
 
     /// <summary>
-    /// Whether any of the endpoints is one that needs a session.
+    /// Whether any of the endpoints is one that needs a session, or a dynamic one whose
+    /// endpoint is known only once the request is matched.
     /// </summary>
+    /// <remarks>
+    /// Routing decides which policies apply to a dynamic endpoint (a dynamic controller
+    /// route, a fallback to a controller or a page) from its placeholder, so a policy
+    /// that applied only to the placeholder's marks would leave the endpoint it resolves
+    /// to unjudged.
+    /// </remarks>
     /// <param name="endpoints">The endpoints routing may select among.</param>
     /// <returns>Whether the policy judges them.</returns>
     /// <exception cref="ArgumentNullException">The endpoints are absent.</exception>
@@ -41,7 +48,7 @@ internal sealed class SessionRequirementPolicy : MatcherPolicy, IEndpointSelecto
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        return endpoints.Any(SessionRequired.Asks);
+        return ContainsDynamicEndpoints(endpoints) || endpoints.Any(SessionRequired.Asks);
     }
 
     /// <summary>

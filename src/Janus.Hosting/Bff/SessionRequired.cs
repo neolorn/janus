@@ -10,15 +10,28 @@ namespace Janus.Hosting.Bff;
 /// What an endpoint carries to say whether it answers nobody.
 /// </summary>
 /// <remarks>
-/// Implements BFF-STEP-001, BFF-HOST-002 and API-CONV-003. An endpoint says where it is
-/// mounted whether it needs a session, so which endpoints need one is read from the
+/// Implements BFF-STEP-001, BFF-HOST-002 and API-CONV-003 (D-211). An endpoint says where
+/// it is mounted whether it needs a session, so which endpoints need one is read from the
 /// mounting rather than from the body of every handler, and the stage that reads it
 /// answers them all the same way. An endpoint that says nothing needs one: the library
 /// marks its own as answering anyone where it mounts them and then marks those that do
-/// not, and a host endpoint left unmarked fails closed.
+/// not, and a host endpoint left unmarked, or an action or a page it reaches through a
+/// dynamic route, fails closed.
 /// </remarks>
 internal sealed class SessionRequired
 {
+    /// <summary>
+    /// The display name ASP.NET Core gives the endpoint it makes for a method a matched
+    /// path does not take (<c>HttpMethodMatcherPolicy</c>).
+    /// </summary>
+    internal const string MethodNotTaken = "405 HTTP Method Not Supported";
+
+    /// <summary>
+    /// The display name ASP.NET Core gives the endpoint it makes for a content type a
+    /// matched path does not take (<c>AcceptsMatcherPolicy</c>).
+    /// </summary>
+    internal const string MediaTypeNotTaken = "415 HTTP Unsupported Media Type";
+
     private static readonly SessionRequired Needed = new(needs: true);
 
     private static readonly SessionRequired Unneeded = new(needs: false);
@@ -57,15 +70,16 @@ internal sealed class SessionRequired
     }
 
     /// <summary>
-    /// Whether the endpoint the request reached is one that needs a session. Only an
-    /// endpoint something mapped is held to one: a request that reached none, or only
-    /// the framework's answer to a method a mapped path does not take, is answered as
-    /// no path is (API-CONV-003).
+    /// Whether the endpoint the request reached is one that needs a session, whatever its
+    /// type: a route something mapped and an endpoint a dynamic route resolves to alike.
+    /// Only a request that reached none, or one of the endpoints ASP.NET Core's matcher
+    /// policies make for a method or a content type a matched path does not take, is held
+    /// to none, and is answered as API-CONV-003 gives (D-211).
     /// </summary>
     /// <param name="endpoint">The endpoint, or nothing where routing matched none.</param>
     /// <returns>Whether it needs a session.</returns>
     public static bool Asks(Endpoint? endpoint) =>
-        endpoint is RouteEndpoint && (endpoint.Metadata.GetMetadata<SessionRequired>()?._needs ?? true);
+        endpoint is not null && !Rejection(endpoint) && Needs(endpoint.Metadata);
 
     /// <summary>
     /// What stage 8 answers a request to the endpoint with, where the request may not
@@ -84,4 +98,30 @@ internal sealed class SessionRequired
             ? resolved.Expiry ?? Error.From(ErrorCodes.SessionExpired)
             : null;
     }
+
+    // The mark nearest the endpoint stands: the last its metadata carries, the
+    // convention's and the attribute's alike, as a single kind of mark would be read.
+    private static bool Needs(EndpointMetadataCollection metadata)
+    {
+        for (int index = metadata.Count - 1; index >= 0; index--)
+        {
+            switch (metadata[index])
+            {
+                case SessionRequired mark:
+                    return mark._needs;
+                case AllowNoSessionAttribute:
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    // HttpMethodMatcherPolicy's 405 endpoint and AcceptsMatcherPolicy's 415, as
+    // ASP.NET Core 10.0.14 makes them: no metadata, and the display name it gives each.
+    // One the framework renamed asks for a session, which fails closed.
+    private static bool Rejection(Endpoint endpoint) =>
+        endpoint.Metadata.Count == 0
+        && endpoint.DisplayName is MethodNotTaken or MediaTypeNotTaken;
+
 }

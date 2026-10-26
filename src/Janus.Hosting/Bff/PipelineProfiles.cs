@@ -191,7 +191,9 @@ public static class PipelineProfiles
     /// carries: a request that reaches it carrying no session is issued the
     /// pre-authentication session, and a state-changing request to it carries that
     /// session's synchronizer token or is refused. Step-up is never marked here: it is
-    /// bound to the permission the endpoint asks the gate for.
+    /// bound to the permission the endpoint asks the gate for. A controller, an action or
+    /// a Razor page, which a dynamic route reaches through no builder of its own, is
+    /// marked with <see cref="AllowNoSessionAttribute"/>.
     /// </remarks>
     /// <typeparam name="TBuilder">The kind of convention builder.</typeparam>
     /// <param name="builder">The endpoint, as the host maps it.</param>

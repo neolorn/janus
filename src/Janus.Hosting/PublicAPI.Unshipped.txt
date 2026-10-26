@@ -1,5 +1,7 @@
 #nullable enable
 Janus.Hosting.AuthorizationTables
+Janus.Hosting.Bff.AllowNoSessionAttribute
+Janus.Hosting.Bff.AllowNoSessionAttribute.AllowNoSessionAttribute() -> void
 Janus.Hosting.Bff.Answers
 Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Management = 0 -> Janus.Hosting.Bff.ApplicationKind
