@@ -162,7 +162,7 @@ base".
     name of its own" (Allowed).
 - PRIV-RIGHT-005b:
   - `SubjectEventContractTests.PRIV_RIGHT_005b_NoEventIsOwedAfterAnExport`;
-  - `ExportServiceTests.PRIV_RIGHT_005b_AnAssembledExportOwesTheSubscribersNothingAsync`.
+  - `ExportEndpointTests.PRIV_RIGHT_005b_AnAssembledExportOwesTheSubscribersNothingAsync`.
 - PRIV-RIGHT-003:
   - AC5, in `ExportServiceTests`:
     - `PRIV_RIGHT_003_AC5_EachContributorsSectionsFollowTheLibrarysInNameOrderAsync`;
@@ -693,10 +693,8 @@ base".
 - Q41, a step-up judged while a unit of work is open, AUTH-FACT-002b, CONV-DESIGN-003
   (`e2b954bd`, `691af92b`):
   - `StepUpGuardTests.AUTH_FACT_002b_AStepUpJudgedWhileAUnitOfWorkIsOpenOffersAsWhereNoSignalIsDeclaredAsync`;
-  - `StepUpBeforeTheUnitOfWorkTests.CONV_DESIGN_003_AC13_AHostsGateUnmetAtItsAskInsideItsUnitOfWorkAsksNoSignalAsync`
-    (D-209's first case, judged at the guard: `RequestGates` keeps each gate's judgement for
-    the request, so a host's gate met at its first ask is not judged again inside the
-    host's unit of work, and the case is not reachable end to end);
+  - `StepUpBeforeTheUnitOfWorkTests.CONV_DESIGN_003_AC13_TheGuardJudgingAHostsGateInsideAUnitOfWorkAsksNoSignalAsync`
+    (at the guard; Q48);
   - `StepUpBeforeTheUnitOfWorkTests.CONV_DESIGN_003_AC13_AnOperationAHostCallsInsideItsUnitOfWorkAsksNoSignalAsync`
     (D-209's second case; the signal then asked at `POST /auth/step-up` with no unit of
     work open, before any text is sent);
@@ -745,15 +743,14 @@ base".
     `AnInvitationIssuedAsksTheSignalWithNoUnitOfWorkBegunAsync`,
     `AnInvitationNamingARoleAsksTheSignalWithNoUnitOfWorkBegunAsync`,
     `AMembershipEndedAsksTheSignalWithNoUnitOfWorkBegunAsync`;
-  - `AKeyUpgradeOffersNoTextCodeAndAsksNoSignalAsync`: a key upgrade offers no text code,
-    so it asks no signal.
+  - `AKeyUpgradeOffersNoTextCodeAndAsksNoSignalAsync`.
   - The operations were found from every caller of `PassedAsync`, `PassedToEnrolAsync`,
     `ChallengeAsync` and `IStepUpGate.RequireAsync`. That the TOTP confirm, the
     invitation's acknowledgement, the registration session's enrolments and
     `RequestGates.CostAsync` and `ReachedAsync` ask no signal was verified by reading.
 - Q42, INF-BG-001 AC5 (`0713cdf5`):
   `BackgroundWorkerTests.INF_BG_001_AC5_AJobDueBeyondTheTimersLongestDelayRunsWhenItIsDueAsync`.
-- Q43, AUTHZ-GATE-006 AC5, AUTHZ-TEST-001 AC1 and AC2, AUTHZ-PRIN-001 AC1 (`ee0240f8`):
+- Q43, AUTHZ-GATE-006 AC5, AUTHZ-TEST-001 AC2 (`ee0240f8`):
   - `GateBehaviourTests.AUTHZ_GATE_006_AC5_ARestrictedAccountsListsAreRefusedAModifyingPermissionAndHandedAReadingOneAsync`;
   - `TruthTableTests.AUTHZ_TEST_001_AC2_EveryRestrictedCaseDecidesTheSameWayThroughBothPathsAsync`
     (three `Restrictions` rows).
@@ -793,9 +790,7 @@ base".
   now asserts the forged callback's source row and its log lines.
 - The migration `OweNothingAfterAnExport`, OPS-MIG-001, D-203 (`30ef0c2f`):
   `OutboxStoreTests.OPS_MIG_001_AnExportRequestedDeliveryIsRemovedBeforeItsKindIsRetiredAsync`
-  (PostgreSQL: the migrations before it applied, such rows and their confirmations
-  written, then it applied). It deletes those rows: the destructive-operation gate reports
-  it and does not stop it.
+  (PostgreSQL).
 - OPS-SEC-001 AC5 (`f04398ed`): the key-clearing case is renamed
   `CommandFaultTests.OPS_SEC_001_AFaultLeavingTheHolderOfADocumentsKeysClearsEveryOneAsync`
   (Q27 above).
@@ -804,7 +799,8 @@ base".
   the test that carried it is renamed
   `Janus.Testing.Tests.PeopleTests.LIB_TEST_003_EachPersonIsSignedInAsTheirOwnSubjectAndReachesTheLibrarysRoutesItGrantsAsync`.
 - `Janus.Testing`'s secrets, the working guide's section 4 (`4d158fae`, `ea444454`):
-  - `SoftwarePasskeyTests.LIB_TEST_003_ADisposedPasskeyAnswersNoCeremonyAsItsKeyIsCleared`;
+  - `SoftwarePasskeyTests.LIB_TEST_003_ADisposedPasskeyAnswersNoCeremony` (renamed under D-210);
+    that disposal clears the key is verified by review;
     `SoftwarePasskey` is disposable (`PublicAPI.Unshipped.txt`), and `TestSession`
     disposes its passkey, verified by reading;
   - the key document's buffer cleared after the copy: verified by reading, since a test
@@ -812,13 +808,83 @@ base".
 - The comment in `SoftwarePasskey.cs` spells the member `webauthn` (`2469de9a`), checked
   by reading against `endpoints.txt`.
 - The sample's capacity check, CONV-DESIGN-003 (`410b1373`):
-  `CapacityTests.CONV_DESIGN_003_AC6_TwoBookingsOfAWorkshopsLastPlaceLeaveOneAsync`. The
-  test also passes without the row lock: the library's organization lock, taken as a
-  record is registered, already orders two bookings in one organization.
+  `CapacityTests.CONV_DESIGN_003_AC6_TwoBookingsOfAWorkshopsLastPlaceLeaveOneAsync`
+  proves the outcome.
 - The sample's packages from the feed alone, LIB-TEST-004 (`1cfa788e`, section 3 record
   22): verified by the sample host's gate run (section 5); no test decides it.
 - The product-name scan in a linked checkout (`68aaf9ec`, section 3 record 20).
 - Not built: the review finding on `ExportService.cs`, parked by Q47.
+
+**Built under D-210 and the review**
+
+- The servicing release of 2026-10-13, CONV-DEP-004 (`2c107c87`): SDK 10.0.402 in
+  `global.json`, `Microsoft.EntityFrameworkCore`, its relational and design packages and
+  `dotnet-ef` at 10.0.13, each listing checked on nuget.org first; the lockfiles
+  regenerated. Q49 asks about the release of 2026-10-25.
+- Q46, BFF-ORDER-001 AC2, BFF-OWN-001 (`677647b0`, `f39c31e1`; no runtime code changed):
+  - `HostEndpointTests.BFF_ORDER_001_AC2_WithRoutingAfterTheProfileAnEnrolmentRouteAnswersAsForNoEnrolmentSessionAsync`;
+  - `HostEndpointTests.BFF_ORDER_001_AC2_WithRoutingAfterTheProfileAnUnboundRequestIsMalformedAsBeforeAsync`
+    (a route value, a body and a host endpoint's query value);
+  - the documentation of `UseBrowserProfile`, `SessionResolution` and `MalformedRequest`
+    brought into line with BFF-OWN-001, verified by reading.
+- Q48, AUTH-STEP-002 AC10 (`0d7f26b7`):
+  - `StepUpGatesTests.AUTH_STEP_002_AC10_AReportedGateMetAtItsFirstAskIsMetAtASecondAfterItsMaximumAgeAsync`
+    and `..._AC10_AReportedGateUnmetAtItsFirstAskIsUnmetAtASecondAfterTheReportMeetsItAsync`;
+  - truth table: a `Requests` table of four rows (the report and the session, each met
+    then aged and unmet then met), in
+    `TruthTableTests.AUTH_STEP_002_AC10_EveryRequestCaseAnswersTheSecondAskAsTheFirstThroughBothPathsAsync`.
+  - The provider's judgement is kept for the request by acting subject and gate.
+- Q48, CONV-DESIGN-003 AC13's first case (`e5c434de`):
+  `HostGateInsideTheUnitOfWorkTests.CONV_DESIGN_003_AC13_AHostsGateUnmetAtItsAskInsideItsUnitOfWorkAsksNoSignalAsync`
+  (PostgreSQL, the gate a host asks); the guard's case is renamed
+  `StepUpBeforeTheUnitOfWorkTests.CONV_DESIGN_003_AC13_TheGuardJudgingAHostsGateInsideAUnitOfWorkAsksNoSignalAsync`.
+- `PhoneSignalAudit` asks the unit of work (`e2b16a48`), AUTH-FACT-002b, CONV-DESIGN-003:
+  proven through the real stack by the test above. A unit of work that is not the
+  library's is a fault, as `UnitOfWorkJoin`'s is (D-207).
+- The comment in `StepUpBeforeTheUnitOfWorkTests` on whose sessions the called operation
+  ends (`f2c903d6`).
+- OPS-DEP-004 AC7 (`56996663`): no committed test (Q51). Verified by running the changed
+  script as the pipeline runs it, gitleaks 8.30.1 at its pinned SHA-256, against scratch
+  repositories built at run time, with an invented credential:
+
+  | Scratch repository | Script before | Script after |
+  |---|---|---|
+  | a credential alone | fails, one finding | fails, one finding |
+  | a credential on a line carrying the inline allow marker | passes | fails, one finding |
+  | a `.gitleaksignore` at the root, untracked, listing the credential | passes | fails, naming the file |
+  | the same, tracked | passes | fails, naming the file |
+  | an empty `.gitleaksignore` tracked in a folder, history clean | passes | fails, naming the file |
+  | a `.gitleaksignore` committed and removed, tree clean | passes | passes |
+  | a clean repository | passes | passes |
+
+  The changed script over this repository's full history found nothing.
+- OPS-SEC-001 AC4 (`08436851`; no runtime code changed):
+  `BootstrapRefusalTests.OPS_SEC_001_AC4_EveryCommandRefusesAConnectionAbsentBlankOrNotAStringAsMalformedAsync`
+  (`bootstrap`, `rotate-kek`, `rotate-fingerprint-key`, `configure`, `replay-erasures` and
+  `register-client`; a connection absent, empty, blank, a number, null and an object).
+- CONV-SETUP-001 (`c4ad99a9`): `MSBuildTreatWarningsAsErrors` in `Directory.Build.props`;
+  `LibraryStructureTests.CONV_SETUP_001_AC2_AWarningMSBuildRaisesFailsTheBuildAsync`, and
+  `CONV_SETUP_001_AC1_NoProjectOverridesTheInheritedProperties` covering the new
+  property. No warning of MSBuild or the SDK was raised in the library's solution or the
+  sample host's, so none was fixed.
+- CONV-SETUP-004 AC3 (`4bbc960e`):
+  `LibraryStructureTests.CONV_SETUP_004_AC3_ASettingThatSetsARuleBelowErrorIsFoundInAnyBuildFile`
+  (one case for each setting `08` names, through the predicate the tree scan
+  `CONV_SETUP_004_AC2_TheEditorconfigIsTheOnlyPlaceARuleIsConfigured` uses).
+- AUTHZ-GATE-006, AUTHZ-DERIVE-005, the documentation of `IAccessGate.FilterAsync` and
+  `FragmentAsync`, `IDerivationMaterialiser` and `DerivationMaterialiser` (`e96ade6d`):
+  verified by reading against `AccessGate` and `DerivationMaterialiser`.
+- AUTHZ-SCOPE-001 AC4 (`0de297af`):
+  `TruthTableTests.AUTHZ_SCOPE_001_AC4_ARestrictedCallerIsRefusedWithNoRecordWhateverItHoldsAsync`
+  asserts the grant the refused revocation names still stands.
+- The changelog line on a job's unregistered record (`65e4ccbb`).
+- LIB-TEST-003 (`04318206`): the disposed passkey's case is renamed
+  `SoftwarePasskeyTests.LIB_TEST_003_ADisposedPasskeyAnswersNoCeremony`; that disposal
+  clears the key is verified by review.
+- CONV-GATE-001 AC2: the sample host's job added to the checks the protection of `main`
+  requires (below).
+- Not built: D-210 answer 47's fault entry (Q50), and the review's finding on
+  `SessionRequirementPolicy`'s dynamic endpoints (Q52).
 
 **Items the round proves that this section did not list**
 
@@ -1069,9 +1135,9 @@ base".
 - CONV-GATE-001:
   - AC1: `.github/workflows/gates.yml` runs on `pull_request`; the pull request run on
     the last commit pushed ran every job (section 5).
-  - AC2: the protection of `main` requires the status checks of the jobs; it requires 22
-    and not the sample host's job, which this round added. Adding it is a change of a
-    repository setting, which waits on the owner's leave.
+  - AC2: met. The protection of `main` requires the status checks of every job the
+    criterion lists, 23, the sample host's job among them (added under D-210); read back
+    from the branch protection's required checks.
 - CONV-LAYOUT-001 AC1: `LIB_PKG_001_AC1_NoAreaIsCompiledAgainstAnotherAreasInternals` and
   the "InternalsVisibleTo allow-list" job.
 - CONV-LAYOUT-002 AC2: the "Public surface files up to date" job, over the `PublicAPI`
@@ -1082,6 +1148,8 @@ base".
 - CONV-SETUP-003 AC2: `release.sh` in the "Public surface files up to date" job, which
   fails a range that changes a `PublicAPI.Shipped.txt` outside a release commit.
 - CONV-SETUP-004 AC1: the "Format" job.
+- OPS-DEP-004 AC7: no committed test (Q51); verified by running the changed script
+  against scratch repositories (section 1, under D-210).
 - CONV-TEST-001 AC1: verified by review of the tree: each test project is named for its
   source project and mirrors its folders; no job decides it.
 - CONV-VCS-004 AC1: `truth-table-change.sh` in the "Truth-table suite" job.
@@ -1646,7 +1714,7 @@ base".
     with `endpoints.txt` and a changelog line.
   - Answered by D-209, "Tier 1 records": the change stands.
 
-**Unanswered.**
+**Answered by D-210.**
 
 - **Q46 (Tier 3). Stages 5 and 7 under late routing (BFF-ORDER-001, BFF-HOST-002,
   D-209).**
@@ -1659,6 +1727,9 @@ base".
     - stage 7 (`MalformedRequest`) answers `api.request.malformed` without naming the
       member that failed to parse, since the member's binding is the endpoint's.
   - Parks nothing: both fail closed.
+  - Answered by D-210 answer 46: stage 5 fails closed under late routing, and routing
+    before the profile serves the enrolment routes; the malformed-request refusal reads
+    the endpoint routing selected whatever the order; built (section 1).
 - **Q47 (Tier 2). A contributor's fault in an export is logged with its type and frames
   (review finding on `ExportService.cs`, about line 207; BFF-ERR-002 AC2, PRIV-RIGHT-003,
   CONV-LOG-003).**
@@ -1675,6 +1746,82 @@ base".
       `IExports` throws);
     - **D:** a formatter private to `Janus.Privacy` (a second way of logging a fault).
   - Parked: that finding alone.
+  - Answered by D-210 answer 47 (reading A); its build waits on Q50.
+
+- **Q48 (Tier 3). D-209's first case of a step-up inside a host's unit of work (`08`
+  CONV-DESIGN-003 AC13).**
+  - The case read "a host's bound action whose gate is met at the first ask and unmet at
+    the ask inside its unit of work". `RequestGates` keeps each gate's judgement for the
+    request, so a gate met at its first ask is not judged again inside the host's unit of
+    work, and the case is not reachable end to end; it was tested at the guard alone.
+  - Raised in the run under D-209 inside section 1's lines on Q41, not as a question.
+  - Parked: the case's test through the gate a host asks.
+  - Answered by D-210, "A bound action's step-up gate is judged once a request": the case
+    cannot arise, and criterion 13's first case reads a host's bound action whose gate the
+    host first asks inside its own unit of work; built (section 1).
+
+**Unanswered.**
+
+- **Q49 (Tier 2). The servicing release of 2026-10-25 (CONV-DEP-004, D-205, D-210).**
+  - D-210 takes the servicing release of 2026-10-13 (.NET 10.0.13, SDK 10.0.402), built
+    in `2c107c87`. Microsoft's release metadata for .NET 10 names a later one, 10.0.14 of
+    2026-10-25 (SDK 10.0.403), marked a security release, and nuget.org lists
+    `Microsoft.EntityFrameworkCore`, its relational and design packages and `dotnet-ef`
+    at 10.0.14, published the same day.
+  - Readings, with the smallest fix for each:
+    - **A:** 10.0.13 stands for this round, and 10.0.14 is taken as its own change later;
+    - **B:** 10.0.14 and SDK 10.0.403 are taken now, in one change over `global.json`,
+      `Directory.Packages.props`, `.config/dotnet-tools.json` and the lockfiles.
+  - Parks nothing: D-210's move is built as it reads.
+- **Q50 (Tier 2). What the fault entry of D-210 answer 47 does (`08` CONV-DESIGN-007,
+  BFF-ERR-002 AC2, PRIV-RIGHT-003, CONV-LOG-003).**
+  - `FaultLog.Of` builds the fault's text and logs nothing. Every other caller keeps it
+    one of two ways: `ErrorTranslation`, `BackgroundWorker` and the restore test put it in
+    the `system.fault` error's `fault` detail, which `Refusal.WriteAsync` logs under the
+    correlation identifier and withholds from the body; `SendPublisher` logs it through
+    its own log event. `Janus.Privacy` holds no logger.
+  - `08` says the export keeps a contributor's fault "as the pipeline does", and D-210
+    answer 47 that the export "answers as before".
+  - Readings, with the smallest fix for each:
+    - **A:** `IFaultEntry` answers the entry (`string Of(Exception fault)`, Hosting's over
+      `FaultLog.Of`), and `ExportService` adds it as the `fault` detail beside
+      `contributor`, logged by the refusal under the correlation identifier. The answer
+      over HTTP is unchanged, but the error `IExports.AssembleAsync` returns gains a
+      `fault` detail, so a host calling the operation directly sees it.
+    - **B:** `IFaultEntry` keeps the entry in the log (`void Keep(string contributor,
+      Exception fault)`), Hosting's implementation logging `FaultLog.Of` through a log
+      event of its own; the operation's result is unchanged, and the entry is a second
+      log line beside the refusal's, tied to the request by its scope.
+  - Parked: the review finding on `ExportService.cs`, Q47's build.
+
+- **Q51 (Tier 2). A committed test of the scan's one allow-list (`06` OPS-DEP-004 AC7).**
+  - Running `.github/gates/secret-scanning.sh` takes bash, git, curl, `sha256sum` and tar
+    on Linux, a download of the gitleaks release, and a scratch repository holding a
+    credential. The test projects are .NET projects run on Windows here and on Ubuntu in
+    the pipeline; no test runs a gate script today.
+  - A committed test would need what `08` does not name: a container image the tests
+    pull, a test project for the pipeline's gates, a test reaching the network.
+  - Readings, with the smallest fix for each:
+    - **A:** no committed test; AC7 is a criterion no test decides, verified by running
+      the script against scratch repositories (section 1);
+    - **B:** a committed integration test, `08` naming the image, the test project and
+      whether a test may reach the network.
+  - Parked: the committed test alone; the script is built.
+- **Q52 (Tier 3). A host action a dynamic route resolves to holds no session
+  (BFF-HOST-002 AC1 and AC5, BFF-ORDER-001 stage 8, D-202 rule 3, D-209).**
+  - A host's unmarked controller action reached through `MapFallbackToController`, with
+    `AllowNoSession` on the fallback, answered 200 to a browser holding no session, with
+    routing before the profile and after it. The endpoint MVC resolves a dynamic route to
+    is an `Endpoint` built from the controller's data, not a `RouteEndpoint`, and
+    `SessionRequired.Asks` holds only a `RouteEndpoint` to a session; that line is how the
+    framework's own answers (405, no match) answer as API-CONV-003 gives.
+  - D-202 rule 3 and BFF-HOST-002 require a session at every endpoint the host maps after
+    the profile unless it is marked, and do not say how such an endpoint is told apart
+    from the framework's own answers.
+  - The review's change to `SessionRequirementPolicy.AppliesToEndpoints`
+    (`ContainsDynamicEndpoints`) is needed and does not decide the criterion alone.
+  - Parked: that finding whole (the change, its test, its fixture), kept out of every
+    commit.
 
 ## 5. Gate result
 
@@ -1682,31 +1829,36 @@ Fast checks on every commit, and after each merge of a part: build with warnings
 errors, the analysers and `dotnet format --verify-no-changes` over `Janus.slnx`, the unit
 and contract tests, all green.
 
-The pipeline's runs on `16c3d812`, the tip of the last push, were green: the push run
-40222543122 and the pull request run 40222543392.
+The pipeline's runs on `281df27c`, the tip of the last push, were green: the push run
+40261700394 and the pull request run 40261701812.
 
-The full gate ran once on the development machine at `4427c032`, after the last merge of
-a part, job by job as `.github/workflows/gates.yml` runs it, over the merge base with
-`main` (`b6d14fe`) to `HEAD`:
+The full gate ran once on the development machine at `12a1d22c`, after the last merge of
+a part, on SDK 10.0.402 installed under `tmp/tools/dotnet` by Microsoft's
+`dotnet-install.ps1` (its Authenticode signature valid, Microsoft Corporation; the
+installed `dotnet.exe` signed by Microsoft) with its own runtimes, 10.0.13, job by job as
+`.github/workflows/gates.yml` runs it, over the merge base with `main` (`b6d14fe`) to
+`HEAD`:
 
 | Job | Result |
 |---|---|
 | Locked restore, build, public surface, format | green |
-| Unit tests | 4701 of 4701 |
-| Contract tests | 178 of 178 |
+| Unit tests | 4711 of 4711 |
+| Contract tests | 211 of 211 |
 | Unicode tables run and diff, tool restore | green |
-| Integration tests | 1336 of 1336 |
+| Integration tests | 1341 of 1341 |
 | Policy coverage | 3 of 3 |
-| Truth-table change, truth-table suite | green, 183 of 183 |
+| Truth-table change, truth-table suite | green, 187 of 187 |
 | Analyser rules, permitted outcome, forbidden log values | 23 of 23, 4 of 4, 4 of 4 |
 | Dependency allow-list, internals allow-list | 2 of 2, 1 of 1 |
 | Forbidden markers, acceptance test names, commit message, changelog | green |
 | Destructive operations | reported only (the gate is disabled); it names the two `DELETE` statements of `OweNothingAfterAnExport` |
 | Dependency vulnerabilities | green, no package with a known vulnerability |
 | Double migration | both runs applied through `migrate` |
-| The sample host builds from the packages packed from the same commit, and its tests pass | green, `.github/gates/sample-host.sh` after a locked restore: the pack, the sample's restore with the library's packages from the folder feed alone, the tool install, its build with warnings as errors, `dotnet format --verify-no-changes` over `HostSample.slnx`, and its tests, 14 of 14 |
+| The sample host builds from the packages packed from the same commit, and its tests pass | green, on the same SDK: `.github/gates/sample-host.sh` after a locked restore, its build with warnings as errors and `dotnet format --verify-no-changes` over `HostSample.slnx`, and its tests, 14 of 14 |
 
-- The full-history secret scan (OPS-DEP-004) ran after the gate, gitleaks 8.30.1 under
-  `.gitleaks.toml` over every commit of every branch and tag (1561 commits): no finding.
-  It runs again before the push of this commit.
+- The full-history secret scan (OPS-DEP-004) ran after the gate, gitleaks 8.30.1 as the
+  changed script runs it (`.gitleaks.toml`, `--ignore-gitleaks-allow`, an empty ignore
+  path, no baseline, no `.gitleaksignore` in the tree), over every commit of every branch
+  and tag (1578 commits): no finding. It runs again before the push of this commit.
+- The protection of `main` requires 23 checks, the sample host's job among them.
 - The pipeline run, the gate of record, runs on the push of this commit.
