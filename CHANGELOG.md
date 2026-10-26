@@ -4024,3 +4024,7 @@ against the public contract of LIB-API-001.
   organization the deployment holds is refused 403 `authz.denied` naming `grant:manage`,
   recorded against no organization, whatever the caller holds, or `authz.restricted`
   with no record for an account under restriction, where it answered 500.
+- `POST /admin/grants` on a record whose registration is removed between the permission
+  check and the write is refused 403 `authz.denied` recorded against no organization and
+  carrying `details.correlation`, as a record no registration names is, where the
+  refusal carried no record.

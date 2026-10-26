@@ -154,6 +154,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "a grant on the whole of an organization the deployment does not hold, by a restricted system administrator",
             Decided.Restricted),
+        ("a grant on a record whose registration was removed since the gate step, by a caller managing grants", Decided.Denied),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
@@ -1331,6 +1332,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     role,
                     restricted: scenario.EndsWith("by a restricted system administrator", StringComparison.Ordinal));
 
+            case "a grant on a record whose registration was removed since the gate step, by a caller managing grants":
+                return await RemovedRecordGrantAsync(deployment, role, caller);
+
             case "a member a group does not hold taken out, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: false);
 
@@ -2237,6 +2241,85 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
 
         return written.Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004 (09 section 8): a grant on a record, asked through
+    // the library's operation by a caller managing grants in the record's organization,
+    // on a session that meets the gate, whose registration another connection removes
+    // between the gate step and the unit of work. The record then belongs to no
+    // organization, so it is refused as the gate step refuses one no registration names:
+    // one refusal of grant:manage recorded against no organization, carried in
+    // details.correlation. Nothing is written and no unit of work is left open.
+    private async Task<Decided> RemovedRecordGrantAsync(Deployment deployment, RoleName role, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        ResourceReference record = Reference(Workspace);
+        var context = AccessContext.Of(caller);
+
+        await deployment.RegisterAsync(record, containedIn: null, cancellationToken);
+
+        bool kept = false;
+
+        await using ServiceProvider interleaved = Interleaved(
+            async cancelled =>
+            {
+                if (kept)
+                {
+                    await using NpgsqlConnection removing = await host.OpenAsync();
+
+                    await removing.ExecuteAsync(new CommandDefinition(
+                        """
+                        DELETE FROM identity.ancestry WHERE resource_type = @type AND resource_id = @id;
+                        DELETE FROM identity.resources WHERE resource_type = @type AND resource_id = @id;
+                        """,
+                        new { type = record.Type.ToString(), id = record.Id.ToString() },
+                        cancellationToken: cancelled));
+                }
+            });
+
+        SessionId session;
+
+        await using (AsyncServiceScope keeping = interleaved.CreateAsyncScope())
+        {
+            session = await SteppedUpAsync(keeping.ServiceProvider, caller);
+            kept = true;
+        }
+
+        await using AsyncServiceScope scope = interleaved.CreateAsyncScope();
+
+        Result<GrantId> written = await scope.ServiceProvider.GetRequiredService<IGrants>().GrantAsync(
+            context,
+            session,
+            new GrantRequest(
+                GrantSubject.Of(account),
+                role,
+                record,
+                Deny: false,
+                ExpiresAt: null,
+                "A grant on a record removed meanwhile."),
+            cancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int held = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.grants WHERE subject_id = @account;",
+            new { account = account.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal(0, held);
+        Assert.Equal(1, await GrantRefusalsAsync(context, deployment.Organization));
+        Assert.False(Assert.IsType<UnitOfWorkInterleaved>(scope.ServiceProvider.GetRequiredService<IUnitOfWork>()).Open);
+
+        Error refusal = written.Match(_ => throw new InvalidOperationException("The grant was written."), error => error);
+        DeniedAccess? recorded = await scope.ServiceProvider.GetRequiredService<IAccessAudit>().FindAsync(
+            new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+            cancellationToken);
+
+        Assert.Equal(Permissions.GrantManage, recorded?.Permission);
+        Assert.Null(recorded?.Organization);
+
+        return Refused(refusal);
     }
 
     // AUTHZ-SCOPE-001 (D-207, D-208): the caller of a grant admission's case and the

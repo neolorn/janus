@@ -429,8 +429,9 @@ internal sealed class GrantService(
 
         // AUTHZ-INHERIT-002 (D-203): a grant on a record is written with its organization's
         // tree held, which a removal holds too, so the record still stands and a removal
-        // finds the grant to revoke. One removed since is answered as a record no
-        // registration names is (AUTHZ-SCOPE-001).
+        // finds the grant to revoke. One removed since is refused as the gate step refuses
+        // a record no registration names, once the unit of work has ended
+        // (AUTHZ-SCOPE-001, 09 section 8).
         if (grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id)
         {
             await resources.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
@@ -440,7 +441,8 @@ internal sealed class GrantService(
             {
                 await work.RollbackAsync().ConfigureAwait(false);
 
-                return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
+                return Result.Failure<GrantId>(
+                    await unscoped.RefusedAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false));
             }
         }
 
