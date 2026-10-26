@@ -160,34 +160,36 @@ migration across every query later.
 **AUTHZ-GRANT-004** — Grants and roles SHALL be runtime-changeable without a deploy.
 
 A change to a role SHALL carry a `reason` (API-CONV-002), SHALL be the `grant:manage`
-step-up action (`10` section 5a), and SHALL be recorded with the role, its permissions
-before and after, the reason and the actor. A change to a role that carries
-`system:administer` before or after it SHALL require `system:administer`
-(OPS-CFG-007). A change SHALL NOT take a library-owned permission out of a role the
-reserved `emergency` account holds, and the `emergency` account's grant of
-`system-administrator` SHALL NOT be revoked (OPS-BOOT-002). A role that a grant (live,
-expired or revoked), a declared derivation or a standing invitation (neither
-acknowledged nor revoked, expired or not) names SHALL NOT be removed
-(`authz.role.inuse`).
+step-up action (`10` section 5a), SHALL stay within the actor's reach (AUTHZ-GRANT-005),
+and SHALL be recorded with the role, its permissions and its `handsOut` before and
+after, the reason and the actor. A change to a role that carries `system:administer`
+before or after it SHALL require `system:administer` (OPS-CFG-007). A change SHALL NOT
+take a library-owned permission out of a role the reserved `emergency` account holds,
+and the `emergency` account's grant of `system-administrator` SHALL NOT be revoked
+(OPS-BOOT-002). A role that a grant (live, expired or revoked), a declared derivation or
+a standing invitation (neither acknowledged nor revoked, expired or not) or another
+role's `handsOut` names SHALL NOT be removed (`authz.role.inuse`).
 
-**Declared roles (D-204).** A host may declare the roles its deployment starts with
-(`AuthorizationDeclarationBuilder.Role(name, permissions)`, LIB-HOST-001), each name a
-role name as `POST /admin/roles` takes it and none a role of `10` section 3, and each
-permission a declared host permission or a library-owned one other than
-`system:administer` (OPS-CFG-007); any other fails startup with
-`model.startup.declarationinvalid`, `details.declaration` `role.<name>`. At each start,
-before the application serves a request, every declared role the deployment has not yet
-seeded is seeded, under the lock of its name, by the start principal `role-declaration`
-(`10` section 5.29, operation `role-seeding`), inside the start step and through no public
-operation. The role definition admits it there without `role:manage`, a step-up or a
-person's reason, its reason being `AUTHZ-GRANT-004`, and `IRoles` admits no system
-principal, refusing one with `authz.denied`, so no code outside the start step defines a
-role as it does, whatever principal it builds: the role is defined where no role of that name exists, recorded `authz.role.defined`, and left
-as it stands where one does; either way the name is kept as seeded, a row of a library
-table. A role once seeded is never seeded again, so a change or a removal an
-administrator makes later stands.
+**Declared roles (D-204, D-212).** A host may declare the roles its deployment starts
+with (`AuthorizationDeclarationBuilder.Role(name, permissions, handsOut)`, LIB-HOST-001,
+`handsOut` optional), each name a role name as `POST /admin/roles` takes it and none a
+role of `10` section 3, and each permission a declared host permission or a
+library-owned one other than `system:administer` (OPS-CFG-007), and each role its
+`handsOut` names one it declares or one of `10` section 3 (AUTHZ-GRANT-005); any other
+fails startup with `model.startup.declarationinvalid`, `details.declaration`
+`role.<name>`. At each start, before the application serves a request, every declared
+role the deployment has not yet seeded is seeded, under the lock of its name, by the
+start principal `role-declaration` (`10` section 5.29, operation `role-seeding`), inside
+the start step and through no public operation. The role definition admits it there
+without `role:manage`, a step-up or a person's reason, its reason being
+`AUTHZ-GRANT-004`, and `IRoles` admits no system principal, refusing one with
+`authz.denied`, so no code outside the start step defines a role as it does, whatever
+principal it builds: the role is defined where no role of that name exists, recorded
+`authz.role.defined`, and left as it stands where one does; either way the name is kept
+as seeded, a row of a library table. A role once seeded is never seeded again, so a
+change or a removal an administrator makes later stands.
 
-*Source: D-010, D-015, D-166, D-204*
+*Source: D-010, D-015, D-166, D-204, D-212*
 
 **Acceptance criteria**
 1. Creating a role and assigning permissions to it requires no restart.
@@ -197,14 +199,91 @@ administrator makes later stands.
 5. A change taking a library-owned permission out of the role the `emergency` account
    holds, and a revocation of that account's `system-administrator` grant, are refused
    with `authz.denied` and change nothing.
-6. Removing a role that a grant, a derivation or a standing invitation names, an
-   expired one included, is refused with `authz.role.inuse` and changes nothing.
+6. Removing a role that a grant, a derivation, a standing invitation or another role's
+   `handsOut` names, an expired one included, is refused with `authz.role.inuse` and
+   changes nothing.
 7. A declared role is defined at the first start of a fresh deployment; changed or removed
    by an administrator, it is not defined again at the next start; one an administrator
    made before it was declared is left as it stands; a declared role named as a role of
    `10` section 3 fails startup; an `IRoles` call made with a system principal's context,
    one named `role-declaration` included, is refused with `authz.denied` and changes
    nothing.
+
+---
+
+**AUTHZ-GRANT-005** — Nobody SHALL hand out a role beyond what they may hand out, and
+nobody SHALL give themselves access.
+
+**Values (D-212).** A person hands out a role where they make or revoke a grant of it,
+allow or deny; name it among an invitation's roles; or add a member (an account or a
+group) to a group, or remove one from it, where the group reaches a grant of the role,
+live, allow or deny, its own or that of a group it belongs to; and ending a membership,
+now or at an end set in advance, hands out every role its revocations and removals reach
+(`01` IDN-MEM-001, D-213). Each such change SHALL, beside the admission of
+AUTHZ-SCOPE-001, be refused with 403 `authz.role.notassignable` unless the actor may
+hand out every role it touches. The actor may hand out a role where: - it holds
+`system:administer` in the administrative organization; or - a role it holds, through a
+live allow grant at a scope that covers the change (across the organization, or on the
+grant's resource or an ancestor of it), lists that role among the roles its holders may
+hand out (`handsOut`); or - `authz.handout.byholding` is on (`10` section 4.5a; off by
+default) and the actor's grants admit, at the change's scope, every permission the role
+carries, as the gate's grant terms decide it (allows less denies, through groups and
+containment, derived grants included).
+
+A role's `handsOut` is a list of role names, set by the host for its own roles, any role
+a deployment holds named: where the role is created or changed (`POST /admin/roles`), and
+in a declared role (`AuthorizationDeclarationBuilder.Role(name, permissions, handsOut)`),
+none where absent. A change to a role SHALL be refused with `authz.role.notassignable`
+unless the actor holds `system:administer` in the administrative organization, or its
+grants there admit, across the organization, every permission the role carries before
+and after the change and it may hand out, by the rule above in the administrative
+organization, every role the role's `handsOut` names after the change; so nobody widens
+a role, or their own list, beyond their own reach.
+
+Nobody gives themselves access, whatever they may hand out. These SHALL be refused with
+403 `authz.grant.self`, save to an actor holding `system:administer` in the
+administrative organization, which can already change any role it holds:
+- an allow grant to the actor, or to a group the actor belongs to, directly or through
+  nesting;
+- the revocation of a deny grant to the actor or to such a group;
+- adding the actor, or such a group, to a group, and removing the actor or such a group
+  from a group that reaches a deny grant;
+- the acknowledgement of an invitation by the account that issued it (`20` REG-INV-002).
+
+Taking away one's own access stays allowed. OPS-CFG-007 stands over this rule: a role
+carrying `system:administer` needs that permission whatever list names it. Derived
+grants, which no person hands out, are outside it. The rule is judged where the
+admission is (AUTHZ-SCOPE-001, AUTHZ-GATE-006); a refusal writes nothing and is recorded
+as a refusal (AUTHZ-CONCEAL-004), counting toward `alerting.denials.threshold`; an
+admitted change is recorded as before, with its reason and its step-up.
+
+*Source: D-212, D-213*
+
+Without it, anyone who may manage grants holds every role one step removed, which is
+OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
+roles, PostgreSQL's per-role `ADMIN OPTION` and Salesforce's assignable profiles; the
+setting is Kubernetes' rule that holding a role's permissions is enough. Someone who may
+hand out a role can still give it to anyone: that is the trust handing it out means, and
+the record of who gave what, when and why is the control.
+
+**Acceptance criteria**
+1. With `authz.handout.byholding` off, an actor holding `grant:manage` and a role whose
+   `handsOut` names `accountant` grants `accountant` to another account, names it in an
+   invitation and adds a member to a group holding it; granting a role no role of the
+   actor lists is refused `authz.role.notassignable` and changes nothing.
+2. With the setting on, an actor whose grants admit every permission of a role hands it
+   out with no list naming it; one whose grants miss a permission, or deny one, is
+   refused.
+3. An allow grant to oneself, one to a group one belongs to through nesting, the
+   revocation of a deny on oneself, adding oneself to a group and acknowledging an
+   invitation one issued are each refused `authz.grant.self`; revoking one's own allow
+   grant is not.
+4. A role change adding a permission the actor's grants do not admit, and a `handsOut`
+   naming a role the actor may not hand out, are refused `authz.role.notassignable` and
+   change nothing.
+5. A revocation, a deny and a removal from a group are judged as a grant is.
+6. An actor holding `system:administer` in the administrative organization hands out any
+   role, to itself included, and changes any role.
 
 ---
 
@@ -219,12 +298,12 @@ removing a member) SHALL carry a `reason` (API-CONV-002) and SHALL be recorded w
 group, its name, the member where one changed, the reason and the actor, under the
 group's organization. A change of members SHALL be the `grant:manage` step-up action
 (`10` section 5a), and where the group reaches a grant of a role carrying
-`system:administer` it SHALL also require that permission (OPS-CFG-007); creating a
-group and removing one SHALL NOT be stepped up. A group that holds a member, belongs to
-a group, or was given a grant, live, expired or revoked, SHALL NOT be removed
-(`authz.group.inuse`).
+`system:administer` it SHALL also require that permission (OPS-CFG-007), and every role
+the group reaches is held to AUTHZ-GRANT-005; creating a group and removing one SHALL
+NOT be stepped up. A group that holds a member, belongs to a group, or was given a
+grant, live, expired or revoked, SHALL NOT be removed (`authz.group.inuse`).
 
-*Source: D-015, D-166*
+*Source: D-015, D-166, D-212*
 
 **Acceptance criteria**
 1. A user in a team inside a department inherits grants held by the department.

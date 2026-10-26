@@ -137,7 +137,8 @@ turnover**. This is a materially higher insider risk than a stable, known team.
 | Staff browsing customer health data out of curiosity | Partial — permissions limit reach; volume alerting detects patterns (D-045) |
 | Exporting the customer list before leaving | Covered — exports gated and audited (D-045) |
 | Approving their own recovery | Covered — self-approval blocked; but see R-A03 |
-| **Access surviving departure** | Covered — offboarding procedure (D-050); a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001, D-166) |
+| **Handing oneself or another a role beyond one's reach** | Covered: a role is handed out only by a role that lists it, by holding all it grants where the deployment allows that, or by a system administrator, on every route; nobody gives themselves access (AUTHZ-GRANT-005, D-212) |
+| **Access surviving departure** | Covered: offboarding procedure (D-050); ending a membership, now or at an end set in advance for the last day, revokes the person's grants in the organization, and for the administrative organization in every organization they are not a member of; a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001, D-166, D-213) |
 | **Shared logins destroying attribution** | Covered — prohibited and detected (D-051) |
 
 ---

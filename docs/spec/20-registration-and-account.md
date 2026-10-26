@@ -1018,17 +1018,18 @@ a second, personal channel.
 **REG-INV-002** — A person who already holds an account SHALL accept an invitation by
 **signing in**, after which they SHALL be taken directly to the membership step. A
 corporate address named by the invitation SHALL be added to the existing account as a
-verified identifier where the organization asserts it (REG-MAIL-001), or verified as
-any added identifier otherwise. The organization's credential policy (`requiredAssurance`,
+verified identifier where the organization asserts it (REG-MAIL-001), or verified as any
+added identifier otherwise. The organization's credential policy (`requiredAssurance`,
 `credentialRedundancy`, `loginFactors`) SHALL be satisfied before the membership
 attaches, counting only credentials whose factor that policy's `loginFactors` permits;
 an account that does not satisfy it is held at enrolment with no grace (AUTH-FACT-017).
 A refusal the account cannot meet by enrolling (the membership limit,
 `identity.membership.limitreached`, IDN-MEM-002; the email maximum,
 `identity.identifier.maximum`) SHALL be decided before the credential policy. No second
-account SHALL be created.
+account SHALL be created. An invitation the accepting account issued SHALL be refused
+with 403 `authz.grant.self`, nothing attached (`03` AUTHZ-GRANT-005, D-212).
 
-*Source: D-146, D-166; IDN-ACCT-003*
+*Source: D-146, D-166, D-212; IDN-ACCT-003*
 
 **Acceptance criteria**
 1. Opening an invitation while signed in, or signing in from the invitation landing page,

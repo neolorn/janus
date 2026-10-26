@@ -1936,6 +1936,7 @@ writes is one transaction; a refusal writes nothing. The refusals that can never
 
 **204**
 **403**: `authz.restricted` for a restricted account (IDN-ACCT-007);
+`authz.grant.self` where the account accepting issued the invitation (AUTHZ-GRANT-005);
 `auth.stepup.required` with `outcome` `enrol` and `policyRequirement` `{ field, value }`
 (AUTH-FACT-017, with no `deadline`: no grace applies to an account joining) when the
 account does not satisfy `requiredAssurance` or `credentialRedundancy` of the policy in
@@ -1959,7 +1960,7 @@ email the lock could admit (REG-DOM-001)
 Emits `MembershipChanged` and, where a corporate address is taken on,
 `IdentifierAdded` and `IdentifierPrimaryChanged`.
 
-*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187*
+*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187, D-212*
 
 ---
 
@@ -2234,8 +2235,10 @@ the two are one admission, refused and recorded once, only where neither admits
 (AUTHZ-SCOPE-001, D-208). `reason` is recorded. Revocation records the revoking actor;
 `DELETE` takes `{ "reason": "..." }`. A grant or revocation of a role that carries
 `system:administer` also requires `system:administer` in the administrative organization
-(OPS-CFG-007). Nothing is granted to the reserved `emergency` account, and its
-`system-administrator` grant is not revoked (OPS-BOOT-002).
+(OPS-CFG-007). Each grant and revocation is held to AUTHZ-GRANT-005: the actor may hand
+out the role, and the change does not widen the actor's own access. Nothing is granted
+to the reserved `emergency` account, and its `system-administrator` grant is not revoked
+(OPS-BOOT-002).
 
 **201**: `{ "id": "..." }` · **204** **400**: `api.request.malformed` naming `reason`
 where it is longer than 1024 characters after trimming **403**: `authz.denied` where
@@ -2246,7 +2249,9 @@ registered record, or, for a grant on `resourceType` `organization`, its `resour
 names no organization the deployment holds, recorded against no organization as section
 8 records an identifier naming no row (AUTHZ-SCOPE-001, D-209), where a role carrying
 `system:administer` is granted or revoked without it, and for a grant to the reserved
-account or a revocation of its `system-administrator` grant; `auth.stepup.required`
+account or a revocation of its `system-administrator` grant; `authz.role.notassignable`
+where the actor may not hand out the role, and `authz.grant.self` where the grant or
+revocation would widen the actor's own access (AUTHZ-GRANT-005); `auth.stepup.required`
 (`grant:manage`) **404**: `authz.grant.notfound`, to a caller the permission check
 admitted (`grant:manage` there, or `system:administer` in the administrative
 organization for a grant outside it), for a grant already revoked, or one a derivation
@@ -2255,7 +2260,7 @@ wrote or materialised **409**: `authz.grant.duplicate`; `authz.grant.expired` wh
 `authz.grant.unresolved` where `role` names no role the deployment holds, or `subjectId`
 names a group that does not exist or belongs to another organization (`details.member`)
 
-*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-SCOPE-001, D-166, D-207, D-208, D-209*
+*Source: AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-005, AUTHZ-SCOPE-001, D-166, D-207, D-208, D-209, D-212*
 
 ---
 
@@ -2281,29 +2286,36 @@ marks a grant a revocation refuses
 Runtime role management, under `role:manage` in the administrative organization for
 reading and changing alike. Every change carries `reason`, recorded, and is the
 `grant:manage` step-up action. A change to a role that carries `system:administer`
-before or after it requires that permission in the administrative organization. A
-change that would take a library-owned permission out of the role the reserved
-`emergency` account holds is refused (OPS-BOOT-002).
+before or after it requires that permission in the administrative organization. A change
+that would take a library-owned permission out of the role the reserved `emergency`
+account holds is refused (OPS-BOOT-002). A change stays within the actor's reach: the
+permissions the role carries before and after, and every role its `handsOut` names
+after, are ones the actor may give or hand out (AUTHZ-GRANT-005).
 
-`GET /admin/roles`: **200** `[ { name, permissions } ]`.
-`POST /admin/roles` `{ "name": "...", "permissions": [ "..." ], "reason": "..." }`:
-**201** creates the role; **204** gives the role of that name the permissions stated.
+`GET /admin/roles`: **200** `[ { name, permissions, handsOut } ]`.
+`POST /admin/roles`
+`{ "name": "...", "permissions": [ "..." ], "handsOut": [ "..." ], "reason": "..." }`,
+`handsOut` optional and none where absent: **201** creates the role; **204** gives the
+role of that name the permissions and the `handsOut` stated.
 `DELETE /admin/roles/{name}` `{ "reason": "..." }`: **204**.
 
 **400**: `api.request.malformed` naming `name` where it is not a role name (a lower-case
 letter, then lower-case letters and digits, in parts joined by single hyphens:
 `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`),
 `permissions` where one is declared neither by the library nor by the host
-(AUTHZ-MODEL-004), `reason` where it is absent, blank or longer than 1024 characters
-after trimming
-**403**: `authz.denied` without `role:manage`, without `system:administer` for a role
-that carries it, or for a change taking a library-owned permission out of the role the
+(AUTHZ-MODEL-004), `handsOut` where one is not a role name, `reason` where it is absent,
+blank or longer than 1024 characters after trimming
+**403**: `authz.role.notassignable` where the change reaches beyond the actor
+(AUTHZ-GRANT-005); `authz.denied` without `role:manage`, without `system:administer` for
+a role that carries it, or for a change taking a library-owned permission out of the role the
 reserved account holds; `auth.stepup.required` (`grant:manage`)
 **404**: `authz.role.notfound` where `DELETE` names a role the deployment does not hold
 **409**: `authz.role.inuse` for a `DELETE` of a role a grant (live, expired or revoked),
-a declared derivation or a standing invitation names
+a declared derivation, a standing invitation or another role's `handsOut` names
+**422**: `authz.grant.unresolved` (`details.member` `handsOut`) where `handsOut` names a
+role the deployment does not hold
 
-*Source: AUTHZ-GRANT-004, OPS-CFG-007, OPS-BOOT-002, D-166*
+*Source: AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-002, D-166, D-212*
 
 ---
 
@@ -2606,9 +2618,10 @@ configuration change's missing reason excepted, below). **404**
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` held in the organization itself, for which `system:administer` does not stand in (AUTHZ-SCOPE-001, D-207), and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007). `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
+| `POST /admin/organizations/{id}/invitations` | Issues a time-boxed, single-use enrolment link (IDN-LIFE-009a). The body members are `email`, `phone`, `corporateEmail`, `roles` and `documents`, and `formerMailbox` with `reason` where a mailbox is taken over (below). MAY bind `email`, `phone`, both or neither (REG-INV-001); a bound identifier is pre-filled and locked at registration, and a bound phone is verified before the membership step. Where the mail server is integrated, the invitation names a personal `email` (required; the link goes to it and its press verifies it, so the account is created with a verified personal email) and a `corporateEmail`, asserted, whose mailbox is provisioned disabled (REG-MAIL-001, D-148); `corporateEmail` where the mail is not integrated is **400** `api.request.malformed`. `roles` (optional; none where absent) names roles granted across the organization when the membership attaches; naming a role also requires `grant:manage` held in the organization itself, for which `system:administer` does not stand in (AUTHZ-SCOPE-001, D-207), and the `grant:manage` gate, and a role carrying `system:administer` also requires `system:administer` in the administrative organization (OPS-CFG-007); each role named is one the inviter may hand out (AUTHZ-GRANT-005), or the issue is refused **403** `authz.role.notassignable`. `documents` (optional; none where absent) names legal documents, each fixed at the version published when the invitation is issued, which the membership step shows and the acknowledgement records. Requires step-up (`invitation:issue`). The link is sent to the bound email only, never to the bound phone; its send is written in the transaction that issues the invitation and first attempted once that transaction commits (AUTH-ABUSE-004), and a send a restriction refuses issues nothing and answers **429** `auth.restriction.exceeded` with `retryAt`. A corporate address whose mailbox was held before, by anyone, the person invited included, never passes silently (the address of an erased holder is not recognised, REG-MAIL-003): the issue is refused **409** `identity.invitation.mailboxheld` unless the body carries `formerMailbox` (`10` section 5.44), `transfer` (the invitee receives the mailbox with its mail) or `replace` (the old mailbox is removed and a new one reserved), with a `reason`; either is stepped up with the issue and audited. The issue makes no check of who the invitee is, since issuing tells nothing about accounts; the mail-server adapter's adoption of an existing server account is REG-MAIL-003's (D-166). An organization whose deletion was requested takes no invitation: its grants confer nothing, so issuing answers **403** `authz.denied`. **201** `{ id, expiresAt, token }`: `token` is the link's token where no email is bound, answered once for the administrator to hand over and never shown again, and `null` wherever the link was sent; only its fingerprint is kept (IDN-LIFE-009a). **409** `identity.mailbox.taken` (`details.member` `corporateEmail`) where the corporate address is held by a member or reserved by a standing invitation that has not expired; an expired one is revoked in the issuing transaction and its mailbox kept. **422** `identity.invitation.addressrequired`, `details.member` naming `email` or `corporateEmail`, for an integrated-mail invitation without a personal `email`, without a `corporateEmail`, or naming the corporate address as the personal one; **422** `identity.identifier.domainnotallowed` where the address the member will sign in with (the corporate address where the mail is integrated, the bound email otherwise) is outside the organization's lock (REG-DOM-001); `identity.identifier.mixedscript` and `identity.identifier.invalid` carry `details.member` naming `email`, `phone` or `corporateEmail`; **422** `authz.grant.unresolved` (`details.member` `roles`) for a role the deployment does not hold; **422** `api.request.invalid` (`details.member` `documents`) for a document never published; **422** `api.request.invalid` (`details.member` `formerMailbox`) for a `formerMailbox` where no held mailbox stands for the corporate address. The identifier-mismatch refusal belongs to acceptance (`POST /account/invitation/acknowledge`), not to issue |
 | `DELETE /admin/organizations/{id}/invitations/{invitationId}` | Revokes an invitation not yet acknowledged, whether or not its link was opened; what it bound is forgotten and a mailbox nobody ever held is released, marked and owed `removed` (REG-MAIL-001, INT-MAIL-006). **204**, also for one already revoked. **404** `identity.invitation.notfound` where the organization issued no such invitation; **422** `identity.invitation.expired` where it was acknowledged. Not a step-up action |
-| `DELETE /admin/organizations/{id}/memberships/{subject}` | Ends a membership; the account and organization persist (IDN-MEM-001), and the account's grants in the organization are not removed (`16` section 3 step 4); a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001). Requires step-up (`membership:end`). **204** · **403** `authz.denied` where `{subject}` is the reserved `emergency` account and `{id}` the administrative organization, before the step-up (OPS-BOOT-002, D-202) · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
+| `DELETE /admin/organizations/{id}/memberships/{subject}` | Ends a membership; the account and organization persist, and in the same transaction the account's grants in the organization, save those a derivation wrote, are revoked and the account is taken out of its groups, and, for the administrative organization, the same in every organization the account is not a member of (IDN-MEM-001, D-213). Requires step-up (`membership:end`). **204** · **403** `authz.denied` where `{subject}` is the reserved `emergency` account and `{id}` the administrative organization, before the step-up (OPS-BOOT-002, D-202); `authz.role.notassignable` where the actor may not hand out a role the end reaches (AUTHZ-GRANT-005) · **404** `identity.membership.notfound` where the account holds no current membership of the organization, a second end included. Recorded as `identity.membership.ended`; emits `MembershipChanged`, and `IdentifierRemoved` where the end retires the corporate address (REG-MAIL-003) |
+| `PUT /admin/organizations/{id}/memberships/{subject}/end` · `DELETE /admin/organizations/{id}/memberships/{subject}/end` | `PUT` `{ endsAt, reason }` sets or moves the instant the membership ends, which the job `membership-ends` carries out as `DELETE /admin/organizations/{id}/memberships/{subject}` would; `DELETE` `{ reason }` cancels it (IDN-MEM-001, D-213). The same permission, step-up (`membership:end`) and refusals as ending now, judged when set. **204** · **403** as ending now · **404** `identity.membership.notfound` where the account holds no current membership of the organization, and for a `DELETE` where no end is set · **422** `api.request.invalid` (`details.member` `endsAt`) where `endsAt` is not after the present. Recorded as `identity.membership.endset` |
 
 ### Groups — `group:manage`
 
@@ -2617,7 +2630,7 @@ configuration change's missing reason excepted, below). **404**
 | `GET /admin/groups?organization={id}` | The organization's groups, each with the members it holds directly: **200** `[ { id, name, members: [ { subjectType, subjectId } ] } ]`. Membership is transitive (AUTHZ-GROUP-001) |
 | `POST /admin/groups` | `{ organization, name, reason }`: creates a group in the organization. **201** `{ id }` |
 | `DELETE /admin/groups/{id}` | `{ reason }` in the body: removes a group nothing names. **204**. **409** `authz.group.inuse` where the group holds a member, belongs to a group, or was given a grant, live, expired or revoked |
-| `POST /admin/groups/{id}/members` · `DELETE /admin/groups/{id}/members` | `{ subjectType, subjectId, reason }`: adds or removes an account or a group of the group's own organization. **204**, also where the member is already held or already absent, which changes and records nothing. **409** `authz.group.cycle`. Requires step-up (`grant:manage`); where the group, or a group holding it, holds a live grant (allow or deny) of a role carrying `system:administer` or of a role that cannot be read, also requires `system:administer` in the administrative organization (OPS-CFG-007) |
+| `POST /admin/groups/{id}/members` · `DELETE /admin/groups/{id}/members` | `{ subjectType, subjectId, reason }`: adds or removes an account or a group of the group's own organization. **204**, also where the member is already held or already absent, which changes and records nothing. **409** `authz.group.cycle`. Requires step-up (`grant:manage`); where the group, or a group holding it, holds a live grant (allow or deny) of a role carrying `system:administer` or of a role that cannot be read, also requires `system:administer` in the administrative organization (OPS-CFG-007); every role the group reaches is held to AUTHZ-GRANT-005: **403** `authz.role.notassignable`, `authz.grant.self` |
 
 `group:manage` is asked in the organization the group belongs to, read from the group's
 row, or for `GET` and `POST` in the organization the request names (AUTHZ-SCOPE-001). An

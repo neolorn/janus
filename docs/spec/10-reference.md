@@ -137,8 +137,10 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.grant.duplicate` | An identical live grant exists; 409 | AUTHZ-GRANT-003, D-166 |
 | `authz.grant.expired` **(new)** | A grant written with an expiry that is not after the present; 409 | AUTHZ-GRANT-003, D-166 |
 | `authz.grant.notfound` | A revocation names a grant already revoked, or one a derivation wrote, and the caller holds `grant:manage` where it is scoped, or, for a grant in an organization other than the administrative organization, `system:administer` in the administrative organization (AUTHZ-SCOPE-001, D-207); an identifier naming no grant is `authz.denied` (`09` section 8); 404 | AUTHZ-GRANT-001, AUTHZ-SCOPE-001, D-166, D-207 |
-| `authz.grant.unresolved` | A grant names a role the deployment does not hold, or a group that does not exist or belongs to another organization; `details.member` names `role` or `subjectId`. Also an invitation whose `roles` names a role the deployment does not hold, `details.member` `roles`; 422 | AUTHZ-GRANT-001, REG-INV-001, D-166 |
+| `authz.grant.unresolved` | A grant names a role the deployment does not hold, or a group that does not exist or belongs to another organization; `details.member` names `role` or `subjectId`. Also an invitation whose `roles` names a role the deployment does not hold, `details.member` `roles`, and a role whose `handsOut` names one, `details.member` `handsOut`; 422 | AUTHZ-GRANT-001, AUTHZ-GRANT-005, REG-INV-001, D-166, D-212 |
 | `authz.grant.reasonrequired` | A grant created or revoked without a non-empty `reason`; 422 | AUTHZ-GRANT-003, D-153 |
+| `authz.role.notassignable` **(new)** | The actor may not hand out a role the change touches (a grant made or revoked, allow or deny, an invitation's roles, a change of a group's members), or a role change reaches beyond what the actor may give or hand out; 403 | AUTHZ-GRANT-005, D-212 |
+| `authz.grant.self` **(new)** | The change would widen the actor's own access: an allow grant to the actor or a group it belongs to, the revocation of a deny on them, adding them to a group, removing them from a group that reaches a deny, or acknowledging an invitation they issued; 403 | AUTHZ-GRANT-005, D-212 |
 | `authz.role.inuse` | A grant (live, expired or revoked), a declared derivation or a standing invitation names the role, so it is not removed; its permissions can be changed instead; 409 | AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, AUTHZ-DERIVE-001, REG-INV-001, D-166 |
 | `authz.resource.inuse` **(new)** | A registration is removed while a record is registered inside it (`IResources.RemoveAsync`); its contents are removed first; 409 | AUTHZ-INHERIT-002, D-203 |
 | `authz.role.notfound` | A role named in the path (`DELETE /admin/roles/{name}`) is not one the deployment holds; a role a body names that the deployment does not hold is `authz.grant.unresolved` (422); 404 | AUTHZ-GRANT-004, D-166 |
@@ -502,6 +504,7 @@ is the empty list.
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `authz.reverselookup.budget` | 2 seconds | R | AUTHZ-SEAM-001, R-A09, D-125 — the migration trigger's measurable bound |
+| `authz.handout.byholding` | `false` | R, boolean; turning it on is loosening | AUTHZ-GRANT-005, D-212: whether an actor whose grants admit every permission a role carries may hand the role out with no role of theirs listing it (Kubernetes' rule); off, only a role whose `handsOut` names it, or `system:administer` in the administrative organization, does |
 | `derivation.materialised.driftcheck` | `P1D` | R, duration; lengthening is loosening | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-161, D-166: how often the drift check re-evaluates every materialised derivation, over the relationship sources the host declares for every declared derivation (LIB-HOST-001), corrects drift and raises `degradation` naming the derivation; it runs as the system principal `derivation-driftcheck` (section 5.29), and a grant it writes records the nil subject as granter with the reason `AUTHZ-DERIVE-005`; each grant it writes or takes back is recorded as `authz.grant.materialised` or `authz.grant.retracted` (section 5.24, D-187) |
 
 ### 4.6 Organizations and lifecycle
@@ -1042,7 +1045,7 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `authz.group.memberadded` | security | An account or a group was added to a group; `details.group`, `details.name`, `details.memberType`, `details.memberId`, `details.reason` | AUTHZ-GROUP-001, OPS-CFG-007 |
 | `authz.group.memberremoved` | security | An account or a group was taken out of a group; the same details | AUTHZ-GROUP-001, OPS-CFG-007 |
 | `authz.group.removed` | security | A group nothing named was removed; `details.group`, `details.name`, `details.reason` | AUTHZ-GROUP-001 |
-| `authz.role.defined` | security | A role was created, or its permissions changed; `details.role`, `details.before` (empty for a role bootstrap or the role declaration defines), `details.after`, `details.reason` (`AUTHZ-GRANT-004` for one the role declaration defines, principal `role-declaration`); no organization | AUTHZ-GRANT-004, OPS-CFG-007, OPS-BOOT-001, D-204 |
+| `authz.role.defined` | security | A role was created, or its permissions or its `handsOut` changed; `details.role`, `details.before` and `details.after`, each the permissions and the `handsOut` (`before` empty for a role bootstrap or the role declaration defines), `details.reason` (`AUTHZ-GRANT-004` for one the role declaration defines, principal `role-declaration`); no organization | AUTHZ-GRANT-004, AUTHZ-GRANT-005, OPS-CFG-007, OPS-BOOT-001, D-204, D-212 |
 | `authz.role.removed` | security | A role nothing named was removed; `details.after` is null | AUTHZ-GRANT-004 |
 | `identity.account.deactivated` | routine | The owner deactivated the account | IDN-LIFE-013 |
 | `identity.account.reactivated` | routine; security where an administrator acted | A suspended account was stood back up: by its owner from a deactivation, or by an administrator from an administrator's suspension (the administrator acting, the account the `subject`) | IDN-LIFE-013 |
@@ -1052,7 +1055,8 @@ whose `reason` is the action's own; it is plain, as every stated reason is (OPS-
 | `identity.invitation.acknowledged` | security | An invitation was acknowledged and its membership attached; `details.invitation`; the person acknowledging is the actor; filed under the organization | REG-INV-001, IDN-LIFE-009a |
 | `identity.invitation.issued` | security | An invitation into an organization was issued; `details.invitation` and nothing it binds, and `details.formerMailbox` with its reason where the invitation names one because the corporate address's mailbox has been held before (section 5.44); filed under the organization | IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 |
 | `identity.invitation.revoked` | security | An unacknowledged invitation was revoked, or replaced by a later one for the same corporate address; `details.invitation` | IDN-LIFE-009a, REG-MAIL-001 |
-| `identity.membership.ended` | security | An administrator ended a membership; `details.membership`; the administrator acting, the member the `subject`; filed under the organization | IDN-MEM-001, REG-MAIL-003 |
+| `identity.membership.ended` | security | An administrator ended a membership, or the job `membership-ends` ended it at the instant one set; `details.membership`, `details.reason`; the administrator acting or who set the end, the member the `subject`; filed under the organization | IDN-MEM-001, REG-MAIL-003, D-213 |
+| `identity.membership.endset` | security | An administrator set, moved or cancelled the instant a membership ends; `details.membership`, `details.endsAt` (absent where cancelled), `details.reason`; the administrator acting, the member the `subject`; filed under the organization | IDN-MEM-001, D-213 |
 | `identity.organization.created` | security | An organization was created with no policy override; `details.reason`; filed under the organization; bootstrap's is recorded under the principal `bootstrap` | IDN-ORG-002, OPS-BOOT-001 |
 | `identity.organization.deletioncancelled` | security | An organization's deletion was cancelled inside its window; `details.reason`; filed under the organization | IDN-ORG-003 |
 | `identity.organization.deletionrequested` | security | An organization's deletion was requested: it is suspended and every member session ended; `details.reason`; filed under the organization | IDN-ORG-003 |
@@ -1220,6 +1224,7 @@ of this table, nor `migrate`, the command that runs as none (D-206).
 | `loss-reports` | job | `expiry-sweep` | AUTH-RECOV-007 |
 | `recovery-code-reminder` | job | `expiry-sweep` | AUTH-FACT-008 |
 | `domain-reverification` | job | `expiry-sweep` | REG-DOM-001 |
+| `membership-ends` | job | `expiry-sweep` | IDN-MEM-001 |
 | `outbox` | job | `delivery` | IDN-LIFE-003a |
 | `events` | job | `delivery` | IDN-LIFE-003a |
 | `sends` | job | `delivery` | INF-BG-001 |

@@ -1898,7 +1898,7 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110, D-184, D-205*
+*Source: D-046, D-110, D-184, D-205, D-215*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
@@ -1910,6 +1910,13 @@ Two kinds of update are not taken one by one as they arrive: the packages and th
 CONV-DESIGN-008 holds at one version move together in one change, and the
 analyser-authoring packages move only by a decision-log entry, since the analysers must
 load in the compiler of every build that uses them.
+
+**A package another brings (D-215).** A package that reaches the solution only through
+another stays at the version its parent takes, a package of Microsoft's that follows the
+runtime included: the restore's audit covers it, and an advisory against it fails the
+build. Such an advisory is met by the parent's release that takes a fixed version, or,
+where there is none, by a direct reference at the fixed version, which a decision-log
+entry adds to CONV-DESIGN-008's table.
 
 **The shared framework (D-205).** A package the ASP.NET Core shared framework serves is
 resolved from the framework in every project (CONV-LAYOUT-001), so no lockfile holds it,

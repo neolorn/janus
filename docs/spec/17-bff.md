@@ -219,7 +219,9 @@ two could disagree, and an endpoint asking two permissions could not express it.
    live sign-in session to an unmarked controller action reached through
    `MapFallbackToController` is answered 401 `auth.session.expired` before it runs, one
    to an action marked with `[AllowNoSession]` reaches it, and one with a method a
-   served host path does not take is answered 404 `authz.resource.notfound` (D-211).
+   served host path does not take is answered 404 `authz.resource.notfound` (D-211). A
+   Razor page reached through `MapFallbackToPage` is judged by the same rule, which
+   reads the endpoint's metadata whatever its type, verified in review (D-215).
 
 ---
 

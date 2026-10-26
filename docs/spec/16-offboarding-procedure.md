@@ -33,6 +33,11 @@ exported "to finish something up," which is why exports are gated and audited
 export in the weeks before a departure is worth knowing about *before* they leave,
 not after.
 
+**Set the membership's end for their last day.** The membership can be set to end at an
+instant you choose (IDN-MEM-001), so access ends on the day without anyone having to
+remember; it can be moved or cancelled until then. Transfer what only they hold before
+that day (step 4).
+
 **Do not tip your hand about anything else.** If there is a concern, gather what you
 need before access is removed — after removal, the audit trail is all you have.
 
@@ -59,10 +64,12 @@ if the departure is temporary or disputed. (D-148)
 
 **3 — End organization membership.**
 
-The account may hold membership beyond the one being left. Ending membership is
-distinct from suspending the account (IDN-MEM-001). It revokes none of their grants;
-those in the administrative organization confer nothing from this step until step 4
-transfers or revokes them (D-166).
+The account may hold membership beyond the one being left. Ending membership is distinct
+from suspending the account (IDN-MEM-001). It revokes every grant a person gave them in
+the organization and takes them out of its groups, and, for the administrative
+organization, does the same in every organization they are not a member of (D-213);
+access they hold through the host's own relationships is the host's to end. Where an end
+was set for their last day (section 2), this step has already happened.
 
 Ending membership is also what retires the corporate address (REG-MAIL-003). The
 address stops resolving to the account and the mailbox is disabled, and the address
@@ -81,17 +88,17 @@ is no longer refused, since nothing left in the library recognises the address; 
 the mail-server account they left as well (D-101), because a new mailbox at the address
 is created only once that account is gone (REG-MAIL-003, D-178).
 
-**4 — Revoke or transfer their grants.**
+**4 — Transfer what only they held.**
 
-Anything granted directly to them rather than through a group. `GET /admin/grants` lists
-them for the person and for a group, per organization (D-166). A revoked grant stays on
-record (IDN-PRIN-003). If they were the sole holder of a permission, transfer it before
-revoking; otherwise something quietly stops working and nobody knows why. Their grants
-in another organization, a host's, are revoked the same way by an administrator holding
-`system:administer` in the administrative organization; where the person was the last
-holder of `grant:manage` there, give it to another first; otherwise the organization's
-grants wait on a holder of `system:administer`, who gives `grant:manage` to another
-(AUTHZ-SCOPE-001, D-207).
+Ending the membership (step 3) revokes their grants, so do this first where you have
+notice. `GET /admin/grants` lists what they hold, for the person and for a group, per
+organization (D-166). If they were the sole holder of a permission, give it to someone
+else before the end; otherwise something quietly stops working and nobody knows why.
+After the end, the audit trail's `authz.grant.revoked` records name what was revoked
+with them (D-213). Where the person was the last holder of `grant:manage` in an
+organization, give it to another first; otherwise the organization's grants wait on a
+holder of `system:administer`, who gives `grant:manage` to another (AUTHZ-SCOPE-001,
+D-207).
 
 **5 — Check what they approved.**
 

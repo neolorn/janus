@@ -639,10 +639,12 @@ changing the members of a group that holds, itself or through a group holding it
 live grant (allow or deny) of such a role or of a role that cannot be read, SHALL
 require it likewise.
 
-*Source: D-010, D-166*
+*Source: D-010, D-166, D-212*
 
-Self-referential deliberately. Without it, any administrator who can manage grants is
-a system administrator one step removed, and the distinction is decorative.
+Self-referential deliberately. Without it, any administrator who can manage grants is a
+system administrator one step removed, and the distinction is decorative.
+AUTHZ-GRANT-005 holds every other role to the same reasoning: nobody hands out a role
+beyond what they may hand out, and nobody gives themselves access (D-212).
 
 **Acceptance criteria**
 1. A grant-managing administrator without the permission cannot confer it.

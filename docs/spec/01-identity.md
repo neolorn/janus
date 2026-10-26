@@ -409,13 +409,16 @@ not partitioned by it.
 ## 3. Membership
 
 **IDN-MEM-001** — Membership SHALL be a first-class record linking an account to an
-organization, carrying its own lifecycle independent of both. Ending a membership SHALL
-NOT revoke the account's grants in the organization; they are transferred or revoked as
-their own step (`16` section 3 step 4), and no grant row is removed (IDN-PRIN-003). A
-grant in the administrative organization SHALL confer only while its holder holds a
-current membership of that organization.
+organization, carrying its own lifecycle independent of both. Ending a membership, save
+at its organization's erasure (IDN-ORG-003), SHALL revoke, in the same transaction,
+every live grant to the account in the organization save one a derivation wrote or
+materialised, and SHALL take the account out of every group of the organization; ending
+a membership of the administrative organization SHALL do the same in every organization
+of which the account holds no current membership. No grant row is removed
+(IDN-PRIN-003). A grant in the administrative organization SHALL confer only while its
+holder holds a current membership of that organization.
 
-*Source: D-002, D-003, D-166, D-202*
+*Source: D-002, D-003, D-166, D-202, D-213*
 
 An administrator ends a membership under `membership:manage` in the organization, as the
 `membership:end` step-up action; where the path names no organization the deployment
@@ -425,17 +428,41 @@ account holds no current membership of the organization, with
 Ending the reserved account's membership of the administrative organization is refused
 with 403 `authz.denied`, for anyone (OPS-BOOT-002, D-202).
 
+The same administrator may instead set the membership to end at a later instant
+(`endsAt`), move that instant, or cancel it, under the same permission and step-up and
+with a reason; the library's job `membership-ends` (`10` section 5.29) ends it at its
+first pass after the instant, as the administrator who set it would have, recording that
+administrator and reason (D-213). An end a person makes or sets is judged as the
+revocations and removals it makes are (`03` AUTHZ-GRANT-005): the actor may hand out
+every role they reach, or holds `system:administer` in the administrative organization.
+A set end is judged when it is set, and at its instant ends whatever grants and groups
+the account then holds. The revocations and removals an end makes are never refused as
+widening the actor's own access, since none of the grants they reach remain. Each
+revocation is recorded as `authz.grant.revoked` and each removal as
+`authz.group.memberremoved`, with the end's reason and actor. An organization's erasure
+ends its memberships and leaves their grants as IDN-ORG-003 gives. Access derived from
+the host's own relationships is the host's to end (AUTHZ-DERIVE-001).
+
 **Acceptance criteria**
 1. Ending a membership leaves both the account and the organization intact.
 2. Membership records carry created and ended timestamps.
-3. After a membership ends, the account's grants in the organization are still held
-   and revocable.
+3. After a membership ends, every grant a person made to the account in the
+   organization is revoked, recorded with the end's reason, the account is in none of
+   the organization's groups, and a grant a derivation wrote stands; after a membership
+   of the administrative organization ends, the account's grants in an organization it
+   is not a member of are revoked too, and those in one it is still a member of stand.
 4. After a membership of the administrative organization ends, no grant the account
    holds there confers.
 5. Ending a membership without the `membership:end` step-up is refused with
    `auth.stepup.required`, and the membership stays current.
 6. Ending the reserved account's membership is refused with `authz.denied`, and it stays
    current.
+7. A membership set to end at an instant stays current until then and is ended at the
+   job's first pass after it, recorded with the administrator who set it; moved or
+   cancelled before it, it ends at the new instant or not at all; an end set to an
+   instant not after the present is refused with `api.request.invalid` naming `endsAt`.
+8. Ending, or setting the end of, the membership of an account holding a role the actor
+   may not hand out is refused with `authz.role.notassignable` and changes nothing.
 
 ---
 

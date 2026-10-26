@@ -9033,7 +9033,7 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 ## D-166 — Review of entries 110 to 423: 101 reversed, 14 settled, the exit gate prepared, the chapters reconciled
 
-> **Amended.** Section B's two Tier 1 allowances become three: an allow-list entry of exactly the form D-167 states, for a flagged value that is specification text, is Tier 1 too (D-167).
+> **Amended.** Section B's two Tier 1 allowances become three: an allow-list entry of exactly the form D-167 states, for a flagged value that is specification text, is Tier 1 too (D-167). Item 252: ending a membership now revokes the grants a person gave in the organization (D-213).
 
 > **Amended.** R3's Public Suffix List is drawn when a release is prepared and committed with its date, not downloaded by each build (D-169).
 
@@ -16169,7 +16169,7 @@ the frontends' server side, the known issues carried).
 
 ## D-202 — A host builds on the public surface: who is asking, its own endpoints, its own jobs
 
-> **Amended.** Rule 1: `RequestAccess` carries `Context` and `Session` alone; the gate a host asks reads the session record and the account's reachable assurance when it judges. Rule 2: what comes with the context is the break-glass reason; the step-up the session proved is judged against the session (D-205).
+> **Amended.** Rule 1: `RequestAccess` carries `Context` and `Session` alone; the gate a host asks reads the session record and the account's reachable assurance when it judges. Rule 2: what comes with the context is the break-glass reason; the step-up the session proved is judged against the session (D-205). Rule 9: ending a membership revokes the grants a person gave in the organization, and for the administrative organization in every organization the account is not a member of, and an end can be set in advance, which the library's own job carries out (D-213).
 
 > **Amended.** Rule 7: a job is admitted on its organization as on its records, a consent-based purpose refused there; no restriction is judged for it; the capability page and the explanation refuse it, and so does a materialiser's refresh while a request is served (D-207).
 
@@ -17145,7 +17145,7 @@ two keys coincide); `10` section 1 (`model.startup.declarationinvalid`,
 
 ## D-207 — Round H1 questions 20 to 34, and the implementer pushes its own work
 
-> **Amended.** Answer 21: only a refusal the gate answers `authz.denied` to a permission it is asked for (or conceals) is recorded, so a job's consent refusal writes no record; answer 23: a job's refresh while a request is served is a fault of the calling code; answer 28: a reuse takes one path whatever its token names, revoking what of the family it names; answer 30: an edit naming the username the account held at the unlocked read changes no username; answer 34: the two permissions are one admission, refused and recorded once, only where neither admits (D-208).
+> **Amended.** Answer 21: only a refusal the gate answers `authz.denied` to a permission it is asked for (or conceals) is recorded, so a job's consent refusal writes no record; answer 23: a job's refresh while a request is served is a fault of the calling code; answer 28: a reuse takes one path whatever its token names, revoking what of the family it names; answer 30: an edit naming the username the account held at the unlocked read changes no username; answer 34: the two permissions are one admission, refused and recorded once, only where neither admits (D-208). The full gate runs in the pipeline, whose run on the last commit pushed is the gate of record (D-214).
 
 > **Amended.** Answer 30: a step-up judged while a unit of work is open asks no phone signal and offers as where none is declared, the signal asked when the step-up is carried out; answer 34: an organization-wide grant naming no organization the deployment holds is refused as `09` section 8 refuses an identifier naming no row (D-209).
 
@@ -17909,6 +17909,265 @@ contributor's fault); `implementation-plan.md` (section 3a, round H1).
 
 ---
 
+## D-212 — Who may hand out a role: lists the host sets, and nobody gives themselves access
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** a host's review of the
+library (2026-10-26, point 4) · **Extends:** D-010 and D-166 (OPS-CFG-007's reasoning,
+applied to every role), D-204 (declared roles), D-207 (who may write a grant)
+
+**TL;DR.** Only roles carrying `system:administer` were protected: anyone holding
+`grant:manage` could give any other role to anyone, themselves included, and anyone
+holding `role:manage` could widen a role they held. Now a person may hand out a role
+only where a role they hold lists it, where the deployment lets holding all a role
+grants be enough and they hold it, or where they hold `system:administer`; this covers
+every route by which a role is handed out, and nobody gives themselves access. Which
+role may hand out which is the host's to set, for every role it has.
+
+**The finding.** A host's review found that one account holding `grant:manage` could
+raise itself, or an accomplice, to any business role, and one holding `role:manage`
+could add to a role it holds any permission. OPS-CFG-007 says of `system:administer`
+that without its rule "any administrator who can manage grants is a system administrator
+one step removed"; the same holds of every role. The insider section of `15` (staff not
+all known, periodic turnover) had no row for it.
+
+**What established systems do** (the owner asked for this to be researched in full; the
+report is kept with the lead's notes):
+- Kubernetes refuses a role binding unless the requester holds every permission of the
+  role at the binding's scope, or holds the `bind` verb on that role, which can name
+  roles one by one; a role is created or changed only by one holding all it grants, or
+  the `escalate` verb.
+- PostgreSQL 16 took from `CREATEROLE` the power to add members to any role: "Such
+  changes, including adding members, now require the role requesting the change to have
+  ADMIN OPTION permission", given per role.
+- Business Central's SECURITY set lets its holder assign only the permission sets "also
+  assigned to your account", and warns that one who may change group membership "could
+  potentially assign themselves to other user groups".
+- Salesforce's delegated administrators assign only the profiles named for them, never
+  one with "Modify All Data", and manage only the users of the roles named for them.
+- Microsoft Entra made groups that hold an administrative role assignable only by a
+  privileged administrator, since one who manages a group could add themselves to it.
+- AWS lets an administrator delegate creating users inside a boundary the delegate
+  cannot change, and says that delegating still trusts the delegate.
+- ARBAC97, the model of administering roles, authorises assignment by `can_assign`: an
+  administrative role, a prerequisite and the range of roles it may assign.
+
+**Decision.**
+1. **Handing out a role.** A grant of it made or revoked, allow or deny; naming it among
+   an invitation's roles; and a change of the members of a group that reaches a grant of
+   it each need, beside the admission of AUTHZ-SCOPE-001, that the actor may hand the
+   role out: it holds `system:administer` in the administrative organization; or a role
+   it holds at a scope covering the change lists the role in its `handsOut`; or the
+   setting `authz.handout.byholding` is on and its grants admit, at the change's scope,
+   every permission the role carries. Otherwise 403 `authz.role.notassignable`, nothing
+   written (`03` AUTHZ-GRANT-005).
+2. **The host sets the lists.** A role's `handsOut` names any roles the deployment
+   holds, the host's own and custom ones made at run time; it is set in a declared role
+   (`AuthorizationDeclarationBuilder.Role(name, permissions, handsOut)`) and where a
+   role is created or changed (`POST /admin/roles`); none where absent. A role a list
+   names is not removed (`authz.role.inuse`).
+3. **The one setting.** `authz.handout.byholding`, runtime, off by default: on, holding
+   every permission of a role is enough to hand it out with no list, as Kubernetes
+   allows; off, only a listing role or `system:administer` hands a role out, as
+   PostgreSQL's per-role grant does. Both are safe; off is the stricter and so the
+   default (P-001), and turning it on is a loosening OPS-CFG-002 audits.
+4. **Nobody widens their own reach.** A change to a role needs the actor's grants in the
+   administrative organization to admit every permission the role carries before and
+   after, and the actor to be able to hand out every role its `handsOut` names after, or
+   `system:administer` there.
+5. **Nobody gives themselves access.** An allow grant to the actor or to a group it
+   belongs to, the revocation of a deny on either, adding either to a group, removing
+   either from a group that reaches a deny, and acknowledging an invitation the account
+   issued are refused 403 `authz.grant.self`, save to a holder of `system:administer` in
+   the administrative organization, which can already change any role it holds. Taking
+   away one's own access stays allowed.
+6. **Unchanged.** OPS-CFG-007 stands over the rule; derived grants are outside it; every
+   change keeps its reason, its step-up and its record, and a refusal is recorded and
+   counted toward the denial alert.
+
+*Rejected:* holding a role's permissions as the only way to hand it out (Business
+Central's rule: a clerk who onboards staff into roles the clerk must not hold could not,
+so every hire outside the clerk's own area would wait on a system administrator); the
+safety rules as settings (a setting that lifts a protection becomes the point of
+attack, as no setting turns off certificate validation or OPS-CFG-007); protecting a
+senior account's grants from a junior administrator's revocation (Entra and AWS protect
+credentials so; here the lists already keep a delegate to the roles named for it, and
+the account actions keep their own rules).
+
+**The trust that remains.** Someone who may hand out a role can give it to anyone. That
+is what handing it out means, and the record of who gave what, when and why is the
+control.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `03` AUTHZ-GRANT-005 (new), AUTHZ-GRANT-004 (a role change within
+reach, `handsOut`, declared roles, criterion 6), AUTHZ-GROUP-001 (a change of members);
+`06` OPS-CFG-007 (discussion); `09` `POST /admin/grants`, `/admin/roles`,
+`POST /admin/organizations/{id}/invitations`, `/admin/groups/{id}/members`,
+`POST /account/invitation/acknowledge`; `10` section 1.3 (`authz.role.notassignable`,
+`authz.grant.self`, `authz.grant.unresolved`), section 4.5a (`authz.handout.byholding`),
+section 5.24 (`authz.role.defined`); `15` section 3.5; `20` REG-INV-002;
+`implementation-plan.md` (section 3a, round H1).
+
+---
+
+## D-213 — A leaver's access: an end set for the last day, and ending a membership ends its grants
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** a host's review of the
+library (2026-10-26, points 1 and 2) · **Amends:** D-166 (252: ending a membership
+removed no grant), D-202 (rule 9: a membership's end and the account's grants) ·
+**Extends:** D-212 (an end is judged as the revocations it makes)
+
+**TL;DR.** A leaver's access ended only when a person remembered to end the membership
+on the day, and outside the administrative organization even that left the person's
+roles working until each grant was revoked by hand. Now whoever may end a membership may
+set it to end at an instant in advance, which the library carries out itself, and ending
+a membership revokes the grants a person gave in that organization and takes the account
+out of its groups; ending one of the administrative organization does the same in every
+organization the account is not a member of. The owner's rule: someone let go from one
+company loses access to that company and keeps it in the others they still work for.
+
+**The finding.** A host's review asked that a declared job end a leaver's membership on
+the date the host knows, and that ending a membership end the person's access. D-202
+rule 7 refused a host's job the operations that take access away, for reasons that
+stand: ending a membership retires a corporate address and disables a mailbox, it is a
+person's step-up action, and a job could end every administrator's membership with
+nobody present. And a grant outside the administrative organization kept conferring
+after the membership ended, so a member let go from a host's organization, or a member
+of the administrative organization holding roles in a customer organization, as a
+customer-facing host's staff do (D-207 answer 34), kept those roles until each was
+revoked.
+
+**Decision.**
+1. **An end set in advance.** Whoever may end a membership (`membership:manage`, the
+   `membership:end` step-up) may set it to end at a later instant, move it or cancel it,
+   with a reason (`PUT` and
+   `DELETE /admin/organizations/{id}/memberships/{subject}/end`). The library's job
+   `membership-ends` (`expiry-sweep`) ends it at its first pass after the instant, as
+   the administrator who set it would have, recorded with that administrator and reason
+   (`01` IDN-MEM-001, `identity.membership.endset`). The person decides once, when the
+   date is known, and nobody has to remember on the day; a host's job still ends no
+   membership.
+2. **Ending a membership ends its grants.** In the same transaction it revokes every
+   live grant to the account in the organization save one a derivation wrote or
+   materialised, and takes the account out of every group of the organization; for the
+   administrative organization it does the same in every organization of which the
+   account holds no current membership, since those are the roles it held as the
+   deployment's staff. Nothing is deleted: each revocation and removal is recorded with
+   the end's reason and actor. Access a host derives from its own relationships is the
+   host's to end.
+3. **Judged as what it revokes.** An end a person makes or sets is judged as the
+   revocations and removals it makes (`03` AUTHZ-GRANT-005): the actor may hand out
+   every role they reach, or holds `system:administer` in the administrative
+   organization; so a clerk who may hand out staff roles can end a staff member's
+   membership and not a senior one's. A set end is judged when set, and at its instant
+   ends whatever the account then holds.
+4. **Sessions stay.** The account's sessions are left as they are: every request is
+   judged on the grants as they stand, so nothing the membership gave remains usable,
+   and the account may still be a customer or a member elsewhere. Suspending the
+   account, when the person leaves entirely, ends its sessions (`16` section 3).
+
+*Rejected:* a host's job ending memberships (D-202 rule 7's reasons stand); grants held
+inert past the membership, as the administrative organization's rule alone kept them
+(the record shows as live what confers nothing, and other organizations were not
+covered); every grant everywhere bound to a current membership of its own organization
+(a customer-facing host's staff hold their customer organization's roles as members of
+the administrative organization, and a customer holds none); revoking the account's
+sessions (it may still be a customer, or a member elsewhere).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-MEM-001 (statement, values, criteria 3, 7 and 8); `03`
+AUTHZ-GRANT-005 (a membership's end); `09`
+`DELETE /admin/organizations/{id}/memberships/{subject}`, `PUT` ·
+`DELETE /admin/organizations/{id}/memberships/{subject}/end`; `10` section 5.24
+(`identity.membership.ended`, `identity.membership.endset`), section 5.29
+(`membership-ends`); `13` R-M23; `15` section 3.5; `16` sections 2 and 3 (steps 3 and
+4); `19` INF-BG-001; `implementation-plan.md` (section 3a, round H1);
+`janus-explained.md` (section 7).
+
+---
+
+## D-214 — The full gate runs in the pipeline, not on the implementer's machine
+
+**Date:** 2026-10-27 · **Status:** accepted · **Amends:** D-207 (the full gate again on
+the last commit wherever the work goes on after a push)
+
+**TL;DR.** Every run built the full gate twice: once on the implementer's machine,
+before the report, and again in the pipeline on the push, which runs every gate of
+CONV-GATE-001 and blocks the merge. The local run is dropped. The fast checks stay on
+every commit, narrowed to the unit tests of the projects a commit changes; before every
+push the implementer runs every unit test, the commit-message gate and the full-history
+secret scan, the two gates whose failure after a push could only be mended by rewriting
+what was pushed; the pipeline's run on the last commit pushed is the gate of record.
+
+**Why.** The local run was the gate of record before the pipeline existed. Since the
+pipeline runs every gate on every push and the branch protection requires each of them
+(CONV-GATE-001 criterion 2), the local run repeats the same suites, one after another,
+on a machine that is not the deployment's, while the pipeline's runner is the Linux the
+deployment runs on: twice on 2026-10-26 the messaging library's pipeline failed a test
+its local run had passed, a difference of platform. Nothing merges unless every check is
+green, as before; a failure is found minutes after a push instead of before it, on a
+working branch, and is fixed in new commits in the same run.
+
+**Decision.** The working guide, sections 3, 4 and 6, and the plan, sections 2 and 5:
+- fast checks per commit: build with warnings as errors, analysers, formatting, and the
+  unit tests of the projects the commit changes;
+- before every push: every unit test, the commit-message gate and the full-history
+  secret scan;
+- the rest of the full gate (integration, migration twice, contract and conformance
+  suites, the sample host) runs in the pipeline alone, and a test a failing run names
+  may be run locally to find its cause;
+- after every push the implementer waits for the pipeline's runs in the same run, fixes
+  a failure in new commits and pushes again, and the report names the pipeline's run on
+  its own commit as the gate of record, its identifier and result given in the run's
+  last message.
+
+*Rejected:* keeping the local full gate (a second run of the same suites, on another
+platform, in every run); moving the commit-message gate and the secret scan to the
+pipeline as well (a failure of either after a push could only be mended by rewriting a
+pushed commit, which is never done).
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** the working guide (sections 3, 4 and 6); `implementation-plan.md`
+(sections 2 and 5).
+
+---
+
+## D-215 — Round H1 questions 53 and 54: a package another brings, and the page case
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** D-211
+
+**TL;DR.** The run under D-211 asked two questions, both Tier 2. Two of Microsoft's
+packages reach the solution only through other packages, at versions below the
+runtime's; they stay where their parents put them, since the restore's audit covers them
+and fails the build on an advisory (53). A Razor page reached through a fallback is
+judged by the same rule as a controller action, and that case is verified in review
+(54).
+
+53. **A package another brings (Tier 2).** `Microsoft.Bcl.Cryptography` (10.0.2, through
+    `Fido2`) and `Microsoft.Extensions.Http.Polly` (10.0.11, through
+    `OpenIddict.Validation.SystemNetHttp`) stay at the versions their parents take. The
+    restore's audit covers a transitive package, and the vulnerability gate reports
+    neither. An advisory against such a package is met by the parent's release that
+    takes a fixed version, or, where there is none, by a direct reference at the fixed
+    version, added to CONV-DESIGN-008's table by a decision-log entry (`08`
+    CONV-DEP-004). *Rejected:* transitive pinning
+    (`CentralPackageTransitivePinningEnabled`), which would hold every parent to
+    versions it was not released against, for no advisory.
+54. **The page case (Tier 2).** Reading B. Stage 8 reads the metadata of the endpoint
+    routing selects, whatever its type, so a Razor page reached through
+    `MapFallbackToPage` is held to a session and freed by `[AllowNoSession]` as a
+    controller action is; the controller tests prove the rule, and the page case is
+    verified in review (`17` BFF-HOST-002 criterion 6). *Rejected:* moving
+    `Janus.Hosting.Tests` to the Razor SDK for one fixture.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `08` CONV-DEP-004; `17` BFF-HOST-002 (criterion 6).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18130,6 +18389,10 @@ contributor's fault); `implementation-plan.md` (section 3a, round H1).
 | Round H1 questions 41 to 43 and the round's review: a host binds only its own actions, the worker's longest wait, a restricted account's list | D-209 |
 | Round H1 questions 46 and 47 and the review of its run under D-209: a gate judged once a request, a contributor's fault, the scan's one allow-list | D-210 |
 | Round H1 questions 49 to 52, and an organization's capabilities | D-211 |
+| Who may hand out a role: lists the host sets, and nobody gives themselves access | D-212 |
+| A leaver's access: an end set for the last day, and ending a membership ends its grants | D-213 |
+| The full gate runs in the pipeline, not on the implementer's machine | D-214 |
+| Round H1 questions 53 and 54: a package another brings, and the page case | D-215 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
