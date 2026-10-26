@@ -4066,3 +4066,7 @@ against the public contract of LIB-API-001.
   step-up is carried out at `POST /auth/step-up`, before any text is sent. The signal
   asked inside an open unit of work throws `InvalidOperationException`, and a `risk`
   answer is recorded in the outermost unit of work.
+- A step-up gate bound to a host's action and judged from the host's assurance provider
+  is judged once a request for each person asking, as one judged from the library's
+  session already was: a later ask in the same request, under the host's lock or
+  otherwise, answers as the first did and does not ask the provider again.
