@@ -4024,3 +4024,6 @@ against the public contract of LIB-API-001.
   with `authz.restricted`, as `RequireAsync` does, before any rule is handed out and
   writing no refusal record, rather than handing out a rule that matches nothing; a
   reading permission is handed its rule as before.
+- `IDerivationMaterialiser.RefreshAsync` called with a declared job's context on a record
+  of an organization other than the one the job acts for throws
+  `InvalidOperationException` and writes nothing.

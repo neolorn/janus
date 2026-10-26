@@ -154,6 +154,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a fact in the host's data a declared job's refresh materialised, outside a request", Decided.Allowed),
         ("a fact in the host's data a declared job's refresh was asked for, while a request is served", Decided.Denied),
         ("a fact in the host's data a principal naming no declared job asked a refresh for", Decided.Denied),
+        ("a fact in the host's data a declared job acting for another organization asked a refresh for", Decided.Denied),
         ("a fact in the host's data a reconciling principal's refresh materialised, outside a request", Decided.Allowed),
         ("a fact in the host's data a reconciling principal asked a refresh for, while a request is served", Decided.Denied),
         ("a fact in the host's data a principal that may not reconcile asked a refresh for", Decided.Denied),
@@ -1404,6 +1405,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 return await RefreshedByAsync(
                     deployment,
                     SystemPrincipal.ForOrganization("import", "the nightly import", deployment.Organization),
+                    inRequest: false);
+
+            // AUTHZ-DERIVE-005 AC7, IDN-PRIN-001 AC2 (D-209): a declared job acts for its
+            // own organization, so its refresh of another's record throws and writes nothing.
+            case "a fact in the host's data a declared job acting for another organization asked a refresh for":
+                var other = new Deployment(host);
+
+                _ = await other.BeginAsync([HostPermissions.Read], cancellationToken);
+
+                return await RefreshedByAsync(
+                    deployment,
+                    SystemPrincipal.ForOrganization(HostFixture.Digest, "the nightly digest", other.Organization),
                     inRequest: false);
 
             case "a fact in the host's data a reconciling principal's refresh materialised, outside a request":

@@ -589,6 +589,44 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-005 AC7, IDN-PRIN-001 AC2 (D-209): outside a request, a refresh called
+    /// with a declared job's context acting for another organization than the one the
+    /// record belongs to throws <c>InvalidOperationException</c> through both of its
+    /// paths and writes no grant and no record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC7_AJobsRefreshOfAnotherOrganizationsRecordThrowsAndWritesNothingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+        var other = new Deployment(host);
+
+        _ = await other.BeginAsync([HostPermissions.Read], cancellationToken);
+
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the nightly digest",
+            other.Organization));
+
+        await using ServiceProvider deployment = Materialised();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await RefreshAsync(deployment, reviewed, job));
+
+        await using (AsyncServiceScope scope = deployment.CreateAsyncScope())
+        {
+            DerivationMaterialiser materialiser = scope.ServiceProvider.GetRequiredService<DerivationMaterialiser>();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await materialiser.RefreshAsync(job, "reviewer", reviewed.Workspace.Id, cancellationToken));
+        }
+
+        Assert.Equal(0, await MaterialisedAsync(reviewed));
+        Assert.Empty(await CorrectedAsync(reviewed));
+    }
+
+    /// <summary>
     /// AUTHZ-DERIVE-005 AC7, AUTHZ-GRANT-003 (D-207, D-208): the refresh over the source
     /// the host declared, called outside a request with a deployment-scoped principal
     /// that may run <c>reconciliation</c> other than the drift check's, names the nil
