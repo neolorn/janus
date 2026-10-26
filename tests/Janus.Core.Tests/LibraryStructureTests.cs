@@ -187,7 +187,9 @@ public sealed class LibraryStructureTests
         "Microsoft.EntityFrameworkCore.Relational",
     ];
 
-    private static readonly string[] InheritedProperties =
+    // CONV-SETUP-001: the settings Directory.Build.props sets once and every project
+    // inherits.
+    private static readonly string[] BuildSettings =
     [
         "AnalysisLevel",
         "Deterministic",
@@ -196,9 +198,14 @@ public sealed class LibraryStructureTests
         "ImplicitUsings",
         "MSBuildTreatWarningsAsErrors",
         "Nullable",
+        "TreatWarningsAsErrors",
+    ];
+
+    private static readonly string[] InheritedProperties =
+    [
+        .. BuildSettings,
         "TargetFramework",
         "TargetFrameworks",
-        "TreatWarningsAsErrors",
     ];
 
     // CONV-SETUP-004 AC2: the folders every project lives in, the sample host's among
@@ -206,12 +213,17 @@ public sealed class LibraryStructureTests
     // configuration from.
     private static readonly string[] Built = ["src", "tests", "tools", "samples"];
 
-    // CONV-SETUP-004 AC2: what configures a rule when a project, props or targets file
-    // declares it, as a property, an item or an item's metadata: a rule's severity or
-    // suppression, a rule set, a further configuration file, whether the analysers run,
-    // or a mode or a level for one category of rules.
+    // CONV-SETUP-004 AC2 and AC3 (D-210): what configures a rule when a project, props or
+    // targets file declares it, as a property, an item or an item's metadata: a rule's
+    // severity or suppression, a rule set, a further configuration file, whether the
+    // analysers run, a mode or a level for one category of rules, the warning level of
+    // the compiler, of MSBuild and of the SDK, the SDK's warnings on a target framework,
+    // and the restore's audit.
     private static readonly Regex RuleConfiguration = new(
-        @"^(NoWarn|WarningsAsErrors|WarningsNotAsErrors|CodeAnalysisRuleSet|GlobalAnalyzerConfigFiles|EditorConfigFiles|RunAnalyzers\w*|Analysis(Mode\w*|Level\w+))$",
+        @"^(NoWarn|WarningsAsErrors|WarningsNotAsErrors|WarningLevel|MSBuildWarningsAsMessages|MSBuildWarningsNotAsErrors"
+            + @"|EnableNETAnalyzers|CodeAnalysisRuleSet|CodeAnalysisTreatWarningsAsErrors|SuppressTfmSupportBuildWarnings"
+            + @"|CheckEolTargetFramework|NuGetAudit(Mode|Level|Suppress)?|GlobalAnalyzerConfigFiles|EditorConfigFiles"
+            + @"|RunAnalyzers\w*|Analysis(Mode\w*|Level\w+))$",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -1301,8 +1313,10 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-SETUP-004 AC2: the .editorconfig at the root is the one file that configures
-    /// a rule, and no project, props or targets file configures one beside it.
+    /// CONV-SETUP-004 AC2 and AC3 (D-210): the .editorconfig at the root is the one file
+    /// that configures a rule, and no project, props or targets file configures one beside
+    /// it or sets a rule below error, a setting of CONV-SETUP-001 set anywhere but
+    /// Directory.Build.props among them.
     /// </summary>
     [Fact]
     public void CONV_SETUP_004_AC2_TheEditorconfigIsTheOnlyPlaceARuleIsConfigured()
@@ -1314,18 +1328,58 @@ public sealed class LibraryStructureTests
                 .Select(file => Path.GetRelativePath(Repository.Root, file)),
         ];
         IEnumerable<string> configuring = BuildFiles()
-            .Where(file => XDocument
-                .Parse(File.ReadAllText(file))
-                .Descendants()
-                .SelectMany(element => element
-                    .Attributes()
-                    .Select(attribute => attribute.Name.LocalName)
-                    .Prepend(element.Name.LocalName))
-                .Any(RuleConfiguration.IsMatch));
+            .Where(file => ConfiguresARule(
+                Path.GetRelativePath(Repository.Root, file).Replace('\\', '/'),
+                File.ReadAllText(file)));
 
         Assert.Equal([".editorconfig"], configurations);
         Assert.Empty(configuring);
     }
+
+    /// <summary>
+    /// CONV-SETUP-004 AC3 (D-210): each setting the paragraph refuses, set in a project,
+    /// props or targets file, is found by the scan of the build files: a property, an
+    /// item or a reference's metadata that turns warnings off, lowers them or keeps them
+    /// from failing the build, and a setting of CONV-SETUP-001 set anywhere but
+    /// Directory.Build.props.
+    /// </summary>
+    /// <param name="file">The file's path from the root.</param>
+    /// <param name="text">The file's text.</param>
+    [Theory]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><NoWarn>CA2000</NoWarn></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><WarningsNotAsErrors>CA2000</WarningsNotAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><WarningLevel>0</WarningLevel></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><MSBuildWarningsNotAsErrors>MSB3277</MSBuildWarningsNotAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><RunAnalyzers>false</RunAnalyzers></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><EnableNETAnalyzers>false</EnableNETAnalyzers></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><CodeAnalysisRuleSet>rules.ruleset</CodeAnalysisRuleSet></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><CheckEolTargetFramework>false</CheckEolTargetFramework></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><AnalysisMode>Minimum</AnalysisMode></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><AnalysisLevelSecurity>none</AnalysisLevelSecurity></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><PropertyGroup><AnalysisModeSecurity>None</AnalysisModeSecurity></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><PropertyGroup><NuGetAudit>false</NuGetAudit></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><PropertyGroup><NuGetAuditMode>direct</NuGetAuditMode></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><PropertyGroup><NuGetAuditLevel>critical</NuGetAuditLevel></PropertyGroup></Project>")]
+    [InlineData("Directory.Build.props", "<Project><ItemGroup><NuGetAuditSuppress Include='https://github.com/advisories/GHSA-0000-0000-0000' /></ItemGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><ItemGroup><PackageReference Include='MinVer' NoWarn='NU1608' /></ItemGroup></Project>")]
+    [InlineData("tests/Janus.Core.Tests/Janus.Core.Tests.csproj", "<Project><ItemGroup><ProjectReference Include='../../src/Janus.Core/Janus.Core.csproj'><NoWarn>NU1608</NoWarn></ProjectReference></ItemGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><ItemGroup><GlobalAnalyzerConfigFiles Include='rules.globalconfig' /></ItemGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><ItemGroup><EditorConfigFiles Include='rules.editorconfig' /></ItemGroup></Project>")]
+    [InlineData("Directory.Build.targets", "<Project><PropertyGroup><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Directory.Build.targets", "<Project><PropertyGroup><MSBuildTreatWarningsAsErrors>false</MSBuildTreatWarningsAsErrors></PropertyGroup></Project>")]
+    [InlineData("src/Directory.Build.props", "<Project><PropertyGroup><AnalysisLevel>none</AnalysisLevel></PropertyGroup></Project>")]
+    [InlineData("samples/Directory.Build.props", "<Project><PropertyGroup><EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild></PropertyGroup></Project>")]
+    [InlineData("tests/Directory.Build.props", "<Project><PropertyGroup><Nullable>disable</Nullable></PropertyGroup></Project>")]
+    [InlineData("tools/Directory.Build.props", "<Project><PropertyGroup><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>")]
+    [InlineData("src/Janus.Core/Janus.Core.csproj", "<Project><Target Name='Late'><PropertyGroup><Deterministic>false</Deterministic></PropertyGroup></Target></Project>")]
+    [InlineData("samples/HostSample/HostSample.csproj", "<Project><PropertyGroup><GenerateDocumentationFile>false</GenerateDocumentationFile></PropertyGroup></Project>")]
+    public void CONV_SETUP_004_AC3_ASettingThatSetsARuleBelowErrorIsFoundInAnyBuildFile(string file, string text) =>
+        Assert.True(ConfiguresARule(file, text));
 
     /// <summary>
     /// CONV-SETUP-004 AC3, the configuration: the .editorconfig sets below error the five
@@ -2096,6 +2150,25 @@ public sealed class LibraryStructureTests
 
     private static IEnumerable<string> BuildFiles() =>
         BuildTree().Where(file => Path.GetExtension(file) is ".csproj" or ".props" or ".targets");
+
+    // CONV-SETUP-004 AC2 and AC3 (D-210): whether a project, props or targets file, given
+    // by its path from the root with forward slashes, configures a rule or sets one below
+    // error: through a property, an item or an item's metadata RuleConfiguration names,
+    // or, outside the root's Directory.Build.props, through a setting of CONV-SETUP-001.
+    private static bool ConfiguresARule(string file, string text)
+    {
+        XElement[] elements = [.. XDocument.Parse(text).Descendants()];
+
+        return elements
+                .SelectMany(element => element
+                    .Attributes()
+                    .Select(attribute => attribute.Name.LocalName)
+                    .Prepend(element.Name.LocalName))
+                .Any(RuleConfiguration.IsMatch)
+            || (!string.Equals(file, "Directory.Build.props", StringComparison.Ordinal)
+                && elements.Any(element => element.Parent?.Name.LocalName is "PropertyGroup"
+                    && BuildSettings.Contains(element.Name.LocalName, StringComparer.Ordinal)));
+    }
 
     // What an .editorconfig sets below error, each as its section, the rule and the
     // severity, in the order the file sets them.
