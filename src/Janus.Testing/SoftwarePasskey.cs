@@ -24,7 +24,7 @@ namespace Janus.Testing;
 /// What it answers is genuine, so the library verifies it as it verifies a real
 /// authenticator.
 /// </remarks>
-public sealed class SoftwarePasskey
+public sealed class SoftwarePasskey : IDisposable
 {
     // The COSE identifier of ECDSA over P-256 with SHA-256.
     private const int Es256 = -7;
@@ -41,6 +41,8 @@ public sealed class SoftwarePasskey
     private byte[]? _privateKey;
 
     private string? _userHandle;
+
+    private bool _disposed;
 
     /// <summary>
     /// Makes an authenticator that runs its ceremonies on a page of an origin.
@@ -75,8 +77,11 @@ public sealed class SoftwarePasskey
     /// <exception cref="InvalidOperationException">
     /// It holds a credential already, or the options allow no ES256 key.
     /// </exception>
+    /// <exception cref="ObjectDisposedException">It has been disposed.</exception>
     public JsonObject Create(JsonElement options)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (_privateKey is not null)
         {
             throw new InvalidOperationException("A software passkey holds one credential.");
@@ -149,8 +154,11 @@ public sealed class SoftwarePasskey
     /// <exception cref="InvalidOperationException">
     /// It holds no credential, or the options allow other credentials only.
     /// </exception>
+    /// <exception cref="ObjectDisposedException">It has been disposed.</exception>
     public JsonObject Get(JsonElement options)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (_privateKey is null)
         {
             throw new InvalidOperationException("The software passkey holds no credential.");
@@ -193,6 +201,21 @@ public sealed class SoftwarePasskey
             },
             ["clientExtensionResults"] = new JsonObject(),
         };
+    }
+
+    /// <summary>
+    /// Clears the private key of the credential it holds (CONV-CODE-007); it answers no
+    /// ceremony afterwards.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_privateKey is not null)
+        {
+            CryptographicOperations.ZeroMemory(_privateKey);
+            _privateKey = null;
+        }
+
+        _disposed = true;
     }
 
     // WebAuthn Level 3 section 5.8.1: the challenge as the options carry it, base64url.

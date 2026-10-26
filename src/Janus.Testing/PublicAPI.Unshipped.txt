@@ -39,6 +39,7 @@ Janus.Testing.InMemorySmsTransport.SentTo(Janus.Core.PhoneNumber destination) ->
 Janus.Testing.SoftwarePasskey
 Janus.Testing.SoftwarePasskey.Create(System.Text.Json.JsonElement options) -> System.Text.Json.Nodes.JsonObject!
 Janus.Testing.SoftwarePasskey.CredentialId.get -> string!
+Janus.Testing.SoftwarePasskey.Dispose() -> void
 Janus.Testing.SoftwarePasskey.Get(System.Text.Json.JsonElement options) -> System.Text.Json.Nodes.JsonObject!
 Janus.Testing.SoftwarePasskey.SoftwarePasskey(System.Uri! origin, System.Security.Cryptography.RandomNumberGenerator! randomness) -> void
 Janus.Testing.SucceededCertificateRenewal

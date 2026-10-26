@@ -103,6 +103,20 @@ public sealed class TestSession : HttpClient
     }
 
     /// <summary>
+    /// Ends the browser and clears the person's passkey with it (CONV-CODE-007).
+    /// </summary>
+    /// <param name="disposing">Whether it is disposed rather than finalized.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _passkey?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <summary>
     /// Where the browser profile is mounted, as a base address relative routes are read
     /// against.
     /// </summary>

@@ -166,18 +166,29 @@ public sealed class TestPeople
         ArgumentNullException.ThrowIfNull(enrolment);
 
         string token = Links.Token(enrolment, "enrolment");
-        var passkey = new SoftwarePasskey(_address, _randomness);
+        SoftwarePasskey? passkey = new(_address, _randomness);
 
-        using (Browser enrolling = Browser())
+        try
         {
-            using HttpClient client = Client(enrolling);
+            using (Browser enrolling = Browser())
+            {
+                using HttpClient client = Client(enrolling);
 
-            await FirstContactAsync(client, cancellationToken).ConfigureAwait(false);
-            await SendAsync(client, HttpMethod.Post, "enrol/begin", new JsonObject { ["token"] = token }, HttpStatusCode.OK, cancellationToken).ConfigureAwait(false);
-            await EnrolledAsync(client, passkey, cancellationToken).ConfigureAwait(false);
+                await FirstContactAsync(client, cancellationToken).ConfigureAwait(false);
+                await SendAsync(client, HttpMethod.Post, "enrol/begin", new JsonObject { ["token"] = token }, HttpStatusCode.OK, cancellationToken).ConfigureAwait(false);
+                await EnrolledAsync(client, passkey, cancellationToken).ConfigureAwait(false);
+            }
+
+            TestSession administrator = await SignInAsync(email.Value, passkey, cancellationToken).ConfigureAwait(false);
+
+            passkey = null;
+
+            return administrator;
         }
-
-        return await SignInAsync(email.Value, passkey, cancellationToken).ConfigureAwait(false);
+        finally
+        {
+            passkey?.Dispose();
+        }
     }
 
     /// <summary>
@@ -220,31 +231,42 @@ public sealed class TestPeople
             .ConfigureAwait(false);
 
         string invitation = Links.Token(Mailed(email), "invitation");
-        var passkey = new SoftwarePasskey(_address, _randomness);
+        SoftwarePasskey? passkey = new(_address, _randomness);
 
-        using (Browser registering = Browser())
+        try
         {
-            using HttpClient client = Client(registering);
+            using (Browser registering = Browser())
+            {
+                using HttpClient client = Client(registering);
 
-            await BegunAsync(client, invitation, cancellationToken).ConfigureAwait(false);
-            await PhoneAsync(client, phone, cancellationToken).ConfigureAwait(false);
-            await SendAsync(client, HttpMethod.Post, "register/confirm", null, HttpStatusCode.OK, cancellationToken).ConfigureAwait(false);
-            await EnrolledAsync(client, passkey, cancellationToken).ConfigureAwait(false);
-            await AcceptedAsync(client, cancellationToken).ConfigureAwait(false);
+                await BegunAsync(client, invitation, cancellationToken).ConfigureAwait(false);
+                await PhoneAsync(client, phone, cancellationToken).ConfigureAwait(false);
+                await SendAsync(client, HttpMethod.Post, "register/confirm", null, HttpStatusCode.OK, cancellationToken).ConfigureAwait(false);
+                await EnrolledAsync(client, passkey, cancellationToken).ConfigureAwait(false);
+                await AcceptedAsync(client, cancellationToken).ConfigureAwait(false);
 
-            Answer standing = await SendAsync(client, HttpMethod.Get, "account/invitation", null, HttpStatusCode.OK, cancellationToken).ConfigureAwait(false);
+                Answer standing = await SendAsync(client, HttpMethod.Get, "account/invitation", null, HttpStatusCode.OK, cancellationToken).ConfigureAwait(false);
 
-            await SendAsync(
-                    client,
-                    HttpMethod.Post,
-                    "account/invitation/acknowledge",
-                    new JsonObject { ["invitationId"] = standing.Text("id") },
-                    HttpStatusCode.NoContent,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                await SendAsync(
+                        client,
+                        HttpMethod.Post,
+                        "account/invitation/acknowledge",
+                        new JsonObject { ["invitationId"] = standing.Text("id") },
+                        HttpStatusCode.NoContent,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            TestSession staff = await SignInAsync(email.Value, passkey, cancellationToken).ConfigureAwait(false);
+
+            passkey = null;
+
+            return staff;
         }
-
-        return await SignInAsync(email.Value, passkey, cancellationToken).ConfigureAwait(false);
+        finally
+        {
+            passkey?.Dispose();
+        }
     }
 
     // A state-changing request an administrator makes, stepped up once where the gate

@@ -51,7 +51,7 @@ public sealed class SoftwarePasskeyTests : IAsyncDisposable
     {
         _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
 
-        var passkey = new SoftwarePasskey(Origin, _randomness);
+        using var passkey = new SoftwarePasskey(Origin, _randomness);
         Browser registering = await Flow.ConfirmedAsync(_deployment);
         Answer begun = await registering.SendAsync("POST", "/auth/webauthn/register/begin", ("kind", "passkey"));
 
