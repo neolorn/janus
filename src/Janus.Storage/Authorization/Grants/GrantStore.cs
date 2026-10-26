@@ -93,6 +93,15 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<bool> HoldsOrganizationAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        await context.Organizations
+            .AsNoTracking()
+            .AnyAsync(row => row.Id == organization, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grant);

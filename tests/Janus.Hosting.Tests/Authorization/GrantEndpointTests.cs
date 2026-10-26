@@ -42,12 +42,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     private readonly Janus.Hosting.Tests.Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment able to register a browser, administered by one organization.
+    /// A deployment able to register a browser, administered by one organization and
+    /// holding a branch.
     /// </summary>
     public GrantEndpointTests()
     {
         Flow.Prepare(_deployment);
         _deployment.Administers(Administration);
+        _deployment.Organizations.Seed(Branch);
     }
 
     /// <summary>
@@ -147,6 +149,31 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status403Forbidden, created.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), created.Text("code"));
         Assert.Empty(await HeldAsync(Branch));
+    }
+
+    /// <summary>
+    /// AUTHZ-SCOPE-001 (D-209): <c>POST /admin/grants</c> answers a grant on the whole of
+    /// an organization the deployment does not hold 403 <c>authz.denied</c>, in the shape
+    /// it answers a record no registration names, to a caller holding both permissions of
+    /// the admission, and writes nothing. What the refusal records is decided against the
+    /// database, where the gate's own refusal answers it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_SCOPE_001_AnOrganizationWideGrantNamingNoOrganizationIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(
+            Administration,
+            Permissions.SystemAdminister,
+            Permissions.GrantManage);
+        var unheld = new OrganizationId(Guid.Parse("66666666-6666-4666-8666-666666666666"));
+
+        Answer refused = await GrantedAsync(administrator, "organization", unheld.ToString());
+        Answer unregistered = await GrantedAsync(administrator, "document", "d-2");
+
+        Denied(refused);
+        Assert.Equal(Shape(unregistered), Shape(refused));
+        Assert.Empty(await HeldAsync(unheld));
     }
 
     /// <summary>

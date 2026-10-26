@@ -67,6 +67,16 @@ internal sealed class GrantsInMemory : IGrantStore
     public ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_grants.TryGetValue(id, out Grant? grant) ? grant.Organization : (OrganizationId?)null);
 
+    /// <summary>
+    /// Which organizations the deployment holds, read from where the test deployment keeps
+    /// them; none where it keeps none.
+    /// </summary>
+    public Func<OrganizationId, bool> Organizations { get; set; } = _ => false;
+
+    /// <inheritdoc/>
+    public ValueTask<bool> HoldsOrganizationAsync(OrganizationId organization, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Organizations(organization));
+
     /// <inheritdoc/>
     public ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken)
     {

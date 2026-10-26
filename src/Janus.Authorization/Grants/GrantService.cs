@@ -74,16 +74,17 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
         }
 
-        OrganizationId? scoped = await ScopeOfAsync(request.On, cancellationToken).ConfigureAwait(false);
-
-        if (scoped is null && request.On.Type == OrganizationWide)
+        if (request.On.Type == OrganizationWide && !Guid.TryParse(request.On.Id.ToString(), out _))
         {
             return Result.Failure<GrantId>(Malformed("resourceId"));
         }
 
-        // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a record the deployment holds no
-        // registration for belongs to no organization, and the gate refuses it as it
-        // refuses a caller managing nothing where a record is.
+        OrganizationId? scoped = await ScopeOfAsync(request.On, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3 (D-209): a record the deployment holds no
+        // registration for, and an organization it does not hold, belong to no
+        // organization, and the gate refuses them as it refuses a caller managing
+        // nothing where a record is, neither permission of the admission being decided.
         if (scoped is not OrganizationId organization)
         {
             return Result.Failure<GrantId>(
@@ -327,16 +328,19 @@ internal sealed class GrantService(
     private static Error Unresolved(string member) =>
         Error.From(ErrorCodes.GrantUnresolved, "member", JsonSerializer.SerializeToElement(member));
 
-    // AUTHZ-GRANT-001 AC2: the whole organization is named by its identifier; a record
-    // is scoped to the organization it was registered in.
+    // AUTHZ-GRANT-001 AC2, AUTHZ-SCOPE-001: the whole organization is named by its
+    // identifier, and is the grant's scope where the deployment holds it; a record is
+    // scoped to the organization it was registered in.
     private async ValueTask<OrganizationId?> ScopeOfAsync(
         ResourceReference on,
         CancellationToken cancellationToken)
     {
         if (on.Type == OrganizationWide)
         {
-            return Guid.TryParse(on.Id.ToString(), out Guid organization)
-                ? new OrganizationId(organization)
+            var organization = new OrganizationId(Guid.Parse(on.Id.ToString()));
+
+            return await grants.HoldsOrganizationAsync(organization, cancellationToken).ConfigureAwait(false)
+                ? organization
                 : null;
         }
 
