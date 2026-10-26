@@ -462,7 +462,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
 
     /// <summary>
     /// CONV-DESIGN-003 AC13 (D-209): a library operation with a step-up that a host calls
-    /// inside its own unit of work, the end of another person's sessions, is refused
+    /// inside its own unit of work, the end of the actor's own sessions, is refused
     /// <c>auth.stepup.required</c> with the offer made where no signal is declared, the
     /// carrier not asked and no consideration recorded; the signal is asked when the
     /// step-up is carried out, with no unit of work open and before any text is sent, and
