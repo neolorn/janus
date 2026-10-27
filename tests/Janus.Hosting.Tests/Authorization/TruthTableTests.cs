@@ -333,8 +333,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // names no record and so runs through the single check alone: its declaration
     // reaches the organization as an organization-wide grant reaches a person, and the
     // refusals are those of its records; a consent-based purpose, which no data subject's
-    // consent can admit there, is refused as it is for a person (AUTHZ-TEST-001 AC1, AC2,
-    // IDN-PRIN-001 AC6, AUTHZ-GATE-005, D-207, D-208).
+    // consent can admit there, is refused as it is for a person. A read of the library
+    // IDN-READ-004 lets a job declare reaches its organization as a host permission does,
+    // and a read it does not declare is refused (AUTHZ-TEST-001 AC1, AC2, IDN-PRIN-001
+    // AC6, IDN-READ-004 AC3, AUTHZ-GATE-005, D-207, D-208, D-218).
     private static readonly (string Scenario, Decided Decided)[] JobOrganizations =
     [
         ("a declared job asking a permission its declaration names, of its organization", Decided.Allowed),
@@ -344,6 +346,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a declared job asking of its organization, whose deletion is requested", Decided.Denied),
         ("a declared job asking of its organization, once it is erased", Decided.Denied),
         ("a declared job asking of its organization while a request is served", Decided.Denied),
+        ("a declared job asking a library read its declaration names, of its organization", Decided.Allowed),
+        ("a declared job asking a library read its declaration does not name, of its organization", Decided.Denied),
+        (
+            "a declared job asking a library read its declaration names, of its organization while a request is served",
+            Decided.Denied),
     ];
 
     // A grant written in an organization, which names no record of a list and so runs
@@ -1906,13 +1913,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await ConsentedAsync(account);
         }
 
-        Permission asked = scenario.Contains("does not name", StringComparison.Ordinal)
-            ? HostPermissions.Retain
-            : scenario.Contains("consent-bound", StringComparison.Ordinal)
-                ? HostPermissions.Recommend
-                : scenario.Contains("modifying", StringComparison.Ordinal)
-                    ? HostPermissions.Edit
-                    : HostPermissions.Read;
+        Permission asked = scenario.Contains("a library read its declaration does not name", StringComparison.Ordinal)
+            ? Permissions.MembershipRead
+            : scenario.Contains("a library read", StringComparison.Ordinal)
+                ? Permissions.ContactRead
+                : scenario.Contains("does not name", StringComparison.Ordinal)
+                    ? HostPermissions.Retain
+                    : scenario.Contains("consent-bound", StringComparison.Ordinal)
+                        ? HostPermissions.Recommend
+                        : scenario.Contains("modifying", StringComparison.Ordinal)
+                            ? HostPermissions.Edit
+                            : HostPermissions.Read;
 
         return new Case(host, deployment, account, record, sibling, outer, outer, asked);
     }

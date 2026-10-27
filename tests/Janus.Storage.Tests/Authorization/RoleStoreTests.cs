@@ -2,12 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Roles;
+using Janus.Storage.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authorization;
@@ -168,6 +173,64 @@ public sealed class RoleStoreTests(DatabaseFixture database)
         Assert.Equal([lead], (await ReadAsync(lead)).HandsOut);
         Assert.False(await NamedAsync(handed));
         Assert.False(await NamedAsync(lead));
+    }
+
+    /// <summary>
+    /// IDN-READ-004, OPS-MIG-001 (D-218): a deployment bootstrap stood up before the five
+    /// reads existed gives its <c>system-administrator</c> role each of them once
+    /// migrated, every other role keeping what it held, so the role holds every
+    /// library-owned permission as chapter 10 section 3 says.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_004_TheSystemAdministratorTakesTheReadsOnceMigratedAsync()
+    {
+        string seeded = await database.CreateDatabaseAsync("administrator_reads");
+        string giving;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(seeded))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            giving = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(GiveTheSystemAdministratorTheReads), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, giving) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(seeded);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.roles (name) VALUES ('system-administrator'), ('auditor');
+            INSERT INTO identity.role_permissions (role, permission)
+            VALUES
+                ('system-administrator', 'audit:read'),
+                ('system-administrator', 'system:administer'),
+                ('auditor', 'audit:read');
+            """);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(seeded))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(giving, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            [
+                ("auditor", "audit:read"),
+                ("system-administrator", "account:read"),
+                ("system-administrator", "audit:read"),
+                ("system-administrator", "consent:read"),
+                ("system-administrator", "contact:read"),
+                ("system-administrator", "membership:read"),
+                ("system-administrator", "organization:read"),
+                ("system-administrator", "system:administer"),
+            ],
+            await connection.QueryAsync<(string, string)>(
+                "SELECT role, permission FROM identity.role_permissions ORDER BY role, permission"));
     }
 
     /// <inheritdoc/>

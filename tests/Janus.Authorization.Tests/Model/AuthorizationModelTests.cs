@@ -458,16 +458,18 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
-    /// IDN-PRIN-001 AC7, OPS-ALERT-006 (D-202): a job declared with a permission the
-    /// model does not declare, one of the library's own, one bound to a step-up gate or
-    /// one whose action is <c>export</c> stops the deployment with
-    /// <c>model.startup.declarationinvalid</c>, naming <c>job.&lt;name&gt;</c> and
-    /// <c>permissions</c>.
+    /// IDN-PRIN-001 AC7, IDN-READ-004 AC3, OPS-ALERT-006 (D-202, D-218): a job declared
+    /// with a permission the model does not declare, a library-owned one other than the
+    /// four reads of IDN-READ-004, one bound to a step-up gate or one whose action is
+    /// <c>export</c> stops the deployment with <c>model.startup.declarationinvalid</c>,
+    /// naming <c>job.&lt;name&gt;</c> and <c>permissions</c>.
     /// </summary>
     /// <param name="permission">The permission the job is declared with.</param>
     [Theory]
     [InlineData("ledger:close")]
     [InlineData("audit:read")]
+    [InlineData("account:read")]
+    [InlineData("account:manage")]
     [InlineData("system:administer")]
     [InlineData("article:publish")]
     [InlineData("article:export")]
@@ -566,6 +568,25 @@ public sealed class AuthorizationModelTests
             .Job("nightly-digest", "article:read", "article:edit")
             .Job("archive", "article:read")
             .Build())));
+    }
+
+    /// <summary>
+    /// IDN-READ-004 AC3 (D-218): a job declares the four reads of the library beside its
+    /// host permissions, and the model then has it exercise each.
+    /// </summary>
+    /// <param name="permission">The library's read the job declares.</param>
+    [Theory]
+    [InlineData("organization:read")]
+    [InlineData("membership:read")]
+    [InlineData("contact:read")]
+    [InlineData("consent:read")]
+    public void IDN_READ_004_AC3_AJobDeclaresTheLibrarysFourReads(string permission)
+    {
+        var model = AuthorizationModel.Of(Jobbed()
+            .Job("customer-letters", "article:read", permission)
+            .Build());
+
+        Assert.True(model.Exercises("customer-letters", Permission.Parse(permission)));
     }
 
     /// <summary>

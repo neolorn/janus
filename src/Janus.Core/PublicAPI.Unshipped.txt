@@ -4434,18 +4434,23 @@ static Janus.Core.Permission.TryParse(string? value, out Janus.Core.Permission p
 static Janus.Core.Permission.operator !=(Janus.Core.Permission left, Janus.Core.Permission right) -> bool
 static Janus.Core.Permission.operator ==(Janus.Core.Permission left, Janus.Core.Permission right) -> bool
 static Janus.Core.Permissions.AccountManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.AccountRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.All.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
 static Janus.Core.Permissions.AuditRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.ComplianceManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.ConfigurationManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.ConfigurationRead.get -> Janus.Core.Permission
+static Janus.Core.Permissions.ConsentRead.get -> Janus.Core.Permission
+static Janus.Core.Permissions.ContactRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.DomainManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.GrantManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.GrantRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.GroupManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.MembershipManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.MembershipRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.NoticePublish.get -> Janus.Core.Permission
 static Janus.Core.Permissions.OrganizationManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.OrganizationRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.PrivacyRequestManage.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RecordsOfProcessingRead.get -> Janus.Core.Permission
 static Janus.Core.Permissions.RecoveryApprove.get -> Janus.Core.Permission

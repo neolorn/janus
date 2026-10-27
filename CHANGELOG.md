@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Five library permissions: `organization:read`, `membership:read`, `account:read`,
+  `contact:read` and `consent:read`. A host's job may declare the four reads beside its
+  own permissions (`account:read` stays a person's), and the migration gives an existing
+  `system-administrator` role all five.
 - The background job `membership-ends` ends a membership at the first pass after the
   instant an administrator set, as an end now would, without judging it again; its
   records carry the job's principal, `details.endSetBy` naming that administrator and

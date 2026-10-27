@@ -16,7 +16,8 @@ namespace Janus.Core;
 public static class Permissions
 {
     /// <summary>
-    /// Viewing grants and the "who can access this?" view.
+    /// Viewing grants, the "who can access this?" view, and which accounts may exercise a
+    /// permission.
     /// </summary>
     public static Permission GrantRead { get; } = Permission.Parse("grant:read");
 
@@ -46,6 +47,18 @@ public static class Permissions
     public static Permission MembershipManage { get; } = Permission.Parse("membership:manage");
 
     /// <summary>
+    /// Reading the organizations the deployment holds: in the administrative organization
+    /// every one, elsewhere the organization itself. A host's job may declare it.
+    /// </summary>
+    public static Permission OrganizationRead { get; } = Permission.Parse("organization:read");
+
+    /// <summary>
+    /// Reading an organization's current members, one account's membership and the
+    /// organization's standing invitations. A host's job may declare it.
+    /// </summary>
+    public static Permission MembershipRead { get; } = Permission.Parse("membership:read");
+
+    /// <summary>
     /// Adding, verifying and removing an organization's locked email domains.
     /// </summary>
     public static Permission DomainManage { get; } = Permission.Parse("domain:manage");
@@ -62,9 +75,27 @@ public static class Permissions
 
     /// <summary>
     /// Suspending and reactivating an account, lifting a restriction, cancelling a
-    /// deletion on a subject's behalf.
+    /// deletion on a subject's behalf, and setting another person's preferences.
     /// </summary>
     public static Permission AccountManage { get; } = Permission.Parse("account:manage");
+
+    /// <summary>
+    /// Reading another person's account and finding an account by an identifier; a
+    /// person's alone.
+    /// </summary>
+    public static Permission AccountRead { get; } = Permission.Parse("account:read");
+
+    /// <summary>
+    /// Reading another person's display name, primary verified email and phone,
+    /// language, time zone and state. A host's job may declare it.
+    /// </summary>
+    public static Permission ContactRead { get; } = Permission.Parse("contact:read");
+
+    /// <summary>
+    /// Reading another person's state, consents and objections. A host's job may
+    /// declare it.
+    /// </summary>
+    public static Permission ConsentRead { get; } = Permission.Parse("consent:read");
 
     /// <summary>
     /// The minor takedown operation.
@@ -82,7 +113,7 @@ public static class Permissions
     public static Permission SessionRevoke { get; } = Permission.Parse("session:revoke");
 
     /// <summary>
-    /// Revoking one account's sessions, for offboarding or suspension.
+    /// Revoking one account's sessions, for offboarding or suspension, and listing them.
     /// </summary>
     public static Permission SessionRevokeAccount { get; } = Permission.Parse("session:revoke-account");
 
@@ -137,17 +168,22 @@ public static class Permissions
     public static IReadOnlyList<Permission> All { get; } =
     [
         AccountManage,
+        AccountRead,
         AuditRead,
         ComplianceManage,
         ConfigurationManage,
         ConfigurationRead,
+        ConsentRead,
+        ContactRead,
         DomainManage,
         GrantManage,
         GrantRead,
         GroupManage,
         MembershipManage,
+        MembershipRead,
         NoticePublish,
         OrganizationManage,
+        OrganizationRead,
         PrivacyRequestManage,
         RecoveryApprove,
         RestrictionEdit,

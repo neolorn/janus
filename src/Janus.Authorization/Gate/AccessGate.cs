@@ -1735,10 +1735,11 @@ internal sealed class AccessGate(
         return context.Principal is { IsDeploymentScoped: false };
     }
 
-    // IDN-PRIN-001 (D-202, D-207): a job is admitted for the host permissions its
-    // declaration names in its own organization, while that organization has no deletion
-    // request and is not erased, read live at each evaluation (IDN-ORG-003). The state is
-    // read whatever else decides, so a refusal runs the statement an admission does.
+    // IDN-PRIN-001, IDN-READ-004 (D-202, D-207, D-218): a job is admitted for the
+    // permissions its declaration names, host permissions and the library's reads, in its
+    // own organization, while that organization has no deletion request and is not
+    // erased, read live at each evaluation (IDN-ORG-003). The state is read whatever else
+    // decides, so a refusal runs the statement an admission does.
     private async ValueTask<bool> JobReachesAsync(
         AccessContext context,
         Permission permission,

@@ -302,12 +302,13 @@ public sealed class HostFixture : IAsyncLifetime
             .ServesPurpose(HostPermissions.Retain.ToString(), "keeping the books")
             // IDN-PRIN-001 AC6 (D-208): the job exercises a permission bound to a
             // consent-based purpose, which the gate admits on the record's data subject's
-            // consent alone.
+            // consent alone, and one of the library's reads (IDN-READ-004 AC3, D-218).
             .Job(
                 Digest,
                 HostPermissions.Read.ToString(),
                 HostPermissions.Edit.ToString(),
-                HostPermissions.Recommend.ToString())
+                HostPermissions.Recommend.ToString(),
+                Permissions.ContactRead.ToString())
             .Relationship<HostReviewer>(
                 "reviewer",
                 "workspace",
