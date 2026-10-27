@@ -312,6 +312,7 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipAttachment, MembershipAttachment>();
         services.AddScoped<IMembershipEnding, MembershipEnding>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
+        services.AddScoped<IRoleHandOut, RoleHandOut>();
         services.AddScoped<IResourceStore, ResourceStore>();
         services.AddScoped<IAccountHolders, AccountHolders>();
 

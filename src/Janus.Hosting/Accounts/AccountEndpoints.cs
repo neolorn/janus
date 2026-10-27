@@ -196,7 +196,8 @@ internal static class AccountEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
                     ErrorCodes.InvitationNotFound, ErrorCodes.MembershipLimitReached,
                     ErrorCodes.IdentifierMaximum, ErrorCodes.InvitationExpired,
-                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.IdentifierDomainNotAllowed))
+                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.GrantSelf))
             .Accepts<AcknowledgeInvitationRequest>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
 

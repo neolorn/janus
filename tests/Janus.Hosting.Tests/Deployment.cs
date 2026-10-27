@@ -1279,6 +1279,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<RandomNumberGenerator>()));
         _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
+        _ = services.AddScoped<Janus.Authentication.Invitations.IRoleHandOut, Janus.Storage.Authentication.Invitations.RoleHandOut>();
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
         _ = services.AddSingleton<Janus.Authentication.Maintenance.IMaintenanceStore>(Maintenance);

@@ -92,6 +92,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly OrganizationsInMemory _organizations;
     private readonly MembershipAttachmentInMemory _attachments;
     private readonly MembershipEndingInMemory _ending;
+    private readonly RoleHandOutInMemory _handOut;
     private readonly SubjectId _inviter;
 
     /// <summary>
@@ -104,6 +105,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _organizations = new OrganizationsInMemory(_memberships);
         _attachments = new MembershipAttachmentInMemory(_memberships);
         _ending = new MembershipEndingInMemory(_memberships);
+        _handOut = new RoleHandOutInMemory(_gate, _administrative);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer, name: "Northern branch");
 
@@ -685,6 +687,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         gates[StepUpAction.GrantManage] = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
         _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault with { Gates = gates });
         _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
 
         Error challenged = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk])));
 
@@ -976,6 +979,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
 
         _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
         _documents.Publish("staff-handbook", "2", Noon.AddDays(-1));
         _accounts.Holds(_inviter, new HeldProfile(Named("Ada"), LegalName: null, DateOfBirth: null, PhotoUpdatedAt: null));
 
@@ -1078,6 +1082,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
 
         _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, clerk);
         _documents.Publish("staff-handbook", "2", Noon.AddDays(-1));
 
         string token = Accepted(await IssueAsync(
@@ -1115,6 +1120,51 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Null(invitation.Identifiers);
         Assert.Equal(ErrorCodes.InvitationNotFound, Failure(await AttachedAsync(holder)).Code);
         Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 AC1: with handing out by holding off, an inviter managing grants
+    /// names in an invitation a role it hands out; a role it does not hand out is refused
+    /// <c>authz.role.notassignable</c>, and nothing is issued or sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC1_AnInvitationNamesOnlyARoleTheInviterHandsOutAsync()
+    {
+        RoleName accountant = _roles.Define("accountant", Permissions.MembershipManage);
+        RoleName auditor = _roles.Define("auditor", Permissions.AuditRead);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _handOut.HandsOut(_inviter, Customer, accountant);
+
+        Error refused = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [accountant, auditor])));
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, refused.Code);
+        Assert.Empty(_invitations.Held);
+        Assert.Empty(_notifications.Sent);
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Personal, roles: [accountant])));
+
+        Assert.Equal([accountant], Assert.Single(_invitations.Held).Roles);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 AC3, REG-INV-002: the account that issued an invitation and
+    /// acknowledges it is refused <c>authz.grant.self</c>, and nothing attaches.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC3_AcknowledgingAnInvitationOneIssuedIsRefusedAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(_inviter, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(_inviter, token));
+
+        Error refused = Failure(await AcknowledgeAsync(_inviter, invitation.Id));
+
+        Assert.Equal(ErrorCodes.GrantSelf, refused.Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Null(invitation.AcknowledgedAt);
     }
 
     /// <summary>
@@ -2210,6 +2260,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             stepUp,
             _organizations,
             _roles,
+            _handOut,
             _documents,
             new DomainLock(_memberships, _configuration, _domains),
             _invitations,
@@ -2219,6 +2270,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _gate,
                 new AdministrativeScope(_gate, _administrative),
                 _roles,
+                _handOut,
                 _restriction,
                 _invitations,
                 _organizations,

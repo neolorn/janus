@@ -284,6 +284,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IOrganizationDirectory>(),
             provider.GetRequiredService<IRoleCatalogue>(),
+            provider.GetRequiredService<IRoleHandOut>(),
             provider.GetRequiredService<ILegalDocuments>(),
             provider.GetRequiredService<DomainLock>(),
             provider.GetRequiredService<IInvitationStore>(),

@@ -22,6 +22,10 @@ against the public contract of LIB-API-001.
   scope, under the same rule as a grant (`authz.role.notassignable`); adding the actor, or
   a group it belongs to, is refused `authz.grant.self`, and so is taking either out of a
   group that reaches a deny.
+- `POST /admin/organizations/{id}/invitations` refuses a role in `roles` the inviter may not
+  hand out with `authz.role.notassignable`, and `POST /account/invitation/acknowledge`
+  refuses the account that issued the invitation with `authz.grant.self`; each refusal
+  writes nothing and is recorded as a refusal.
 - `authz.handout.byholding` (runtime, off by default; turning it on is loosening) lets an
   actor whose stored grants admit every permission a role carries hand the role out with
   no role of theirs listing it.

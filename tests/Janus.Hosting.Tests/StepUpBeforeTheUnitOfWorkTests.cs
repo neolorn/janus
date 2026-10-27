@@ -1341,6 +1341,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
             Branch,
             Permissions.MembershipManage,
             Permissions.GrantManage);
+        _deployment.HandOuts.HandsOut(subject, Branch, Reader);
 
         Texted(subject);
 
