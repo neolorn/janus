@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -23,7 +24,12 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
-    private readonly Deployment _deployment = new();
+    private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
+    [
+        new PreferenceDeclaration("badge", PreferenceKind.Boolean, "false", AdministratorOnly: true),
+    ]);
+
+    private readonly Deployment _deployment = new(preferences: Declared);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
@@ -424,6 +430,47 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal(0, standing.Json().GetProperty("objections").GetArrayLength());
         Assert.Equal(StatusCodes.Status404NotFound, beyond.Status);
         Assert.Equal(ErrorCodes.AccountNotFound.ToString(), beyond.Text("code"));
+    }
+
+    /// <summary>
+    /// IDN-READ-003 AC5 and chapter 09 section 8a (D-218): an administrator sets another
+    /// person's administrator-only preference over the endpoint, answered 204 with no
+    /// step-up, while setting it as one's own is refused
+    /// <c>identity.preference.administratoronly</c> as before; a body without a reason is
+    /// malformed, naming it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_003_AC5_AnAdministratorSetsAnotherPersonsPreferencesAsync()
+    {
+        Session member = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var badge = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["badge"] = "true",
+        };
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+        _deployment.Clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Answer set = await browser.SendAsync(
+            "PUT",
+            PathOf(member.Subject, "preferences"),
+            ("declared", badge),
+            ("reason", "Ticket 4471"));
+        Answer unreasoned = await browser.SendAsync(
+            "PUT",
+            PathOf(member.Subject, "preferences"),
+            ("declared", badge));
+        Answer own = await browser.SendAsync("PUT", "/account/preferences", ("declared", badge));
+
+        Assert.Equal(StatusCodes.Status204NoContent, set.Status);
+        Assert.Equal("true", (await _deployment.Accounts.PreferencesAsync(member.Subject, TestContext.Current.CancellationToken))
+                .Values["badge"]);
+        Assert.Equal(StatusCodes.Status400BadRequest, unreasoned.Status);
+        Assert.Equal("reason", unreasoned.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, own.Status);
+        Assert.Equal(ErrorCodes.PreferenceAdministratorOnly.ToString(), own.Text("code"));
     }
 
     private static string PathOf(SubjectId subject, string operation) =>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Mime;
 using System.Threading;
@@ -18,13 +19,16 @@ namespace Janus.Hosting.Accounts;
 /// </summary>
 /// <remarks>
 /// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010,
-/// PRIV-RIGHT-004, IDN-ATTR-003 and IDN-READ-003. Each is one line to
+/// PRIV-RIGHT-004, IDN-ATTR-003, IDN-READ-003 and REG-PREF-001. Each is one line to
 /// <see cref="IAccounts"/>, the standing to <see cref="IConsents"/>; the permission, the
 /// step-up and the state are the service's to judge, so a host calling it in process
 /// meets the same refusals.
 /// </remarks>
 internal static class AccountAdministrationEndpoints
 {
+    private static readonly IReadOnlyDictionary<string, string> NoPreferences =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
@@ -98,6 +102,15 @@ internal static class AccountAdministrationEndpoints
                     ErrorCodes.AccountNotFound)
                 .Binding<SubjectId>("subject"))
             .Produces<StandingView>();
+        _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.AccountNotFound, ErrorCodes.PreferenceUndeclared,
+                    ErrorCodes.PreferenceWrongType, ErrorCodes.PreferenceTooLarge)
+                .Binding<SubjectId>("subject"))
+            .Accepts<AdministeredPreferencesRequest>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
         _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/find", FindAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -325,6 +338,42 @@ internal static class AccountAdministrationEndpoints
                 AccountJson.Default.FoundAccountView,
                 contentType: null,
                 StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> SetPreferencesAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        HttpContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AdministeredPreferencesRequest request = await JsonBody
+            .ReadAsync<AdministeredPreferencesRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        // API-CONV-002: the reason is required, so a body without one is not the shape
+        // the endpoint takes.
+        if (request.Reason is null)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await accounts
+                .SetPreferencesAsync(
+                    browser.Asking,
+                    subject,
+                    request.Language,
+                    request.TimeZone,
+                    request.Declared ?? NoPreferences,
+                    request.Reason,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // 09 section 8a: the organization a read is asked in may be left out, which asks it

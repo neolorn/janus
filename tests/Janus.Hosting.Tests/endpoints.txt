@@ -537,6 +537,18 @@ GET /admin/accounts/{subject}/photo
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
   404 identity.account.notfound identity.photo.notfound
+PUT /admin/accounts/{subject}/preferences
+  request application/json
+    language: string
+    timeZone: string
+    declared{}: string
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  404 identity.account.notfound
+  422 identity.preference.toolarge identity.preference.undeclared identity.preference.wrongtype
 POST /admin/accounts/{subject}/reactivate
   204
   400 api.request.malformed

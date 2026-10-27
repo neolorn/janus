@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An administrator holding `account:manage` in the administrative organization sets
+  another person's language, time zone and declared preferences, an administrator-only
+  one included (`IAccounts.SetPreferencesAsync`,
+  `PUT /admin/accounts/{subject}/preferences`), with a required reason and no step-up.
+  The values are validated as the person's own setting is, and the change is recorded as
+  `identity.preferences.changed` with the administrator acting and `details.reason`.
 - An administrator holding `session:revoke-account` lists another account's live
   sessions (`ISessions.ListOfAsync`, `GET /admin/accounts/{subject}/sessions`) as the
   account's own list shows them, none marked current, to check an offboarding before

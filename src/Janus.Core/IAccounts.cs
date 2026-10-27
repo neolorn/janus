@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,7 +23,8 @@ namespace Janus.Core;
 /// is, and reaches every account from the administrative organization and elsewhere only
 /// the organization's current members and the data subjects of its records. An account
 /// beyond that reach is answered as an account no person bears, and each account a
-/// person reads counts toward their read volume. A read is not audited.
+/// person reads counts toward their read volume. A read is not audited. Setting another
+/// person's preferences is IDN-READ-003's too, and is audited as every change is.
 /// </remarks>
 public interface IAccounts
 {
@@ -179,5 +181,35 @@ public interface IAccounts
         AccessContext context,
         SubjectId subject,
         OrganizationId? organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Replaces another person's preference set as an administrator, a key only an
+    /// administrator may edit included, under <c>account:manage</c> in the administrative
+    /// organization and with no step-up. Validated as the person's own setting is, and
+    /// recorded as the administrator's with the reason.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="subject">Whose preferences.</param>
+    /// <param name="language">The language, or nothing to clear it.</param>
+    /// <param name="timeZone">The time zone, or nothing to clear it.</param>
+    /// <param name="declared">The values to hold, which replace whatever was held.</param>
+    /// <param name="reason">Why, which the change is recorded with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal, judged in this order: <c>authz.denied</c> where the caller
+    /// does not hold the permission, <c>api.request.malformed</c> naming <c>reason</c>
+    /// where it is blank or longer than 1024 characters after trimming,
+    /// <c>identity.account.notfound</c> where no account bears the subject or the account
+    /// is deleted, and the refusal of a key or a value by name as the person's own setting
+    /// answers it.
+    /// </returns>
+    ValueTask<Result> SetPreferencesAsync(
+        AccessContext context,
+        SubjectId subject,
+        string? language,
+        string? timeZone,
+        IReadOnlyDictionary<string, string> declared,
+        string reason,
         CancellationToken cancellationToken);
 }

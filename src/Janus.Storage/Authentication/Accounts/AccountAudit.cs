@@ -15,7 +15,7 @@ namespace Janus.Storage.Authentication.Accounts;
 /// <param name="records">Where the trail is appended to.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REG-PROF-001, REG-PREF-001, IDN-AUD-001 and CONV-DESIGN-003. The entry
+/// Implements REG-PROF-001, REG-PREF-001, IDN-AUD-001, IDN-READ-003 and CONV-DESIGN-003. The entry
 /// says which group changed and never what it changed to, so the trail carries no
 /// personal attribute of the person it is about.
 /// </remarks>
@@ -43,6 +43,31 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
                     breakGlassReason,
                     organization: null,
                     Nothing),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask PreferencesSetAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId subject,
+        string reason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records.AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Routine,
+                    AuditActions.PreferencesChanged,
+                    at,
+                    acting,
+                    subject,
+                    breakGlassReason,
+                    organization: null,
+                    new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                    {
+                        ["reason"] = JsonSerializer.SerializeToElement(reason),
+                    }),
                 cancellationToken)
             .ConfigureAwait(false);
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -239,6 +240,57 @@ public sealed class AccountReadTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal(nobody.Code, beyond.Code);
         Assert.Equal(nobody.Details, beyond.Details);
         Assert.Equal(2, await VolumeAsync(clerk, cancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-READ-003 AC5 (D-218): an administrator's setting of another person's
+    /// preferences is written to the trail as <c>identity.preferences.changed</c>, the
+    /// administrator acting, the person the subject and the reason in
+    /// <c>details.reason</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_003_AC5_AnAdministratorsSettingIsRecordedWithTheReasonAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([], cancellationToken);
+
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        RoleName managing = await deployment.RoleAsync([Permissions.AccountManage], cancellationToken);
+        SubjectId steward = await deployment.AccountAsync(cancellationToken);
+        SubjectId member = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.MemberAsync(steward, administrative, cancellationToken);
+        _ = await deployment.GrantAsync(
+            GrantSubject.Of(steward), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IAccounts accounts = scope.ServiceProvider.GetRequiredService<IAccounts>();
+
+        Result set = await accounts.SetPreferencesAsync(
+            AccessContext.Of(steward),
+            member,
+            "ar",
+            timeZone: null,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            "Ticket 4471",
+            cancellationToken);
+
+        Assert.Null(set.Match<ErrorCode?>(() => null, error => error.Code));
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        string? reason = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            """
+            SELECT details->>'reason' FROM identity.audit_records
+            WHERE action = 'identity.preferences.changed' AND acting_subject = @steward AND subject = @member
+            """,
+            new { steward = steward.Value, member = member.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal("Ticket 4471", reason);
     }
 
     private static ResourceReference Reference() => new(Document, ResourceId.Parse(Guid.NewGuid().ToString()));

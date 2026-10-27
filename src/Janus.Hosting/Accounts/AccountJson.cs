@@ -34,4 +34,5 @@ namespace Janus.Hosting.Accounts;
 [JsonSerializable(typeof(ContactView))]
 [JsonSerializable(typeof(FindAccountRequest))]
 [JsonSerializable(typeof(FoundAccountView))]
+[JsonSerializable(typeof(AdministeredPreferencesRequest))]
 internal sealed partial class AccountJson : JsonSerializerContext;

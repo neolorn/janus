@@ -17,7 +17,8 @@ namespace Janus.Authentication.Accounts;
 /// <summary>
 /// What an administrator does to the standing of someone else's account: suspends it,
 /// reactivates it, lifts its restriction and cancels its deletion, and reads the photo it
-/// shows; and what a host reads of another person's account.
+/// shows; what a host reads of another person's account, and the preferences an
+/// administrator sets for it.
 /// </summary>
 /// <param name="scope">Whether the caller administers accounts in the deployment.</param>
 /// <param name="stepUp">What the gated operations ask of the administrator's session.</param>
@@ -38,9 +39,9 @@ namespace Janus.Authentication.Accounts;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004, IDN-AUD-001, IDN-READ-003,
-/// IDN-READ-004 and chapter 09 section 8a. The grants of a suspended account are left in place, which is what lets
-/// reactivation restore them exactly; the gate confers nothing on an account that is
-/// not active.
+/// IDN-READ-004, REG-PREF-001 and chapter 09 section 8a. The grants of a suspended
+/// account are left in place, which is what lets reactivation restore them exactly; the
+/// gate confers nothing on an account that is not active.
 /// </remarks>
 internal sealed class AccountAdministration(
     AdministrativeScope scope,
@@ -630,6 +631,106 @@ internal sealed class AccountAdministration(
             state);
 
         return await CountedAsync(context, contact, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> SetPreferencesAsync(
+        AccessContext context,
+        SubjectId subject,
+        string? language,
+        string? timeZone,
+        IReadOnlyDictionary<string, string> declared,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(declared);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        // IDN-READ-004: the setting stays a person's, so no system principal makes it.
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope.RefusedAsync(context, Permissions.AccountManage, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        // API-CONV-002: the reason the change is recorded with is free text of 1 to 1024
+        // characters after trimming.
+        if (reason.Trim() is not { Length: > 0 and <= 1024 } stated)
+        {
+            return Result.Failure(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
+
+        // IDN-READ-003: a deleted account is answered as an account no person bears.
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is null or AccountState.Deleted)
+        {
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        Result<int> maximumSize = await configuration
+            .ReadAsync(Settings.PreferencesMaxSize, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (maximumSize.Match(_ => (Error?)null, error => error) is Error unread)
+        {
+            return Result.Failure(unread);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // REG-PREF-001: an administrator's replace sets a key only an administrator may
+        // edit, validated as the person's own setting is.
+        if ((await directory
+                .RecordPreferencesAsync(
+                    subject,
+                    language,
+                    timeZone,
+                    declared,
+                    asAdministrator: true,
+                    maximumSize.Match(read => read, _ => default),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error invalid)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(invalid);
+        }
+
+        await audit
+            .PreferencesSetAsync(acting, context.BreakGlassReason, subject, stated, now, cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     // What a suspension is refused with, where it is; an account an administrator

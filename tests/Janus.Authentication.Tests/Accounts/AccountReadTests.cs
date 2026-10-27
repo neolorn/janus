@@ -33,7 +33,10 @@ public sealed class AccountReadTests : IAsyncDisposable
     private static readonly DateTimeOffset Noon = new(2026, 10, 27, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
-        [new PreferenceDeclaration("digest", PreferenceKind.Boolean, "true")]);
+        [
+            new PreferenceDeclaration("digest", PreferenceKind.Boolean, "true"),
+            new PreferenceDeclaration("badge", PreferenceKind.Boolean, "false", AdministratorOnly: true),
+        ]);
 
     private readonly AccountDirectoryInMemory _directory = new(Declared);
     private readonly IdentifierDirectoryInMemory _identifiers = new();
@@ -41,6 +44,7 @@ public sealed class AccountReadTests : IAsyncDisposable
     private readonly OrganizationsInMemory _organizations;
     private readonly AccountTiesInMemory _ties = new();
     private readonly ReadVolumeInMemory _volume = new();
+    private readonly AccountAuditInMemory _audit = new();
     private readonly SessionStoreInMemory _sessions = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
@@ -93,7 +97,7 @@ public sealed class AccountReadTests : IAsyncDisposable
             new LifecycleLinkStoreInMemory(),
             _configuration,
             new EventsInMemory(),
-            new AccountAuditInMemory(),
+            _audit,
             new ProfilePhotos(
                 _directory,
                 new SettingsRestrictionInMemory(),
@@ -292,6 +296,89 @@ public sealed class AccountReadTests : IAsyncDisposable
             [(_clerk, 1), (_clerk, 1)],
             _volume.Returned.Select(counted => (counted.Context.Acting, counted.Records)));
     }
+
+    /// <summary>
+    /// IDN-READ-003 AC5 (D-218): an administrator holding <c>account:manage</c> in the
+    /// administrative organization sets another person's administrator-only preference,
+    /// with no step-up, and the change is recorded as the administrator's with the reason
+    /// trimmed.
+    /// </summary>
+    [Fact]
+    public async Task IDN_READ_003_AC5_AnAdministratorSetsAnAdministratorOnlyPreferenceAsync()
+    {
+        SubjectId steward = Account();
+
+        _gate.Grant(steward, _administering, Permissions.AccountManage);
+
+        Result set = await Administration.SetPreferencesAsync(
+            AccessContext.Of(steward),
+            _customer,
+            "ar",
+            "Asia/Riyadh",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["badge"] = "true" },
+            "  Ticket 4471  ",
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(set.Match<ErrorCode?>(() => null, error => error.Code));
+        HeldPreferences held = await _directory.PreferencesAsync(_customer, TestContext.Current.CancellationToken);
+        Assert.Equal(("ar", "Asia/Riyadh", "true"), (held.Language, held.TimeZone, held.Values["badge"]));
+        RecordedChange recorded = Assert.Single(_audit.Recorded);
+        Assert.Equal(
+            (AuditActions.PreferencesChanged, steward, _customer, "Ticket 4471"),
+            (recorded.Action, recorded.Acting, recorded.Subject, recorded.Reason));
+    }
+
+    /// <summary>
+    /// IDN-READ-003 (D-218): the setting is refused <c>authz.denied</c> without
+    /// <c>account:manage</c> in the administrative organization, held elsewhere included,
+    /// <c>api.request.malformed</c> for a blank or overlong reason,
+    /// <c>identity.account.notfound</c> for a subject no account bears and for an account
+    /// deleted, and by name for a value the key does not admit; a refused setting changes
+    /// and records nothing.
+    /// </summary>
+    [Fact]
+    public async Task IDN_READ_003_AnAdministratorsSettingIsRefusedAsThePersonsOwnIsAsync()
+    {
+        SubjectId steward = Account();
+        SubjectId deleted = Account();
+        var badge = new Dictionary<string, string>(StringComparer.Ordinal) { ["badge"] = "true" };
+
+        _gate.Grant(steward, _administering, Permissions.AccountManage);
+        _gate.Grant(_clerk, _shop, Permissions.AccountManage);
+        _directory.Stands(deleted, AccountState.Deleted);
+
+        Assert.Equal(ErrorCodes.Denied, await SetRefusedAsync(_clerk, _customer, badge, "Ticket"));
+        Assert.Equal(ErrorCodes.RequestMalformed, await SetRefusedAsync(steward, _customer, badge, "   "));
+        Assert.Equal(
+            ErrorCodes.RequestMalformed, await SetRefusedAsync(steward, _customer, badge, new string('r', 1025)));
+        Assert.Equal(
+            ErrorCodes.AccountNotFound, await SetRefusedAsync(steward, SubjectId.New(_randomness), badge, "Ticket"));
+        Assert.Equal(ErrorCodes.AccountNotFound, await SetRefusedAsync(steward, deleted, badge, "Ticket"));
+        Assert.Equal(
+            ErrorCodes.PreferenceWrongType,
+            await SetRefusedAsync(
+                steward,
+                _customer,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["badge"] = "often" },
+                "Ticket"));
+        Assert.Empty((await _directory.PreferencesAsync(_customer, TestContext.Current.CancellationToken)).Values);
+        Assert.Empty(_audit.Recorded);
+    }
+
+    private async Task<ErrorCode?> SetRefusedAsync(
+        SubjectId administrator,
+        SubjectId subject,
+        IReadOnlyDictionary<string, string> declared,
+        string reason) =>
+        (await Administration.SetPreferencesAsync(
+            AccessContext.Of(administrator),
+            subject,
+            language: null,
+            timeZone: null,
+            declared,
+            reason,
+            TestContext.Current.CancellationToken))
+        .Match<ErrorCode?>(() => null, error => error.Code);
 
     private SubjectId Account()
     {

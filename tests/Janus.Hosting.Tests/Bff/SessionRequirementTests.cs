@@ -132,6 +132,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /account/profile",
         "PUT /account/identifiers/backup",
         "PUT /account/secondstep/preferred",
+        "PUT /admin/accounts/{subject}/preferences",
         "PUT /admin/compliance/assessments",
         "PUT /admin/compliance/licences",
         "PUT /admin/config/{key}",
