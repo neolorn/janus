@@ -23,14 +23,16 @@ namespace Janus.Authorization.Groups;
 /// <param name="grants">What a group holds, and whether any grant was given to it.</param>
 /// <param name="roles">Where the roles a group holds are read.</param>
 /// <param name="emergency">Which account joins no group.</param>
+/// <param name="handOut">Whether the caller may hand out the roles a change of members reaches.</param>
 /// <param name="audit">Where every change is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTHZ-GROUP-001 and OPS-CFG-007. The organization a change
-/// is judged in is the group's own, read from its row, never from the caller. A change
-/// of members confers or takes away what the group holds, so it is stepped up as a
-/// grant is; creating a group and removing one nothing names confer nothing.
+/// Implements LIB-API-005, AUTHZ-GROUP-001, AUTHZ-GRANT-005 and OPS-CFG-007. The
+/// organization a change is judged in is the group's own, read from its row, never from
+/// the caller. A change of members confers or takes away what the group holds, so it is
+/// stepped up and handed out as a grant is; creating a group and removing one nothing
+/// names confer nothing.
 /// </remarks>
 internal sealed class GroupService(
     IAccessGate gate,
@@ -41,6 +43,7 @@ internal sealed class GroupService(
     IGrantStore grants,
     IRoleStore roles,
     IEmergencyAccount emergency,
+    IHandOutAdmission handOut,
     IGroupAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IGroups
@@ -270,7 +273,8 @@ internal sealed class GroupService(
         // before the unit of work begins; each is judged again under the lock inside.
         Error? unmet = await CycleAsync(group, member, cancellationToken).ConfigureAwait(false)
             ? Error.From(ErrorCodes.GroupCycle)
-            : await ChangeRefusedAsync(context, acting, session, found, cancellationToken).ConfigureAwait(false);
+            : await ChangeRefusedAsync(context, acting, session, found, member, adding: true, cancellationToken)
+                .ConfigureAwait(false);
 
         if (unmet is not null)
         {
@@ -306,7 +310,9 @@ internal sealed class GroupService(
                 ? Unjoinable()
                 : await CycleAsync(group, member, cancellationToken).ConfigureAwait(false)
                     ? Error.From(ErrorCodes.GroupCycle)
-                    : await AdministeringRefusedAsync(context, held, locking: true, cancellationToken).ConfigureAwait(false);
+                    : await AdministeringRefusedAsync(context, held, locking: true, cancellationToken).ConfigureAwait(false)
+                        ?? await HandOutRefusedAsync(context, held, member, adding: true, cancellationToken)
+                            .ConfigureAwait(false);
 
         if (refused is not null)
         {
@@ -372,8 +378,8 @@ internal sealed class GroupService(
         // CONV-DESIGN-002, D-207: every refusal the step-up must follow is judged first
         // without a lock, so the step-up, which may ask the carrier's signal, is judged
         // before the unit of work begins; each is judged again under the lock inside.
-        if (await ChangeRefusedAsync(context, acting, session, found, cancellationToken).ConfigureAwait(false)
-            is Error unmet)
+        if (await ChangeRefusedAsync(context, acting, session, found, member, adding: false, cancellationToken)
+                .ConfigureAwait(false) is Error unmet)
         {
             return Result.Failure(unmet);
         }
@@ -402,7 +408,9 @@ internal sealed class GroupService(
 
         if ((held is null
                 ? await GoneAsync(context, cancellationToken).ConfigureAwait(false)
-                : await AdministeringRefusedAsync(context, held, locking: true, cancellationToken).ConfigureAwait(false))
+                : await AdministeringRefusedAsync(context, held, locking: true, cancellationToken).ConfigureAwait(false)
+                    ?? await HandOutRefusedAsync(context, held, member, adding: false, cancellationToken)
+                        .ConfigureAwait(false))
             is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -498,16 +506,20 @@ internal sealed class GroupService(
 
     // OPS-CFG-007: a member holds what the group holds and what every group holding it
     // holds, so a change of members where any of them carries system administration,
-    // an allow or a deny, is made only by a system administrator. The step-up is judged
-    // last, as for a grant, and before the unit of work begins, since it may ask the
-    // carrier's signal (CONV-DESIGN-002, D-207).
+    // an allow or a deny, is made only by a system administrator. The roles it
+    // reaches are handed out (AUTHZ-GRANT-005). The step-up is judged last, as for a
+    // grant, and before the unit of work begins, since it may ask the carrier's signal
+    // (CONV-DESIGN-002, D-207).
     private async ValueTask<Error?> ChangeRefusedAsync(
         AccessContext context,
         SubjectId acting,
         SessionId session,
         Group group,
+        GrantSubject member,
+        bool adding,
         CancellationToken cancellationToken) =>
         await AdministeringRefusedAsync(context, group, locking: false, cancellationToken).ConfigureAwait(false)
+            ?? await HandOutRefusedAsync(context, group, member, adding, cancellationToken).ConfigureAwait(false)
             ?? (await stepUp
                 .RequireAsync(acting, session, StepUpAction.GrantManage, cancellationToken)
                 .ConfigureAwait(false))
@@ -531,17 +543,7 @@ internal sealed class GroupService(
     // the change.
     private async ValueTask<bool> AdministersAsync(Group group, bool locking, CancellationToken cancellationToken)
     {
-        IReadOnlyList<GroupId> above = await groups
-            .GroupsOfAsync(GrantSubject.Of(group.Id), cancellationToken)
-            .ConfigureAwait(false);
-
-        IReadOnlyList<Grant> held = await grants
-            .HeldByAsync(
-                [GrantSubject.Of(group.Id), .. above.Select(GrantSubject.Of)],
-                group.Organization,
-                time.GetUtcNow(),
-                cancellationToken)
-            .ConfigureAwait(false);
+        IReadOnlyList<Grant> held = await ReachedAsync(group, cancellationToken).ConfigureAwait(false);
 
         foreach (RoleName role in held
             .Select(grant => grant.Role)
@@ -560,4 +562,78 @@ internal sealed class GroupService(
 
         return false;
     }
+
+    // AUTHZ-GRANT-005 (D-212): a change of members hands out every role the group
+    // reaches, each at the scope of the grant reaching it. Adding the actor, or a group
+    // holding it, widens the actor's own access whatever the group reaches, and so does
+    // removing either from a group that reaches a deny. A role nobody can read hands
+    // out what it is named.
+    private async ValueTask<Error?> HandOutRefusedAsync(
+        AccessContext context,
+        Group group,
+        GrantSubject member,
+        bool adding,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Grant> reached = await ReachedAsync(group, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<GrantSubject> widened = adding || reached.Any(grant => grant.Deny) ? [member] : [];
+
+        List<HandOut> changes = [];
+
+        foreach (IGrouping<ResourceReference?, Grant> scoped in reached.GroupBy(Scope))
+        {
+            List<DefinedRole> handed = [];
+
+            foreach (RoleName name in scoped
+                .Select(grant => grant.Role)
+                .Distinct()
+                .OrderBy(name => name.ToString(), StringComparer.Ordinal))
+            {
+                Role read = await roles.FindAsync(name, cancellationToken).ConfigureAwait(false) ?? Role.Of(name, []);
+
+                handed.Add(new DefinedRole(read.Name, [.. read.Permissions], [.. read.HandsOut]));
+            }
+
+            changes.Add(new HandOut(Permissions.GroupManage, group.Organization, scoped.Key, handed, widened));
+        }
+
+        if (changes.Count == 0)
+        {
+            changes.Add(new HandOut(Permissions.GroupManage, group.Organization, null, [], widened));
+        }
+
+        foreach (HandOut change in changes)
+        {
+            if ((await handOut.AdmitAsync(context, change, cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error refused)
+            {
+                return refused;
+            }
+        }
+
+        return null;
+    }
+
+    // AUTHZ-GROUP-001: a member holds the live grants of the group and of every group
+    // holding it, allows and denies alike.
+    private async ValueTask<IReadOnlyList<Grant>> ReachedAsync(Group group, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<GroupId> above = await groups
+            .GroupsOfAsync(GrantSubject.Of(group.Id), cancellationToken)
+            .ConfigureAwait(false);
+
+        return await grants
+            .HeldByAsync(
+                [GrantSubject.Of(group.Id), .. above.Select(GrantSubject.Of)],
+                group.Organization,
+                time.GetUtcNow(),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // The record a grant is on, or nothing for the whole organization.
+    private static ResourceReference? Scope(Grant grant) =>
+        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
+            ? new ResourceReference(type, id)
+            : null;
 }

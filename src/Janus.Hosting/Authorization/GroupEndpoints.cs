@@ -60,7 +60,8 @@ internal static class GroupEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
+                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid,
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf)
                 .Binding<GroupId>("id"))
             .Accepts<MemberBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);
@@ -68,7 +69,8 @@ internal static class GroupEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
+                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid,
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf)
                 .Binding<GroupId>("id"))
             .Accepts<MemberBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);

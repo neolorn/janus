@@ -56,6 +56,41 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 AC1: with handing out by holding off, the actor adds a member to a
+    /// group holding the role its role lists; a group holding a role no role of the actor
+    /// lists, itself or through a group it belongs to, is refused
+    /// <c>authz.role.notassignable</c> and keeps its members as they were.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC1_AGroupReachingOnlyRolesTheActorHandsOutTakesAMemberAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        GroupId listing = await deployment.GroupAsync(cancellationToken);
+        GroupId holding = await deployment.GroupAsync(cancellationToken);
+        GroupId inner = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.GrantAsync(GrantSubject.Of(listing), held.Listed, null, false, null, null, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(holding), unlisted, null, false, null, null, cancellationToken);
+        await deployment.JoinAsync(holding, GrantSubject.Of(inner), cancellationToken);
+
+        Result added = await MemberChangedAsync(held, listing, GrantSubject.Of(account), adding: true);
+        Result refused = await MemberChangedAsync(held, holding, GrantSubject.Of(account), adding: true);
+        Result nested = await MemberChangedAsync(held, inner, GrantSubject.Of(account), adding: true);
+
+        Assert.Null(Code(added));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Code(refused));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Code(nested));
+        Assert.Equal(1, await MembersAsync(listing));
+        Assert.Equal(1, await MembersAsync(holding));
+        Assert.Equal(0, await MembersAsync(inner));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 AC2: with handing out by holding on, an actor whose grants admit
     /// every permission of a role hands it out with no role listing it; one whose grants
     /// miss a permission of it, or deny one, is refused. Off, the same role is refused.
@@ -138,6 +173,43 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-005 AC3: adding oneself to a group, or a group one belongs to, is
+    /// refused <c>authz.grant.self</c> whatever the group holds, and so is leaving a group
+    /// that reaches a deny; leaving one that reaches only an allow is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC3_JoiningAGroupOrLeavingADenyIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        GroupId empty = await deployment.GroupAsync(cancellationToken);
+        GroupId own = await deployment.GroupAsync(cancellationToken);
+        GroupId denying = await deployment.GroupAsync(cancellationToken);
+        GroupId allowing = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.JoinAsync(own, GrantSubject.Of(held.Actor), cancellationToken);
+        await deployment.JoinAsync(denying, GrantSubject.Of(held.Actor), cancellationToken);
+        await deployment.JoinAsync(allowing, GrantSubject.Of(held.Actor), cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(denying), held.Listed, null, true, null, null, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(allowing), held.Listed, null, false, null, null, cancellationToken);
+
+        Result joined = await MemberChangedAsync(held, empty, GrantSubject.Of(held.Actor), adding: true);
+        Result nested = await MemberChangedAsync(held, empty, GrantSubject.Of(own), adding: true);
+        Result undenied = await MemberChangedAsync(held, denying, GrantSubject.Of(held.Actor), adding: false);
+        Result left = await MemberChangedAsync(held, allowing, GrantSubject.Of(held.Actor), adding: false);
+
+        Assert.Equal(ErrorCodes.GrantSelf, Code(joined));
+        Assert.Equal(ErrorCodes.GrantSelf, Code(nested));
+        Assert.Equal(ErrorCodes.GrantSelf, Code(undenied));
+        Assert.Null(Code(left));
+        Assert.Equal(0, await MembersAsync(empty));
+        Assert.Equal(1, await MembersAsync(denying));
+        Assert.Equal(0, await MembersAsync(allowing));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-005 AC5: a deny of a role, and the revocation of a grant of it, are
     /// judged as a grant is, so an actor no role of whose lists the role is refused both
     /// and nothing changes.
@@ -160,6 +232,30 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
         Assert.Equal(ErrorCodes.RoleNotAssignable, Code(denied));
         Assert.Equal(ErrorCodes.RoleNotAssignable, Code(revoked));
         Assert.Equal(1, await LiveGrantsAsync(account));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-005 AC5: taking a member out of a group is judged as a grant is, so an
+    /// actor no role of whose lists a role the group holds is refused and the member stays.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC5_ARemovalFromAGroupIsJudgedAsAGrantIsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        GroupId group = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.GrantAsync(GrantSubject.Of(group), unlisted, null, false, null, null, cancellationToken);
+        await deployment.JoinAsync(group, GrantSubject.Of(account), cancellationToken);
+
+        Result removed = await MemberChangedAsync(held, group, GrantSubject.Of(account), adding: false);
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Code(removed));
+        Assert.Equal(1, await MembersAsync(group));
     }
 
     /// <summary>
@@ -323,6 +419,29 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
             grant,
             "No longer needed.",
             TestContext.Current.CancellationToken);
+    }
+
+    private async Task<Result> MemberChangedAsync(Case held, GroupId group, GrantSubject member, bool adding)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        SessionId session = await SteppedUpAsync(scope.ServiceProvider, held.Actor);
+        IGroups groups = scope.ServiceProvider.GetRequiredService<IGroups>();
+        var context = AccessContext.Of(held.Actor);
+
+        return adding
+            ? await groups.AddMemberAsync(context, session, group, member, "Joined.", TestContext.Current.CancellationToken)
+            : await groups.RemoveMemberAsync(context, session, group, member, "Left.", TestContext.Current.CancellationToken);
+    }
+
+    private async Task<int> MembersAsync(GroupId group)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM identity.group_members WHERE group_id = @group;",
+            new { group = group.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     // AUTHZ-CONCEAL-004: the refusals recorded under the actor.

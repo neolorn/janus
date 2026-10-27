@@ -17,6 +17,11 @@ against the public contract of LIB-API-001.
   there, or the change is refused `authz.role.notassignable`; an allow grant to the actor or
   a group it belongs to, and the revocation of a deny on either, are refused
   `authz.grant.self`. Each refusal writes nothing and is recorded as a refusal.
+- `POST` and `DELETE /admin/groups/{id}/members` hand out every role the group reaches,
+  its own grants and those of every group holding it, allow or deny, each at the grant's
+  scope, under the same rule as a grant (`authz.role.notassignable`); adding the actor, or
+  a group it belongs to, is refused `authz.grant.self`, and so is taking either out of a
+  group that reaches a deny.
 - `authz.handout.byholding` (runtime, off by default; turning it on is loosening) lets an
   actor whose stored grants admit every permission a role carries hand the role out with
   no role of theirs listing it.

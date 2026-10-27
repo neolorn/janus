@@ -157,6 +157,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.NotAssignable),
         ("an allow grant to the caller itself, of a role the caller hands out", Decided.WidensOwnAccess),
         (
+            "a member added to a group holding a role no role of the caller hands out, by a caller managing groups",
+            Decided.NotAssignable),
+        (
+            "a member taken out of a group holding a role no role of the caller hands out, by a caller managing groups",
+            Decided.NotAssignable),
+        ("the caller added to a group, by a caller managing groups", Decided.WidensOwnAccess),
+        ("the caller taken out of a group holding a deny, by a caller managing groups", Decided.WidensOwnAccess),
+        (
             "a grant written and then revoked in another organization, by a system administrator of the administrative organization",
             Decided.Allowed),
         (
@@ -1639,6 +1647,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "an allow grant to the caller itself, of a role the caller hands out":
                 return await HandedOutAsync(deployment, role, caller, scenario);
 
+            // AUTHZ-GRANT-005 (D-212): a change of members hands out every role the group
+            // reaches; adding the caller widens its own access, and so does taking it out
+            // of a group that reaches a deny.
+            case "a member added to a group holding a role no role of the caller hands out, by a caller managing groups":
+            case "a member taken out of a group holding a role no role of the caller hands out, by a caller managing groups":
+            case "the caller added to a group, by a caller managing groups":
+            case "the caller taken out of a group holding a deny, by a caller managing groups":
+                return await GroupHandedOutAsync(deployment, role, caller, scenario);
+
             case "a grant written and then revoked in another organization, by a system administrator of the administrative organization":
             case "a grant written in another organization, by a system administrator restricted since the gate step":
                 return await AdministeredGrantAsync(
@@ -2492,6 +2509,63 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     "The reason the grant was asked for."),
                 cancellationToken))
             .Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-005 (D-212): a member added to a group holding a role the managing role
+    // does not list, or taken out of one, or the caller added to a group, or taken out of
+    // one denying it the role it lists, on a session that meets the gate; a refused
+    // change leaves the group's members as they were.
+    private async Task<Decided> GroupHandedOutAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        bool own = scenario.StartsWith("the caller", StringComparison.Ordinal);
+        bool adding = scenario.Contains(" added to ", StringComparison.Ordinal);
+        var member = GrantSubject.Of(own ? caller : await deployment.AccountAsync(cancellationToken));
+        GroupId group = await deployment.GroupAsync(cancellationToken);
+
+        if (scenario.Contains("a role no role of the caller hands out", StringComparison.Ordinal))
+        {
+            RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+
+            await deployment.GrantAsync(GrantSubject.Of(group), unlisted, null, false, null, null, cancellationToken);
+        }
+        else if (!adding)
+        {
+            await deployment.GrantAsync(GrantSubject.Of(group), role, null, true, null, null, cancellationToken);
+        }
+
+        if (!adding)
+        {
+            await deployment.JoinAsync(group, member, cancellationToken);
+        }
+
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGroups groups = services.GetRequiredService<IGroups>();
+
+        Decided decided = (adding
+                ? await groups.AddMemberAsync(context, session, group, member, "Joined the reviewers.", cancellationToken)
+                : await groups.RemoveMemberAsync(context, session, group, member, "Left the reviewers.", cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int members = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM identity.group_members WHERE group_id = @group;",
+            new { group = group.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal(adding ? 0 : 1, members);
+
+        return decided;
     }
 
     // AUTHZ-GRANT-001, AUTHZ-GRANT-003 AC6 (D-206): a grant across the organization to
