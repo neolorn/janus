@@ -303,15 +303,17 @@ public interface IAccessGate
     /// is named. Or <c>authz.denied</c> for a person without <c>grant:read</c> in the
     /// organization the record belongs to, for a job whose declaration does not name the
     /// permission or the organization, for a job's context asked while a request is
-    /// served, and for a record the registry does not hold, or an organization
-    /// identifier that is not one; and <c>authz.derivation.sourcesmissing</c> where a
-    /// derivation the host's rows decide reaches the type and no source is declared for
-    /// its relationship.
+    /// served, and for a record the registry does not hold;
+    /// <c>authz.derivation.sourcesmissing</c> where a derivation the host's rows decide
+    /// reaches the type and no source is declared for its relationship; and
+    /// <c>api.request.malformed</c> naming <c>permission</c> or <c>type</c> for one the
+    /// model does not declare, or <c>id</c> for an organization's identifier that is not
+    /// one, with no refusal recorded.
     /// </returns>
     /// <remarks>
-    /// AUTHZ-GATE-007 (D-218): a step-up is a session's and not an account's, so none is
-    /// judged; nothing is recorded or counted for the accounts judged, only a refusal of
-    /// the one asking.
+    /// AUTHZ-GATE-007 (D-218, D-219): a step-up is a session's and not an account's, so
+    /// none is judged; nothing is recorded or counted for the accounts judged, only a
+    /// refusal of the one asking.
     /// </remarks>
     ValueTask<Result<AdmittedAccounts>> WhoMayAsync(
         AccessContext context,

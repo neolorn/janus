@@ -429,11 +429,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // restrictions' table's, and a membership of the administrative organization that
     // ended takes away what a grant there confers. Of the organization itself, its
     // organization-wide grants decide, a deny there defeating an allow (AUTHZ-GATE-007
-    // AC1, AUTHZ-GATE-005, IDN-LIFE-009a, D-218).
+    // AC1, AUTHZ-GATE-005, IDN-LIFE-009a, D-218). A word the model does not declare is
+    // answered malformed before any case is judged, which decides none of them (AC5,
+    // D-219).
     private static readonly (string Scenario, Decided Decided)[] Admissions =
     [
         ("an account holding the permission through a grant on the record", Decided.Allowed),
         ("a suspended account holding the permission through a grant on the record", Decided.Denied),
+        ("an account holding the permission through a grant on the record's container", Decided.Allowed),
         ("an account holding the permission across the organization, asked of the organization", Decided.Allowed),
         (
             "an account denied the permission across the organization over an allow there, asked of the organization",
@@ -966,7 +969,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// who may exercise its permission on its record exactly where the single check
     /// admits it, through a group, a container, a derivation or the whole organization,
     /// and leaves it out under a deny, an expiry or a revocation; a type or a permission
-    /// the model does not declare is raised as the check raises it.
+    /// the model does not declare, which the check raises, is answered malformed (AC5,
+    /// D-219).
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="decided">What the check decides.</param>
@@ -2190,9 +2194,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 Refused);
     }
 
-    // AUTHZ-GATE-007 (D-218): what the question of who may names, for the account a
-    // case of another table writes, is the single check's admission of it: a refusal of
-    // any kind leaves it out, and what the check raises is raised.
+    // AUTHZ-GATE-007 (D-218, D-219): what the question of who may names, for the account
+    // a case of another table writes, is the single check's admission of it: a refusal of
+    // any kind leaves it out, and what the check raises is answered malformed.
     private static Decided Admitted(Decided checkedAs) =>
         checkedAs switch
         {
@@ -2203,36 +2207,36 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // AUTHZ-GATE-007 (D-218): whether the question of who may exercise the case's
     // permission on what is asked names the case's account, asked by a member of the
     // organization the record or the organization asked of belongs to, holding
-    // grant:read across it.
-    private async Task<Decided> AdmittedAsync(Case written, ResourceReference asked) =>
-        await RaisedOrAsync(async () =>
-        {
-            CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-            OrganizationId within = asked.Type == ResourceType.Parse("organization")
-                ? OrganizationId.Parse(asked.Id.ToString(), CultureInfo.InvariantCulture)
-                : written.Deployment.Organization;
+    // grant:read across it. A word the model does not declare, which the check raises,
+    // the question answers malformed, read here as the same case (AC5, D-219).
+    private async Task<Decided> AdmittedAsync(Case written, ResourceReference asked)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId within = asked.Type == ResourceType.Parse("organization")
+            ? OrganizationId.Parse(asked.Id.ToString(), CultureInfo.InvariantCulture)
+            : written.Deployment.Organization;
 
-            RoleName reading = await written.Deployment.RoleAsync([Permissions.GrantRead], cancellationToken);
-            SubjectId caller = await written.Deployment.AccountAsync(cancellationToken);
+        RoleName reading = await written.Deployment.RoleAsync([Permissions.GrantRead], cancellationToken);
+        SubjectId caller = await written.Deployment.AccountAsync(cancellationToken);
 
-            await written.Deployment.MemberAsync(caller, within, cancellationToken);
-            await written.Deployment.GrantAsync(
-                GrantSubject.Of(caller),
-                reading,
-                on: null,
-                deny: false,
-                expiresAt: null,
-                within,
-                cancellationToken);
+        await written.Deployment.MemberAsync(caller, within, cancellationToken);
+        await written.Deployment.GrantAsync(
+            GrantSubject.Of(caller),
+            reading,
+            on: null,
+            deny: false,
+            expiresAt: null,
+            within,
+            cancellationToken);
 
-            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
 
-            return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-                    .WhoMayAsync(AccessContext.Of(caller), written.Asked, asked, cancellationToken))
-                .Match(
-                    admitted => admitted.Subjects.Contains(written.Account) ? Decided.Allowed : Decided.Denied,
-                    Refused);
-        });
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .WhoMayAsync(AccessContext.Of(caller), written.Asked, asked, cancellationToken))
+            .Match(
+                admitted => admitted.Subjects.Contains(written.Account) ? Decided.Allowed : Decided.Denied,
+                error => error.Code == ErrorCodes.RequestMalformed ? Decided.Raised : Refused(error));
+    }
 
     // AUTHZ-GATE-007 (D-218): one account holding what the case names, on a record of
     // the case's organization or across an organization, and what is asked of: the
@@ -2260,6 +2264,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         {
             case "an account holding the permission through a grant on the record":
                 await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+
+                return (written, record);
+
+            case "an account holding the permission through a grant on the record's container":
+                await deployment.GrantAsync(GrantSubject.Of(account), role, inner, false, null, null, cancellationToken);
 
                 return (written, record);
 

@@ -454,6 +454,43 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
         Assert.Equal(ErrorCodes.Denied, Refusal(unregistered));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-007 AC5 (D-219): a permission or a type the model does not declare, and
+    /// an organization's identifier that is not one, are answered
+    /// <c>api.request.malformed</c> naming it, and no refusal is recorded.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC5_AWordTheModelDoesNotDeclareIsMalformedAndRecordsNothingAsync()
+    {
+        Deployed deployed = await DeployAsync();
+        var asking = AccessContext.Of(deployed.Administrator);
+
+        Result<AdmittedAccounts> permission = await WhoMayAsync(
+            asking,
+            Permission.Parse("ledger:read"),
+            deployed.Note);
+        Result<AdmittedAccounts> type = await WhoMayAsync(
+            asking,
+            HostPermissions.ReadNote,
+            new ResourceReference(ResourceType.Parse("ledger"), deployed.Note.Id));
+        Result<AdmittedAccounts> id = await WhoMayAsync(
+            asking,
+            HostPermissions.ReadNote,
+            new ResourceReference(ResourceType.Parse("organization"), ResourceId.Parse("ledger")));
+
+        Assert.Equal(
+            [
+                (ErrorCodes.RequestMalformed, "permission"),
+                (ErrorCodes.RequestMalformed, "type"),
+                (ErrorCodes.RequestMalformed, "id"),
+            ],
+            new[] { permission, type, id }.Select(outcome => outcome.Match(
+                _ => throw new InvalidOperationException("It was answered."),
+                error => (error.Code, error.Details["member"].GetString()))));
+        Assert.Equal(0, await DenialsAsync(deployed.Administrator));
+    }
+
     private static AdmittedAccounts Admitted(Result<AdmittedAccounts> outcome) =>
         outcome.Match(
             admitted => admitted,

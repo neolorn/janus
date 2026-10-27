@@ -474,6 +474,15 @@ GET /admin/access
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
+GET /admin/access/admitted
+  200
+    application/json
+      subjects[]: Guid
+      partial: boolean
+      unevaluated[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
 POST /admin/accounts/find
   request application/json
     identifier: string

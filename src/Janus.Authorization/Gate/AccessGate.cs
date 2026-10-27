@@ -711,24 +711,34 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        Declared(permission);
+        // AUTHZ-GATE-007 AC5 (D-219): a word the model does not declare, and an
+        // organization's identifier that is not one, cannot be read as a question, so it
+        // is answered malformed, as the view of who can access a record answers it, and
+        // no refusal is recorded.
+        if (!model.Declares(permission))
+        {
+            return Result.Failure<AdmittedAccounts>(Malformed("permission"));
+        }
 
         bool organizationWide = resource.Type == OrganizationWide;
         RegisteredResource? registered = null;
-        OrganizationId? scoped = null;
+        OrganizationId? scoped;
 
         if (organizationWide)
         {
-            // An identifier that is not an organization's names none, and is refused as
-            // a record the registry does not hold is.
-            if (Guid.TryParse(resource.Id.ToString(), out Guid named))
+            if (!Guid.TryParse(resource.Id.ToString(), out Guid named))
             {
-                scoped = new OrganizationId(named);
+                return Result.Failure<AdmittedAccounts>(Malformed("id"));
             }
+
+            scoped = new OrganizationId(named);
         }
         else
         {
-            Declared(resource.Type);
+            if (model.Find(resource.Type) is null)
+            {
+                return Result.Failure<AdmittedAccounts>(Malformed("type"));
+            }
 
             registered = await records.FindAsync(resource, cancellationToken).ConfigureAwait(false);
             scoped = registered?.Organization;

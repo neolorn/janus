@@ -51,6 +51,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /account/preferences",
         "GET /account/sessions",
         "GET /admin/access",
+        "GET /admin/access/admitted",
         "GET /admin/accounts/{subject}",
         "GET /admin/accounts/{subject}/contact",
         "GET /admin/accounts/{subject}/photo",
