@@ -8,13 +8,36 @@ base". Where two test classes share a name, the project is given.
 **`01` identity**
 
 - IDN-READ-001:
+  - AC1:
+    - `OrganizationReadTests.IDN_READ_001_AC1_AnAdministrativeHolderListsEveryOrganizationButTheErasedInPagesAsync`;
+    - `OrganizationReadTests.IDN_READ_001_AC1_AHolderInAnotherOrganizationListsThatOrganizationAloneAsync`;
+    - `OrganizationDirectoryTests.IDN_READ_001_AC1_EveryOrganizationButTheErasedIsReadInPagesAsync`;
+    - `OrganizationReadEndpointTests.IDN_READ_001_AC1_TheOrganizationsAreListedInPagesAndOneReadAsync`.
   - AC2: `OrganizationServiceTests.IDN_READ_001_AC2_TheAdministrativeOrganizationIsAnsweredWithNoContextAsync`.
+  - Also:
+    - `OrganizationReadTests.IDN_READ_001_ACallerHoldingItNowhereIsRefusedOnceAsync`;
+    - `OrganizationReadTests.IDN_READ_001_ALimitOutsideOneTo500IsMalformedAsync`;
+    - `OrganizationReadTests.IDN_READ_001_AnErasedOrganizationIsReadAsOneNeverHeldAsync`;
+    - `OrganizationReadEndpointTests.IDN_READ_001_AnUnreadablePageOrALimitOutOfBoundsIsMalformedAsync`;
+    - `OrganizationReadEndpointTests.IDN_READ_001_AnOrganizationNotHeldIsNotFoundAsync`.
 - IDN-READ-002:
   - AC1, the event and the membership's invitation:
     - `InvitationServiceTests.IDN_READ_002_AC1_TheMembershipAnInvitationBeganIsAnnouncedNamingItAsync`;
     - `BootstrapTests.IDN_READ_002_AC1_AMembershipBootstrapAttachesNamesNoInvitationAsync`;
     - `MembershipAttachmentTests.IDN_READ_002_AC1_TheMembershipKeepsTheInvitationItBeganFromAsync`;
     - `MembershipAttachmentTests.IDN_READ_002_AC1_AMembershipStandingBeforeTheMigrationIsMatchedToItsInvitationAsync`.
+  - AC1, the listing:
+    - `OrganizationReadTests.IDN_READ_002_AC1_AMemberWhoJoinedThroughAnInvitationIsListedWithItAsync`;
+    - `MembershipAttachmentTests.IDN_READ_002_AC1_AMemberIsListedWithTheInvitationItJoinedThroughAsync`.
+  - AC2:
+    - `OrganizationReadTests.IDN_READ_002_AC2_AnEndedMembershipIsNotFoundAndOneEndingIsListedWithItsEndAsync`;
+    - `OrganizationDirectoryTests.IDN_READ_002_AC2_AnEndedMembershipIsNoneAndOneEndingCarriesItsEndAsync`.
+  - AC3:
+    - `OrganizationReadTests.IDN_READ_002_AC3_AnInvitationAcknowledgedRevokedOrExpiredIsNotListedAsync`;
+    - `InvitationStoreTests.IDN_READ_002_AC3_AnInvitationAcknowledgedRevokedOrExpiredIsNotListedAsync`.
+  - Also:
+    - `OrganizationReadTests.IDN_READ_002_TheMembersAreReadInPagesAsync`;
+    - `OrganizationReadEndpointTests.IDN_READ_002_TheMembersAndStandingInvitationsAreReadAsync`.
 - IDN-READ-003, in `AccountReadTests` (Authentication) unless marked:
   - AC1: `IDN_READ_003_AC1_AnAccountReadAnswersNoCredentialDateOfBirthOrPhotoAsync`.
   - AC2: `IDN_READ_003_AC2_AnAccountIsFoundByItsIdentifierInAnotherFormAsync`.
@@ -49,6 +72,22 @@ base". Where two test classes share a name, the project is given.
   - AC4:
     - `IDN_READ_004_AC4_APersonsReadsAddToTheirReadVolumeAndAJobsDoNotAsync`;
     - `AccountReadTests.IDN_READ_004_AC4_EachPersonRecordReadIsCountedAsync` (Authentication).
+  - AC4, the members: `OrganizationReadTests.IDN_READ_004_EachMemberAPersonReadsIsCountedAsync`.
+  - AC5:
+    - `OrganizationReadTests.IDN_READ_004_AC5_AnAdministrativeHolderListsAnotherOrganizationsMembersAsync`;
+    - `OrganizationReadTests.IDN_READ_004_AC5_AHolderInNeitherOrganizationIsRefusedOnceAsync`;
+    - `OrganizationReadEndpointTests.IDN_READ_004_AC5_TheAdministrativeOrganizationReachesAnotherOrganizationsMembersAsync`;
+    - `TruthTableTests.IDN_READ_004_AC5_EveryOrganizationReadDecidesTheWayTheTableSaysThroughTheAdmissionAsync`:
+      the new `OrganizationReads` table, each refusal recorded once and naming
+      `organization:read` in the organization the path names, or in the administrative
+      organization for the list.
+  - A job's organization reads, in its own organization alone:
+    - `OrganizationReadTests.IDN_READ_004_AJobListsItsOwnOrganizationAsync`;
+    - `OrganizationReadTests.IDN_READ_004_AJobReadsItsOwnOrganizationAloneAsync`;
+    - the `OrganizationReads` rows "a read of its organization, by a declared job of
+      it" (Allowed), "a read of another organization, by a declared job of the
+      administrative organization" (Denied) and "the list, by a declared job of another
+      organization" (Allowed, listing its own).
   - Also:
     - `AccountReadTests.IDN_READ_004_TheOrganizationAskedInIsFoundAndItsPermissionHeldAsync` (Authentication);
     - `StandingTests.IDN_READ_004_AStandingAskedOutsideTheHoldersOrganizationIsRefusedAsync`;
@@ -82,6 +121,15 @@ base". Where two test classes share a name, the project is given.
   - AC4: `ReverseLookupTests.AUTHZ_GATE_007_AC4_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync`.
   - The consent rule: `TruthTableTests.AUTHZ_GATE_007_EveryConsentCaseNamesTheAccountWhereTheCheckAdmitsItAsync`.
   - Refusing who may ask: `ReverseLookupTests.AUTHZ_GATE_007_ACallerWithoutGrantReadAndAnUnregisteredRecordAreRefusedAsync`.
+  - AC5:
+    - `ReverseLookupTests.AUTHZ_GATE_007_AC5_AWordTheModelDoesNotDeclareIsMalformedAndRecordsNothingAsync`;
+    - `AccessEndpointTests.AUTHZ_GATE_007_AC5_AWordTheModelDoesNotDeclareIsAnsweredAsMalformedAsync`;
+    - the `Admissions` rows for an undeclared type and permission, now answered malformed.
+  - Over `GET /admin/access/admitted`:
+    - `AccessEndpointTests.AUTHZ_GATE_007_TheAccountsWhoMayAreAnsweredOverTheEndpointAsync`;
+    - `AccessEndpointTests.AUTHZ_GATE_007_TheAccountsWhoMayAreRefusedWithoutGrantReadAsync`.
+  - Truth-table row for the change to the gate: "an account holding the permission
+    through a grant on the record's container" (Allowed).
 
 **`07` the library contract**
 
@@ -90,7 +138,8 @@ base". Where two test classes share a name, the project is given.
   - `IAccounts`: `ReadAsync`, `FindAsync`, `ContactAsync` and `SetPreferencesAsync`;
   - `IConsents.StandingAsync`;
   - `ISessions.ListOfAsync`;
-  - `IOrganizations.AdministrativeAsync`;
+  - `IOrganizations`: `AdministrativeAsync`, `ListAsync` and `ReadAsync`;
+  - `IInvitations`: `MembersAsync`, `MemberAsync` and `StandingAsync`;
   - `IAccessGate.WhoMayAsync`.
   - Proven by the item tests above, `IdentityEndpointsTests` (at base) and
     `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract` with its baseline.
@@ -98,6 +147,9 @@ base". Where two test classes share a name, the project is given.
 - LIB-TEST-004: the sample host's declared job `ready-notices` asks which accounts may
   read a repair and reads each one's contact details outside a request:
   `ReadyNoticesTests.LIB_TEST_004_AJobReadsTheContactDetailsOfEveryoneWhoMayReadARepairAsync`.
+- LIB-TEST-004: the sample host's staff page lists the current members of the
+  organization that runs a workshop:
+  `WorkshopEndpointTests.LIB_TEST_004_AC2_TheStaffPageListsTheOrganizationsMembersAsync`.
 
 **`09` section 8a, the reads**
 
@@ -107,9 +159,13 @@ base". Where two test classes share a name, the project is given.
   - `GET /admin/accounts/{subject}/contact`;
   - `GET /admin/accounts/{subject}/standing`;
   - `GET /admin/accounts/{subject}/sessions`;
-  - `PUT /admin/accounts/{subject}/preferences`.
-- Proven by the endpoint tests named under IDN-READ-003 and IDN-READ-004, and by the
-  endpoint baseline.
+  - `PUT /admin/accounts/{subject}/preferences`;
+  - `GET /admin/organizations` and `GET /admin/organizations/{id}`;
+  - `GET /admin/organizations/{id}/members` and `/members/{subject}`;
+  - `GET /admin/organizations/{id}/invitations`;
+  - `GET /admin/access/admitted`.
+- Proven by the endpoint tests named under IDN-READ-001 to IDN-READ-004 and
+  AUTHZ-GATE-007, and by the endpoint baseline.
 
 **`10` the reference**
 
@@ -125,12 +181,25 @@ base". Where two test classes share a name, the project is given.
     - `OrganizationServiceTests.LIB_API_001_ACreatedOrganizationIsAnnouncedInItsTransactionAsync`;
     - `..._ADeletionRequestAndItsCancellationAreAnnouncedInTheirTransactionsAsync`;
     - `..._CONV_DESIGN_002_AnOrganizationWhoseEventIsNotTakenIsNotCreatedAsync`.
-  - `RoleChanged`: `RoleEndpointTests.LIB_API_001_ARoleDefinedChangedAndRemovedIsAnnouncedAtEachAsync`.
+  - `RoleChanged`:
+    - `RoleEndpointTests.LIB_API_001_ARoleDefinedChangedAndRemovedIsAnnouncedAtEachAsync`;
+    - bootstrap's three roles raise none:
+      `BootstrapTests.LIB_API_001_TheRolesBootstrapDefinesAreNotAnnouncedAsync`.
   - `GroupMembershipChanged`: `GroupEndpointTests.LIB_API_001_AMemberAddedAndTakenOutOfAGroupIsAnnouncedAtEachAsync`.
   - `GrantChanged`:
     - `GrantEndpointTests.LIB_API_001_AGrantMadeAndRevokedIsAnnouncedAtEachAsync`;
     - `MembershipAttachmentTests.LIB_API_001_EachGrantAnAcknowledgementWritesIsAnnouncedAsync`.
-  - `SessionEnded`, on the paths no question parks:
+  - `SessionEnded`:
+    - a sign-out `signedout` and an end from the list `ended`:
+      `SessionServiceTests.LIB_API_001_AnEndFromTheListIsEndedAndASignOutSignedOutAsync`;
+    - a refresh token presented twice, `security`:
+      `OidcServiceTests.LIB_API_001_EachSessionAReuseEndsIsAnnouncedAsSecurityAsync`;
+    - the provider's security event, `security`:
+      `ProviderEventTests.IDN_LIFE_012a_AC1_ASignedCompromiseEndsEverySessionAndHoldsTheCredentialAsync`;
+    - a restriction of processing, `account`:
+      `AccountStatesTests.AUTH_SESS_010_AC4_RestrictingAnAccountEndsItsSessionsAsync`;
+    - the reasons, `security` among them:
+      `VocabularyContractTests.LIB_API_001_TheChangesTheEventsCarryAreTheContract`;
     - `SessionServiceTests.LIB_API_001_EachSessionARevocationEndsIsAnnouncedAsync`;
     - `SessionServiceTests.LIB_API_001_ASessionPastItsExpiryIsNotAnnouncedAsync`;
     - `SessionServiceTests.CONV_DESIGN_003_AC5_ARevocationWhoseEndIsNotAnnouncedIsRolledBackAsync`;
@@ -143,21 +212,15 @@ base". Where two test classes share a name, the project is given.
     - "a role defined, changed and removed, each announced in its transaction, by a caller managing roles";
     - "a grant written and then revoked, each announced in its transaction, by a caller managing grants".
 
+**`12` disaster recovery**
+
+- DR-016, the replay of the erasure ledger, which failed in the pipeline's run on the
+  previous push for want of the event outbox a takedown writes to: `ErasureReplayTests`
+  (Cli), at base, now composed with it.
+
 ## 2. Items not implemented
 
-- IDN-READ-001 AC1, and `IOrganizations.ListAsync` and `ReadAsync` with their endpoints.
-  Wait on Q1.
-- IDN-READ-002, the reads waiting on Q1:
-  - AC1's listing half, AC2 and AC3;
-  - `IInvitations.MembersAsync`, `MemberAsync` and `StandingAsync`, with their endpoints.
-- The sample host's staff page listing its organization's members (LIB-TEST-004, D-218
-  rule 11). Waits on Q1.
-- `RoleChanged` for the roles bootstrap defines. Waits on Q2.
-- `SessionEnded` from:
-  - `ISessions.EndAsync` and `EndEverywhereAsync` (waits on Q3);
-  - the refresh-token replay, the provider's event and the restriction of processing
-    (waits on Q4).
-- `GET /admin/access/admitted` (AUTHZ-GATE-007, `09` section 8a). Waits on Q5.
+None.
 
 ## 3. Resolved by rule
 
@@ -179,15 +242,18 @@ base". Where two test classes share a name, the project is given.
   - Governing item: API-CONV-002 (a response member the endpoint carries is written,
     null where it holds nothing).
   - Rule: the member is written as null, as the account's own profile read writes it.
-- The optional `organization` query value of the reads (`09` section 8a):
-  - What was out of step: no binding can give an optional identifier a malformed answer.
+- The optional `organization`, `after` and `limit` query values of the reads (`09`
+  section 8a):
+  - What was out of step: no binding can give an optional value a malformed answer.
   - Governing item: `10` section 1, `api.request.malformed`.
   - Rule: the value is read as text and an unreadable one answers malformed, naming
-    `organization`.
+    `organization`, `after` or `limit`; a `limit` that reads but lies outside 1 to 500
+    is the read's to refuse, naming `limit`.
 - A read naming no organization before bootstrap (IDN-READ-004):
   - What was out of step: no administrative organization exists to ask it in.
   - Governing item: AUTHZ-SCOPE-001.
   - Rule: it is refused `authz.denied`, as a scope that names no organization is.
+    The list of organizations is refused alike, recording nothing.
 - The account finding and read volume (IDN-READ-004, OPS-ALERT-005):
   - What was out of step: whether a finding counts.
   - Governing item: IDN-READ-004.
@@ -199,11 +265,33 @@ base". Where two test classes share a name, the project is given.
   - Governing item: IDN-READ-003.
   - Rule: as for every read of IDN-READ-003, it answers `identity.account.notfound`.
 
+- Standing invitations and read volume (IDN-READ-004, OPS-ALERT-005):
+  - What was out of step: whether an invitation read counts.
+  - Governing item: IDN-READ-004.
+  - Rule: an invitation is none of the person records the item counts (an account, a
+    contact, a standing, a member), so it is not counted.
+- A job's reads under an organization's path (IDN-READ-001, IDN-READ-004, D-219):
+  - What was out of step: the path rule admits the permission held in the
+    administrative organization, which read alone would admit a job acting for that
+    organization in every organization.
+  - Governing item: IDN-READ-004, a job "admitted for the reads they govern in its own
+    organization", and IDN-READ-001, the list answering "a job its own organization".
+  - Rule: a job is admitted for these reads in its own organization alone.
+- The gate step of the reads (CONV-DESIGN-002 AC3, `PublicSurfaceTests`):
+  - What was out of step: the test lists the collaborators a call on which is the gate
+    step, naming the grant admission and not the read admission D-219 makes one.
+  - Governing item: IDN-READ-004 (D-219), the read admitted as one admission "as
+    `grant:manage` with `system:administer` is".
+  - Rule: the read admission is listed beside the grant admission, the least change to
+    the test that lets the reads meet it; the reads ask it first, past the scope
+    resolution of the organization the path names.
+
 ## 4. Open questions
 
-**Q1 (Tier 2, unanswered).** Which organization the organization-path reads are asked
-in, and how the administrative organization's reach meets a path naming another
-organization (IDN-READ-001, IDN-READ-002, IDN-READ-004, `09` section 8a).
+**Q1 (Tier 2, answered by D-219: reading A).** Which organization the
+organization-path reads are asked in, and how the administrative organization's reach
+meets a path naming another organization (IDN-READ-001, IDN-READ-002, IDN-READ-004,
+`09` section 8a).
 
 - What the code needs:
   - `GET /admin/organizations/{id}`, `/members`, `/members/{subject}` and
@@ -226,17 +314,21 @@ organization (IDN-READ-001, IDN-READ-002, IDN-READ-004, `09` section 8a).
   - `IOrganizations.ListAsync` and `ReadAsync`;
   - `IInvitations.MembersAsync`, `MemberAsync` and `StandingAsync`, with their endpoints;
   - the sample host's members page.
+- Built: the parked items, under reading A.
 
-**Q2 (Tier 2, unanswered).** Whether bootstrap's definitions of `system-administrator`,
-`auditor` and `support` raise `RoleChanged` `defined` (`10` section 5b).
+**Q2 (Tier 2, answered by D-219: reading B).** Whether bootstrap's definitions of
+`system-administrator`, `auditor` and `support` raise `RoleChanged` `defined` (`10`
+section 5b).
 
 - Reading A: yes. Smallest fix: the deployment seed returns the roles it created, and
   bootstrap publishes one event for each.
 - Reading B: no, as `OrganizationCreated` is limited to `POST /admin/organizations`.
 - Parks: `RoleChanged` at bootstrap.
+- Built: bootstrap's three roles raise no `RoleChanged`; a declared role's seeding
+  still raises one.
 
-**Q3 (Tier 2, unanswered).** `signedout` or `ended` for a person's own sign-out (`10`
-section 5.39, `SessionEnded`).
+**Q3 (Tier 2, answered by D-219: reading C).** `signedout` or `ended` for a person's
+own sign-out (`10` section 5.39, `SessionEnded`).
 
 - What the code needs: a reason for each session `ISessions.EndAsync` ends and each one
   `EndEverywhereAsync` ends (AUTH-SESS-008). Neither knows which session is asking, and
@@ -248,8 +340,10 @@ section 5.39, `SessionEnded`).
 - Reading C: logout gives `signedout` to all, and `EndAsync` gives `ended`. Smallest fix:
   no surface change.
 - Parks: `SessionEnded` from these two operations.
+- Built: `EndEverywhereAsync` gives `signedout` to every session it ends, and
+  `EndAsync` gives `ended` to the session it names; the public surface is unchanged.
 
-**Q4 (Tier 2, unanswered).** Three ends no reason of `10` section 5.39 names.
+**Q4 (Tier 2, answered by D-219).** Three ends no reason of `10` section 5.39 names.
 
 - (a) A refresh token presented twice ends its session family (AUTH-OIDC-003). Readings:
   `revoked`, or a new reason.
@@ -259,9 +353,12 @@ section 5.39, `SessionEnded`).
   Readings: `account`, or a new reason.
 - Smallest fix for each: one line of section 5.39 naming the reason.
 - Parks: `SessionEnded` from these three paths.
+- Built: (a) and (b) end their sessions with the new reason `security`; (c) ends them
+  with `account`.
 
-**Q5 (Tier 2, unanswered).** How `WhoMayAsync` and `GET /admin/access/admitted` answer a
-word the model does not declare (AUTHZ-GATE-007, `10` section 1, LIB-API-005).
+**Q5 (Tier 2, answered by D-219: reading B).** How `WhoMayAsync` and
+`GET /admin/access/admitted` answer a word the model does not declare (AUTHZ-GATE-007,
+`10` section 1, LIB-API-005).
 
 - What the code needs: an answer for an undeclared permission, an undeclared type, and
   an organization identifier that is not a UUID.
@@ -279,9 +376,10 @@ word the model does not declare (AUTHZ-GATE-007, `10` section 1, LIB-API-005).
   or `id`, as `WhoCanAccessAsync` answers `resourceType` and `resourceId`, and as
   `IRoles` answers `permissions`. The endpoint stays one line. Smallest fix: AUTHZ-GATE-007
   reads "refused as malformed" for the three.
-- Built under reading A, in process only. An organization identifier that is not a UUID
-  is refused `authz.denied`, as a record with no registration is.
 - Parks: `GET /admin/access/admitted`.
+- Built: `WhoMayAsync` answers an undeclared permission or type, and an organization
+  identifier that is not one, `api.request.malformed` naming `permission`, `type` or
+  `id`, recording no refusal; the endpoint maps it in one line.
 
 ## 5. Gate result
 
