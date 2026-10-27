@@ -341,6 +341,35 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             Noon.AddDays(7)),
         new DeviceVerified(Noon, "device", new DeviceId(Guid.CreateVersion7(Noon))) { Subject = Subject },
         new ErasureRequested(Noon, "erasure", ErasureReason.MinorTakedown) { Subject = Subject },
+        new GrantChanged(
+            Noon,
+            "grant",
+            new GrantId(Guid.CreateVersion7(Noon)),
+            GrantKind.Materialised,
+            SubjectType.User,
+            Subject.Value,
+            "editor",
+            Deny: false,
+            new OrganizationId(Guid.CreateVersion7(Noon)),
+            "document",
+            "d-1",
+            GrantChange.Made)
+        {
+            Subject = Subject,
+            Actor = Actor,
+        },
+        new GroupMembershipChanged(
+            Noon,
+            "group-member",
+            new GroupId(Guid.CreateVersion7(Noon)),
+            new OrganizationId(Guid.CreateVersion7(Noon)),
+            SubjectType.User,
+            Subject.Value,
+            GroupMembershipChange.Removed)
+        {
+            Subject = Subject,
+            Actor = Actor,
+        },
         new IdentifierAdded(Noon, "identifier-added", new IdentifierId(Guid.CreateVersion7(Noon)), IdentifierKind.Phone),
         new IdentifierPrimaryChanged(
             Noon,
@@ -353,12 +382,29 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             "membership",
             new MembershipId(Guid.CreateVersion7(Noon)),
             new OrganizationId(Guid.CreateVersion7(Noon)),
-            MembershipChange.Ended),
+            MembershipChange.Ended,
+            new InvitationId(Guid.CreateVersion7(Noon))),
         new ObjectionChanged(Noon, "objection", "profiling", Objecting: true) { Subject = Subject },
+        new OrganizationCreated(Noon, "organization-created", new OrganizationId(Guid.CreateVersion7(Noon))) { Actor = Actor },
+        new OrganizationDeletionCancelled(Noon, "organization-deletion-cancelled", new OrganizationId(Guid.CreateVersion7(Noon)))
+        {
+            Actor = Actor,
+        },
+        new OrganizationDeletionRequested(Noon, "organization-deletion-requested", new OrganizationId(Guid.CreateVersion7(Noon)))
+        {
+            Actor = Actor,
+        },
         new OrganizationErased(Noon, "organization-erased", new OrganizationId(Guid.CreateVersion7(Noon)), 3),
         new RestrictionChanged(Noon, "restriction", Restricted: true) { Subject = Subject },
+        new RoleChanged(Noon, "role", "editor", RoleChange.Changed) { Actor = Actor },
         new SendingRestrictionChanged(Noon, "sending-restriction", "sms-per-number", Loosening: true) { Actor = Actor },
         new SendingRestrictionGranted(Noon, "sending-grant", "sms-per-number", 2, "a support request") { Actor = Actor },
+        new SessionEnded(Noon, "session-ended", new SessionId(Guid.CreateVersion7(Noon)), SessionEndReason.Revoked)
+        {
+            Subject = Subject,
+            Actor = Actor,
+            Effective = Actor,
+        },
         new TakedownExecuted(Noon, "takedown") { Subject = Subject },
         new TakedownReversed(Noon, "takedown-reversed") { Subject = Subject },
     ];

@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Privacy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -10,16 +14,21 @@ using Microsoft.AspNetCore.Routing;
 namespace Janus.Hosting.Accounts;
 
 /// <summary>
-/// The account endpoints of chapter 09 section 8a, under <c>account:manage</c>.
+/// The account endpoints of chapter 09 section 8a: the changes under
+/// <c>account:manage</c>, and the reads of another person's account.
 /// </summary>
 /// <remarks>
 /// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010,
-/// PRIV-RIGHT-004 and IDN-ATTR-003. Each is one line to <see cref="IAccounts"/>; the permission, the
+/// PRIV-RIGHT-004, IDN-ATTR-003, IDN-READ-003 and REG-PREF-001. Each is one line to
+/// <see cref="IAccounts"/>, the standing to <see cref="IConsents"/>; the permission, the
 /// step-up and the state are the service's to judge, so a host calling it in process
 /// meets the same refusals.
 /// </remarks>
 internal static class AccountAdministrationEndpoints
 {
+    private static readonly IReadOnlyDictionary<string, string> NoPreferences =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
@@ -72,6 +81,43 @@ internal static class AccountAdministrationEndpoints
                     ErrorCodes.Denied, ErrorCodes.PhotoNotFound, ErrorCodes.AccountNotFound)
                 .Binding<SubjectId>("subject"))
             .Produces<byte[]>(StatusCodes.Status200OK, StoredPhoto);
+        _ = SessionRequired.On(endpoints.MapGet("/admin/accounts/{subject}", ReadAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<HeldAccountView>();
+        _ = SessionRequired.On(group.MapGet("/contact", ContactAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<ContactView>();
+        _ = SessionRequired.On(group.MapGet("/standing", StandingAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"))
+            .Produces<StandingView>();
+        _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.AccountNotFound, ErrorCodes.PreferenceUndeclared,
+                    ErrorCodes.PreferenceWrongType, ErrorCodes.PreferenceTooLarge)
+                .Binding<SubjectId>("subject"))
+            .Accepts<AdministeredPreferencesRequest>(MediaTypeNames.Application.Json)
+            .Produces(StatusCodes.Status204NoContent);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/find", FindAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound,
+                    ErrorCodes.AccountNotFound))
+            .Accepts<FindAccountRequest>(MediaTypeNames.Application.Json)
+            .Produces<FoundAccountView>();
 
         return endpoints;
     }
@@ -179,5 +225,175 @@ internal static class AccountAdministrationEndpoints
                     cancellationToken)
                 .ConfigureAwait(false),
             image => TypedResults.Bytes(image, StoredPhoto));
+    }
+
+    private static async Task<IResult> ReadAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        SubjectId subject,
+        string? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!Asked(organization, out OrganizationId? named))
+        {
+            return Answers.Malformed(nameof(organization));
+        }
+
+        return Answers.Of(
+            await accounts
+                .ReadAsync(browser.Asking, subject, named, cancellationToken)
+                .ConfigureAwait(false),
+            account => TypedResults.Json(
+                HeldAccountView.Of(account),
+                AccountJson.Default.HeldAccountView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> ContactAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        SubjectId subject,
+        string? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!Asked(organization, out OrganizationId? named))
+        {
+            return Answers.Malformed(nameof(organization));
+        }
+
+        return Answers.Of(
+            await accounts
+                .ContactAsync(browser.Asking, subject, named, cancellationToken)
+                .ConfigureAwait(false),
+            contact => TypedResults.Json(
+                ContactView.Of(contact),
+                AccountJson.Default.ContactView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> StandingAsync(
+        IConsents consents,
+        RequestSession browser,
+        SubjectId subject,
+        string? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(consents);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!Asked(organization, out OrganizationId? named))
+        {
+            return Answers.Malformed(nameof(organization));
+        }
+
+        return Answers.Of(
+            await consents
+                .StandingAsync(browser.Asking, subject, named, cancellationToken)
+                .ConfigureAwait(false),
+            standing => TypedResults.Json(
+                StandingView.Of(standing),
+                PrivacyJson.Default.StandingView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    // IDN-READ-003: the identifier rides in the body, so no address a proxy logs names it.
+    private static async Task<IResult> FindAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        FindAccountRequest request = await JsonBody
+            .ReadAsync<FindAccountRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(request.Identifier))
+        {
+            return Answers.Malformed("identifier");
+        }
+
+        return Answers.Of(
+            await accounts
+                .FindAsync(
+                    browser.Asking,
+                    request.Identifier,
+                    request.Organization is Guid named ? new OrganizationId(named) : null,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            subject => TypedResults.Json(
+                new FoundAccountView(subject.Value),
+                AccountJson.Default.FoundAccountView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> SetPreferencesAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        HttpContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AdministeredPreferencesRequest request = await JsonBody
+            .ReadAsync<AdministeredPreferencesRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        // API-CONV-002: the reason is required, so a body without one is not the shape
+        // the endpoint takes.
+        if (request.Reason is null)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        return Answers.Of(
+            await accounts
+                .SetPreferencesAsync(
+                    browser.Asking,
+                    subject,
+                    request.Language,
+                    request.TimeZone,
+                    request.Declared ?? NoPreferences,
+                    request.Reason,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    // 09 section 8a: the organization a read is asked in may be left out, which asks it
+    // in the administrative organization; one given that does not read is malformed.
+    private static bool Asked(string? organization, out OrganizationId? named)
+    {
+        named = null;
+
+        if (organization is null)
+        {
+            return true;
+        }
+
+        if (!OrganizationId.TryParse(organization, CultureInfo.InvariantCulture, out OrganizationId read))
+        {
+            return false;
+        }
+
+        named = read;
+
+        return true;
     }
 }

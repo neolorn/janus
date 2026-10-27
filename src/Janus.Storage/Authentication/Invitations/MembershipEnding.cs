@@ -28,7 +28,7 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
         (await CurrentAsync(subject, organization, cancellationToken).ConfigureAwait(false))?.Id;
 
     /// <inheritdoc/>
-    public async ValueTask<MembershipId?> EndAsync(
+    public async ValueTask<EndedMembership?> EndAsync(
         SubjectId subject,
         OrganizationId organization,
         DateTimeOffset at,
@@ -45,7 +45,7 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
 
         await memberships.RecordAsync(current, cancellationToken).ConfigureAwait(false);
 
-        return current.Id;
+        return new EndedMembership(current.Id, current.Invitation);
     }
 
     /// <inheritdoc/>
@@ -130,7 +130,13 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
 
     private static MembershipEndDue? Due(Membership membership) =>
         membership.EndSet is { } set
-            ? new MembershipEndDue(membership.Id, membership.Subject, membership.Organization, set.SetBy, set.Reason)
+            ? new MembershipEndDue(
+                membership.Id,
+                membership.Subject,
+                membership.Organization,
+                set.SetBy,
+                set.Reason,
+                membership.Invitation)
             : null;
 
     private async ValueTask<Membership?> HeldAsync(

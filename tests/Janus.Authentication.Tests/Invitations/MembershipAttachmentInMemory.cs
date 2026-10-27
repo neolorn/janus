@@ -45,6 +45,7 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
     public async ValueTask<Result<MembershipId>> AttachAsync(
         SubjectId subject,
         OrganizationId organization,
+        InvitationId? invitation,
         IReadOnlyList<InvitationDocument> acknowledged,
         IReadOnlyList<RoleName> roles,
         SubjectId grantedBy,
@@ -74,7 +75,10 @@ internal sealed class MembershipAttachmentInMemory(MembershipLookupInMemory look
             grantedBy,
             reason,
             acting,
-            at));
+            at)
+        {
+            Invitation = invitation,
+        });
 
         return Result.Success(membership);
     }

@@ -96,6 +96,50 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): a grant made and then revoked is
+    /// announced as <c>GrantChanged</c> at each, <c>made</c> then <c>revoked</c>, in the
+    /// transaction that makes the change, naming the grant, its kind, holder, role and
+    /// record, a grant on the whole organization written as <c>GET /admin/grants</c>
+    /// writes it, with the holder as the subject and the administrator who acted. A grant
+    /// to a group names no subject.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_AGrantMadeAndRevokedIsAnnouncedAtEachAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        var tellers = Group.Create(new GroupId(Guid.NewGuid()), Branch, "Tellers");
+
+        await _deployment.Groups.CreateAsync(tellers, CancellationToken.None);
+
+        Answer created = await GrantedAsync(administrator, "organization", Branch.ToString());
+        _ = await RevokedAsync(administrator, created.Text("id"));
+        Answer denied = await GrantedAsync(administrator, Document.Type.ToString(), Document.Id.ToString(), deny: true, group: tellers.Id);
+
+        var grant = new GrantId(Guid.Parse(created.Text("id")));
+        IReadOnlyList<GrantChanged> announced = _deployment.Events.Of<GrantChanged>();
+
+        Assert.Collection(
+            announced,
+            made => Assert.Equal(
+                (grant, GrantChange.Made, "organization", Branch.ToString(), (SubjectId?)new SubjectId(Holder)),
+                (made.Grant, made.Change, made.ResourceType, made.ResourceId, made.Subject)),
+            revoked => Assert.Equal(
+                (grant, GrantChange.Revoked, "organization", Branch.ToString(), (SubjectId?)new SubjectId(Holder)),
+                (revoked.Grant, revoked.Change, revoked.ResourceType, revoked.ResourceId, revoked.Subject)),
+            group => Assert.Equal(
+                (new GrantId(Guid.Parse(denied.Text("id"))), true, SubjectType.Group, tellers.Id.Value, "document", "d-1", (SubjectId?)null),
+                (group.Grant, group.Deny, group.SubjectType, group.SubjectId, group.ResourceType, group.ResourceId, group.Subject)));
+        Assert.All(
+            announced,
+            one => Assert.Equal(
+                (GrantKind.Stored, "reader", Branch, (SubjectId?)actor),
+                (one.Kind, one.Role, one.Organization, one.Actor)));
+        Assert.All(announced, one => Assert.Contains(one, _deployment.Events.PublishedInTransaction));
+        Assert.Equal(3, announced.Select(one => one.IdempotencyKey).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
     /// IDN-LIFE-009a AC1 and INT-MAIL-006: a grant in the administrative organization is
     /// a grant and nothing more: the holder is no member of it afterwards and no
     /// mailbox is reserved, since staff membership begins at an invitation.

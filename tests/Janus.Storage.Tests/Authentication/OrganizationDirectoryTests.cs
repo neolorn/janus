@@ -201,6 +201,79 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
         Assert.Equal(["invitation"], issued.Details.Keys.ToArray());
     }
 
+    /// <summary>
+    /// IDN-READ-001 AC1 (D-218): the organizations are read ordered by identifier, in
+    /// pages after the identifier the last page ended at, within the organizations named
+    /// where some are, and an erased one is never among them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_001_AC1_EveryOrganizationButTheErasedIsReadInPagesAsync()
+    {
+        OrganizationId[] held =
+        [
+            .. (await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => _deployment.OrganizationAsync(Noon))))
+                .OrderBy(organization => organization.Value),
+        ];
+
+        await EraseAsync(held[1]);
+
+        await using StoreContext reading = database.Context();
+        OrganizationDirectory directory = Directory(reading);
+
+        IReadOnlyList<OrganizationStanding> first = await directory.PageAsync(
+            held, after: null, 1, TestContext.Current.CancellationToken);
+        IReadOnlyList<OrganizationStanding> second = await directory.PageAsync(
+            held, first[^1].Id, 2, TestContext.Current.CancellationToken);
+        IReadOnlyList<OrganizationStanding> every = await directory.PageAsync(
+            within: null, held[0], int.MaxValue, TestContext.Current.CancellationToken);
+
+        Assert.Equal([held[0]], first.Select(organization => organization.Id));
+        Assert.Equal([held[2]], second.Select(organization => organization.Id));
+        Assert.Contains(held[2], every.Select(organization => organization.Id));
+        Assert.DoesNotContain(held[1], every.Select(organization => organization.Id));
+        Assert.Equal(every.OrderBy(organization => organization.Id.Value), every);
+    }
+
+    /// <summary>
+    /// IDN-READ-002 AC2 (D-218): an organization's current members are read ordered by
+    /// subject, in pages, each with its membership, when it began and the end set in
+    /// advance; a membership that ended is no current membership, listed or read.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC2_AnEndedMembershipIsNoneAndOneEndingCarriesItsEndAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId departed = await _deployment.AccountAsync(Noon);
+        SubjectId[] current =
+        [
+            .. (await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => _deployment.AccountAsync(Noon))))
+                .OrderBy(subject => subject.Value),
+        ];
+
+        await PlaceAsync(departed, organization, Noon.AddDays(1));
+        await PlaceAsync(current[0], organization, until: null);
+        await PlaceAsync(current[1], organization, until: null, endsAt: Noon.AddDays(30));
+
+        await using StoreContext reading = database.Context();
+        OrganizationDirectory directory = Directory(reading);
+
+        IReadOnlyList<MemberSummary> first = await directory.MemberPageAsync(
+            organization, after: null, 1, TestContext.Current.CancellationToken);
+        IReadOnlyList<MemberSummary> second = await directory.MemberPageAsync(
+            organization, first[^1].Subject, 10, TestContext.Current.CancellationToken);
+        MemberSummary? ending = await directory.MemberAsync(
+            organization, current[1], TestContext.Current.CancellationToken);
+
+        Assert.Equal([current[0]], first.Select(member => member.Subject));
+        Assert.Equal([current[1]], second.Select(member => member.Subject));
+        Assert.Equal((Noon, (DateTimeOffset?)null, (InvitationId?)null), (first[0].BeganAt, first[0].EndsAt, first[0].Invitation));
+        Assert.Equal(Noon.AddDays(30), ending?.EndsAt);
+        Assert.Equal(second[0], ending);
+        Assert.Null(await directory.MemberAsync(organization, departed, TestContext.Current.CancellationToken));
+    }
+
     private static OrganizationDirectory Directory(StoreContext context) =>
         new(context, new OrganizationStore(context));
 
@@ -214,6 +287,20 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
         return await Directory(reading).FindAsync(organization, TestContext.Current.CancellationToken);
     }
 
+    private async Task EraseAsync(OrganizationId organization)
+    {
+        await using StoreContext erasing = database.Context();
+        var store = new OrganizationStore(erasing);
+        Organization held = Assert.IsType<Organization>(
+            await store.FindAsync(organization, TestContext.Current.CancellationToken));
+
+        held.RequestDeletion(Noon);
+        held.RecordErasure(Noon.AddDays(30), TimeSpan.FromDays(30));
+
+        await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
     private async Task<IReadOnlyList<AuditRecord>> RecordsAsync(SubjectId actor)
     {
         await using StoreContext reading = database.Context();
@@ -225,7 +312,8 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
     private async ValueTask PlaceAsync(
         SubjectId subject,
         OrganizationId organization,
-        DateTimeOffset? until)
+        DateTimeOffset? until,
+        DateTimeOffset? endsAt = null)
     {
         Membership membership = Membership
             .Create(
@@ -240,6 +328,11 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
         if (until is { } ended)
         {
             membership.End(ended);
+        }
+
+        if (endsAt is { } ending)
+        {
+            membership.SetEnd(new MembershipEndSet(ending, subject, "the contract ends"));
         }
 
         await using StoreContext writing = database.Context();

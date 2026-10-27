@@ -66,6 +66,18 @@ internal sealed class AuthorizationModel
         "replay-erasures", "role-declaration", "migrate",
     ];
 
+    // IDN-READ-004 (D-218): the library's reads a job may declare beside its host
+    // permissions, since a host's processing outside a request reads the organization,
+    // its members and the people it writes to; every other library-owned permission
+    // stays a person's.
+    private static readonly Permission[] JobReads =
+    [
+        Core.Permissions.OrganizationRead,
+        Core.Permissions.MembershipRead,
+        Core.Permissions.ContactRead,
+        Core.Permissions.ConsentRead,
+    ];
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
@@ -1022,15 +1034,16 @@ internal sealed class AuthorizationModel
         }
     }
 
-    // IDN-PRIN-001, OPS-ALERT-006 (D-202, D-206): a job exercises the host's own
-    // permissions with no person present, so it takes none of the library's, none a
-    // step-up gate asks a session to prove and no export; and its name is its own, never
-    // another job's, a library principal's or `migrate`. A host redeclares none of the
-    // library's permissions, so one of its own is never one of those. The rule a name
-    // keeps is judged where the other names of INT-SMS-003 are.
+    // IDN-PRIN-001, OPS-ALERT-006 (D-202, D-206, D-218): a job exercises the host's own
+    // permissions with no person present, so it takes none of the library's but the
+    // reads of IDN-READ-004, none a step-up gate asks a session to prove and no export;
+    // and its name is its own, never another job's, a library principal's or `migrate`.
+    // A host redeclares none of the library's permissions, so one of its own is never
+    // one of those. The rule a name keeps is judged where the other names of INT-SMS-003
+    // are.
     private static void CheckJobs(AuthorizationDeclaration declaration)
     {
-        var hosts = new HashSet<Permission>(declaration.Permissions);
+        var exercisable = new HashSet<Permission>(declaration.Permissions.Concat(JobReads));
         var names = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (JobDeclaration job in declaration.Jobs)
@@ -1049,7 +1062,7 @@ internal sealed class AuthorizationModel
 
             foreach (Permission permission in job.Permissions)
             {
-                if (!hosts.Contains(permission)
+                if (!exercisable.Contains(permission)
                     || declaration.StepUpGates.ContainsKey(permission)
                     || string.Equals(permission.Action, Export, StringComparison.Ordinal))
                 {
@@ -1057,7 +1070,7 @@ internal sealed class AuthorizationModel
                         at,
                         "permissions",
                         "the job " + job.Name + " exercises " + permission
-                        + ", which is not a host permission it may exercise");
+                        + ", which is not a permission a job may exercise");
                 }
             }
         }

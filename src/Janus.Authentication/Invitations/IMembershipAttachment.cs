@@ -42,6 +42,9 @@ internal interface IMembershipAttachment
     /// </summary>
     /// <param name="subject">Whose membership.</param>
     /// <param name="organization">Of which organization.</param>
+    /// <param name="invitation">
+    /// The invitation whose acknowledgement begins it, or nothing where bootstrap attaches it.
+    /// </param>
     /// <param name="acknowledged">The documents the person acknowledged, at the versions shown.</param>
     /// <param name="roles">The roles granted across the organization.</param>
     /// <param name="grantedBy">Who granted them, which is who issued the invitation.</param>
@@ -60,6 +63,7 @@ internal interface IMembershipAttachment
     ValueTask<Result<MembershipId>> AttachAsync(
         SubjectId subject,
         OrganizationId organization,
+        InvitationId? invitation,
         IReadOnlyList<InvitationDocument> acknowledged,
         IReadOnlyList<RoleName> roles,
         SubjectId grantedBy,

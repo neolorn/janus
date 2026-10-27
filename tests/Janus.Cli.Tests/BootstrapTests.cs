@@ -484,6 +484,27 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-219): the three roles bootstrap defines are
+    /// read by a host as bootstrap made them, so none is announced as defined.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_TheRolesBootstrapDefinesAreNotAnnouncedAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(
+            (3, 0),
+            await connection.QuerySingleAsync<(int, int)>(
+                """
+                SELECT
+                    (SELECT count(DISTINCT role)::int FROM identity.role_permissions
+                     WHERE role IN ('system-administrator', 'auditor', 'support')),
+                    (SELECT count(*)::int FROM identity.events WHERE kind = 'RoleChanged')
+                """));
+    }
+
+    /// <summary>
     /// IDN-PRIN-001 AC4 and OPS-CFG-005: what bootstrap defines and every value it sets
     /// are recorded under its own named principal with its stated reason, since no
     /// person is signed in to answer for them.
@@ -690,6 +711,32 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
             memberships.Order(StringComparer.Ordinal),
             announced.Select(one => one.Membership).Order(StringComparer.Ordinal));
         Assert.All(announced, one => Assert.Equal("began", one.Change));
+    }
+
+    /// <summary>
+    /// IDN-READ-002 AC1 (D-218): a membership bootstrap attaches began from no invitation,
+    /// so neither its row nor its announcement names one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC1_AMembershipBootstrapAttachesNamesNoInvitationAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(
+            (3, 0, 3, 0),
+            await connection.QuerySingleAsync<(int, int, int, int)>(
+                """
+                SELECT
+                    count(*)::int,
+                    count(*) FILTER (WHERE m.invitation IS NOT NULL)::int,
+                    (SELECT count(*)::int FROM identity.events WHERE kind = 'MembershipChanged'),
+                    (SELECT count(*)::int FROM identity.events
+                     WHERE kind = 'MembershipChanged' AND payload->>'Invitation' IS NOT NULL)
+                FROM identity.memberships m
+                JOIN identity.organizations o ON o.id = m.organization
+                WHERE o.administrative
+                """));
     }
 
     /// <summary>

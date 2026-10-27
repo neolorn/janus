@@ -11,6 +11,7 @@ using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Invitations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -48,10 +49,12 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ConfigurationAuditInMemory _changes = new();
     private readonly OrganizationAuditInMemory _audit = new();
-    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private readonly InvitationStoreInMemory _invitations = new();
+    private readonly ReadVolumeInMemory _volume = new();
     private readonly OrganizationsInMemory _organizations;
     private readonly SubjectId _administrator;
 
@@ -61,6 +64,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     /// </summary>
     public OrganizationServiceTests()
     {
+        _events = new EventsInMemory { Work = _work };
         _organizations = new OrganizationsInMemory(_memberships);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer);
@@ -79,6 +83,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
 
             return new OrganizationService(
                 scope,
+                _administrative,
                 new StepUpGuard(
                     _sessions,
                     _authenticators,
@@ -103,7 +108,14 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
                     _clock),
                 policies,
                 _events,
+                _events,
                 new ImageCodecInMemory().Declared,
+                new OrganizationReads(
+                    new ReadAdmissionInMemory(_gate, _administrative, _memberships),
+                    _organizations,
+                    _invitations,
+                    _volume,
+                    _clock),
                 _work,
                 _clock);
         }
@@ -116,6 +128,26 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     {
         await _work.DisposeAsync();
         _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// IDN-READ-001 AC2 (D-218): the administrative organization's identifier is answered
+    /// with no access context, and <c>identity.organization.notfound</c> before bootstrap
+    /// made the organization.
+    /// </summary>
+    [Fact]
+    public async Task IDN_READ_001_AC2_TheAdministrativeOrganizationIsAnsweredWithNoContextAsync()
+    {
+        OrganizationId found = (await Service.AdministrativeAsync(TestContext.Current.CancellationToken))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        _administrative.Organization = null;
+
+        Assert.Equal(Staff, found);
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            (await Service.AdministrativeAsync(TestContext.Current.CancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
     }
 
     /// <summary>
@@ -147,7 +179,8 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     /// IDN-ORG-003 AC8: the sessions of the organization's current members end inside
     /// the unit of work that suspends it: nothing has ended when the organization's row
     /// is held, and the one commit that follows carries the suspension, the ended
-    /// sessions and the record together. A session of someone who is no member stands.
+    /// sessions, their announcements (D-218) and the record together. A session of
+    /// someone who is no member stands.
     /// </summary>
     [Fact]
     public async Task IDN_ORG_003_AC8_TheMemberSessionsEndInTheUnitOfWorkThatSuspendsAsync()
@@ -172,6 +205,13 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
         Assert.Equal((1, 0, false), (_work.Committed, _work.RolledBack, _work.Open));
         Assert.Equal(Noon, theirs.EndedAt);
         Assert.Null(own.EndedAt);
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (theirs.Id, SessionEndReason.Organization, member, _administrator),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
+        Assert.Contains(ended, _events.PublishedInTransaction);
         Assert.Equal(
             Noon,
             (await _organizations.FindAsync(Customer, TestContext.Current.CancellationToken))?.DeletionRequestedAt);
@@ -287,6 +327,83 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
         Assert.Equal(0, _work.Opened);
         Assert.Equal(0, _work.RolledBack);
         Assert.Empty(_changes.Written);
+    }
+
+    /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): a created organization is announced
+    /// once, in the transaction that creates it, naming the organization and no subject,
+    /// with the administrator who acted.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_ACreatedOrganizationIsAnnouncedInItsTransactionAsync()
+    {
+        Result<OrganizationId> created = await Service.CreateAsync(
+            Acting,
+            "Northwind Freight",
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        OrganizationId organization = created.Match(
+            id => id,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+        OrganizationCreated announced = Assert.Single(_events.Of<OrganizationCreated>());
+
+        Assert.Equal(organization, announced.Organization);
+        Assert.Equal(Noon, announced.RaisedAt);
+        Assert.Null(announced.Subject);
+        Assert.Equal((_administrator, _administrator), (announced.Actor, announced.Effective));
+        Assert.Contains(announced, _events.PublishedInTransaction);
+    }
+
+    /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): a deletion request and its
+    /// cancellation are each announced once, in the transaction that makes it true, and a
+    /// request for an organization whose deletion is already requested announces nothing.
+    /// </summary>
+    [Fact]
+    public async Task LIB_API_001_ADeletionRequestAndItsCancellationAreAnnouncedInTheirTransactionsAsync()
+    {
+        Assert.True((await Service.RequestDeletionAsync(Acting, Stepped(), Customer, Reason, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+        Assert.True((await Service.RequestDeletionAsync(Acting, Stepped(), Customer, Reason, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+
+        OrganizationDeletionRequested requested = Assert.Single(_events.Of<OrganizationDeletionRequested>());
+
+        Assert.Equal((Customer, (SubjectId?)null), (requested.Organization, requested.Subject));
+        Assert.Contains(requested, _events.PublishedInTransaction);
+
+        Assert.True((await Service.CancelDeletionAsync(Acting, Stepped(), Customer, Reason, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+
+        OrganizationDeletionCancelled cancelled = Assert.Single(_events.Of<OrganizationDeletionCancelled>());
+
+        Assert.Equal((Customer, (SubjectId?)null), (cancelled.Organization, cancelled.Subject));
+        Assert.Equal(_administrator, cancelled.Actor);
+        Assert.Contains(cancelled, _events.PublishedInTransaction);
+        Assert.NotEqual(requested.IdempotencyKey, cancelled.IdempotencyKey);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 (D-218): an organization whose event is not taken is not created:
+    /// the unit of work rolls back with the failure, and nothing is recorded.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnOrganizationWhoseEventIsNotTakenIsNotCreatedAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<OrganizationId> created = await Service.CreateAsync(
+            Acting,
+            "Northwind Freight",
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            created.Match(_ => throw new Xunit.Sdk.XunitException("The organization was created."), error => error.Code));
+        Assert.Equal((1, false), (_work.RolledBack, _work.Open));
+        Assert.Empty(_audit.Changes);
     }
 
     private static ErrorCode Refused(Result outcome) =>

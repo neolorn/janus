@@ -10,6 +10,98 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host asks which accounts may exercise a permission on a record, or across an
+  organization (`IAccessGate.WhoMayAsync`, `GET /admin/access/admitted`), and is
+  answered as the single check would admit each account, through groups, containers and
+  derived access, a deny excluding; a person asks under `grant:read`, a declared job for
+  a permission it declares. A permission or type the model does not declare, and an
+  organization identifier that is not one, are answered `api.request.malformed` naming
+  `permission`, `type` or `id`, with no refusal recorded.
+- A host lists the organizations a caller may read (`IOrganizations.ListAsync`,
+  `GET /admin/organizations`) and reads one (`IOrganizations.ReadAsync`,
+  `GET /admin/organizations/{id}`) under `organization:read`: a holder in the
+  administrative organization lists every organization, any other person the
+  organizations of their current memberships they hold it in, and a declared job its
+  own. The list is ordered by identifier in pages of at most `limit` (1 to 500, 100 by
+  default) after `after`, with `next`; an erased organization is never listed and reads
+  as one never held.
+- A host reads an organization's current members (`IInvitations.MembersAsync`,
+  `GET /admin/organizations/{id}/members`), one account's current membership
+  (`IInvitations.MemberAsync`, `GET /admin/organizations/{id}/members/{subject}`) and
+  the organization's standing invitations (`IInvitations.StandingAsync`,
+  `GET /admin/organizations/{id}/invitations`) under `membership:read`. Each member
+  carries its membership, when it began, the end set in advance and the invitation it
+  began from; each invitation its roles, when it was issued and expires, who issued it
+  and the identifiers it binds. Each member a person reads counts toward their read
+  volume.
+- A person's read whose path names an organization is admitted where its permission is
+  held in that organization or in the administrative organization, with one refusal,
+  naming the organization the path names, recorded where neither admits it. A declared
+  job is admitted for these reads in its own organization alone.
+- A host reads the administrative organization's identifier
+  (`IOrganizations.AdministrativeAsync`) with no access context, to name its jobs'
+  principals and register its records before anyone acts; before bootstrap it answers
+  `identity.organization.notfound`.
+- An administrator holding `account:manage` in the administrative organization sets
+  another person's language, time zone and declared preferences, an administrator-only
+  one included (`IAccounts.SetPreferencesAsync`,
+  `PUT /admin/accounts/{subject}/preferences`), with a required reason and no step-up.
+  The values are validated as the person's own setting is, and the change is recorded as
+  `identity.preferences.changed` with the administrator acting and `details.reason`.
+- An administrator holding `session:revoke-account` lists another account's live
+  sessions (`ISessions.ListOfAsync`, `GET /admin/accounts/{subject}/sessions`) as the
+  account's own list shows them, none marked current, to check an offboarding before
+  revoking them.
+- A host reads where another person stands (`IConsents.StandingAsync`,
+  `GET /admin/accounts/{subject}/standing`) under `consent:read`, which a declared job
+  may hold: the account's state, its consents and its objections, each as the person's
+  own read answers it, so the host's own processing can follow a restriction, a
+  withdrawn consent or an objection. It reaches the same people as the account reads, and
+  each standing a person reads counts toward their read volume.
+- A host reads another person's account (`IAccounts.ReadAsync`,
+  `GET /admin/accounts/{subject}`) under `account:read`, finds an account by its email
+  address, phone number or username as sign-in reads it (`IAccounts.FindAsync`,
+  `POST /admin/accounts/find`), and reads the contact details it writes to
+  (`IAccounts.ContactAsync`, `GET /admin/accounts/{subject}/contact`) under
+  `contact:read`, which a declared job may hold. Each is asked in the organization named,
+  the administrative organization where none is: asked there it reaches every account,
+  and asked elsewhere only the organization's current members and the data subjects of
+  its records; an account beyond the reach, a deleted one and an unknown subject are
+  answered alike. Each account and contact a person reads counts toward their read
+  volume.
+- `MembershipChanged` carries `invitation`, the invitation whose acknowledgement began
+  the membership, on its beginning and on its end; a membership bootstrap attached
+  names none. A membership standing before this release is matched to the invitation it
+  began from when the migration runs.
+- The event `SessionEnded`, carrying the session and `reason` (`signedout`, `ended`,
+  `revoked`, `security`, `account` or `organization`), written for each session ended
+  before its expiry: by a sign-out (`signedout`, every session it ends), by an end
+  through the session list (`ended`, the asking session included), by an
+  administrator's revocation of an account's sessions or of every session, by a refresh
+  token presented twice or a provider's security event (`security`), by the
+  restriction, suspension, deactivation, deletion, takedown or erasure of the account,
+  by a request to delete its organization, and where a changed password, a changed
+  identifier or a recovery ends the person's other sessions; the account is the event's
+  subject. A session past its expiry raises none.
+- The event `GrantChanged`, carrying the grant, its kind, holder, role, whether it denies,
+  its organization and record, and `change` (`made` or `revoked`), written whenever a
+  grant is made or revoked: by an administrator, by an acknowledged invitation or
+  bootstrap, by a materialised derivation's refresh, by a record's removal, by a
+  membership's end and by an erasure; an account holder is the event's subject.
+- The event `GroupMembershipChanged`, carrying the group, its organization, the member
+  and `change` (`added` or `removed`), written when an administrator adds a member to a
+  group or takes one out, and when the end of a membership takes the account out of the
+  organization's groups; an account member is the event's subject.
+- The event `RoleChanged`, carrying the role and `change` (`defined`, `changed` or
+  `removed`), written when an administrator defines, changes or removes a role and when
+  a declared role is seeded.
+- The events `OrganizationCreated`, `OrganizationDeletionRequested` and
+  `OrganizationDeletionCancelled`, each written in the transaction that makes it true,
+  naming the organization and no subject.
+- Five library permissions: `organization:read`, `membership:read`, `account:read`,
+  `contact:read` and `consent:read`. A host's job may declare the four reads beside its
+  own permissions (`account:read` stays a person's), and the migration gives an existing
+  `system-administrator` role all five.
 - The background job `membership-ends` ends a membership at the first pass after the
   instant an administrator set, as an end now would, without judging it again; its
   records carry the job's principal, `details.endSetBy` naming that administrator and

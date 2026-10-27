@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -24,6 +25,7 @@ namespace Janus.Authorization.Roles;
 /// <param name="handOut">Whether a change stays within the reach of the caller making it.</param>
 /// <param name="model">Which permissions exist, and which roles a derivation confers.</param>
 /// <param name="audit">Where every change is written down.</param>
+/// <param name="events">Where every change is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -44,6 +46,7 @@ internal sealed class RoleService(
     IHandOutAdmission handOut,
     AuthorizationModel model,
     IRoleAudit audit,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time) : IRoles
 {
@@ -179,6 +182,19 @@ internal sealed class RoleService(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        if (await AnnouncedAsync(
+                defined.Name,
+                held is null ? Core.RoleChange.Defined : Core.RoleChange.Changed,
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -268,6 +284,14 @@ internal sealed class RoleService(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        if (await AnnouncedAsync(role, Core.RoleChange.Removed, context, cancellationToken).ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -275,6 +299,41 @@ internal sealed class RoleService(
         }
 
         return Result.Success();
+    }
+
+    // Chapter 10 section 5b (D-218): the event is written in the transaction that makes
+    // the change, naming the role and no subject, with the person who acted as the
+    // context gives them.
+    private async ValueTask<Error?> AnnouncedAsync(
+        RoleName role,
+        Core.RoleChange change,
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+
+        return (await events
+                .PublishAsync(
+                    new RoleChanged(now, Key(role, change, now), role.ToString(), change)
+                    {
+                        Actor = context.Acting,
+                        Effective = context.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+    }
+
+    private static string Key(RoleName role, Core.RoleChange change, DateTimeOffset at)
+    {
+        string kind = change switch
+        {
+            Core.RoleChange.Defined => "role-defined",
+            Core.RoleChange.Changed => "role-changed",
+            _ => "role-removed",
+        };
+
+        return string.Create(CultureInfo.InvariantCulture, $"{kind}:{role}@{at.UtcTicks}");
     }
 
     private static DefinedRole Defined(Role role) =>
@@ -426,7 +485,7 @@ internal sealed class RoleService(
         return (await handOut
                 .AdmitAsync(
                     context,
-                    new RoleChange(
+                    new Gate.RoleChange(
                         held is null ? null : Defined(held),
                         defined is null ? null : Defined(defined),
                         handedOut),

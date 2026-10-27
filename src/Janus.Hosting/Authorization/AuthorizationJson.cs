@@ -8,10 +8,11 @@ namespace Janus.Hosting.Authorization;
 /// How the administration of access reads and writes, generated rather than reflected
 /// over (CONV-CODE-004, CONV-DESIGN-006).
 /// </summary>
-/// <remarks>Implements AUTHZ-DERIVE-007, AUTHZ-GATE-004, AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-004, AUTHZ-GROUP-001, API-CONV-002 and BFF-CAP-002.</remarks>
+/// <remarks>Implements AUTHZ-DERIVE-007, AUTHZ-GATE-004, AUTHZ-GATE-007, AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-004, AUTHZ-GROUP-001, API-CONV-002 and BFF-CAP-002.</remarks>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true)]
+[JsonSerializable(typeof(AdmittedAccountsView))]
 [JsonSerializable(typeof(CapabilityResidual))]
 [JsonSerializable(typeof(CreatedGrantView))]
 [JsonSerializable(typeof(CreatedGroupView))]

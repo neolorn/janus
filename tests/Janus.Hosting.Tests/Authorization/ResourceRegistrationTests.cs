@@ -359,8 +359,8 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
     /// nothing. A removal leaves no row and no ancestry row of the record, and revokes
     /// every live grant naming it with the nil subject as revoker and the reason
     /// <c>AUTHZ-INHERIT-002</c>, each recorded <c>authz.grant.revoked</c> naming its
-    /// holder as subject; a grant on its container stands, and the record registered
-    /// again inherits nothing it held.
+    /// holder as subject and announced as <c>GrantChanged</c> <c>revoked</c> (D-218); a grant
+    /// on its container stands, and the record registered again inherits nothing it held.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -401,6 +401,9 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         Assert.Equal(0, await RevokedAsync(onContainer));
         Assert.Equal(1, await RevocationsRecordedAsync(allowed, other));
         Assert.Equal(1, await RevocationsRecordedAsync(denied, written.Account));
+        Assert.Equal(1, await RevocationsAnnouncedAsync(allowed));
+        Assert.Equal(1, await RevocationsAnnouncedAsync(denied));
+        Assert.Equal(0, await RevocationsAnnouncedAsync(onContainer));
 
         Ok(await RegisteredAsync(new ResourceRegistration(document, written.Organization, workspace, written.Account)));
 
@@ -505,6 +508,22 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
               AND subject = @holder;
             """,
             new { id = grant.Value, holder = holder.Value });
+    }
+
+    // The announcements that the grant was revoked, as the rows of the events table,
+    // naming no actor since the host removed the record (chapter 10 section 5b, D-218).
+    private async Task<int> RevocationsAnnouncedAsync(GrantId grant)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'GrantChanged' AND payload->>'Change' = 'revoked'
+              AND payload->>'Actor' IS NULL
+              AND payload->>'IdempotencyKey' LIKE @key;
+            """,
+            new { key = "grant-revoked:" + grant.Value + "@%" });
     }
 
     private async Task<int> AncestorRowsOfAsync(ResourceReference resource)

@@ -1978,7 +1978,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-IDENT-006 AC4: the sessions the account holds elsewhere end with the
-    /// identifier, and the one that asked is left alone.
+    /// identifier, and the one that asked is left alone; each that ends is announced as
+    /// ended by the person (D-218).
     /// </summary>
     [Fact]
     public async Task REG_IDENT_006_AC4_EveryOtherSessionEndsOnRemovalAsync()
@@ -1998,6 +1999,10 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.NotNull(await _sessions.FindAsync(asking, TestContext.Current.CancellationToken));
         Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal((elsewhere, SessionEndReason.Ended, _person), (ended.Session, ended.Reason, ended.Actor));
     }
 
     /// <summary>
@@ -2111,7 +2116,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// <summary>
     /// IDN-LIFE-008 AC4 (D-190): the undo of a removal completes under no session, so
     /// it ends every session of the account, the one that made the removal and one
-    /// opened since included.
+    /// opened since included, each announced as ended on the person's behalf (D-218).
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_008_AC4_AnUndoOfARemovalEndsEverySessionAsync()
@@ -2127,6 +2132,12 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.True(Named(await HeldAsync(), Second).IsVerified);
         Assert.NotNull((await _sessions.FindAsync(removing, TestContext.Current.CancellationToken))?.EndedAt);
         Assert.NotNull((await _sessions.FindAsync(since, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.Equal(
+            new[] { removing.Value, since.Value }.Order(),
+            _events.Of<SessionEnded>()
+                .Where(ended => ended.Reason is SessionEndReason.Ended && ended.Actor == _person)
+                .Select(ended => ended.Session.Value)
+                .Order());
     }
 
     /// <summary>

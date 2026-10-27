@@ -285,6 +285,21 @@ public sealed class VocabularyContractTests
             WireNames<DeliveryChange>());
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5.39 (D-218, D-219): the change each event of
+    /// section 5b carries, and the reason a session ended, spelled as section 5.39
+    /// spells them.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_TheChangesTheEventsCarryAreTheContract()
+    {
+        Assert.Equal(["made", "revoked"], WireNames<GrantChange>());
+        Assert.Equal(["added", "removed"], WireNames<GroupMembershipChange>());
+        Assert.Equal(["began", "ended"], WireNames<MembershipChange>());
+        Assert.Equal(["changed", "defined", "removed"], WireNames<RoleChange>());
+        Assert.Equal(["account", "ended", "organization", "revoked", "security", "signedout"], WireNames<SessionEndReason>());
+    }
+
+    /// <summary>
     /// REG-PREF-001: the four types a host declares a preference key with, spelled as
     /// the item spells them, because a host writes the declaration in those words.
     /// </summary>
@@ -375,6 +390,11 @@ public sealed class VocabularyContractTests
             typeof(PreferenceKind),
             typeof(SendKind),
             typeof(RegistrationStep),
+            typeof(GrantChange),
+            typeof(GroupMembershipChange),
+            typeof(MembershipChange),
+            typeof(RoleChange),
+            typeof(SessionEndReason),
         ];
 
         foreach (Type vocabulary in vocabularies)

@@ -639,6 +639,63 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-SESS-010 (D-218): each end hands back the sessions it ended while both their
+    /// inactivity and their absolute lifetime were still ahead, to be announced; a session
+    /// past either expiry, or one already ended, is ended or left as it is and not handed
+    /// back.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_010_AnEndHandsBackTheSessionsItEndedBeforeTheirExpiryAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        Session live = Record(subject);
+        Session idle = Record(subject, inactivity: TimeSpan.FromHours(1));
+        Session lapsed = Record(subject, inactivity: TimeSpan.FromDays(2), absolute: TimeSpan.FromHours(1));
+        Session ended = Record(subject);
+        Session record = Record(other);
+        Session application = Derived(record, SessionType.PerApp);
+        Session elsewhere = Record(other);
+        DateTimeOffset at = Noon + TimeSpan.FromHours(2);
+
+        ended.End(Noon);
+
+        await WrittenAsync(live, idle, lapsed, ended, record, application, elsewhere);
+
+        IReadOnlyList<EndedSession> account;
+        IReadOnlyList<EndedSession> spine;
+        IReadOnlyList<EndedSession> every;
+
+        await using (StoreContext ending = database.Context())
+        {
+            account = await Store(ending).EndAccountAsync(subject, at, TestContext.Current.CancellationToken);
+            spine = await Store(ending).EndSpineAsync(record.Id, at, TestContext.Current.CancellationToken);
+            every = await Store(ending).EndEveryAsync(at, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal([new EndedSession(live.Id, subject)], account);
+        Assert.Equal(
+            new[] { record.Id.Value, application.Id.Value }.Order(),
+            spine.Select(each => each.Session.Value).Order());
+        Assert.Equal([new EndedSession(elsewhere.Id, other)], every.Where(each => each.Subject == other));
+
+        await using StoreContext reading = database.Context();
+
+        foreach (Session held in new[] { idle, lapsed })
+        {
+            Assert.Equal(
+                at,
+                Assert.IsType<Session>(await Store(reading).FindAsync(held.Id, TestContext.Current.CancellationToken))
+                    .EndedAt);
+        }
+
+        Assert.Equal(
+            Noon,
+            Assert.IsType<Session>(await Store(reading).FindAsync(ended.Id, TestContext.Current.CancellationToken))
+                .EndedAt);
+    }
+
+    /// <summary>
     /// AUTH-SESS-009 AC5, AC6, AUTH-SESS-001: a downgrade is written on every session of
     /// the account that has not ended, as the instant it was made, and on no other
     /// account's; what each session attained reads back as it was reached, and an ended

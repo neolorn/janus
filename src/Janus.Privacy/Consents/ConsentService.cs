@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Outbox;
+using Janus.Privacy.Policies;
+using Janus.Privacy.Requests;
 
 namespace Janus.Privacy.Consents;
 
@@ -20,12 +22,16 @@ namespace Janus.Privacy.Consents;
 /// <param name="events">Where the change is announced.</param>
 /// <param name="outbox">Where the change is delivered to the purpose handlers naming its purpose.</param>
 /// <param name="audit">Where the change is written down.</param>
+/// <param name="reach">Where a read of another person is asked, and whom it reaches.</param>
+/// <param name="states">Where another person's account stands.</param>
+/// <param name="volume">Where the standings a person reads are counted.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements LIB-API-005, PRIV-CONS-001, PRIV-CONS-002, PRIV-CONS-008,
-/// PRIV-CONS-011, PRIV-RIGHT-001a and IDN-LIFE-003a. A change is announced as an event and
-/// written to the outbox for the purpose handlers in the transaction that makes it true.
+/// PRIV-CONS-011, PRIV-RIGHT-001a, IDN-LIFE-003a, IDN-READ-003 and IDN-READ-004. A change
+/// is announced as an event and written to the outbox for the purpose handlers in the
+/// transaction that makes it true.
 /// One purpose a record: nothing here takes a list, so no record can reference two
 /// purposes and no one control can grant for two.
 /// </remarks>
@@ -36,6 +42,9 @@ internal sealed class ConsentService(
     IEvents events,
     IOutboxStore outbox,
     IPrivacyAudit audit,
+    SubjectReach reach,
+    IAccountStates states,
+    IReadVolume volume,
     IUnitOfWork work,
     TimeProvider time) : IConsents
 {
@@ -325,6 +334,41 @@ internal sealed class ConsentService(
             : Result.Success(await consents
                 .ObjectionsAsync(subject, cancellationToken)
                 .ConfigureAwait(false));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<SubjectStanding>> StandingAsync(
+        AccessContext context,
+        SubjectId subject,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if ((await reach
+                .ReachedAsync(context, Permissions.ConsentRead, subject, organization, cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error refused)
+        {
+            return Result.Failure<SubjectStanding>(refused);
+        }
+
+        // IDN-READ-003: a deleted account is answered as an account no person bears.
+        if (await states.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { State: not AccountState.Deleted } standing)
+        {
+            return Result.Failure<SubjectStanding>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        var read = new SubjectStanding(
+            standing.State,
+            await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false),
+            await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false));
+
+        // OPS-ALERT-005: a standing a person reads counts toward their read volume; a
+        // system principal's reads are nobody's and are not counted.
+        return (await volume.ReturnedAsync(context, 1, cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(read), Result.Failure<SubjectStanding>);
     }
 
     /// <inheritdoc/>

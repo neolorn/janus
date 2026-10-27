@@ -31,11 +31,13 @@ namespace Janus.Authentication.Sessions;
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
 /// <param name="clients">Where the client a registration captured is read, for the return it answers.</param>
+/// <param name="events">Where each session an end takes is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-SESS-001 to AUTH-SESS-013, IDN-LIFE-012a and OPS-ALERT-007.
+/// Implements AUTH-SESS-001 to AUTH-SESS-013, IDN-LIFE-012a, IDN-READ-003 and
+/// OPS-ALERT-007.
 /// Lifetimes are read from the assurance the principal's policy requires and from
 /// nothing else, so the session a passkey opened lives exactly as long as the one a
 /// password opened.
@@ -53,6 +55,7 @@ internal sealed class SessionService(
     ILocationResolver locations,
     ConcurrentSessions concurrent,
     IOidcClientStore clients,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -638,20 +641,34 @@ internal sealed class SessionService(
             return Result.Failure<IReadOnlyList<SessionSummary>>(Error.From(ErrorCodes.Denied));
         }
 
-        IReadOnlyList<Session> live = await sessions
-            .LiveOfAsync(subject, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        return Result.Success(await SummariesAsync(subject, current, cancellationToken).ConfigureAwait(false));
+    }
 
-        return Result.Success<IReadOnlyList<SessionSummary>>(
-        [
-            .. live.Select(session => new SessionSummary(
-                session.Id,
-                session.CreatedAt,
-                session.LastSeenAt,
-                session.LastSeen.Device,
-                session.LastSeen.Location,
-                session.Id == current)),
-        ]);
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<SessionSummary>>> ListOfAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+                .ConfigureAwait(false) is Error refused)
+        {
+            return Result.Failure<IReadOnlyList<SessionSummary>>(refused);
+        }
+
+        // IDN-READ-003: a deleted account is answered as an account no person bears.
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is null or AccountState.Deleted)
+        {
+            return Result.Failure<IReadOnlyList<SessionSummary>>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        // 16 section 4: the offboarding check reads the list from no session of the
+        // account's, so none is marked current.
+        return Result.Success(await SummariesAsync(subject, current: null, cancellationToken).ConfigureAwait(false));
     }
 
     /// <inheritdoc/>
@@ -685,8 +702,24 @@ internal sealed class SessionService(
             return Result.Failure(notBegun);
         }
 
-        await sessions.EndSpineAsync(ending.Spine, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        // Chapter 10 section 5.39 (D-219): an end through the session list is ended,
+        // whichever session it names, the asking one included.
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndSpineAsync(ending.Spine, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Ended,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -704,9 +737,43 @@ internal sealed class SessionService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return context.Effective is SubjectId subject
-            ? await EndAccountAsync(subject, cancellationToken).ConfigureAwait(false)
-            : Result.Failure(Error.From(ErrorCodes.Denied));
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        // Chapter 10 section 5.39 (D-219): a sign-out is signedout for every session it
+        // ends.
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.SignedOut,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
@@ -763,8 +830,22 @@ internal sealed class SessionService(
             return Result.Failure(since);
         }
 
-        await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Revoked,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -823,7 +904,22 @@ internal sealed class SessionService(
             return Result.Failure(since);
         }
 
-        await sessions.EndEveryAsync(time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndEveryAsync(now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Revoked,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -836,13 +932,16 @@ internal sealed class SessionService(
 
     /// <summary>
     /// Ends every session of an account, which is what a transition out of
-    /// <c>active</c> does in the same operation as the transition.
+    /// <c>active</c> does in the same operation as the transition, announcing each
+    /// (chapter 10 section 5b, D-218).
     /// </summary>
     /// <param name="subject">Whose sessions.</param>
+    /// <param name="reason">Why they end.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success.</returns>
+    /// <returns>Success, or the failure where an end was not announced.</returns>
     public async ValueTask<Result> EndAccountAsync(
         SubjectId subject,
+        SessionEndReason reason,
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -851,8 +950,22 @@ internal sealed class SessionService(
             return Result.Failure(notBegun);
         }
 
-        await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    reason,
+                    now,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -951,6 +1064,29 @@ internal sealed class SessionService(
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+    // AUTH-SESS-008: the account's live sessions as its list shows them, the one asking
+    // marked where there is one.
+    private async ValueTask<IReadOnlyList<SessionSummary>> SummariesAsync(
+        SubjectId subject,
+        SessionId? current,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Session> live = await sessions
+            .LiveOfAsync(subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. live.Select(session => new SessionSummary(
+                session.Id,
+                session.CreatedAt,
+                session.LastSeenAt,
+                session.LastSeen.Device,
+                session.LastSeen.Location,
+                session.Id == current)),
+        ];
+    }
 
     // INT-GEN-006: the address is the session's own and the city is what the local
     // database makes of it, so nothing outside the library writes a place into one.

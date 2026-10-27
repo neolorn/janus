@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Core;
 using Janus.Privacy.Erasures;
 using Janus.Storage;
@@ -173,7 +174,8 @@ internal static class ReplayErasuresCommand
             }));
 
     // What the command runs over: the storage area under the connection and the keys
-    // the document carried, and the replay itself.
+    // the document carried, the authentication area, whose event outbox announces the
+    // sessions a takedown ends, and the replay itself.
     private static ServiceProvider Composed(KeyDocument keys)
     {
         var services = new ServiceCollection();
@@ -186,6 +188,7 @@ internal static class ReplayErasuresCommand
         services.AddCoreArea();
         services.AddSingleton(keys.Ring);
         services.AddStorageArea(keys.Connection);
+        services.AddAuthenticationArea();
         services.AddScoped<ErasureReplay>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

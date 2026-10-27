@@ -225,6 +225,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IIdentifierDirectory, IdentifierDirectory>();
         services.AddScoped<IAccountDirectory, AccountDirectory>();
+        services.AddScoped<IAccountTies, AccountTies>();
         services.AddScoped<ILifecycleLinkStore, LifecycleLinkStore>();
         services.AddScoped<IAccountAudit, AccountAudit>();
         services.AddScoped<IPasswordStore, PasswordStore>();
@@ -287,6 +288,7 @@ internal static class StorageRegistration
         services.AddScoped<IConsentStore, ConsentStore>();
         services.AddScoped<Janus.Privacy.IPrivacyAudit, PrivacyAudit>();
         services.AddScoped<Janus.Privacy.Policies.IAdministrativeOrganization, PrivacyAdministrativeOrganization>();
+        services.AddScoped<Janus.Privacy.Policies.IReachedSubjects, ReachedSubjects>();
         services.AddScoped<IAuditTrailStore, AuditTrailStore>();
 
         services.AddScoped<IRoleStore, RoleStore>();
@@ -314,12 +316,14 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipRevocations, MembershipRevocations>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
         services.AddScoped<IRoleHandOut, RoleHandOut>();
+        services.AddScoped<IReadAdmission, ReadAdmission>();
         services.AddScoped<IResourceStore, ResourceStore>();
         services.AddScoped<IAccountHolders, AccountHolders>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
+        services.AddScoped<IExercisingAccounts, ExercisingAccounts>();
         services.AddScoped<IOrganizationSuspensions, OrganizationSuspensions>();
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();

@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Outbox;
+using Janus.Privacy.Policies;
 using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Outbox;
+using Janus.Privacy.Tests.Requests;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Consents;
@@ -57,6 +59,9 @@ public sealed class ConsentTests : IAsyncDisposable
             _events,
             _outbox,
             _audit,
+            new SubjectReach(new AccessGateInMemory(), new AdministrativeOrganizationInMemory(), new ReachedSubjectsInMemory()),
+            new AccountStatesInMemory(),
+            new ReadVolumeInMemory(),
             _work,
             _clock);
 
@@ -628,6 +633,9 @@ public sealed class ConsentTests : IAsyncDisposable
             _events,
             _outbox,
             _audit,
+            new SubjectReach(new AccessGateInMemory(), new AdministrativeOrganizationInMemory(), new ReachedSubjectsInMemory()),
+            new AccountStatesInMemory(),
+            new ReadVolumeInMemory(),
             _work,
             _clock);
 
@@ -676,6 +684,9 @@ public sealed class ConsentTests : IAsyncDisposable
             _events,
             _outbox,
             _audit,
+            new SubjectReach(new AccessGateInMemory(), new AdministrativeOrganizationInMemory(), new ReachedSubjectsInMemory()),
+            new AccountStatesInMemory(),
+            new ReadVolumeInMemory(),
             _work,
             _clock);
 

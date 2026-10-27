@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
@@ -23,6 +24,7 @@ using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
@@ -57,12 +59,13 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private readonly Deployment _deployment = new(database);
 
-    private SubjectEraser Eraser(StoreContext context) => new(
+    private SubjectEraser Eraser(StoreContext context, UnitOfWork work) => new(
         context,
         new SessionStore(context, _deployment.Ring, _deployment.Randomness),
         new ConfigurationStore(context, new DataConnections(context)),
         new DataConnections(context),
-        new IdentifierStore(context, _deployment.Ring, _deployment.Randomness));
+        new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+        new EventOutbox(new PendingEvents(context), work));
 
     /// <summary>
     /// IDN-LIFE-003b AC4, PRIV-RIGHT-005a: the erasure commits as one thing. Afterwards
@@ -132,7 +135,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            await Eraser(erasing).EraseAsync(
+            await Eraser(erasing, work).EraseAsync(
                 subject,
                 ErasureReason.ErasureRequest,
                 Noon,
@@ -173,7 +176,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            await Eraser(erasing).EraseAsync(
+            await Eraser(erasing, work).EraseAsync(
                 kept,
                 ErasureReason.ErasureRequest,
                 Noon,
@@ -367,9 +370,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
         await using StoreContext erasing = database.Context();
+        await using var work = new UnitOfWork(erasing);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await Eraser(erasing).EraseAsync(
+            await Eraser(erasing, work).EraseAsync(
                 subject,
                 ErasureReason.ErasureRequest,
                 Noon,
@@ -1292,7 +1296,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     /// <summary>
     /// AUTH-SESS-010 AC3: the subject's sessions end before anything of theirs is
-    /// made unreadable, so no request arrives on one afterwards.
+    /// made unreadable, so no request arrives on one afterwards; each end is
+    /// announced (D-218).
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_AC3_DeletionEndsSessionsBeforeThePersonalDataGoesAsync()
@@ -1321,7 +1326,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            await Eraser(erasing).EraseAsync(
+            await Eraser(erasing, work).EraseAsync(
                 subject,
                 ErasureReason.ErasureRequest,
                 Noon.AddHours(1),
@@ -1335,6 +1340,22 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .SingleAsync(session => session.Subject == subject, TestContext.Current.CancellationToken);
 
         Assert.Equal(Noon.AddHours(1), ended.EndedAt);
+        Assert.Equal(1, await EndsAnnouncedAsync(subject));
+    }
+
+    // The announcements that a session of the account ended because the account did,
+    // naming no actor, since no person acted (chapter 10 section 5b, D-218).
+    private async ValueTask<int> EndsAnnouncedAsync(SubjectId subject)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'SessionEnded' AND payload->>'Reason' = 'account'
+              AND payload->>'Actor' IS NULL AND payload->'Subject'->>'Value' = @subject
+            """,
+            new { subject = subject.Value.ToString() });
     }
 
     private async ValueTask<SubjectId> DeletingAccountAsync()
@@ -1461,7 +1482,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using var work = new UnitOfWork(erasing);
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
-        await Eraser(erasing).EraseAsync(
+        await Eraser(erasing, work).EraseAsync(
             subject,
             reason,
             Noon,
@@ -1619,8 +1640,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     /// <summary>
     /// IDN-LIFE-014, IDN-PRIN-003 (D-166): the erasure revokes every grant the account
     /// holds, by the nil subject at the erasure's instant and for the requirement, and
-    /// keeps every row; a grant already revoked keeps its own revocation, another
-    /// account's grant is untouched, and the account's counter goes up.
+    /// keeps every row, announcing each it revokes (D-218); a grant already revoked keeps
+    /// its own revocation, another account's grant is untouched, and the account's
+    /// counter goes up.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_014_TheAccountsGrantsReadRevokedAndEveryRowStandsAsync()
@@ -1654,6 +1676,24 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             (kept.RevokedAt, kept.RevokedBy, kept.RevocationReason));
         Assert.Null(untouched.RevokedAt);
         Assert.True(await GrantVersionAsync(subject) > before);
+        Assert.Equal(1, await RevocationsAnnouncedAsync(live));
+        Assert.Equal(0, await RevocationsAnnouncedAsync(revoked) + await RevocationsAnnouncedAsync(others));
+    }
+
+    // The announcements that the grant was revoked, naming its holder as subject and no
+    // actor, since no person erased the account (chapter 10 section 5b, D-218).
+    private async ValueTask<int> RevocationsAnnouncedAsync(GrantId grant)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'GrantChanged' AND payload->>'Change' = 'revoked'
+              AND payload->>'Actor' IS NULL AND payload->'Subject'->>'Value' = payload->>'SubjectId'
+              AND payload->>'IdempotencyKey' LIKE @key
+            """,
+            new { key = "grant-revoked:" + grant.Value + "@%" });
     }
 
     private async ValueTask<GrantId> GrantedAsync(

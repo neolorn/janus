@@ -9,7 +9,7 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, AUTH-SESS-008, AUTH-SESS-009, AUTH-SESS-011 and
-/// AUTH-SESS-013. Ending the
+/// AUTH-SESS-013 and IDN-READ-003. Ending the
 /// record a session stands on ends everything derived from it, so signing out is not
 /// undone by moving to another application.
 /// </remarks>
@@ -40,6 +40,24 @@ public interface ISessions
     ValueTask<Result<IReadOnlyList<SessionSummary>>> ListAsync(
         AccessContext context,
         SessionId current,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Another account's live sessions, as its own list shows them with none marked
+    /// current, which is what an offboarding checks.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="subject">Whose sessions.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The sessions, or the refusal, judged in this order: <c>authz.denied</c> where the
+    /// caller does not hold <c>session:revoke-account</c> in the administrative
+    /// organization, <c>identity.account.notfound</c> where no account bears the subject
+    /// or the account is deleted.
+    /// </returns>
+    ValueTask<Result<IReadOnlyList<SessionSummary>>> ListOfAsync(
+        AccessContext context,
+        SubjectId subject,
         CancellationToken cancellationToken);
 
     /// <summary>

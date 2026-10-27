@@ -457,6 +457,9 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
                 Corrected.Refreshed("authz.grant.retracted", reviewed.Deployment.Granter, reviewed.Deployment.Organization),
             ],
             await CorrectedAsync(reviewed));
+        Assert.Equal(
+            new (string, Guid?)[] { ("made", person), ("revoked", person) },
+            await AnnouncedAsync(reviewed));
     }
 
     /// <summary>
@@ -495,6 +498,7 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
                 Corrected.Named("authz.grant.retracted", HostFixture.Digest, "the nightly digest", reviewed.Deployment.Organization),
             ],
             await CorrectedAsync(reviewed));
+        Assert.Equal(new (string, Guid?)[] { ("made", null), ("revoked", null) }, await AnnouncedAsync(reviewed));
     }
 
     /// <summary>
@@ -1012,6 +1016,28 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
                   AND payload->>'Condition' = 'degradation'
                   AND payload->'Details'->>'derivation' = 'reviewer'
                 """));
+    }
+
+    // What the GrantChanged rows announced of the reviewing account's materialised
+    // grants, by change, with the person who acted, or none for a job (chapter 10
+    // section 5b, D-218). One instant of the host's clock raises both, so they are read
+    // by what they announce.
+    private async Task<IReadOnlyList<(string Change, Guid? Actor)>> AnnouncedAsync(Reviewed reviewed)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return
+        [
+            .. await connection.QueryAsync<(string, Guid?)>(
+                """
+                SELECT payload->>'Change', CAST(payload->'Actor'->>'Value' AS uuid) FROM identity.events
+                WHERE kind = 'GrantChanged' AND payload->>'Kind' = 'materialised'
+                  AND payload->>'SubjectType' = 'user' AND payload->>'SubjectId' = @account
+                  AND payload->>'Subject' IS NOT NULL
+                ORDER BY 1
+                """,
+                new { account = reviewed.Account.Value.ToString() }),
+        ];
     }
 
     // The one materialised grant written for the reviewing account on its workspace, as

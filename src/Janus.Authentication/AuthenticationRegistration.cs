@@ -135,6 +135,7 @@ internal static class AuthenticationRegistration
         // each of which reads the settings table for what it enforces.
         services.AddScoped<PolicyResolution>();
         services.AddScoped<AdministrativeScope>();
+        services.AddScoped<AccountReach>();
         services.AddSingleton<Argon2idHasher>();
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
@@ -197,11 +198,14 @@ internal static class AuthenticationRegistration
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
         services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
 
+        services.AddScoped<OrganizationReads>();
+
         // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos is refused where the
         // deployment declared no codec, so what changes a policy takes the codec as it
         // was registered.
         services.AddScoped<IOrganizations>(provider => new OrganizationService(
             provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<IAdministrativeOrganization>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IOrganizationDirectory>(),
             provider.GetRequiredService<ISessionStore>(),
@@ -210,7 +214,9 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetRequiredService<PolicyResolution>(),
             provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<OrganizationReads>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -298,6 +304,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<LandingLinks>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<OrganizationReads>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));

@@ -61,6 +61,31 @@ public sealed class SessionRevocationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-READ-003 and chapter 09 section 8a (D-218): one account's live sessions are
+    /// listed over the endpoint as its own list shows them, none marked current, and a
+    /// subject no account bears is answered 404 <c>identity.account.notfound</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_003_OneAccountsSessionsAreListedOverTheEndpointAsync()
+    {
+        Session leaving = await OtherSessionAsync();
+        Browser administrator = await AuthorisedAsync(Permissions.SessionRevokeAccount);
+
+        Answer listed = await administrator.SendAsync("GET", $"/admin/accounts/{leaving.Subject.Value}/sessions");
+        Answer unknown = await administrator.SendAsync(
+            "GET",
+            $"/admin/accounts/{SubjectId.New(_randomness).Value}/sessions");
+
+        Assert.Equal(StatusCodes.Status200OK, listed.Status);
+        Assert.Equal(1, listed.Json().GetArrayLength());
+        Assert.Equal(leaving.Id.ToString(), listed.Json()[0].GetProperty("id").GetString());
+        Assert.False(listed.Json()[0].GetProperty("current").GetBoolean());
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.AccountNotFound.ToString(), unknown.Text("code"));
+    }
+
+    /// <summary>
     /// AUTH-SESS-009 AC3: the explicit revocation over the endpoint ends every session,
     /// the caller's own included.
     /// </summary>

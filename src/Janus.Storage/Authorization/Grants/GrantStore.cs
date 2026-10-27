@@ -344,7 +344,12 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         RevocationReason = grant.RevocationReason,
     };
 
-    private static Grant Read(GrantRecord record) => Grant.Existing(
+    /// <summary>
+    /// The grant a row of the <c>grants</c> table holds.
+    /// </summary>
+    /// <param name="record">The row.</param>
+    /// <returns>The grant, as the row stands.</returns>
+    internal static Grant Read(GrantRecord record) => Grant.Existing(
         record.Id,
         new GrantSubject(record.SubjectType, record.SubjectId),
         record.Role,

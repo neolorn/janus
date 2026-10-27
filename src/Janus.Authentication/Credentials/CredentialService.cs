@@ -169,9 +169,9 @@ internal sealed class CredentialService(
         }
 
         // IDN-LIFE-008: a changed password ends what was held under the old one.
-        await EndOthersAsync(acting, cancellationToken).ConfigureAwait(false);
-
-        return Result.Success();
+        return await EndOthersAsync(acting, cancellationToken).ConfigureAwait(false) is Error unended
+            ? Result.Failure(unended)
+            : Result.Success();
     }
 
     /// <inheritdoc/>
@@ -1819,17 +1819,25 @@ internal sealed class CredentialService(
     }
 
     // The account's other sessions end; the one asking is left alone, and an
-    // enrolment session leaves none standing because nobody is holding one.
-    private async ValueTask EndOthersAsync(Acting acting, CancellationToken cancellationToken)
+    // enrolment session leaves none standing because nobody is holding one. The ends
+    // and their announcements commit together (chapter 10 section 5b, D-218).
+    private async ValueTask<Error?> EndOthersAsync(Acting acting, CancellationToken cancellationToken)
     {
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
+
         DateTimeOffset now = time.GetUtcNow();
+        List<EndedSession> ended = [];
 
         if (acting.Session is not SessionId keeping)
         {
-            await sessions.EndAccountAsync(acting.Subject, now, cancellationToken)
-                .ConfigureAwait(false);
+            ended.AddRange(await sessions.EndAccountAsync(acting.Subject, now, cancellationToken)
+                .ConfigureAwait(false));
 
-            return;
+            return await AnnouncedAsync(ended, now, acting.Context, cancellationToken).ConfigureAwait(false);
         }
 
         IReadOnlyList<Session> live = await sessions
@@ -1846,16 +1854,38 @@ internal sealed class CredentialService(
             }
         }
 
-        var ended = new HashSet<SessionId>();
+        var spines = new HashSet<SessionId>();
 
         foreach (Session session in live)
         {
-            if (session.Spine != kept && ended.Add(session.Spine))
+            if (session.Spine != kept && spines.Add(session.Spine))
             {
-                await sessions.EndSpineAsync(session.Spine, now, cancellationToken)
-                    .ConfigureAwait(false);
+                ended.AddRange(await sessions.EndSpineAsync(session.Spine, now, cancellationToken)
+                    .ConfigureAwait(false));
             }
         }
+
+        return await AnnouncedAsync(ended, now, acting.Context, cancellationToken).ConfigureAwait(false);
+    }
+
+    // IDN-LIFE-008, chapter 10 section 5b (D-218): a change to the credentials ended them.
+    private async ValueTask<Error?> AnnouncedAsync(
+        IReadOnlyList<EndedSession> ended,
+        DateTimeOffset now,
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        if (await SessionEnds
+                .AnnouncedAsync(events, ended, SessionEndReason.Ended, now, context, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return unannounced;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     private async ValueTask<int> TellAsync(

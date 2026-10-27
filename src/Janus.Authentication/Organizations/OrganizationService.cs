@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ namespace Janus.Authentication.Organizations;
 /// an administrator.
 /// </summary>
 /// <param name="scope">Whether the caller may manage organizations.</param>
+/// <param name="administrative">Which organization administers the deployment.</param>
 /// <param name="stepUp">What a deletion request or its cancellation asks of the caller's session.</param>
 /// <param name="directory">Where organizations are written and their members read.</param>
 /// <param name="sessions">What a deletion request ends for every member.</param>
@@ -26,21 +28,24 @@ namespace Janus.Authentication.Organizations;
 /// <param name="administration">Where an organization's policy key is written and recorded.</param>
 /// <param name="policies">Where what a change of policy raised is recorded.</param>
 /// <param name="alerts">Where a change of policy that weakens a step-up gate is told.</param>
+/// <param name="events">Where a creation, a deletion request and its cancellation are announced.</param>
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it declared none.
 /// </param>
+/// <param name="reads">Where the organizations the caller may read are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements LIB-API-005, IDN-ACCT-004, IDN-ACCT-005, IDN-ORG-002, IDN-ORG-003,
-/// IDN-ORG-004 and OPS-ALERT-001. An organization is the deployment's, and its own
-/// grants confer nothing while it is suspended, so <c>organization:manage</c> is asked
-/// in the administrative organization: that is the one place a suspended organization
-/// can still be restored from. A name is judged on its comparison key, as every
-/// identifier is.
+/// IDN-ORG-004, IDN-READ-001 and OPS-ALERT-001. An organization is the deployment's,
+/// and its own grants confer nothing while it is suspended, so <c>organization:manage</c>
+/// is asked in the administrative organization: that is the one place a suspended
+/// organization can still be restored from. A name is judged on its comparison key, as
+/// every identifier is.
 /// </remarks>
 internal sealed class OrganizationService(
     AdministrativeScope scope,
+    IAdministrativeOrganization administrative,
     StepUpGuard stepUp,
     IOrganizationDirectory directory,
     ISessionStore sessions,
@@ -49,10 +54,18 @@ internal sealed class OrganizationService(
     ConfigurationAdministration administration,
     PolicyResolution policies,
     IAlertChannels alerts,
+    IEvents events,
     ImageCodec? codec,
+    OrganizationReads reads,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
+    private const string Created = "organization-created";
+
+    private const string DeletionRequested = "organization-deletion-requested";
+
+    private const string DeletionCancelled = "organization-deletion-cancelled";
+
     /// <inheritdoc/>
     public async ValueTask<Result<OrganizationId>> CreateAsync(
         AccessContext context,
@@ -140,6 +153,20 @@ internal sealed class OrganizationService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<OrganizationId>(unwritten);
+        }
+
+        // Chapter 10 section 5b (D-218): the event is written in the transaction that
+        // creates the organization, so a host hears of none that did not commit.
+        if (await AnnouncedAsync(
+                new OrganizationCreated(now, Key(Created, organization, now), organization),
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationId>(unannounced);
         }
 
         await audit
@@ -249,7 +276,32 @@ internal sealed class OrganizationService(
         // is refused, because the sessions end in the transaction that suspends.
         foreach (SubjectId member in await directory.MembersAsync(organization, cancellationToken).ConfigureAwait(false))
         {
-            await sessions.EndAccountAsync(member, now, cancellationToken).ConfigureAwait(false);
+            if (await SessionEnds
+                    .AnnouncedAsync(
+                        events,
+                        await sessions.EndAccountAsync(member, now, cancellationToken).ConfigureAwait(false),
+                        SessionEndReason.Organization,
+                        now,
+                        context,
+                        cancellationToken)
+                    .ConfigureAwait(false) is Error unended)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unended);
+            }
+        }
+
+        if (await AnnouncedAsync(
+                new OrganizationDeletionRequested(now, Key(DeletionRequested, organization, now), organization),
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
         }
 
         await audit
@@ -365,6 +417,19 @@ internal sealed class OrganizationService(
         }
 
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);
+
+        if (await AnnouncedAsync(
+                new OrganizationDeletionCancelled(now, Key(DeletionCancelled, organization, now), organization),
+                context,
+                cancellationToken)
+                .ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
@@ -581,6 +646,27 @@ internal sealed class OrganizationService(
         return Result.Success();
     }
 
+    /// <inheritdoc/>
+    public ValueTask<Result<OrganizationPage>> ListAsync(
+        AccessContext context,
+        OrganizationId? after,
+        int? limit,
+        CancellationToken cancellationToken) =>
+        reads.ListAsync(context, after, limit, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<OrganizationSummary>> ReadAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        reads.ReadAsync(context, organization, cancellationToken);
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<OrganizationId>> AdministrativeAsync(CancellationToken cancellationToken) =>
+        await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is OrganizationId found
+            ? Result.Success(found)
+            : Result.Failure<OrganizationId>(Error.From(ErrorCodes.OrganizationNotFound));
+
     // AUTH-STEP-002a, AUTH-SESS-005b, OPS-CFG-002: what a replacement would make of the
     // policy in force, or the refusal it meets: below the system policy, below the
     // administrative organization's floor, or a loosening the caller may not make. It
@@ -660,6 +746,20 @@ internal sealed class OrganizationService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // Chapter 10 section 5b: an organization's event names no subject, and carries the
+    // person who acted as the context gives them.
+    private async ValueTask<Error?> AnnouncedAsync(
+        DomainEvent raised,
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        (await events
+            .PublishAsync(raised with { Actor = context.Acting, Effective = context.Effective }, cancellationToken)
+            .ConfigureAwait(false))
+        .Match(() => (Error?)null, error => error);
+
+    private static string Key(string kind, OrganizationId organization, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{kind}:{organization.Value}@{at.UtcTicks}");
 
     private sealed record Replacement(
         PolicyOverride Before,

@@ -11,6 +11,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -101,6 +102,15 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 _work,
                 codec: null,
                 _clock),
+            new AccountReach(
+                _gate,
+                _administrative,
+                new OrganizationsInMemory(_memberships),
+                new AccountTiesInMemory()),
+            new IdentifierDirectoryInMemory(),
+            _memberships,
+            Declared,
+            new ReadVolumeInMemory(),
             _work,
             _clock);
 
@@ -115,12 +125,14 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-SESS-010: the suspension ends every session of the account in the operation
-    /// that suspends it, announces the administrator's suspension, and is recorded as
-    /// the administrator's act on the member's account.
+    /// that suspends it, announces the administrator's suspension and each session it
+    /// ended (D-218), and is recorded as the administrator's act on the member's account.
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_SuspensionEndsTheSessionsOfTheAccountAsync()
     {
+        SessionId opened = Assert.Single(_sessions.All, session => session.Subject == _member).Id;
+
         Accepted(await SuspendAsync(_member));
 
         Assert.Equal(AccountState.Suspended, await StateAsync(_member));
@@ -134,6 +146,12 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Equal(
             (SuspensionOrigin.Administrator, _member, _administrator),
             (suspended.By, suspended.Subject, suspended.Actor));
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal(
+            (opened, SessionEndReason.Account, _member, _administrator),
+            (ended.Session, ended.Reason, ended.Subject, ended.Actor));
         Assert.Equal(
             new RecordedChange(AuditActions.AccountSuspended, _administrator, _member, Noon),
             Assert.Single(_audit.Administered));
@@ -279,8 +297,9 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-013 AC4: an account restricted, then suspended by an administrator and
-    /// reactivated, is restricted again; the suspension and the reactivation are
-    /// announced, and nothing is announced of the restriction on either side.
+    /// reactivated, is restricted again; the suspension, the session it ended and the
+    /// reactivation are announced, and nothing is announced of the restriction on either
+    /// side.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_013_AC4_ARestrictedAccountSuspendedAndReactivatedIsRestrictedAsync()
@@ -290,13 +309,15 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Accepted(await SuspendAsync(_member));
 
         Assert.Equal(AccountState.Suspended, await StateAsync(_member));
-        Assert.Equal([typeof(AccountSuspended)], _events.Published.Select(published => published.GetType()));
+        Assert.Equal(
+            [typeof(SessionEnded), typeof(AccountSuspended)],
+            _events.Published.Select(published => published.GetType()));
 
         Accepted(await ReactivateAsync(_member));
 
         Assert.Equal(AccountState.Restricted, await StateAsync(_member));
         Assert.Equal(
-            [typeof(AccountSuspended), typeof(AccountReactivated)],
+            [typeof(SessionEnded), typeof(AccountSuspended), typeof(AccountReactivated)],
             _events.Published.Select(published => published.GetType()));
         Assert.Empty(_directory.Lifted);
     }

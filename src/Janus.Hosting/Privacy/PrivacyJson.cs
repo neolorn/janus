@@ -22,6 +22,7 @@ namespace Janus.Hosting.Privacy;
 [JsonSerializable(typeof(NoticeVersionView))]
 [JsonSerializable(typeof(IReadOnlyList<ConsentView>))]
 [JsonSerializable(typeof(IReadOnlyList<ObjectionView>))]
+[JsonSerializable(typeof(StandingView))]
 [JsonSerializable(typeof(PrivacyReceiptView))]
 [JsonSerializable(typeof(IReadOnlyList<PrivacyRequestView>))]
 [JsonSerializable(typeof(ExportView))]

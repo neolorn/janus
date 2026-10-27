@@ -124,7 +124,7 @@ internal sealed class OrganizationStates(
 
             await memberships.RecordAsync(membership, cancellationToken).ConfigureAwait(false);
 
-            ended.Add(new EndedMembership(membership.Id, membership.Subject));
+            ended.Add(new EndedMembership(membership.Id, membership.Subject, membership.Invitation));
         }
 
         return ended;

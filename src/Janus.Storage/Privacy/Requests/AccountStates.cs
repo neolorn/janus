@@ -16,13 +16,15 @@ namespace Janus.Storage.Privacy.Requests;
 /// the identity area.
 /// </summary>
 /// <param name="accounts">Where accounts are read and their transitions carried.</param>
-/// <param name="sessions">What a takedown ends in the transaction that makes it.</param>
+/// <param name="sessions">What a restriction or a takedown ends in the transaction that makes it.</param>
+/// <param name="events">Where each session a restriction or a takedown ends is announced.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010 and CONV-DESIGN-003. The
 /// transitions are the account aggregate's, so a state this adapter cannot reach from
 /// is refused there and answered here as no change.
 /// </remarks>
-internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessions) : IAccountStates
+internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessions, IEvents events)
+    : IAccountStates
 {
     /// <inheritdoc/>
     public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
@@ -46,7 +48,21 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
             // restricted account.
             case { State: AccountState.Active }:
                 account.Restrict();
-                await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
+                // Chapter 10 section 5.39 (D-219): no person restricts the account here,
+                // so each end is announced as account and names no actor.
+                if (await SessionEnds
+                        .AnnouncedAsync(
+                            events,
+                            await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false),
+                            SessionEndReason.Account,
+                            at,
+                            actor: null,
+                            cancellationToken)
+                        .ConfigureAwait(false) is Error unannounced)
+                {
+                    throw new InvalidOperationException(unannounced.Code.ToString());
+                }
 
                 break;
 
@@ -146,7 +162,21 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         account.Takedown(at);
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
-        await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
+        // Chapter 10 section 5b (D-218): no person takes an account down here, so no actor
+        // is named; an event not taken fails the takedown, as its unit of work failing does.
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    at,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            throw new InvalidOperationException(unannounced.Code.ToString());
+        }
 
         return true;
     }

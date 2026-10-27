@@ -10,6 +10,7 @@ using Janus.Privacy.Records;
 using Janus.Privacy.Tests.Consents;
 using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Outbox;
+using Janus.Privacy.Tests.Requests;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Records;
@@ -995,6 +996,9 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             _events,
             new OutboxStoreInMemory(),
             _audit,
+            new SubjectReach(new AccessGateInMemory(), new AdministrativeOrganizationInMemory(), new ReachedSubjectsInMemory()),
+            new AccountStatesInMemory(),
+            new ReadVolumeInMemory(),
             _work,
             _clock);
 

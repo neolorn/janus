@@ -8,8 +8,8 @@ namespace HostSample;
 public static class WorkshopRoles
 {
     /// <summary>
-    /// A manager of the organization that runs a workshop, who invites its staff, grants
-    /// them their roles and reads who can reach its records.
+    /// A manager of the organization that runs a workshop, who invites its staff, reads
+    /// who they are, grants them their roles and reads who can reach its records.
     /// </summary>
     public const string Manager = "workshop-manager";
 

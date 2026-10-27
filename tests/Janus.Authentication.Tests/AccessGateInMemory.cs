@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -240,6 +241,56 @@ internal sealed class AccessGateInMemory : IAccessGate
         WhoCanAccessAsync(context, resource, cancellationToken);
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The model here declares the library's permissions and no record type, so another
+    /// permission, a record, and an organization's identifier that is not one are
+    /// answered malformed, as the gate answers a word its model does not declare; the
+    /// whole of an organization is answered with the principals granted the permission
+    /// there, to a principal holding <c>grant:read</c> in it.
+    /// </remarks>
+    public ValueTask<Result<AdmittedAccounts>> WhoMayAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (!Permissions.All.Contains(permission))
+        {
+            return ValueTask.FromResult(Result.Failure<AdmittedAccounts>(Malformed("permission")));
+        }
+
+        if (resource.Type != ResourceType.Parse("organization"))
+        {
+            return ValueTask.FromResult(Result.Failure<AdmittedAccounts>(Malformed("type")));
+        }
+
+        if (!Guid.TryParse(resource.Id.ToString(), out Guid named))
+        {
+            return ValueTask.FromResult(Result.Failure<AdmittedAccounts>(Malformed("id")));
+        }
+
+        var organization = new OrganizationId(named);
+
+        if (context.Effective is not SubjectId reader
+            || !_granted.Contains((reader, organization, Permissions.GrantRead)))
+        {
+            return ValueTask.FromResult(Result.Failure<AdmittedAccounts>(Error.From(ErrorCodes.Denied)));
+        }
+
+        return ValueTask.FromResult(Result.Success(new AdmittedAccounts(
+            [
+                .. _granted
+                    .Where(held => held.Organization == organization && held.Permission == permission)
+                    .Select(held => held.Subject)
+                    .OrderBy(subject => subject.Value),
+            ],
+            Partial: false,
+            Unevaluated: [])));
+    }
+
+    /// <inheritdoc/>
     public ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
         AuditRecordId correlation,
@@ -342,4 +393,8 @@ internal sealed class AccessGateInMemory : IAccessGate
         && resolves(explanation)
             ? Result.Success(explanation)
             : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+
+    // 10 section 1: the member a word the model does not declare was given in.
+    private static Error Malformed(string member) =>
+        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 }

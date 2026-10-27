@@ -241,7 +241,8 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-SESS-010 AC1: the transition out of active ends the account's sessions
-    /// in the operation that makes it, and not only the one it was asked on.
+    /// in the operation that makes it, and not only the one it was asked on, announcing
+    /// each as ended by the account's change (D-218).
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_AC1_DeactivationEndsTheAccountsSessionsAsync()
@@ -258,26 +259,37 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Empty(await LiveAsync());
+        Assert.All(
+            _events.Of<SessionEnded>(),
+            ended => Assert.Equal((SessionEndReason.Account, _person, _person), (ended.Reason, ended.Subject, ended.Actor)));
+        Assert.Equal(2, _events.Of<SessionEnded>().Count);
     }
 
     /// <summary>
     /// IDN-LIFE-014: the window the deployment configures is what the account is
-    /// told, and nothing of the account's is live through it.
+    /// told, and nothing of the account's is live through it: the session that asked is
+    /// ended and announced as ended by the account's change (D-218).
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_014_TheDeletionWindowIsWhatTheDeploymentConfiguresAsync()
     {
         _configuration.Set(Settings.AccountDeletionGrace, TimeSpan.FromDays(14));
 
+        SessionId asking = Stepped();
+
         DateTimeOffset erasesAt = Value(await Lifecycle.DeleteAsync(
             Acting,
-            Stepped(),
+            asking,
             Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Noon + TimeSpan.FromDays(14), erasesAt);
         Assert.Equal(AccountState.Deleting, await StateAsync());
         Assert.Empty(await LiveAsync());
+
+        SessionEnded ended = Assert.Single(_events.Of<SessionEnded>());
+
+        Assert.Equal((asking, SessionEndReason.Account, _person), (ended.Session, ended.Reason, ended.Actor));
 
         HeldDeletion held = (await _directory.DeletingAsync(
             _person,

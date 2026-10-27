@@ -125,6 +125,34 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): a role defined, changed and removed is
+    /// announced as <c>RoleChanged</c> once at each, <c>defined</c>, <c>changed</c> and
+    /// <c>removed</c>, in the transaction that makes the change, naming the role and no
+    /// subject, with the administrator who acted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_ARoleDefinedChangedAndRemovedIsAnnouncedAtEachAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Editing);
+        _ = await DefinedAsync(administrator, Reading);
+        _ = await RemovedAsync(administrator, "editor");
+
+        IReadOnlyList<RoleChanged> announced = _deployment.Events.Of<RoleChanged>();
+
+        Assert.Equal(
+            [RoleChange.Defined, RoleChange.Changed, RoleChange.Removed],
+            announced.Select(one => one.Change));
+        Assert.All(
+            announced,
+            one => Assert.Equal(("editor", (SubjectId?)null, (SubjectId?)actor), (one.Role, one.Subject, one.Actor)));
+        Assert.All(announced, one => Assert.Contains(one, _deployment.Events.PublishedInTransaction));
+        Assert.Equal(3, announced.Select(one => one.IdempotencyKey).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004: a role permits only what the model declares, so a permission
     /// neither the library nor the host declared is refused, as is a reason that is
     /// blank.

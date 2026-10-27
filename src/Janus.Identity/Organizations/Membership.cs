@@ -63,6 +63,12 @@ internal sealed class Membership
     public MembershipAcknowledgement? Acknowledgement { get; private init; }
 
     /// <summary>
+    /// The invitation whose acknowledgement began the membership, where one did
+    /// (IDN-READ-002, D-218).
+    /// </summary>
+    public InvitationId? Invitation { get; private init; }
+
+    /// <summary>
     /// The later instant an administrator set the membership to end at, where one is set.
     /// </summary>
     public MembershipEndSet? EndSet { get; private set; }
@@ -86,6 +92,7 @@ internal sealed class Membership
     /// <param name="acknowledgement">
     /// What the person acknowledged, where an invitation attaches it.
     /// </param>
+    /// <param name="invitation">The invitation whose acknowledgement begins it, where one does.</param>
     /// <returns>The membership, or the refusal and its code.</returns>
     /// <exception cref="ArgumentNullException">The memberships held are absent.</exception>
     /// <exception cref="ArgumentException">One of them belongs to another account.</exception>
@@ -96,12 +103,14 @@ internal sealed class Membership
         IEnumerable<Membership> held,
         bool multiple,
         DateTimeOffset createdAt,
-        MembershipAcknowledgement? acknowledgement = null) =>
+        MembershipAcknowledgement? acknowledgement = null,
+        InvitationId? invitation = null) =>
         Refused(subject, organization, held, multiple) is Error refused
             ? Result.Failure<Membership>(refused)
             : Result.Success(new Membership(id, subject, organization, createdAt)
             {
                 Acknowledgement = acknowledgement,
+                Invitation = invitation,
             });
 
     /// <summary>
@@ -170,6 +179,7 @@ internal sealed class Membership
     /// <param name="endedAt">When it ended, where it has.</param>
     /// <param name="acknowledgement">What the person acknowledged, where an invitation attached it.</param>
     /// <param name="endSet">The end set in advance, where one is.</param>
+    /// <param name="invitation">The invitation whose acknowledgement began it, where one did.</param>
     /// <returns>The membership.</returns>
     public static Membership Existing(
         MembershipId id,
@@ -178,12 +188,14 @@ internal sealed class Membership
         DateTimeOffset createdAt,
         DateTimeOffset? endedAt,
         MembershipAcknowledgement? acknowledgement,
-        MembershipEndSet? endSet) =>
+        MembershipEndSet? endSet,
+        InvitationId? invitation) =>
         new(id, subject, organization, createdAt)
         {
             EndedAt = endedAt,
             Acknowledgement = acknowledgement,
             EndSet = endSet,
+            Invitation = invitation,
         };
 
     /// <summary>

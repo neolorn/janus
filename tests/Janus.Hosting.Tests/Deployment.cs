@@ -190,6 +190,8 @@ internal sealed class Deployment : IAsyncDisposable
         Action<IApplicationBuilder>? routing = null,
         Action<IServiceCollection>? services = null)
     {
+        Events = new EventsInMemory { Work = Work };
+
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
@@ -624,9 +626,25 @@ internal sealed class Deployment : IAsyncDisposable
     public UnitOfWorkInMemory Work { get; } = new();
 
     /// <summary>
+    /// Which accounts each organization reaches (IDN-READ-004).
+    /// </summary>
+    public AccountTiesInMemory Ties { get; } = new();
+
+    /// <summary>
+    /// Which organizations are held, and whom each reaches, for the privacy reads
+    /// (IDN-READ-004).
+    /// </summary>
+    public Janus.Privacy.Tests.ReachedSubjectsInMemory Reached { get; } = new();
+
+    /// <summary>
+    /// The records each person was given (OPS-ALERT-005).
+    /// </summary>
+    public ReadVolumeInMemory Volume { get; } = new();
+
+    /// <summary>
     /// The events the operations published.
     /// </summary>
-    public EventsInMemory Events { get; } = new();
+    public EventsInMemory Events { get; }
 
     /// <summary>
     /// The audit trail as the privacy area reads it by subject.
@@ -1122,6 +1140,9 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        _ = services.AddSingleton<IAccountTies>(Ties);
+        _ = services.AddSingleton<IReadVolume>(Volume);
+        _ = services.AddScoped<AccountReach>();
         _ = services.AddScoped<IAccounts, AccountAdministration>();
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<TextedEnrolments>();
@@ -1151,6 +1172,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IConsentStore>(Consents);
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Processing);
         _ = services.AddScoped<Supersession>();
+        _ = services.AddSingleton<Janus.Privacy.Policies.IReachedSubjects>(Reached);
+        _ = services.AddScoped<Janus.Privacy.Policies.SubjectReach>();
         _ = services.AddScoped<IConsents, ConsentService>();
         _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
         _ = services.AddSingleton<IAccountStates>(AccountStates);
@@ -1234,8 +1257,12 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IReadAdmission>(
+            new Janus.Authentication.Tests.Organizations.ReadAdmissionInMemory(Gate, Administrative, Memberships));
+        _ = services.AddScoped<Janus.Authentication.Organizations.OrganizationReads>();
         _ = services.AddScoped<IOrganizations>(provider => new Janus.Authentication.Organizations.OrganizationService(
             provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<IAdministrativeOrganization>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationDirectory>(),
             provider.GetRequiredService<ISessionStore>(),
@@ -1244,7 +1271,9 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetRequiredService<PolicyResolution>(),
             provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.OrganizationReads>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);

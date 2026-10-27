@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Organizations;
@@ -21,6 +22,7 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
 {
     private readonly Dictionary<OrganizationId, OrganizationStanding> _held = [];
     private readonly Dictionary<OrganizationId, string> _names = [];
+    private readonly Dictionary<(OrganizationId, SubjectId), MemberSummary> _joined = [];
 
     /// <summary>
     /// Writes an organization as bootstrap or an earlier operation left it.
@@ -41,6 +43,20 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
 
         _held[organization] = new OrganizationStanding(organization, called, administrative, deletionRequestedAt, erasedAt);
         _names[organization] = called;
+    }
+
+    /// <summary>
+    /// Places an account in an organization as a current member, as the membership it
+    /// holds there reads.
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    /// <param name="member">The membership.</param>
+    public void Join(OrganizationId organization, MemberSummary member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+
+        memberships.Place(member.Subject, organization);
+        _joined[(organization, member.Subject)] = member;
     }
 
     /// <summary>
@@ -115,4 +131,48 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
         OrganizationId organization,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(memberships.Members(organization));
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<OrganizationStanding>> PageAsync(
+        IReadOnlyCollection<OrganizationId>? within,
+        OrganizationId? after,
+        int count,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<OrganizationStanding>>(
+            [
+                .. _held.Values
+                    .Where(held => held.ErasedAt is null)
+                    .Where(held => within is null || within.Contains(held.Id))
+                    .Where(held => after is not OrganizationId from || held.Id.Value.CompareTo(from.Value) > 0)
+                    .OrderBy(held => held.Id.Value)
+                    .Take(count),
+            ]);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<MemberSummary>> MemberPageAsync(
+        OrganizationId organization,
+        SubjectId? after,
+        int count,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<MemberSummary>>(
+            [
+                .. memberships.Members(organization)
+                    .Where(member => after is not SubjectId from || member.Value.CompareTo(from.Value) > 0)
+                    .OrderBy(member => member.Value)
+                    .Take(count)
+                    .Select(member => Membership(organization, member)),
+            ]);
+
+    /// <inheritdoc/>
+    public ValueTask<MemberSummary?> MemberAsync(
+        OrganizationId organization,
+        SubjectId member,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            memberships.Members(organization).Contains(member) ? Membership(organization, member) : null);
+
+    // A member a test placed without joining holds a membership named for itself.
+    private MemberSummary Membership(OrganizationId organization, SubjectId member) =>
+        _joined.GetValueOrDefault((organization, member))
+        ?? new MemberSummary(member, new MembershipId(member.Value), DateTimeOffset.UnixEpoch, EndsAt: null, Invitation: null);
 }

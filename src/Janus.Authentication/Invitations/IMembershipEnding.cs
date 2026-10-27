@@ -40,10 +40,10 @@ internal interface IMembershipEnding
     /// <param name="at">When it ends.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The membership that ended, or nothing where the account holds no current
-    /// membership of the organization.
+    /// The membership that ended and the invitation it began from, or nothing where the
+    /// account holds no current membership of the organization.
     /// </returns>
-    ValueTask<MembershipId?> EndAsync(
+    ValueTask<EndedMembership?> EndAsync(
         SubjectId subject,
         OrganizationId organization,
         DateTimeOffset at,

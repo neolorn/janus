@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -390,7 +391,57 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
+    /// <summary>
+    /// IDN-READ-002 AC3 (D-218): an organization's standing invitations are those issued
+    /// and neither acknowledged, revoked nor past their lifetime, oldest first, each read
+    /// with what it binds; another organization's are not among them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC3_AnInvitationAcknowledgedRevokedOrExpiredIsNotListedAsync()
+    {
+        Invitation standing = await IssuedAsync("standing@example.test");
+        OrganizationId organization = standing.Organization;
+        SubjectId inviter = standing.Inviter;
+        Invitation later = Issue(organization, inviter, mailbox: null, Noon.AddHours(1));
+        Invitation revoked = Issue(organization, inviter, mailbox: null, Noon);
+        Invitation acknowledged = Issue(organization, inviter, mailbox: null, Noon);
+        Invitation expired = Issue(organization, inviter, mailbox: null, Noon.AddDays(-10));
+        SubjectId invitee = await _deployment.AccountAsync(Noon);
+
+        foreach (Invitation invitation in new[] { later, revoked, acknowledged, expired })
+        {
+            await AddAsync(invitation);
+        }
+
+        await IssuedAsync("elsewhere@example.test");
+        await ChangeAsync(revoked.Id, held => held.Revoke(Noon.AddHours(2)));
+        await ChangeAsync(
+            acknowledged.Id,
+            held =>
+            {
+                held.AttachTo(invitee, Noon.AddHours(2));
+                held.Acknowledge(Noon.AddHours(2));
+            });
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<Invitation> listed = await Store(reading)
+            .StandingAsync(organization, Noon.AddDays(1), TestContext.Current.CancellationToken);
+
+        Assert.Equal([standing.Id, later.Id], listed.Select(invitation => invitation.Id));
+        Assert.Equal(standing.Identifiers, listed[0].Identifiers);
+        Assert.Equal(standing.Roles, listed[0].Roles);
+    }
+
     private static Invitation Issue(OrganizationId organization, SubjectId inviter, MailboxId? mailbox) =>
+        Issue(organization, inviter, mailbox, Noon);
+
+    private static Invitation Issue(
+        OrganizationId organization,
+        SubjectId inviter,
+        MailboxId? mailbox,
+        DateTimeOffset issuedAt) =>
         Invitation.Issued(
             InvitationId.New(TimeProvider.System),
             organization,
@@ -400,7 +451,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
             documents: [],
             mailbox,
             OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
-            Noon,
+            issuedAt,
             TimeSpan.FromDays(7));
 
     private static string Fresh(string name) => name + "." + Guid.NewGuid().ToString("N") + "@example.test";

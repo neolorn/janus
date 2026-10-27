@@ -63,6 +63,25 @@ internal sealed class AccountAuditInMemory : IAccountAudit
     }
 
     /// <inheritdoc/>
+    public ValueTask PreferencesSetAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId subject,
+        string reason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _recorded.Add(
+            new RecordedChange(AuditActions.PreferencesChanged, acting, subject, at)
+            {
+                BreakGlassReason = breakGlassReason,
+                Reason = reason,
+            });
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask CancelledOnBehalfAsync(
         SubjectId acting,
         string? breakGlassReason,

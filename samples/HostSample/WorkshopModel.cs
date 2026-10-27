@@ -143,6 +143,7 @@ internal static class WorkshopModel
             .Role(
                 WorkshopRoles.Manager,
                 Permissions.MembershipManage.ToString(),
+                Permissions.MembershipRead.ToString(),
                 Permissions.GrantManage.ToString(),
                 Permissions.GrantRead.ToString())
             .Role(
@@ -159,6 +160,7 @@ internal static class WorkshopModel
                 ReadFitting.ToString())
             .Role(WorkshopRoles.RepairCollector, ReadRepair.ToString())
             .Job(FollowUpCalls.Name, ReadRepair.ToString())
+            .Job(ReadyNotices.Name, ReadRepair.ToString(), Permissions.ContactRead.ToString())
             .Relationship<RepairOwner>(
                 Owner,
                 RepairType.ToString(),

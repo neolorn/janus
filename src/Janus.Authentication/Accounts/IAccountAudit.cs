@@ -10,7 +10,7 @@ namespace Janus.Authentication.Accounts;
 /// trail of its own, so what it has to record it hands out through this.
 /// </summary>
 /// <remarks>
-/// Implements REG-PROF-001, REG-PREF-001, IDN-AUD-001 and CONV-LAYOUT-001. The entry
+/// Implements REG-PROF-001, REG-PREF-001, IDN-AUD-001, IDN-READ-003 and CONV-LAYOUT-001. The entry
 /// says that a field changed and never what it changed to: the values are the
 /// person's, and the trail is read by people who are not them.
 /// </remarks>
@@ -56,6 +56,28 @@ internal interface IAccountAudit
         SubjectId acting,
         string? breakGlassReason,
         SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that an administrator replaced someone else's preferences, as the
+    /// routine change the person's own setting is, with the reason given.
+    /// </summary>
+    /// <param name="acting">The administrator.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="reason">Why the administrator made the change.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask PreferencesSetAsync(
+        SubjectId acting,
+        string? breakGlassReason,
+        SubjectId subject,
+        string reason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

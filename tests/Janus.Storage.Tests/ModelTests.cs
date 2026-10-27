@@ -521,7 +521,8 @@ public sealed class ModelTests
             "maintenance_log.task",
 
             // Standing: the membership record of IDN-MEM-001, with its own beginning
-            // and end, and the end an administrator set it to reach (D-213).
+            // and end, the end an administrator set it to reach (D-213) and the invitation
+            // it began from (IDN-READ-002, D-218).
             "memberships.acknowledged_at",
             "memberships.acknowledged_documents",
             "memberships.created_at",
@@ -530,6 +531,7 @@ public sealed class ModelTests
             "memberships.ended_at",
             "memberships.ends_at",
             "memberships.id",
+            "memberships.invitation",
             "memberships.organization",
             "memberships.subject",
 

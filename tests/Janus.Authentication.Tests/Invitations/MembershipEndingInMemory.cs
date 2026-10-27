@@ -20,11 +20,22 @@ namespace Janus.Authentication.Tests.Invitations;
 internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) : IMembershipEnding
 {
     private readonly Dictionary<(SubjectId Subject, OrganizationId Organization), SetEnd> _set = [];
+    private readonly Dictionary<(SubjectId Subject, OrganizationId Organization), InvitationId> _invited = [];
 
     /// <summary>
     /// Every membership ended, oldest first.
     /// </summary>
-    public List<EndedMembership> Ended { get; } = [];
+    public List<EndedInMemory> Ended { get; } = [];
+
+    /// <summary>
+    /// Records the invitation an account's membership of an organization began from, as
+    /// the row keeps it.
+    /// </summary>
+    /// <param name="subject">Whose membership.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="invitation">The invitation.</param>
+    public void BeganFrom(SubjectId subject, OrganizationId organization, InvitationId invitation) =>
+        _invited[(subject, organization)] = invitation;
 
     /// <summary>
     /// What happens while an end waits for the membership's row, where a test sets it.
@@ -41,7 +52,7 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
             : null;
 
     /// <inheritdoc/>
-    public ValueTask<MembershipId?> EndAsync(
+    public ValueTask<EndedMembership?> EndAsync(
         SubjectId subject,
         OrganizationId organization,
         DateTimeOffset at,
@@ -51,15 +62,16 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
 
         if (!lookup.Leave(subject, organization))
         {
-            return ValueTask.FromResult<MembershipId?>(null);
+            return ValueTask.FromResult<EndedMembership?>(null);
         }
 
         var membership = new MembershipId(Guid.CreateVersion7(at));
 
         _ = _set.Remove((subject, organization));
-        Ended.Add(new EndedMembership(membership, subject, organization, at));
+        Ended.Add(new EndedInMemory(membership, subject, organization, at));
 
-        return ValueTask.FromResult<MembershipId?>(membership);
+        return ValueTask.FromResult<EndedMembership?>(
+            new EndedMembership(membership, Invited(subject, organization)));
     }
 
     /// <summary>
@@ -128,7 +140,13 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
         {
             if (await FindAsync(subject, organization, cancellationToken).ConfigureAwait(false) is MembershipId held)
             {
-                due.Add(new MembershipEndDue(held, subject, organization, set.SetBy, set.Reason));
+                due.Add(new MembershipEndDue(
+                    held,
+                    subject,
+                    organization,
+                    set.SetBy,
+                    set.Reason,
+                    Invited(subject, organization)));
             }
         }
 
@@ -152,11 +170,20 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
         var membership = new MembershipId(Guid.CreateVersion7(at));
 
         _ = _set.Remove((subject, organization));
-        Ended.Add(new EndedMembership(membership, subject, organization, at));
+        Ended.Add(new EndedInMemory(membership, subject, organization, at));
 
         return ValueTask.FromResult<MembershipEndDue?>(
-            new MembershipEndDue(membership, subject, organization, set.SetBy, set.Reason));
+            new MembershipEndDue(
+                membership,
+                subject,
+                organization,
+                set.SetBy,
+                set.Reason,
+                Invited(subject, organization)));
     }
+
+    private InvitationId? Invited(SubjectId subject, OrganizationId organization) =>
+        _invited.TryGetValue((subject, organization), out InvitationId invitation) ? invitation : null;
 
     /// <summary>
     /// An end set in advance.

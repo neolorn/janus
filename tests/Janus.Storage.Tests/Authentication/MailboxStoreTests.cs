@@ -4,8 +4,10 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Events;
 using Janus.Authentication.Mailboxes;
 using Janus.Core;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
@@ -358,7 +360,8 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
                     new SessionStore(erasing, _deployment.Ring, _deployment.Randomness),
                     new ConfigurationStore(erasing, new DataConnections(erasing)),
                     new DataConnections(erasing),
-                    new IdentifierStore(erasing, _deployment.Ring, _deployment.Randomness))
+                    new IdentifierStore(erasing, _deployment.Ring, _deployment.Randomness),
+                    new EventOutbox(new PendingEvents(erasing), work))
                 .EraseAsync(replaced.Holder!.Value, ErasureReason.ErasureRequest, Noon.AddDays(3), TestContext.Current.CancellationToken);
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
             await work.CommitAsync(TestContext.Current.CancellationToken);

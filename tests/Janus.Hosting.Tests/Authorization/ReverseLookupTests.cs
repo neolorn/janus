@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -14,13 +15,15 @@ namespace Janus.Hosting.Tests.Authorization;
 /// <summary>
 /// Who can access one record: the stored grants read by query and the derived ones
 /// evaluated over the host's relation, inside the bound on evaluating them
-/// (AUTHZ-DERIVE-007, AUTHZ-GATE-004).
+/// (AUTHZ-DERIVE-007, AUTHZ-GATE-004), and the accounts those grants admit
+/// (AUTHZ-GATE-007).
 /// </summary>
 /// <param name="host">The deployment the cases run against.</param>
 [Trait("kind", "integration")]
 public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFixture>
 {
     private static readonly ResourceType Note = ResourceType.Parse("note");
+    private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
@@ -337,6 +340,174 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
 
         Assert.Equal(deployed.Note, Answered(held).Resource);
         Assert.Equal(ErrorCodes.Denied, Refusal(unregistered));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC1 (D-218): the accounts who may exercise a permission on a record
+    /// are the holder of a stored grant on its container and the holder of a fact the
+    /// derivation follows from, read through the declared source; the caller's own
+    /// grant:read confers no reading of the record and names nobody.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC1_AStoredAndADerivedHolderAreNamedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync();
+
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Reviewing, cancellationToken);
+
+        AdmittedAccounts admitted = Admitted(await WhoMayAsync(
+            AccessContext.Of(deployed.Administrator),
+            HostPermissions.ReadNote,
+            deployed.Note));
+
+        Assert.False(admitted.Partial);
+        Assert.Empty(admitted.Unevaluated);
+        Assert.True(admitted.Subjects.ToHashSet().SetEquals([deployed.Account, deployed.Reviewing]));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC4 (D-218): past <c>authz.reverselookup.budget</c> the answer
+    /// carries <c>partial</c> and names the relationship not evaluated, and the holder of
+    /// the stored grant is still named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC4_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync();
+
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Reviewing, cancellationToken);
+        await BudgetAsync("PT0S");
+
+        try
+        {
+            AdmittedAccounts admitted = Admitted(await WhoMayAsync(
+                AccessContext.Of(deployed.Administrator),
+                HostPermissions.ReadNote,
+                deployed.Note));
+
+            Assert.True(admitted.Partial);
+            Assert.Equal(["reviewer"], admitted.Unevaluated);
+            Assert.Equal([deployed.Account], admitted.Subjects);
+        }
+        finally
+        {
+            await BudgetAsync(budget: null);
+        }
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC3, IDN-PRIN-001 (D-218): a declared job naming
+    /// <c>document:read</c> asks who may read a record of its organization and is
+    /// answered; asking for a permission its declaration does not name is refused
+    /// <c>authz.denied</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC3_AJobIsAnsweredForAPermissionItDeclaresAloneAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read, HostPermissions.Publish], cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        ResourceReference container = Reference(Workspace);
+        ResourceReference document = Reference(Document);
+
+        await deployment.RegisterAsync(container, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(document, container, cancellationToken);
+        _ = await deployment.GrantAsync(GrantSubject.Of(account), role, document, false, null, null, cancellationToken);
+
+        var job = AccessContext.Of(SystemPrincipal.ForOrganization(
+            HostFixture.Digest,
+            "the people who may read a document",
+            deployment.Organization));
+
+        Assert.Equal([account], Admitted(await WhoMayAsync(job, HostPermissions.Read, document)).Subjects);
+        Assert.Equal(ErrorCodes.Denied, Refusal(await WhoMayAsync(job, HostPermissions.Publish, document)));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007, AUTHZ-DERIVE-007 (D-218): a person without <c>grant:read</c> in the
+    /// record's organization is refused, and so is the holder of it for a record the
+    /// deployment holds no registration for, which belongs to no organization.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_ACallerWithoutGrantReadAndAnUnregisteredRecordAreRefusedAsync()
+    {
+        Deployed deployed = await DeployAsync();
+
+        Result<AdmittedAccounts> unheld = await WhoMayAsync(
+            AccessContext.Of(deployed.Account),
+            HostPermissions.ReadNote,
+            deployed.Note);
+        Result<AdmittedAccounts> unregistered = await WhoMayAsync(
+            AccessContext.Of(deployed.Administrator),
+            HostPermissions.ReadNote,
+            Reference(Note));
+
+        Assert.Equal(ErrorCodes.Denied, Refusal(unheld));
+        Assert.Equal(ErrorCodes.Denied, Refusal(unregistered));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC5 (D-219): a permission or a type the model does not declare, and
+    /// an organization's identifier that is not one, are answered
+    /// <c>api.request.malformed</c> naming it, and no refusal is recorded.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC5_AWordTheModelDoesNotDeclareIsMalformedAndRecordsNothingAsync()
+    {
+        Deployed deployed = await DeployAsync();
+        var asking = AccessContext.Of(deployed.Administrator);
+
+        Result<AdmittedAccounts> permission = await WhoMayAsync(
+            asking,
+            Permission.Parse("ledger:read"),
+            deployed.Note);
+        Result<AdmittedAccounts> type = await WhoMayAsync(
+            asking,
+            HostPermissions.ReadNote,
+            new ResourceReference(ResourceType.Parse("ledger"), deployed.Note.Id));
+        Result<AdmittedAccounts> id = await WhoMayAsync(
+            asking,
+            HostPermissions.ReadNote,
+            new ResourceReference(ResourceType.Parse("organization"), ResourceId.Parse("ledger")));
+
+        Assert.Equal(
+            [
+                (ErrorCodes.RequestMalformed, "permission"),
+                (ErrorCodes.RequestMalformed, "type"),
+                (ErrorCodes.RequestMalformed, "id"),
+            ],
+            new[] { permission, type, id }.Select(outcome => outcome.Match(
+                _ => throw new InvalidOperationException("It was answered."),
+                error => (error.Code, error.Details["member"].GetString()))));
+        Assert.Equal(0, await DenialsAsync(deployed.Administrator));
+    }
+
+    private static AdmittedAccounts Admitted(Result<AdmittedAccounts> outcome) =>
+        outcome.Match(
+            admitted => admitted,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private static ErrorCode Refusal(Result<AdmittedAccounts> outcome) =>
+        outcome.Match(_ => throw new InvalidOperationException("It was answered."), error => error.Code);
+
+    private async Task<Result<AdmittedAccounts>> WhoMayAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .WhoMayAsync(context, permission, resource, TestContext.Current.CancellationToken);
     }
 
     private static ResourceAccess Answered(Result<ResourceAccess> outcome) =>

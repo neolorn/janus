@@ -93,7 +93,7 @@ internal sealed class HandOutInMemory(
     /// <inheritdoc/>
     public async ValueTask<Result> AdmitAsync(
         AccessContext context,
-        RoleChange change,
+        Janus.Authorization.Gate.RoleChange change,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);

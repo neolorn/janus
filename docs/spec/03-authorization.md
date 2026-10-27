@@ -1224,6 +1224,53 @@ both: an approved recovery's link is undertaken in the approval's unit of work
 
 ---
 
+**AUTHZ-GATE-007** — The gate SHALL answer which accounts may exercise a permission on a
+record, or across an organization, as the single check would admit each of them.
+
+**Values (D-218).** `IAccessGate.WhoMayAsync(context, permission, resource)` answers
+`AdmittedAccounts`, `{ subjects, partial, unevaluated }`: every account, in state
+`active`, or `restricted` for a reading permission (AUTHZ-GATE-006), that the single
+check's grant terms admit for the permission on the record, through its stored grants,
+its materialised derivations and its live derivations evaluated over the host's
+relationship sources, through groups and containment, allows less denies, and in the
+administrative organization only while it is a current member (IDN-MEM-001). With the
+organization as the resource (type `organization`, its identifier, as for capabilities,
+AUTHZ-GATE-005) it answers the accounts its organization-wide grants admit. Where the
+permission's purpose asks the consent of the record's data subject and it is not given,
+no account is admitted and `subjects` is empty, as every reader would be refused. A
+step-up is a session's, not an account's, and is not judged. Live derivations are
+evaluated within `authz.reverselookup.budget`; past it `partial` is true and
+`unevaluated` names the relationships not evaluated (AUTHZ-DERIVE-007). It is asked by a
+person holding `grant:read` in the organization the record belongs to, or by a host's
+declared job whose declaration names the permission, on its organization's records and
+on its organization (`01` IDN-PRIN-001); a record the deployment holds no registration
+for is refused as AUTHZ-DERIVE-007 refuses it, and a permission or type the model does
+not declare, or an organization's identifier that is not one, with
+`api.request.malformed` naming `permission`, `type` or `id`, writing no refusal record,
+as the view of who can access a record answers an unreadable one (D-219). The endpoint
+is `GET /admin/access/admitted` (`09` section 8a). A host that tells the people who may
+act on a record asks this, rather than keeping its own copy of who holds a role, which
+misses denies and derived access.
+
+*Source: D-218, D-219*
+
+**Acceptance criteria**
+1. Accounts holding the permission through a group, through a container's grant and
+   through a derivation are answered; one holding it under a deny, a suspended one, and
+   one whose membership of the administrative organization ended are not.
+2. A restricted account is answered for a reading permission and not for a modifying
+   one.
+3. A job declaring `document:read` asks who may `document:read` a record of its
+   organization and is answered; asking for a permission it does not declare is refused
+   `authz.denied`.
+4. Past `authz.reverselookup.budget` the answer carries `partial: true` and the
+   relationships not evaluated.
+5. A permission or type the model does not declare, and an organization's identifier
+   that is not one, are refused `api.request.malformed` naming it, writing no refusal
+   record (D-219).
+
+---
+
 ## 5. Concealment
 
 **AUTHZ-CONCEAL-001** — Denied access to a specific record SHALL return **not found**

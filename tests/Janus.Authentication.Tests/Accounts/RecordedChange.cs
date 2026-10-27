@@ -21,4 +21,9 @@ internal sealed record RecordedChange(
     /// made in the session it opened, or nothing.
     /// </summary>
     public string? BreakGlassReason { get; init; }
+
+    /// <summary>
+    /// The reason an administrator gave for the change, where one was asked for.
+    /// </summary>
+    public string? Reason { get; init; }
 }

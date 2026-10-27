@@ -116,6 +116,7 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
                     EndsAt = membership.EndSet?.At,
                     EndSetBy = membership.EndSet?.SetBy,
                     EndReason = membership.EndSet?.Reason,
+                    Invitation = membership.Invitation,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -174,7 +175,8 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
                 record.CreatedAt,
                 record.EndedAt,
                 Acknowledged(record),
-                EndSet(record)));
+                EndSet(record),
+                record.Invitation));
         }
 
         return memberships;

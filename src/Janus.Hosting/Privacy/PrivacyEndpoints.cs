@@ -634,33 +634,14 @@ internal static class PrivacyEndpoints
 
     private static IResult Held(IReadOnlyList<ConsentRecord> records) =>
         TypedResults.Json(
-            (IReadOnlyList<ConsentView>)
-            [
-                .. records.Select(record => new ConsentView(
-                    record.Purpose,
-                    record.Document,
-                    record.NoticeVersion,
-                    record.Mechanism,
-                    record.GrantedAt,
-                    record.WithdrawnAt,
-                    record.SupersededAt)),
-            ],
+            (IReadOnlyList<ConsentView>)[.. records.Select(ConsentView.Of)],
             PrivacyJson.Default.IReadOnlyListConsentView,
             contentType: null,
             StatusCodes.Status200OK);
 
     private static IResult Standing(IReadOnlyList<ObjectionRecord> records) =>
         TypedResults.Json(
-            (IReadOnlyList<ObjectionView>)
-            [
-                .. records.Select(record => new ObjectionView(
-                    record.Purpose,
-                    record.Document,
-                    record.NoticeVersion,
-                    record.Mechanism,
-                    record.RecordedAt,
-                    record.WithdrawnAt)),
-            ],
+            (IReadOnlyList<ObjectionView>)[.. records.Select(ObjectionView.Of)],
             PrivacyJson.Default.IReadOnlyListObjectionView,
             contentType: null,
             StatusCodes.Status200OK);

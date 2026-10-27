@@ -135,7 +135,8 @@ internal sealed class OrganizationErasureSweep(
                             Key(membership.Membership, now),
                             membership.Membership,
                             deletion.Organization,
-                            MembershipChange.Ended)
+                            MembershipChange.Ended,
+                            membership.Invitation)
                         {
                             Subject = membership.Subject,
                         },

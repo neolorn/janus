@@ -110,9 +110,15 @@ public sealed class WorkshopHost : IAsyncLifetime
     public string Workshop { get; private set; } = string.Empty;
 
     /// <summary>
-    /// The workshop's job, as the application registers it.
+    /// The workshop's job that follows up repairs, as the application registers it.
     /// </summary>
     public FollowUpCalls FollowUpCalls => Application.Services.GetRequiredService<FollowUpCalls>();
+
+    /// <summary>
+    /// The workshop's job that tells who may read a repair it is ready, as the application
+    /// registers it.
+    /// </summary>
+    public ReadyNotices ReadyNotices => Application.Services.GetRequiredService<ReadyNotices>();
 
     private TestPeople People => _people ?? throw new InvalidOperationException("The host has not started.");
 

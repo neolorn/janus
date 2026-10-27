@@ -2590,9 +2590,10 @@ operation loosens a control (OPS-CFG-002) or touches another person's account, a
 `10` section 5a names the gate of each; each row below that requires step-up names its
 gate. Not gated, each for its reason: revoking an invitation (it touches no account),
 creating an organization, publishing documents and translations, the compliance
-records, and refusing a privacy request.
+records, refusing a privacy request, and setting another person's preferences (it
+changes nothing the person signs in or is admitted with, D-218).
 
-*Source: D-106, D-166, D-183, D-207*
+*Source: D-106, D-166, D-183, D-207, D-218*
 
 ### Organizations — `organization:manage`
 
@@ -2694,6 +2695,40 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 | `PUT /admin/compliance/licences` | Replaces the licence and permit records the system warns on (OPS-MAINT-001); the body is the list of records, each keyed by the caller's `id`; two records under one `id` are refused **422** `api.request.invalid` (`details.member` `id`) |
 | `GET` · `POST /admin/compliance/maintenance` | Reads and appends the maintenance log (OPS-MAINT-001); the entry's actor is the signed-in subject; an entry dated after now is refused **422** `api.request.invalid` (`details.member` `performedAt`); no route changes or removes an entry |
 | `PUT /admin/compliance/assessments` | The three human-input fields of the records of processing (PRIV-ROPA-001): the data owner, the implemented organizational security measures, and the links to LIA, DPIA and TIA. A statement replaces the three whole: a field it omits, or sends as `null`, is cleared, and the links are the list it carries. `dataOwner` and `organizationalSecurityMeasures` are free text (API-CONV-002): trimmed, and refused **400** `api.request.malformed` naming the member where blank or longer than 1024 characters (D-183). The deployment holds one statement. **204** |
+
+### Reads of organizations, members and people — D-218
+
+Each read below is asked in the organization the request names (`{id}` in the path, or
+the `organization` member), the administrative organization where none is named, under
+the permission its row names, with the reach of `01` IDN-READ-004: a holder in the
+administrative organization reaches every organization and every account, a holder
+elsewhere its own organization and the people tied to it. **400**
+`api.request.malformed` names `organization`, `after`, `limit`, `identifier`, `type`,
+`id`, `permission` or `reason` where it is absent where required or unreadable, a
+`limit` outside 1 to 500, a `permission` the model does not declare, or free text blank
+or past 1024 characters after trimming. **404** `identity.organization.notfound` where
+the organization named is none the deployment holds, or is erased. An account outside
+the reach, a `deleted` one, and a subject no account bears are answered **404**
+`identity.account.notfound` alike, in identical bytes.
+
+| Endpoint | Does |
+|---|---|
+| `GET /admin/organizations?after={id}&limit={n}` | `organization:read`: **200** `{ organizations: [ { id, name, administrative, deletionRequestedAt } ], next }`, ordered by identifier, `limit` 100 where absent, `next` null where none remain (IDN-READ-001) |
+| `GET /admin/organizations/{id}` | `organization:read`: **200** `{ id, name, administrative, deletionRequestedAt }` |
+| `GET /admin/organizations/{id}/members?after={subject}&limit={n}` | `membership:read`: **200** `{ members: [ { subject, membership, beganAt, endsAt, invitation } ], next }`, the current members ordered by subject, paged as the organizations are (IDN-READ-002) |
+| `GET /admin/organizations/{id}/members/{subject}` | `membership:read`: **200** one member, as listed · **404** `identity.membership.notfound` where the account holds no current membership of the organization |
+| `GET /admin/organizations/{id}/invitations` | `membership:read`: **200** `[ { id, roles, issuedAt, expiresAt, issuer, email, phone, corporateAddress } ]`, the standing invitations, an identifier the invitation does not bind null |
+| `GET /admin/accounts/{subject}?organization={id}` | `account:read`: **200** `{ subject, state, createdAt, profile: { displayName, legalName }, identifiers: { emails: [ { value, verified, primary } ], phones: [ { value, verified, primary } ], username }, preferences: { language, timeZone, declared }, memberships: [ organization ] }`, `legalName` absent while `profile.legalname` is off (IDN-READ-003) · **404** as above |
+| `POST /admin/accounts/find` | `account:read`: `{ identifier, organization }`, `organization` optional: the account bearing the email, phone or username, read in its canonical form (IDN-ACCT-004). **200** `{ subject }` · **404** as above |
+| `GET /admin/accounts/{subject}/contact?organization={id}` | `contact:read`: **200** `{ displayName, email, phone, language, timeZone, state }`, `email` and `phone` the primary verified ones, or null · **404** as above |
+| `GET /admin/accounts/{subject}/standing?organization={id}` | `consent:read`: **200** `{ state, consents, objections }`, each consent as `GET /privacy/consents` and each objection as `GET /privacy/objections` answer them · **404** as above |
+| `GET /admin/accounts/{subject}/sessions` | `session:revoke-account` in the administrative organization: **200** the account's live sessions as `GET /account/sessions` lists them, none marked current · **404** `identity.account.notfound` where no account bears the subject |
+| `PUT /admin/accounts/{subject}/preferences` | `account:manage` in the administrative organization: `{ language, timeZone, declared, reason }`, the set replaced as `PUT /account/preferences` replaces it, an administrator-only preference admitted; no step-up. **204** · **404** `identity.account.notfound` where no account bears the subject · **422** as `PUT /account/preferences` answers, save `identity.preference.administratoronly`. Recorded as `identity.preferences.changed` with the reason |
+| `GET /admin/access/admitted?type={type}&id={id}&permission={permission}` | `grant:read` in the organization the record belongs to (AUTHZ-GATE-007): **200** `{ subjects, partial, unevaluated }`, the accounts the single check would admit for the permission on the record; with `type` `organization` and its identifier, those its organization-wide grants admit · **403** `authz.denied` for a record the deployment holds no registration for, as `GET /admin/access` refuses it (AUTHZ-DERIVE-007) |
+
+A person's read of an account, a contact, a standing or a member counts toward their read
+volume (OPS-ALERT-005). A read is not audited; its refusal is recorded as every refusal
+is (AUTHZ-CONCEAL-004).
 
 ---
 

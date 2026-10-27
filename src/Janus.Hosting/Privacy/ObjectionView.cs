@@ -19,4 +19,24 @@ internal sealed record ObjectionView(
     string NoticeVersion,
     ConsentMechanism Mechanism,
     DateTimeOffset RecordedAt,
-    DateTimeOffset? WithdrawnAt);
+    DateTimeOffset? WithdrawnAt)
+{
+    /// <summary>
+    /// Reads one objection record.
+    /// </summary>
+    /// <param name="record">The record.</param>
+    /// <returns>The view.</returns>
+    /// <exception cref="ArgumentNullException">The record is absent.</exception>
+    public static ObjectionView Of(ObjectionRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        return new ObjectionView(
+            record.Purpose,
+            record.Document,
+            record.NoticeVersion,
+            record.Mechanism,
+            record.RecordedAt,
+            record.WithdrawnAt);
+    }
+}

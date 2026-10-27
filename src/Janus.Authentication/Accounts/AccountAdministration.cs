@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Core;
@@ -16,7 +17,8 @@ namespace Janus.Authentication.Accounts;
 /// <summary>
 /// What an administrator does to the standing of someone else's account: suspends it,
 /// reactivates it, lifts its restriction and cancels its deletion, and reads the photo it
-/// shows.
+/// shows; what a host reads of another person's account, and the preferences an
+/// administrator sets for it.
 /// </summary>
 /// <param name="scope">Whether the caller administers accounts in the deployment.</param>
 /// <param name="stepUp">What the gated operations ask of the administrator's session.</param>
@@ -24,17 +26,22 @@ namespace Janus.Authentication.Accounts;
 /// <param name="emergency">Which account no administrator suspends.</param>
 /// <param name="sessions">What a suspension ends.</param>
 /// <param name="links">Where the link a deletion notice carried is held.</param>
-/// <param name="configuration">Where the grace window is read.</param>
+/// <param name="configuration">Where the grace window and the field switches are read.</param>
 /// <param name="events">Where the transition is announced.</param>
 /// <param name="audit">Where what the administrator did is recorded.</param>
 /// <param name="photos">Where the photo an account shows is read.</param>
+/// <param name="reach">Where a read is asked, and which accounts it reaches.</param>
+/// <param name="identifiers">Where an account's identifiers are read and found.</param>
+/// <param name="memberships">Which organizations an account is a current member of.</param>
+/// <param name="declarations">The preference keys the host declared.</param>
+/// <param name="volume">Where the accounts a person reads are counted.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004, IDN-AUD-001 and chapter 09
-/// section 8a. The grants of a suspended account are left in place, which is what lets
-/// reactivation restore them exactly; the gate confers nothing on an account that is
-/// not active.
+/// Implements IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004, IDN-AUD-001, IDN-READ-003,
+/// IDN-READ-004, REG-PREF-001 and chapter 09 section 8a. The grants of a suspended
+/// account are left in place, which is what lets reactivation restore them exactly; the
+/// gate confers nothing on an account that is not active.
 /// </remarks>
 internal sealed class AccountAdministration(
     AdministrativeScope scope,
@@ -47,6 +54,11 @@ internal sealed class AccountAdministration(
     IEvents events,
     IAccountAudit audit,
     ProfilePhotos photos,
+    AccountReach reach,
+    IIdentifierDirectory identifiers,
+    IMembershipLookup memberships,
+    PreferenceDeclarations declarations,
+    IReadVolume volume,
     IUnitOfWork work,
     TimeProvider time) : IAccounts
 {
@@ -131,7 +143,20 @@ internal sealed class AccountAdministration(
 
         // AUTH-SESS-010: the sessions end in the transaction that suspends, so the
         // first request on any of them after the commit is refused.
-        await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    now,
+                    context,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         // An account its owner deactivated is already suspended, so taking it over
         // changes who reverses it and announces nothing: the state did not change.
@@ -471,6 +496,243 @@ internal sealed class AccountAdministration(
             : await photos.ReadOfAsync(subject, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result<AccountView>> ReadAsync(
+        AccessContext context,
+        SubjectId subject,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        Result<AccountState> reached = await ReachedAsync(context, Permissions.AccountRead, subject, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (reached.Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure<AccountView>(refused);
+        }
+
+        AccountState state = reached.Match(read => read, _ => default);
+
+        bool legalName = (await configuration
+                .ReadAsync(Settings.ProfileLegalName, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()))
+            is not AttributeRequirement.Off;
+
+        bool usernames = (await configuration
+                .ReadAsync(Settings.IdentifiersUsernameEnabled, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+        HeldProfile profile = await directory.ProfileAsync(subject, cancellationToken).ConfigureAwait(false);
+        HeldPreferences preferences = await directory.PreferencesAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+        DateTimeOffset createdAt = await directory.CreatedAtAsync(subject, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(ErrorCodes.AccountNotFound.ToString());
+        IReadOnlyList<OrganizationId> member = await memberships.OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        string? username = null;
+
+        if (usernames)
+        {
+            foreach (HeldIdentifier identifier in held.OfKind(IdentifierKind.Username))
+            {
+                username = identifier.Entered;
+            }
+        }
+
+        var account = new AccountView(
+            subject,
+            state,
+            createdAt,
+            new AccountViewProfile(profile.DisplayName?.Value, legalName ? profile.LegalName?.Value : null),
+            new AccountViewIdentifiers(
+                Shown(held, IdentifierKind.Email),
+                Shown(held, IdentifierKind.Phone),
+                username),
+            PreferencesShown.Of(preferences, declarations),
+            member);
+
+        return await CountedAsync(context, account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<SubjectId>> FindAsync(
+        AccessContext context,
+        string identifier,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        Result<AdmittedRead> asked = await reach
+            .AskedAsync(context, Permissions.AccountRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (asked.Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure<SubjectId>(refused);
+        }
+
+        bool usernames = (await configuration
+                .ReadAsync(Settings.IdentifiersUsernameEnabled, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        // IDN-ACCT-004: read in the canonical form sign-in reads it in, so another case or
+        // another Unicode form of the same identifier finds the same account.
+        if (EnteredIdentifiers.Canonical(identifier.Trim(), usernames) is not (IdentifierKind kind, string canonical)
+            || await identifiers.OwnerAsync(kind, canonical, cancellationToken).ConfigureAwait(false)
+                is not SubjectId subject)
+        {
+            return Result.Failure<SubjectId>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        return (await asked
+                .Match(
+                    read => WithinAsync(read, subject, cancellationToken),
+                    error => ValueTask.FromResult(Result.Failure<AccountState>(error)))
+                .ConfigureAwait(false))
+            .Match(_ => Result.Success(subject), Result.Failure<SubjectId>);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<ContactDetail>> ContactAsync(
+        AccessContext context,
+        SubjectId subject,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        Result<AccountState> reached = await ReachedAsync(context, Permissions.ContactRead, subject, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (reached.Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure<ContactDetail>(refused);
+        }
+
+        AccountState state = reached.Match(read => read, _ => default);
+
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+        HeldProfile profile = await directory.ProfileAsync(subject, cancellationToken).ConfigureAwait(false);
+        HeldPreferences preferences = await directory.PreferencesAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        var contact = new ContactDetail(
+            profile.DisplayName?.Value,
+            Reachable(held, IdentifierKind.Email),
+            Reachable(held, IdentifierKind.Phone),
+            preferences.Language,
+            preferences.TimeZone,
+            state);
+
+        return await CountedAsync(context, contact, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> SetPreferencesAsync(
+        AccessContext context,
+        SubjectId subject,
+        string? language,
+        string? timeZone,
+        IReadOnlyDictionary<string, string> declared,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(declared);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        // IDN-READ-004: the setting stays a person's, so no system principal makes it.
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope.RefusedAsync(context, Permissions.AccountManage, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        // API-CONV-002: the reason the change is recorded with is free text of 1 to 1024
+        // characters after trimming.
+        if (reason.Trim() is not { Length: > 0 and <= 1024 } stated)
+        {
+            return Result.Failure(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
+
+        // IDN-READ-003: a deleted account is answered as an account no person bears.
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is null or AccountState.Deleted)
+        {
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        Result<int> maximumSize = await configuration
+            .ReadAsync(Settings.PreferencesMaxSize, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (maximumSize.Match(_ => (Error?)null, error => error) is Error unread)
+        {
+            return Result.Failure(unread);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        // REG-PREF-001: an administrator's replace sets a key only an administrator may
+        // edit, validated as the person's own setting is.
+        if ((await directory
+                .RecordPreferencesAsync(
+                    subject,
+                    language,
+                    timeZone,
+                    declared,
+                    asAdministrator: true,
+                    maximumSize.Match(read => read, _ => default),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error invalid)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(invalid);
+        }
+
+        await audit
+            .PreferencesSetAsync(acting, context.BreakGlassReason, subject, stated, now, cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
+    }
+
     // What a suspension is refused with, where it is; an account an administrator
     // already suspended is settled with nothing to do, which is a refusal of nothing
     // and no state; otherwise the state it is suspended from.
@@ -587,6 +849,73 @@ internal sealed class AccountAdministration(
         return now >= deleting.Since + grace
             ? (Error.From(ErrorCodes.DeletionWindowElapsed), null)
             : (null, deleting);
+    }
+
+    // IDN-READ-004: the permission asked where the read is asked, then the account found
+    // within the reach of that organization.
+    private async ValueTask<Result<AccountState>> ReachedAsync(
+        AccessContext context,
+        Permission permission,
+        SubjectId subject,
+        OrganizationId? organization,
+        CancellationToken cancellationToken) =>
+        await (await reach.AskedAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
+            .Match(
+                read => WithinAsync(read, subject, cancellationToken),
+                error => ValueTask.FromResult(Result.Failure<AccountState>(error)))
+            .ConfigureAwait(false);
+
+    // IDN-READ-003, IDN-READ-004: a deleted account, and one beyond the reach, are
+    // answered as an account no person bears, in the same bytes.
+    private async ValueTask<Result<AccountState>> WithinAsync(
+        AdmittedRead read,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        AccountState? state = await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        return state is null or AccountState.Deleted
+            || !await reach.ReachesAsync(read, subject, cancellationToken).ConfigureAwait(false)
+            ? Result.Failure<AccountState>(Error.From(ErrorCodes.AccountNotFound))
+            : Result.Success(state.Value);
+    }
+
+    // OPS-ALERT-005: each person record a person reads counts toward their read volume;
+    // a system principal's reads are nobody's and are not counted.
+    private async ValueTask<Result<TRecord>> CountedAsync<TRecord>(
+        AccessContext context,
+        TRecord record,
+        CancellationToken cancellationToken) =>
+        (await volume.ReturnedAsync(context, 1, cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Success(record), Result.Failure<TRecord>);
+
+    private static List<AccountViewIdentifier> Shown(HeldIdentifiers held, IdentifierKind kind)
+    {
+        IReadOnlyList<HeldIdentifier> ofKind = held.OfKind(kind);
+
+        var shown = new List<AccountViewIdentifier>(ofKind.Count);
+
+        foreach (HeldIdentifier identifier in ofKind)
+        {
+            shown.Add(new AccountViewIdentifier(identifier.Entered, identifier.IsVerified, identifier.IsPrimary));
+        }
+
+        return shown;
+    }
+
+    // IDN-READ-003: the primary of the kind where it is verified, which is the one a
+    // host writes to; an account holding none verified has nothing to reach.
+    private static string? Reachable(HeldIdentifiers held, IdentifierKind kind)
+    {
+        foreach (HeldIdentifier identifier in held.OfKind(kind))
+        {
+            if (identifier.IsPrimary && identifier.IsVerified)
+            {
+                return identifier.Entered;
+            }
+        }
+
+        return null;
     }
 
     private static string Key(SubjectId subject, DateTimeOffset at) =>

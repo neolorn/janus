@@ -175,6 +175,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 _locations,
                 new ConcurrentSessions(_live, _configuration, _events),
                 _clients,
+                _events,
                 _work,
                 _clock,
                 _randomness),

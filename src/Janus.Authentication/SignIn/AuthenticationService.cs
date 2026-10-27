@@ -1274,23 +1274,8 @@ internal sealed class AuthenticationService(
         string entered = identifier.Trim();
         byte[] counted = throttle.Identify(entered, usernames);
 
-        if (failure is not null || IdentifierKinds.Detect(entered, usernames) is not { } kind)
-        {
-            return (null, null, counted);
-        }
-
-        string? canonical = kind switch
-        {
-            IdentifierKind.Email => EmailAddress.TryParse(entered, out EmailAddress address)
-                ? address.Value
-                : null,
-            IdentifierKind.Phone => PhoneNumber.TryParse(entered, out PhoneNumber number)
-                ? number.Value
-                : null,
-            _ => Username.TryParse(entered, out Username username) ? username.Value : null,
-        };
-
-        if (canonical is null
+        if (failure is not null
+            || EnteredIdentifiers.Canonical(entered, usernames) is not (IdentifierKind kind, string canonical)
             || await identifiers.HolderAsync(kind, canonical, cancellationToken).ConfigureAwait(false)
                 is not { } holder)
         {

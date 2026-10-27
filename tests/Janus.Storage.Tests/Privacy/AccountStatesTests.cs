@@ -47,7 +47,8 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     /// <summary>
     /// AUTH-SESS-010 AC2: the suspension and the end of every session are one
     /// transaction, so a takedown that does not commit leaves the account active and
-    /// its sessions live, and one that does leaves neither.
+    /// its sessions live and announces no end, and one that does leaves neither and
+    /// announces each end (D-218).
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_AC2_TheTakedownEndsSessionsInTheTransactionOfTheSuspensionAsync()
@@ -62,7 +63,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            Assert.True(await States(abandoning).TakeDownAsync(
+            Assert.True(await States(abandoning, work).TakeDownAsync(
                 subject,
                 Noon + TimeSpan.FromHours(1),
                 TestContext.Current.CancellationToken));
@@ -70,6 +71,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         Assert.Equal(AccountState.Active, (await StandingAsync(subject)).State);
         Assert.Equal(2, await LiveAsync(subject));
+        Assert.Equal(0, await EndsAnnouncedAsync(subject));
 
         await using (StoreContext taking = database.Context())
         {
@@ -77,7 +79,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            Assert.True(await States(taking).TakeDownAsync(
+            Assert.True(await States(taking, work).TakeDownAsync(
                 subject,
                 Noon + TimeSpan.FromHours(1),
                 TestContext.Current.CancellationToken));
@@ -91,12 +93,14 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         Assert.Equal(DeletionOrigin.Takedown, standing.DeletingBy);
         Assert.Equal(Noon + TimeSpan.FromHours(1), standing.DeletingSince);
         Assert.Equal(0, await LiveAsync(subject));
+        Assert.Equal(2, await EndsAnnouncedAsync(subject));
     }
 
     /// <summary>
     /// AUTH-SESS-010, IDN-ACCT-007 (D-166): the restriction and the end of every session
     /// are one transaction, so a restriction that does not commit leaves the account
-    /// active and its sessions live, and one that does leaves it restricted with none.
+    /// active and its sessions live, and one that does leaves it restricted with none,
+    /// each end announced as <c>account</c> (chapter 10 section 5.39, D-219).
     /// </summary>
     [Fact]
     public async Task AUTH_SESS_010_AC4_RestrictingAnAccountEndsItsSessionsAsync()
@@ -111,7 +115,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            Assert.True(await States(abandoning).RestrictAsync(
+            Assert.True(await States(abandoning, work).RestrictAsync(
                 subject,
                 Noon + TimeSpan.FromHours(1),
                 TestContext.Current.CancellationToken));
@@ -119,6 +123,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         Assert.Equal(AccountState.Active, (await StandingAsync(subject)).State);
         Assert.Equal(2, await LiveAsync(subject));
+        Assert.Equal(0, await EndsAnnouncedAsync(subject));
 
         await using (StoreContext restricting = database.Context())
         {
@@ -126,7 +131,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            Assert.True(await States(restricting).RestrictAsync(
+            Assert.True(await States(restricting, work).RestrictAsync(
                 subject,
                 Noon + TimeSpan.FromHours(1),
                 TestContext.Current.CancellationToken));
@@ -136,6 +141,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         Assert.Equal(AccountState.Restricted, (await StandingAsync(subject)).State);
         Assert.Equal(0, await LiveAsync(subject));
+        Assert.Equal(2, await EndsAnnouncedAsync(subject));
     }
 
     /// <summary>
@@ -198,7 +204,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             await using var work = new UnitOfWork(restricting);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            Assert.True(await States(restricting).RestrictAsync(
+            Assert.True(await States(restricting, work).RestrictAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
@@ -210,7 +216,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             await using var work = new UnitOfWork(again);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            Assert.False(await States(again).RestrictAsync(
+            Assert.False(await States(again, work).RestrictAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
@@ -238,7 +244,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             await using var work = new UnitOfWork(deleting);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            Assert.True(await States(deleting).BeginDeletionAsync(
+            Assert.True(await States(deleting, work).BeginDeletionAsync(
                 subject,
                 DeletionOrigin.Self,
                 began,
@@ -258,7 +264,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             await using var work = new UnitOfWork(again);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            Assert.False(await States(again).TakeDownAsync(
+            Assert.False(await States(again, work).TakeDownAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
@@ -300,12 +306,12 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             await using var work = new UnitOfWork(deleting);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            Assert.False(await States(deleting).BeginDeletionAsync(
+            Assert.False(await States(deleting, work).BeginDeletionAsync(
                 subject,
                 DeletionOrigin.Self,
                 Noon,
                 TestContext.Current.CancellationToken));
-            Assert.True(await States(deleting).BeginDeletionAsync(
+            Assert.True(await States(deleting, work).BeginDeletionAsync(
                 subject,
                 DeletionOrigin.OutOfBandRequest,
                 Noon,
@@ -396,11 +402,11 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         await using var reversal = new UnitOfWork(reversing);
 
         await erasure.BeginAsync(cancellationToken);
-        _ = await Eraser(erasing).EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken);
+        _ = await Eraser(erasing, erasure).EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken);
 
         await reversal.BeginAsync(cancellationToken);
 
-        Task<bool> reversed = States(reversing)
+        Task<bool> reversed = States(reversing, reversal)
             .ReverseTakedownAsync(subject, Due - TimeSpan.FromMilliseconds(1), Windows, cancellationToken)
             .AsTask();
 
@@ -434,7 +440,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await reversal.BeginAsync(cancellationToken);
 
-        Assert.True(await States(reversing).ReverseTakedownAsync(
+        Assert.True(await States(reversing, reversal).ReverseTakedownAsync(
             subject,
             Due - TimeSpan.FromMilliseconds(1),
             Windows,
@@ -442,7 +448,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await erasure.BeginAsync(cancellationToken);
 
-        Task<Erasure> erased = Eraser(erasing)
+        Task<Erasure> erased = Eraser(erasing, erasure)
             .EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken)
             .AsTask();
 
@@ -473,7 +479,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            Assert.True(await States(abandoning).TakeDownAsync(
+            Assert.True(await States(abandoning, work).TakeDownAsync(
                 abandoned,
                 Noon,
                 TestContext.Current.CancellationToken));
@@ -486,7 +492,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            Assert.True(await States(committing).TakeDownAsync(
+            Assert.True(await States(committing, work).TakeDownAsync(
                 committed,
                 Noon,
                 TestContext.Current.CancellationToken));
@@ -533,7 +539,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             await using var work = new UnitOfWork(taking);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            Assert.False(await States(taking).TakeDownAsync(
+            Assert.False(await States(taking, work).TakeDownAsync(
                 reserved,
                 Noon,
                 TestContext.Current.CancellationToken));
@@ -587,7 +593,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        bool taken = await States(context).TakeDownAsync(
+        bool taken = await States(context, work).TakeDownAsync(
             subject,
             Noon + TimeSpan.FromHours(1),
             TestContext.Current.CancellationToken);
@@ -603,16 +609,17 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             TestContext.Current.CancellationToken))
             .Match(() => true, _ => false);
 
-    private AccountStates States(StoreContext context) =>
-        new(new AccountStore(context), Sessions(context));
+    private AccountStates States(StoreContext context, UnitOfWork work) =>
+        new(new AccountStore(context), Sessions(context), new EventOutbox(new PendingEvents(context), work));
 
-    private SubjectEraser Eraser(StoreContext context) =>
+    private SubjectEraser Eraser(StoreContext context, UnitOfWork work) =>
         new(
             context,
             Sessions(context),
             new ConfigurationStore(context, new DataConnections(context)),
             new DataConnections(context),
-            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness));
+            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new EventOutbox(new PendingEvents(context), work));
 
     // The second transaction is waiting on the account row the first holds, as the
     // database itself reports it, so the case lets the first commit only then.
@@ -638,7 +645,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        bool reversed = await States(reversing).ReverseTakedownAsync(
+        bool reversed = await States(reversing, work).ReverseTakedownAsync(
             subject,
             Noon + TimeSpan.FromHours(1),
             Windows,
@@ -659,7 +666,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(await States(taking).TakeDownAsync(
+        Assert.True(await States(taking, work).TakeDownAsync(
             subject,
             Noon,
             TestContext.Current.CancellationToken));
@@ -670,8 +677,9 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     private async Task<AccountStanding> StandingAsync(SubjectId subject)
     {
         await using StoreContext reading = database.Context();
+        await using var work = new UnitOfWork(reading);
 
-        return Assert.IsType<AccountStanding>(await States(reading).StandingAsync(
+        return Assert.IsType<AccountStanding>(await States(reading, work).StandingAsync(
             subject,
             TestContext.Current.CancellationToken));
     }
@@ -684,6 +692,21 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             subject,
             Noon + TimeSpan.FromHours(2),
             TestContext.Current.CancellationToken)).Count;
+    }
+
+    // The announcements that a session of the account ended because the account did,
+    // naming no actor, since no person acted (chapter 10 section 5b, D-218).
+    private async ValueTask<int> EndsAnnouncedAsync(SubjectId subject)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'SessionEnded' AND payload->>'Reason' = 'account'
+              AND payload->>'Actor' IS NULL AND payload->'Subject'->>'Value' = @subject
+            """,
+            new { subject = subject.Value.ToString() });
     }
 
     private async Task SessionsAsync(SubjectId subject, int count)

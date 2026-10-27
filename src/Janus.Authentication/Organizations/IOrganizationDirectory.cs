@@ -75,4 +75,44 @@ internal interface IOrganizationDirectory
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Its members.</returns>
     ValueTask<IReadOnlyList<SubjectId>> MembersAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The organizations the deployment holds and has not erased, ordered by identifier.
+    /// </summary>
+    /// <param name="within">The organizations to read among, or nothing for every one.</param>
+    /// <param name="after">The identifier to begin after, or nothing for the first.</param>
+    /// <param name="count">At most how many.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Where each stands.</returns>
+    ValueTask<IReadOnlyList<OrganizationStanding>> PageAsync(
+        IReadOnlyCollection<OrganizationId>? within,
+        OrganizationId? after,
+        int count,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// An organization's current members, ordered by subject.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="after">The subject to begin after, or nothing for the first.</param>
+    /// <param name="count">At most how many.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The members.</returns>
+    ValueTask<IReadOnlyList<MemberSummary>> MemberPageAsync(
+        OrganizationId organization,
+        SubjectId? after,
+        int count,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One account's current membership of an organization.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="subject">Whose membership.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The member, or nothing where the account holds no current membership.</returns>
+    ValueTask<MemberSummary?> MemberAsync(
+        OrganizationId organization,
+        SubjectId subject,
+        CancellationToken cancellationToken);
 }

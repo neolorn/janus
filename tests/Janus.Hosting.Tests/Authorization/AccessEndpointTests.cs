@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -9,7 +10,8 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// Who can access one record, the administrative view of chapter 09 section 8
-/// (AUTHZ-DERIVE-007, AUTHZ-GATE-004).
+/// (AUTHZ-DERIVE-007, AUTHZ-GATE-004), and which accounts may exercise a permission, of
+/// section 8a (AUTHZ-GATE-007).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AccessEndpointTests : IAsyncDisposable
@@ -148,6 +150,92 @@ public sealed class AccessEndpointTests : IAsyncDisposable
         Answer refused = await browser.SendAsync(
             "GET",
             $"/admin/access?resourceType=organization&resourceId={Company.Value}");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007, 09 section 8a (D-218): which accounts may exercise a permission
+    /// across an organization is answered 200 with the accounts, whether a derivation
+    /// went unevaluated, and which.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_TheAccountsWhoMayAreAnsweredOverTheEndpointAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var reading = new SubjectId(Guid.NewGuid());
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.GrantRead);
+        _deployment.Gate.Grant(reading, Company, Permissions.AccountRead);
+
+        Answer answered = await browser.SendAsync(
+            "GET",
+            $"/admin/access/admitted?type=organization&id={Company.Value}&permission=account:read");
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Equal(
+            [reading.Value],
+            [.. answered.Json().GetProperty("subjects").EnumerateArray().Select(subject => subject.GetGuid())]);
+        Assert.False(answered.Json().GetProperty("partial").GetBoolean());
+        Assert.Equal(0, answered.Json().GetProperty("unevaluated").GetArrayLength());
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007 AC5, 10 section 1 (D-219): a type, an organization's identifier or a
+    /// permission the model does not declare is answered 400 <c>api.request.malformed</c>
+    /// as the gate answers it, naming the member, and so is a permission that does not
+    /// read as one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_AC5_AWordTheModelDoesNotDeclareIsAnsweredAsMalformedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.GrantRead);
+
+        Answer untyped = await browser.SendAsync(
+            "GET",
+            "/admin/access/admitted?type=ledger&id=one&permission=account:read");
+        Answer unnamed = await browser.SendAsync(
+            "GET",
+            "/admin/access/admitted?type=organization&id=one&permission=account:read");
+        Answer undeclared = await browser.SendAsync(
+            "GET",
+            $"/admin/access/admitted?type=organization&id={Company.Value}&permission=ledger:read");
+        Answer unread = await browser.SendAsync(
+            "GET",
+            $"/admin/access/admitted?type=organization&id={Company.Value}&permission=ledger");
+
+        Assert.Equal(
+            [
+                ("type", ErrorCodes.RequestMalformed.ToString(), 400),
+                ("id", ErrorCodes.RequestMalformed.ToString(), 400),
+                ("permission", ErrorCodes.RequestMalformed.ToString(), 400),
+                ("permission", ErrorCodes.RequestMalformed.ToString(), 400),
+            ],
+            new[] { untyped, unnamed, undeclared, unread }
+                .Select(answer => (
+                    answer.Json().GetProperty("details").GetProperty("member").GetString(),
+                    answer.Text("code"),
+                    answer.Status)));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-007, 09 section 8a (D-218): a caller without <c>grant:read</c> is refused
+    /// 403 <c>authz.denied</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_007_TheAccountsWhoMayAreRefusedWithoutGrantReadAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer refused = await browser.SendAsync(
+            "GET",
+            $"/admin/access/admitted?type=organization&id={Company.Value}&permission=account:read");
 
         Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));

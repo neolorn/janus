@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Identity.Organizations;
+using Janus.Storage.Identity.Organizations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Organizations;
@@ -85,6 +86,85 @@ internal sealed class OrganizationDirectory(StoreContext context, IOrganizationS
             .Distinct()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<OrganizationStanding>> PageAsync(
+        IReadOnlyCollection<OrganizationId>? within,
+        OrganizationId? after,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        Guid? from = after?.Value;
+        Guid[]? among = within is null ? null : [.. within.Select(organization => organization.Value)];
+
+        // IDN-READ-001: ordered by identifier, as the database orders it, and paged from
+        // the identifier the last page ended at.
+        List<OrganizationRecord> found = await context.Organizations
+            .FromSql(
+                $"""
+                SELECT * FROM identity.organizations
+                WHERE erased_at IS NULL
+                  AND ({from}::uuid IS NULL OR id > {from}::uuid)
+                  AND ({among}::uuid[] IS NULL OR id = ANY({among}::uuid[]))
+                ORDER BY id
+                LIMIT {count}
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. found.Select(record => new OrganizationStanding(
+            record.Id,
+            record.Name,
+            record.IsAdministrative,
+            record.DeletionRequestedAt,
+            record.ErasedAt))];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<MemberSummary>> MemberPageAsync(
+        OrganizationId organization,
+        SubjectId? after,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        Guid? from = after?.Value;
+
+        // IDN-READ-002: ordered by subject, as the database orders it, and paged from the
+        // subject the last page ended at.
+        List<MembershipRecord> found = await context.Memberships
+            .FromSql(
+                $"""
+                SELECT * FROM identity.memberships
+                WHERE organization = {organization.Value} AND ended_at IS NULL
+                  AND ({from}::uuid IS NULL OR subject > {from}::uuid)
+                ORDER BY subject
+                LIMIT {count}
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. found.Select(Member)];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<MemberSummary?> MemberAsync(
+        OrganizationId organization,
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        await context.Memberships
+            .AsNoTracking()
+            .Where(membership => membership.Organization == organization
+                && membership.Subject == subject
+                && membership.EndedAt == null)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false) is MembershipRecord found
+            ? Member(found)
+            : null;
+
+    private static MemberSummary Member(MembershipRecord membership) =>
+        new(membership.Subject, membership.Id, membership.CreatedAt, membership.EndsAt, membership.Invitation);
 
     private static OrganizationStanding? Standing(Organization? found) =>
         found is null

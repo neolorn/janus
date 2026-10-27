@@ -247,7 +247,20 @@ internal sealed class ProviderEvents(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await sessions.EndAccountAsync(linked.Subject, now, cancellationToken).ConfigureAwait(false);
+        // Chapter 10 section 5.39 (D-219): the library ends them on a sign of compromise,
+        // so each is announced as security and names no actor.
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(linked.Subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Security,
+                    now,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<ProviderEventOutcome>(unannounced);
+        }
 
         linked.Hold();
 
@@ -327,7 +340,18 @@ internal sealed class ProviderEvents(
         }
 
         // AUTH-SESS-010: the sessions end in the transaction that suspends.
-        await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        if (await SessionEnds
+                .AnnouncedAsync(
+                    events,
+                    await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false),
+                    SessionEndReason.Account,
+                    now,
+                    actor: null,
+                    cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<ProviderEventOutcome>(unannounced);
+        }
 
         if (state is not AccountState.Suspended)
         {

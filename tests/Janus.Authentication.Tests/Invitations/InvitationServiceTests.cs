@@ -80,6 +80,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly LegalDocumentsInMemory _documents = new();
     private readonly DomainStoreInMemory _domains = new();
     private readonly InvitationStoreInMemory _invitations = new();
+    private readonly ReadVolumeInMemory _volume = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly MailboxStoreInMemory _mailboxes = new();
@@ -1701,6 +1702,35 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-READ-002 AC1 (D-218): the membership an acknowledgement begins is attached with
+    /// its invitation and announced naming it, and its end is announced naming it too.
+    /// </summary>
+    [Fact]
+    public async Task IDN_READ_002_AC1_TheMembershipAnInvitationBeganIsAnnouncedNamingItAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(holder, token));
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        Assert.Equal(invitation.Id, Assert.Single(_attachments.Attached).Invitation);
+
+        MembershipChanged began = Assert.Single(_events.Of<MembershipChanged>());
+
+        Assert.Equal((MembershipChange.Began, invitation.Id), (began.Change, began.Invitation));
+
+        _ending.BeganFrom(holder, Customer, invitation.Id);
+        Accepted(await EndAsync(Customer, holder));
+
+        MembershipChanged ended = _events.Of<MembershipChanged>()[^1];
+
+        Assert.Equal((MembershipChange.Ended, invitation.Id), (ended.Change, ended.Invitation));
+    }
+
+    /// <summary>
     /// REG-MAIL-003 AC1 to AC3, IDN-MEM-001 AC1 and INT-MAIL-006a: ending the membership
     /// that gave the account its corporate address takes the address off the account and
     /// makes the personal email the primary in the same transaction, retires the mailbox,
@@ -1722,7 +1752,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Accepted(await EndAsync(Staff, holder));
 
         HeldIdentifiers held = await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken);
-        EndedMembership ended = Assert.Single(_ending.Ended);
+        EndedInMemory ended = Assert.Single(_ending.Ended);
         MembershipChanged announced = _events.Of<MembershipChanged>()[^1];
         IdentifierPrimaryChanged promoted = _events.Of<IdentifierPrimaryChanged>()[^1];
         OutboundMessage told = Assert.Single(_notifications.Sent);
@@ -2213,9 +2243,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-MEM-001 AC3 (D-213): ending a membership revokes, with the end's reason and
-    /// actor, what a person gave the account in the organization and nothing beyond it;
-    /// ending one of the administrative organization revokes too what the account holds
-    /// where it is no member, and leaves what it holds where it still is.
+    /// actor, what a person gave the account in the organization and nothing beyond it,
+    /// announcing each revocation in the end's transaction (D-218); ending one of the
+    /// administrative organization revokes too what the account holds where it is no
+    /// member, and leaves what it holds where it still is.
     /// </summary>
     [Fact]
     public async Task IDN_MEM_001_AC3_AnEndRevokesWhatItReachesWithItsReasonAsync()
@@ -2240,6 +2271,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
 
         Assert.Equal((Customer, _inviter, Why), (revoked.Organization, revoked.Actor, revoked.Reason));
+
+        GrantChanged announced = Assert.Single(_events.Of<GrantChanged>());
+
+        Assert.Equal(
+            (GrantChange.Revoked, Customer, "clerk", (SubjectId?)holder, (SubjectId?)_inviter),
+            (announced.Change, announced.Organization, announced.Role, announced.Subject, announced.Actor));
         Assert.Equal([clerk.Name], _revocations.HeldBy(holder, Staff));
         Assert.Equal([clerk.Name], _revocations.HeldBy(holder, elsewhere));
 
@@ -2412,7 +2449,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(1, Accepted(await PassAsync()));
 
         DateTimeOffset now = _clock.GetUtcNow();
-        EndedMembership ended = Assert.Single(_ending.Ended);
+        EndedInMemory ended = Assert.Single(_ending.Ended);
         MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
         OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
         MembershipChanged announced = _events.Of<MembershipChanged>()[^1];
@@ -2637,6 +2674,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private ValueTask<Result<int>> PassAsync() =>
         Ends().EndDueAsync(Ender, TestContext.Current.CancellationToken);
 
+    private OrganizationReads Reads =>
+        new(new ReadAdmissionInMemory(_gate, _administrative, _memberships), _organizations, _invitations, _volume, _clock);
+
     private InvitationService Serving(IMailServer? server)
     {
         PolicyResolution policies = Policies;
@@ -2683,6 +2723,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             Landing.Links,
             _configuration,
             _audit,
+            Reads,
             _work,
             _clock,
             _randomness);

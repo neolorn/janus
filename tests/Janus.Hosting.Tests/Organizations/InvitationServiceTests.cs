@@ -142,11 +142,14 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
 
         Assert.Equal(0, await StandingAsync(held));
         Assert.Equal(Why, await RevocationReasonAsync(held));
+        Assert.Equal(1, await RevocationsAnnouncedAsync(held, administrator));
+        Assert.Equal(0, await RevocationsAnnouncedAsync(materialised, administrator) + await RevocationsAnnouncedAsync(denied, administrator));
         Assert.Equal(1, await StandingAsync(materialised));
         Assert.Equal(1, await StandingAsync(denied));
         Assert.Equal(0, await GroupsHoldingAsync(member, group));
         Assert.Equal(1, await RecordedAsync("authz.grant.revoked", administrator, organization));
         Assert.Equal(1, await RecordedAsync("authz.group.memberremoved", administrator, organization));
+        Assert.Equal(1, await LeftAnnouncedAsync(member, group));
         Assert.Equal(1, await RecordedAsync("identity.membership.ended", administrator, organization));
     }
 
@@ -365,10 +368,12 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
             (await EndSetAsync(member, organization)).EndedAt?.ToUnixTimeMilliseconds());
         Assert.Equal(0, await StandingAsync(held));
         Assert.Equal((Guid.Empty, Why), await RevocationAsync(held));
+        Assert.Equal(1, await RevocationsAnnouncedAsync(held, actor: null));
         Assert.Equal(1, await StandingAsync(denied));
         Assert.Equal(0, await GroupsHoldingAsync(member, group));
         Assert.Equal(1, await RecordedByTheJobAsync("authz.grant.revoked", administrator, member, organization));
         Assert.Equal(1, await RecordedByTheJobAsync("authz.group.memberremoved", administrator, member, organization));
+        Assert.Equal(1, await LeftAnnouncedAsync(member, group));
         Assert.Equal(1, await RecordedByTheJobAsync("identity.membership.ended", administrator, member, organization));
     }
 
@@ -515,6 +520,40 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
             WHERE group_id = @group AND member_type = 'user' AND member_id = @account
             """,
             new { group = group.Value, account = account.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The announcements that the grant was revoked, as the rows of the events table,
+    // naming who ended the membership, or no one for the job (chapter 10 section 5b).
+    private async Task<int> RevocationsAnnouncedAsync(GrantId grant, SubjectId? actor)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'GrantChanged' AND payload->>'Change' = 'revoked'
+              AND payload->>'IdempotencyKey' LIKE @key
+              AND payload->'Actor'->>'Value' IS NOT DISTINCT FROM @actor
+            """,
+            new { key = "grant-revoked:" + grant.Value + "@%", actor = actor?.Value.ToString() },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The announcements that the account was taken out of the group, as the rows of the
+    // events table (LIB-API-001, chapter 10 section 5b).
+    private async Task<int> LeftAnnouncedAsync(SubjectId account, GroupId group)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'GroupMembershipChanged' AND payload->>'Change' = 'removed'
+              AND payload->>'SubjectType' = 'user' AND payload->>'SubjectId' = @account
+              AND payload->>'IdempotencyKey' LIKE @key
+            """,
+            new { account = account.Value.ToString(), key = "group-member-removed:" + group.Value + ":%" },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 

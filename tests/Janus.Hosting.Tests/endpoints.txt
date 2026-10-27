@@ -474,6 +474,62 @@ GET /admin/access
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
+GET /admin/access/admitted
+  200
+    application/json
+      subjects[]: Guid
+      partial: boolean
+      unevaluated[]: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+POST /admin/accounts/find
+  request application/json
+    identifier: string
+    organization: Guid?
+  200
+    application/json
+      subject: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
+GET /admin/accounts/{subject}
+  200
+    application/json
+      subject: Guid
+      state: AccountState
+      createdAt: DateTimeOffset
+      profile.displayName: string
+      profile.legalName: string
+      identifiers.emails[].value: string
+      identifiers.emails[].verified: boolean
+      identifiers.emails[].primary: boolean
+      identifiers.phones[].value: string
+      identifiers.phones[].verified: boolean
+      identifiers.phones[].primary: boolean
+      identifiers.username: string
+      preferences.language: string
+      preferences.timeZone: string
+      preferences.declared{}: string
+      memberships[]: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
+GET /admin/accounts/{subject}/contact
+  200
+    application/json
+      displayName: string
+      email: string
+      phone: string
+      language: string
+      timeZone: string
+      state: AccountState
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
 POST /admin/accounts/{subject}/delete/cancel
   204
   400 api.request.malformed
@@ -490,6 +546,18 @@ GET /admin/accounts/{subject}/photo
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
   404 identity.account.notfound identity.photo.notfound
+PUT /admin/accounts/{subject}/preferences
+  request application/json
+    language: string
+    timeZone: string
+    declared{}: string
+    reason: string
+  204
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied authz.restricted
+  404 identity.account.notfound
+  422 identity.preference.toolarge identity.preference.undeclared identity.preference.wrongtype
 POST /admin/accounts/{subject}/reactivate
   204
   400 api.request.malformed
@@ -504,12 +572,48 @@ POST /admin/accounts/{subject}/restriction/lift
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   404 identity.account.notfound
   409 identity.account.stateconflict
+GET /admin/accounts/{subject}/sessions
+  200
+    application/json
+      [].id: string
+      [].signedInAt: DateTimeOffset
+      [].lastUsedAt: DateTimeOffset
+      [].device.browser: string
+      [].device.os: string
+      [].location.city: string
+      [].location.country: string
+      [].current: boolean
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound
 POST /admin/accounts/{subject}/sessions/revoke
   204
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   404 identity.account.notfound
+GET /admin/accounts/{subject}/standing
+  200
+    application/json
+      state: AccountState
+      consents[].purpose: string
+      consents[].document: string
+      consents[].noticeVersion: string
+      consents[].mechanism: ConsentMechanism
+      consents[].grantedAt: DateTimeOffset
+      consents[].withdrawnAt: DateTimeOffset?
+      consents[].supersededAt: DateTimeOffset?
+      objections[].purpose: string
+      objections[].document: string
+      objections[].noticeVersion: string
+      objections[].mechanism: ConsentMechanism
+      objections[].recordedAt: DateTimeOffset
+      objections[].withdrawnAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
 POST /admin/accounts/{subject}/suspend
   204
   400 api.request.malformed
@@ -869,6 +973,17 @@ POST /admin/notices
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
   422 privacy.notice.governingtextmissing
+GET /admin/organizations
+  200
+    application/json
+      organizations[].id: Guid
+      organizations[].name: string
+      organizations[].administrative: boolean
+      organizations[].deletionRequestedAt: DateTimeOffset?
+      next: Guid?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
 POST /admin/organizations
   request application/json
     name: string
@@ -880,6 +995,17 @@ POST /admin/organizations
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied authz.restricted
   422 identity.identifier.mixedscript
+GET /admin/organizations/{id}
+  200
+    application/json
+      id: Guid
+      name: string
+      administrative: boolean
+      deletionRequestedAt: DateTimeOffset?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
 POST /admin/organizations/{id}/delete
   request application/json
     reason: string
@@ -957,6 +1083,21 @@ POST /admin/organizations/{id}/domains/{domain}/verify
   403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
   404 identity.domain.notfound identity.organization.notfound
   422 config.change.reasonrequired identity.domain.unverified
+GET /admin/organizations/{id}/invitations
+  200
+    application/json
+      [].id: Guid
+      [].roles[]: string
+      [].issuedAt: DateTimeOffset
+      [].expiresAt: DateTimeOffset
+      [].issuer: Guid
+      [].email: string
+      [].phone: string
+      [].corporateAddress: string
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
 POST /admin/organizations/{id}/invitations
   request application/json
     email: string
@@ -985,6 +1126,31 @@ DELETE /admin/organizations/{id}/invitations/{invitationId}
   403 auth.session.csrfinvalid authz.denied authz.restricted
   404 identity.invitation.notfound identity.organization.notfound
   422 identity.invitation.expired
+GET /admin/organizations/{id}/members
+  200
+    application/json
+      members[].subject: Guid
+      members[].membership: Guid
+      members[].beganAt: DateTimeOffset
+      members[].endsAt: DateTimeOffset?
+      members[].invitation: Guid?
+      next: Guid?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.organization.notfound
+GET /admin/organizations/{id}/members/{subject}
+  200
+    application/json
+      subject: Guid
+      membership: Guid
+      beganAt: DateTimeOffset
+      endsAt: DateTimeOffset?
+      invitation: Guid?
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.membership.notfound identity.organization.notfound
 DELETE /admin/organizations/{id}/memberships/{subject}
   request application/json
     reason: string

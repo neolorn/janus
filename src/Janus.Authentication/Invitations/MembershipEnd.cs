@@ -204,7 +204,7 @@ internal sealed class MembershipEnd(
         // A second end that read the membership before this one committed finds none
         // here, and is answered as the find would answer it.
         if (await memberships.EndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
-            is not MembershipId ended)
+            is not EndedMembership ended)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -212,8 +212,8 @@ internal sealed class MembershipEnd(
         }
 
         // IDN-MEM-001 (D-213): in the transaction that ends the membership, recorded with
-        // the end's reason and actor.
-        await revocations
+        // the end's reason and actor, and announced with it.
+        IReadOnlyList<DomainEvent> revoked = await revocations
             .RevokeAsync(
                 member,
                 organization,
@@ -227,11 +227,19 @@ internal sealed class MembershipEnd(
 
         List<DomainEvent> announced =
         [
-            new MembershipChanged(now, Key(ended, now), ended, organization, MembershipChange.Ended)
+            new MembershipChanged(
+                now,
+                Key(ended.Membership, now),
+                ended.Membership,
+                organization,
+                MembershipChange.Ended,
+                ended.Invitation)
             {
                 Subject = member,
             },
         ];
+
+        announced.AddRange(revoked);
 
         // The mailboxes are the administrative organization's, so only the end of that
         // membership takes one back; another the account ends leaves it in place.
@@ -245,7 +253,7 @@ internal sealed class MembershipEnd(
         await audit
             .MembershipEndedAsync(
                 organization,
-                ended,
+                ended.Membership,
                 member,
                 stated,
                 acting,
@@ -554,7 +562,7 @@ internal sealed class MembershipEnd(
             return Result.Success(0);
         }
 
-        await revocations
+        IReadOnlyList<DomainEvent> revoked = await revocations
             .RevokeAsync(
                 ended.Member,
                 ended.Organization,
@@ -568,11 +576,19 @@ internal sealed class MembershipEnd(
 
         List<DomainEvent> announced =
         [
-            new MembershipChanged(now, Key(ended.Membership, now), ended.Membership, ended.Organization, MembershipChange.Ended)
+            new MembershipChanged(
+                now,
+                Key(ended.Membership, now),
+                ended.Membership,
+                ended.Organization,
+                MembershipChange.Ended,
+                ended.Invitation)
             {
                 Subject = ended.Member,
             },
         ];
+
+        announced.AddRange(revoked);
 
         // REG-MAIL-003: as for an end now; the pass answers no request, so a notice it
         // sends carries no source.

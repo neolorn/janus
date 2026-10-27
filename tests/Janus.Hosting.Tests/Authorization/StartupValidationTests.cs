@@ -681,6 +681,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     /// leaves one an administrator made before it was declared as it stands; each name
     /// is kept as seeded, and the roles each hands out are seeded with it (D-212). A role an
     /// administrator changed or removed afterwards is not defined again at the next start.
+    /// Each definition is announced once as <c>RoleChanged</c> (chapter 10 section 5b,
+    /// D-218).
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -719,6 +721,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(["document:read"], await SeedingsRecordedAsync(removed));
         Assert.Empty(await SeedingsRecordedAsync(premade));
         Assert.Equal(3, await SeededAsync(suffix));
+        Assert.Equal(1, await DefinitionsAnnouncedAsync(changed));
+        Assert.Equal(1, await DefinitionsAnnouncedAsync(removed));
+        Assert.Equal(0, await DefinitionsAnnouncedAsync(premade));
 
         await WriteAsync(
             $"""
@@ -739,6 +744,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Single(await SeedingsRecordedAsync(changed));
         Assert.Single(await SeedingsRecordedAsync(removed));
         Assert.Equal(3, await SeededAsync(suffix));
+        Assert.Equal(1, await DefinitionsAnnouncedAsync(changed));
+        Assert.Equal(1, await DefinitionsAnnouncedAsync(removed));
+        Assert.Equal(0, await DefinitionsAnnouncedAsync(premade));
     }
 
     /// <summary>
@@ -2452,6 +2460,19 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 """,
                 new { role }),
         ];
+    }
+
+    // Chapter 10 section 5b (D-218): the definitions the start announced of one role.
+    private async Task<int> DefinitionsAnnouncedAsync(string role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'RoleChanged' AND payload->>'Role' = @role AND payload->>'Change' = 'defined'
+            """,
+            new { role });
     }
 
     private async Task<int> SeededAsync(string suffix)

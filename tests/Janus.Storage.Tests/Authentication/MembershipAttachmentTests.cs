@@ -4,17 +4,25 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication;
+using Janus.Authentication.Events;
+using Janus.Authentication.Invitations;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Identity.Audit;
 using Janus.Identity.Organizations;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Invitations;
+using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Organizations;
+using Janus.Storage.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Xunit;
 
@@ -90,6 +98,145 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// IDN-READ-002 AC1 (D-218): the membership an acknowledgement attaches keeps the
+    /// invitation it began from, and one attached with none, as bootstrap attaches it,
+    /// keeps none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC1_TheMembershipKeepsTheInvitationItBeganFromAsync()
+    {
+        SubjectId invited = await _deployment.AccountAsync(Noon);
+        SubjectId founding = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        InvitationId invitation = await IssuedAsync(organization, inviter);
+
+        _ = await AttachAsync(invited, organization, [], [], inviter, multiple: false, invitation);
+        _ = await AttachAsync(founding, organization, [], [], inviter, multiple: false);
+
+        await using StoreContext reading = database.Context();
+        var memberships = new MembershipStore(reading);
+
+        Assert.Equal(
+            invitation,
+            Assert.Single(await memberships.FindBySubjectAsync(invited, TestContext.Current.CancellationToken))
+                .Invitation);
+        Assert.Null(
+            Assert.Single(await memberships.FindBySubjectAsync(founding, TestContext.Current.CancellationToken))
+                .Invitation);
+    }
+
+    /// <summary>
+    /// IDN-READ-002 AC1 (D-218): a member who joined through an invitation is listed with
+    /// that invitation, and one attached with none, as bootstrap attaches it, with none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC1_AMemberIsListedWithTheInvitationItJoinedThroughAsync()
+    {
+        SubjectId invited = await _deployment.AccountAsync(Noon);
+        SubjectId founding = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        InvitationId invitation = await IssuedAsync(organization, inviter);
+
+        _ = await AttachAsync(invited, organization, [], [], inviter, multiple: false, invitation);
+        _ = await AttachAsync(founding, organization, [], [], inviter, multiple: false);
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<MemberSummary> members = await new OrganizationDirectory(reading, new OrganizationStore(reading))
+            .MemberPageAsync(organization, after: null, 10, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new Dictionary<SubjectId, InvitationId?> { [invited] = invitation, [founding] = null },
+            members.ToDictionary(member => member.Subject, member => member.Invitation));
+    }
+
+    /// <summary>
+    /// IDN-READ-002 AC1 (D-218): a membership standing before the invitation was kept is
+    /// matched, once migrated, to the invitation whose acknowledgement began it, an ended
+    /// one included, and one bootstrap attached is matched to none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC1_AMembershipStandingBeforeTheMigrationIsMatchedToItsInvitationAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("membership_invitation");
+        string naming;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            naming = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(NameTheInvitationAMembershipBeganFrom), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, naming) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        var values = new
+        {
+            member = Subjects.New().Value,
+            founder = Subjects.New().Value,
+            inviter = Subjects.New().Value,
+            organization = Guid.CreateVersion7(),
+            first = Guid.CreateVersion7(),
+            second = Guid.CreateVersion7(),
+            ended = Guid.CreateVersion7(),
+            current = Guid.CreateVersion7(),
+            founded = Guid.CreateVersion7(),
+            earlier = Noon,
+            later = Noon.AddDays(1),
+        };
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@member, 'active', @earlier), (@founder, 'active', @earlier), (@inviter, 'active', @earlier);
+            INSERT INTO identity.organizations (id, name, canonical_name, created_at)
+            VALUES (@organization, 'Membership invitations', 'membership invitations', @earlier);
+            INSERT INTO identity.invitations
+                (id, organization, inviter, token, wrapped_key, enc_identifiers, roles, documents,
+                 issued_at, expires_at, invitee, attached_at, acknowledged_at)
+            VALUES
+                (@first, @organization, @inviter, '\x01', decode(repeat('00', 32), 'hex'), NULL, '{}', '[]',
+                 @earlier, @later, @member, @earlier, @earlier),
+                (@second, @organization, @inviter, '\x02', decode(repeat('00', 32), 'hex'), NULL, '{}', '[]',
+                 @earlier, @later, @member, @later, @later);
+            INSERT INTO identity.memberships
+                (id, subject, organization, created_at, ended_at, acknowledged_documents, acknowledged_at)
+            VALUES
+                (@ended, @member, @organization, @earlier, @later, '[]', @earlier),
+                (@current, @member, @organization, @later, NULL, '[]', @later),
+                (@founded, @founder, @organization, @earlier, NULL, '[]', @earlier);
+            """,
+            values);
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(naming, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            [(values.ended, (Guid?)values.first), (values.current, values.second), (values.founded, null)],
+            [
+                .. await connection.QueryAsync<(Guid, Guid?)>(
+                    """
+                    SELECT id, invitation FROM identity.memberships
+                    ORDER BY subject = @founder, created_at
+                    """,
+                    values),
+            ]);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003 AC6: each grant an acknowledgement writes is recorded once as
     /// <c>authz.grant.created</c> in its transaction, naming the person acknowledging as
     /// actor and the holder as subject, with the grant, its role and the reason.
@@ -123,6 +270,39 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         Assert.Equal(grant.Id.ToString(), read.Details["grant"].GetString());
         Assert.Equal("clerk", read.Details["role"].GetString());
         Assert.Equal("invitation:reason", read.Details["reason"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): each grant an acknowledgement writes is
+    /// announced once as <c>GrantChanged</c> <c>made</c> in its transaction, across the
+    /// organization, naming the holder as subject and the person acknowledging as actor.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_API_001_EachGrantAnAcknowledgementWritesIsAnnouncedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        await RoleAsync();
+
+        _ = await AttachAsync(subject, organization, [], [Clerk, Clerk], inviter, multiple: false);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            ("made", "clerk", "organization", organization.ToString(), subject.Value),
+            await connection.QuerySingleAsync<(string, string, string, string, Guid)>(new CommandDefinition(
+                """
+                SELECT payload->>'Change', payload->>'Role', payload->>'ResourceType', payload->>'ResourceId',
+                       CAST(payload->'Actor'->>'Value' AS uuid)
+                FROM identity.events
+                WHERE kind = 'GrantChanged' AND payload->>'SubjectId' = @subject
+                  AND CAST(payload->'Subject'->>'Value' AS uuid) = @holder
+                """,
+                new { subject = subject.Value.ToString(), holder = subject.Value },
+                cancellationToken: TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -202,9 +382,10 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        Result<MembershipId> refused = await Attachment(writing).AttachAsync(
+        Result<MembershipId> refused = await Attachment(writing, work).AttachAsync(
             subject,
             second,
+            invitation: null,
             [],
             [],
             subject,
@@ -246,9 +427,10 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         await held.BeginAsync(cancellationToken);
         await raced.BeginAsync(cancellationToken);
 
-        Result<MembershipId> attached = await Attachment(holding).AttachAsync(
+        Result<MembershipId> attached = await Attachment(holding, held).AttachAsync(
             subject,
             first,
+            invitation: null,
             [],
             [],
             subject,
@@ -258,10 +440,11 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
             Noon,
             cancellationToken);
 
-        Task<Result<MembershipId>> waiting = Attachment(racing)
+        Task<Result<MembershipId>> waiting = Attachment(racing, raced)
             .AttachAsync(
                 subject,
                 second,
+                invitation: null,
                 [],
                 [],
                 subject,
@@ -369,13 +552,14 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private MembershipAttachment Attachment(StoreContext context) =>
+    private MembershipAttachment Attachment(StoreContext context, UnitOfWork work) =>
         new(
             new MembershipStore(context),
             new GrantStore(context, new DataConnections(context)),
             new GrantAudit(
                 new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness),
                 TimeProvider.System),
+            new EventOutbox(new PendingEvents(context), work),
             new DataConnections(context),
             TimeProvider.System);
 
@@ -401,22 +585,48 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         }
     }
 
+
+    private async Task<InvitationId> IssuedAsync(OrganizationId organization, SubjectId inviter)
+    {
+        var invitation = Invitation.Issued(
+            InvitationId.New(TimeProvider.System),
+            organization,
+            inviter,
+            new InvitedIdentifiers(Guid.NewGuid().ToString("N") + "@example.test", Phone: null, CorporateEmail: null),
+            roles: [],
+            documents: [],
+            mailbox: null,
+            OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
+            Noon,
+            TimeSpan.FromDays(7));
+
+        await using StoreContext writing = database.Context();
+
+        await new InvitationStore(writing, _deployment.DataKey(writing), _deployment.Randomness)
+            .AddAsync(invitation, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return invitation.Id;
+    }
+
     private async Task<MembershipId> AttachAsync(
         SubjectId subject,
         OrganizationId organization,
         IReadOnlyList<InvitationDocument> documents,
         IReadOnlyList<RoleName> roles,
         SubjectId inviter,
-        bool multiple)
+        bool multiple,
+        InvitationId? invitation = null)
     {
         await using StoreContext writing = database.Context();
         await using UnitOfWork work = new(writing);
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        MembershipId attached = (await Attachment(writing).AttachAsync(
+        MembershipId attached = (await Attachment(writing, work).AttachAsync(
                 subject,
                 organization,
+                invitation,
                 documents,
                 roles,
                 inviter,
