@@ -1017,12 +1017,21 @@ base".
     `..._AC3_EndingAMembershipRevokesWhatAPersonGaveAndLeavesItsGroupsAsync` and
     `..._AC3_EndingTheAdministrativeMembershipRevokesGrantsWhereTheAccountIsNoMemberAsync`
     (`Janus.Hosting.Tests`, integration);
-  - truth table: "a grant of a role carrying system administration that a role of the
-    caller lists, by a caller managing grants", `NotAssignable`.
-- A membership's end set in advance, IDN-MEM-001 (`c17ce71e`):
+  - truth table (`fdd6c639`): "an end of a membership reaching a role carrying system
+    administration that a role of the caller lists, by a caller managing memberships",
+    `NotAssignable`, the membership left current; "a grant of a role carrying system
+    administration that a role of the caller lists, by a caller managing grants",
+    `Denied`, as `09` section 8 answers a grant of such a role without
+    `system:administer` (OPS-CFG-007). `739c8962` had written the grant's row as
+    `NotAssignable`, which the pipeline's runs on `f90c4460` refused (section 5).
+- A membership's end set in advance, IDN-MEM-001 (`c17ce71e`, `23906caa`):
   - `PUT` and `DELETE /admin/organizations/{id}/memberships/{subject}/end`, the
     membership's `ends_at`, `end_set_by` and `end_reason` in the migration
     `AddMembershipEnds`, and `identity.membership.endset`;
+  - `end_set_by` refuses the max UUID (`ck_memberships_end_set_by_not_max_uuid`, the
+    migration `RefuseTheMaxUuidWhereAnEndNamesWhoSetIt`, `23906caa`), which
+    `SchemaContractTests.PRIV_RIGHT_005a_AC18_EveryColumnThatCanHoldASubjectRefusesTheMaxUuidAsync`
+    holds every subject column to;
   - `MembershipTests.IDN_MEM_001_AC7_AnEndSetInAdvanceIsMovedAndCancelled` and
     `MembershipTests.SetEnd_AMembershipThatHasEnded_Throws`;
   - `InvitationServiceTests.IDN_MEM_001_AC7_AnEndIsSetMovedAndCancelledAsync`,
@@ -1046,6 +1055,11 @@ base".
     `MembershipEndingTests.IDN_MEM_001_AC2_TheMembershipEndsAndItsRecordStaysAsync`;
   - AC5 and AC6: their tests in `InvitationServiceTests` (`Janus.Authentication.Tests`),
     each now ending with a reason.
+- The contract files, LIB-API-001 AC2 (`1baea90e`): `error-statuses.txt` gains
+  `authz.grant.self` and `authz.role.notassignable`, `configuration-keys.txt`
+  `authz.handout.byholding`, `endpoints.txt` the routes and refusals above, and
+  `schema.txt` the membership's end and a role's `hands_out`; the commits that changed
+  them had left them as they were, which the pipeline's runs on `f90c4460` refused.
 - D-215 answer 53: nothing to build. D-215 answer 54: the page case verified in review
   (below, under criteria no test decides).
 
@@ -2120,10 +2134,26 @@ base".
 
 **The run under D-212 to D-216 (D-214).**
 
-- Fast checks on every commit from `44a3a518` to `1a6ed945`: build with warnings as
+- Fast checks on every commit from `44a3a518` to `fdd6c639`: build with warnings as
   errors, the analysers and `dotnet format --verify-no-changes` over `Janus.slnx`, and
   the unit tests of the projects each commit changes, all green; the truth-table change,
   changelog and forbidden-marker gates over each commit, green.
+- The pipeline's runs on `f90c4460`, the report's commit of the first push, failed: the
+  push run 40449933566 (the contract tests; the jobs after them skipped) and the pull
+  request run 40449935293 (the contract tests, the truth-table suite and the
+  integration tests). The causes, each fixed in a new commit:
+  - `ErrorCodesTests.LIB_API_001_AC2_TheStatusesAreTheContract`,
+    `SettingsCatalogueTests.LIB_API_001_AC2_TheKeysAreTheContract`,
+    `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract` and
+    `SchemaContractTests.LIB_API_001_AC2_TheLibraryOwnedSchemaIsTheContractAsync`: the
+    contract files (`1baea90e`);
+  - `SchemaContractTests.PRIV_RIGHT_005a_AC18_EveryColumnThatCanHoldASubjectRefusesTheMaxUuidAsync`:
+    `memberships.end_set_by` (`23906caa`);
+  - `TruthTableTests.AUTHZ_TEST_001_AC1_EveryOperationCaseDecidesTheWayTheTableSaysAsync`,
+    the grant's row of a role carrying system administration (`fdd6c639`).
+  - After the fixes, run here as D-214 allows for a test a failing run names: the
+    contract tests, 211 of 211; `SchemaContractTests`, 5 of 5; `TruthTableTests`, 203 of
+    203.
 - Before the push of this commit:
   - every unit test of every test project, 4742 of 4742: `Janus.Analyzers.Tests` 23,
     `Janus.Authentication.Tests` 1652, `Janus.Authorization.Tests` 235,
