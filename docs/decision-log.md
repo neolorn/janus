@@ -18208,6 +18208,59 @@ row); `10` section 4.5a (`authz.handout.byholding`).
 
 ---
 
+## D-217 — Round H1 question 57 and the review: who a set end's records name, and two denies kept
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** D-212, D-213, D-216
+
+**TL;DR.** The run under D-212 to D-216 asked one question, Tier 3, and the review of its
+security code found two places where a deny was lifted. The job that ends a membership at
+the instant set writes its records under its own principal, naming the administrator who
+set the end in `details.endSetBy` (57). From the review: a deny of a role defeats that
+role's `handsOut` as it defeats the role's permissions, and ending a membership revokes
+the account's allow grants and leaves its deny grants standing.
+
+57. **Who a set end's records name (Tier 3).** IDN-MEM-001 and `10` section 5.24 had the
+    job `membership-ends` record the administrator who set the end as acting, while
+    section 5.29 and INF-BG-002 have every job write under its own principal, and
+    `ck_audit_records_principal` forbids a row naming both. The job's records are the
+    job's: the nil subject in both identities, the principal `membership-ends` with the
+    reason `IDN-MEM-001`, `details.endSetBy` the administrator who set the end and
+    `details.reason` the reason they gave, on `identity.membership.ended` and on each
+    `authz.grant.revoked` and `authz.group.memberremoved` the pass writes; a grant it
+    revokes carries the nil subject as revoker, as a record's removal does
+    (AUTHZ-INHERIT-002). *Rejected:* the administrator as acting identity, which would
+    say they acted at an instant they did not, and which the constraint forbids;
+    leaving the administrator out, which loses who decided.
+
+Found in review of the security code:
+- **A deny of a hand-out role.** The hand-out check read a role's `handsOut`
+  through its allow grant alone, so a person denied the role `hr` still handed out
+  every role `hr` lists, wherever a role the deny does not defeat gave them the
+  permission to make the change. AUTHZ-GRANT-002
+  has a deny defeat any allow. A role's list now counts only where no live deny grant
+  of that role to the actor, or to a group it belongs to, covers the change: across
+  the organization, or on the change's record or an ancestor of it (AUTHZ-GRANT-005
+  criterion 8).
+- **Denies at an end.** D-213 revoked every grant a person made to the
+  account, denies included. Revoking a deny lifts what it defeats, a derived grant
+  included (AUTHZ-DERIVE-002), so ending the membership of someone denied one record
+  gave them that record wherever the host's relationships still reached it, and a
+  revocation made by an end was the one change the hand-out rule did not judge as
+  widening. An end now revokes the account's allow grants only; its deny grants stand,
+  and an end only ever takes access away. A group's deny goes with the group, as its
+  allows do; a deny meant for the person is made on the person. *Rejected:* judging an
+  end's deny revocations as widening, which would refuse ending the membership of
+  anyone an administrator had denied something.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-MEM-001 (statement, values, criteria 3 and 7); `03`
+AUTHZ-GRANT-005 (the second condition; criterion 8); `09` section 8a (the immediate
+end's row); `10` section 5.24 (`identity.membership.ended`, `authz.grant.revoked`,
+`authz.group.memberremoved`); `16` section 3 (step 3).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18434,6 +18487,7 @@ row); `10` section 4.5a (`authz.handout.byholding`).
 | The full gate runs in the pipeline, not on the implementer's machine | D-214 |
 | Round H1 questions 53 and 54: a package another brings, and the page case | D-215 |
 | Round H1 questions 55 and 56: the reason a membership's end records, and what holding admits | D-216 |
+| Round H1 question 57 and the review: who a set end's records name, and two denies kept | D-217 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -225,7 +225,9 @@ hand out every role it touches. The actor may hand out a role where:
 - it holds `system:administer` in the administrative organization; or
 - a role it holds, through a live allow grant at a scope that covers the change (across
   the organization, or on the grant's resource or an ancestor of it), lists that role
-  among the roles its holders may hand out (`handsOut`); or
+  among the roles its holders may hand out (`handsOut`), and no live deny grant of that
+  role to the actor, or to a group it belongs to, covers the change, since a deny
+  defeats any allow (AUTHZ-GRANT-002, D-217); or
 - `authz.handout.byholding` is on (`10` section 4.5a; off by default) and the actor's
   grants admit, at the change's scope, every permission the role carries, as the gate's
   stored grant terms decide it (allows less denies, through groups and containment,
@@ -261,7 +263,7 @@ admission is (AUTHZ-SCOPE-001, AUTHZ-GATE-006); a refusal writes nothing and is 
 as a refusal (AUTHZ-CONCEAL-004), counting toward `alerting.denials.threshold`; an
 admitted change is recorded as before, with its reason and its step-up.
 
-*Source: D-212, D-213, D-216*
+*Source: D-212, D-213, D-216, D-217*
 
 Without it, anyone who may manage grants holds every role one step removed, which is
 OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
@@ -291,6 +293,9 @@ the record of who gave what, when and why is the control.
 7. With the setting on, an actor admitted to a permission on a record only through a live
    derivation is refused a role carrying it there with `authz.role.notassignable`, not a
    fault; one admitted through a materialised derivation hands the role out (D-216).
+8. An actor holding a role whose `handsOut` names `accountant`, and a deny of that role
+   covering the change, is refused `authz.role.notassignable` for `accountant`, the
+   setting off; with the deny revoked, it hands `accountant` out (D-217).
 
 ---
 

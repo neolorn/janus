@@ -65,11 +65,12 @@ if the departure is temporary or disputed. (D-148)
 **3 — End organization membership.**
 
 The account may hold membership beyond the one being left. Ending membership is distinct
-from suspending the account (IDN-MEM-001). It revokes every grant a person gave them in
-the organization and takes them out of its groups, and, for the administrative
-organization, does the same in every organization they are not a member of (D-213);
-access they hold through the host's own relationships is the host's to end. Where an end
-was set for their last day (section 2), this step has already happened.
+from suspending the account (IDN-MEM-001). It revokes every allow grant a person gave
+them in the organization (a deny on them stands, D-217) and takes them out of its
+groups, and, for the administrative organization, does the same in every organization
+they are not a member of (D-213); access they hold through the host's own relationships
+is the host's to end. Where an end was set for their last day (section 2), this step has
+already happened.
 
 Ending membership is also what retires the corporate address (REG-MAIL-003). The
 address stops resolving to the account and the mailbox is disabled, and the address
