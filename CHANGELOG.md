@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deny of a role defeats the roles it hands out: a role's `handsOut` counts only where
+  no live deny of that role to the actor, or to a group the actor belongs to, covers the
+  change, across the organization or on the change's record or a container above it.
 - The administrator a membership's end set in advance names refuses the max UUID by a
   check constraint, as every other column holding a subject identifier does.
 - `membership-ends` is a library principal's name: a host job declared under it stops

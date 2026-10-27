@@ -369,6 +369,59 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
         }
     }
 
+    /// <summary>
+    /// AUTHZ-GRANT-005 AC8: with handing out by holding off, a role's <c>handsOut</c>
+    /// counts only where no live deny of that role to the actor, or to a group it belongs
+    /// to, covers the change: a deny across the organization, or on the change's record
+    /// or a container above it, refuses the role the list names with
+    /// <c>authz.role.notassignable</c>; a deny on a record covers no change across the
+    /// organization; with the denies revoked, the actor hands the role out.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_005_AC8_ADenyOfARoleDefeatsTheRolesItHandsOutAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Case held = await CaseAsync();
+        Deployment deployment = held.Deployment;
+        var folder = new ResourceReference(Workspace, ResourceId.Parse(Guid.NewGuid().ToString()));
+        var page = new ResourceReference(Workspace, ResourceId.Parse(Guid.NewGuid().ToString()));
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        SubjectId other = await deployment.AccountAsync(cancellationToken);
+        RoleName accountant = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        RoleName personnel = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        GroupId denied = await deployment.GroupAsync(cancellationToken);
+
+        await deployment.RegisterAsync(folder, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(page, folder, cancellationToken);
+        await deployment.HandsOutAsync(personnel, [accountant], cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(held.Actor), personnel, null, false, null, null, cancellationToken);
+        await deployment.JoinAsync(denied, GrantSubject.Of(held.Actor), cancellationToken);
+
+        GrantId above = await deployment.GrantAsync(
+            GrantSubject.Of(denied), personnel, folder, true, null, null, cancellationToken);
+
+        Result<GrantId> underTheDeny = await GrantedAsync(held, GrantSubject.Of(account), accountant, page);
+        Result<GrantId> beyondIt = await GrantedAsync(held, GrantSubject.Of(account), accountant);
+
+        GrantId across = await deployment.GrantAsync(
+            GrantSubject.Of(held.Actor), personnel, null, true, null, null, cancellationToken);
+
+        Result<GrantId> acrossTheOrganization = await GrantedAsync(held, GrantSubject.Of(other), accountant);
+
+        await deployment.RevokeAsync(above, cancellationToken);
+        await deployment.RevokeAsync(across, cancellationToken);
+
+        Result<GrantId> revoked = await GrantedAsync(held, GrantSubject.Of(other), accountant, page);
+
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Code(underTheDeny));
+        Assert.Null(Code(beyondIt));
+        Assert.Equal(ErrorCodes.RoleNotAssignable, Code(acrossTheOrganization));
+        Assert.Null(Code(revoked));
+        Assert.Equal(1, await LiveGrantsAsync(account));
+        Assert.Equal(1, await LiveGrantsAsync(other));
+    }
+
     private static ErrorCode? Code(Result<GrantId> result) =>
         result.Match<ErrorCode?>(_ => null, error => error.Code);
 

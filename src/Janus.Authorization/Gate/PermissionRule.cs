@@ -238,7 +238,8 @@ internal sealed class PermissionRule
     /// The roles the principal may hand out by what it holds: every role named in the
     /// <c>handsOut</c> of a role it holds through a live allow grant in the organization,
     /// across the organization or, for a change scoped to a record, on the record or a
-    /// container above it.
+    /// container above it, where no live deny of that role to the principal covers the
+    /// change.
     /// </summary>
     /// <param name="organization">The organization the change is made in.</param>
     /// <param name="resource">The record the change is scoped to, or nothing for the whole organization.</param>
@@ -247,9 +248,11 @@ internal sealed class PermissionRule
     /// <returns>The statement and its parameters, one row per role handed out.</returns>
     /// <exception cref="ArgumentNullException">The subjects are absent.</exception>
     /// <remarks>
-    /// Implements AUTHZ-GRANT-005 (D-212). A deny takes nothing away from what a role
-    /// hands out: the role is held through the allow, and a grant of an organization whose
-    /// deletion was requested confers nothing, as the view the gate reads holds (IDN-ORG-003).
+    /// Implements AUTHZ-GRANT-005 (D-212, D-217). A deny of a role defeats its list as it
+    /// defeats its permissions (AUTHZ-GRANT-002), where the deny covers the change: across
+    /// the organization, or on the change's record or a container above it. A grant of an
+    /// organization whose deletion was requested confers nothing, as the view the gate
+    /// reads holds (IDN-ORG-003).
     /// In the administrative organization nothing is held by an account with no current
     /// membership of it (IDN-LIFE-009a).
     /// </remarks>
@@ -271,23 +274,10 @@ internal sealed class PermissionRule
             [Prefix + "at"] = at,
         };
 
-        string covering = string.Empty;
-
         if (resource is ResourceReference scoped)
         {
             parameters[Prefix + "type"] = scoped.Type.ToString();
             parameters[RecordParameter] = scoped.Id.ToString();
-            covering = string.Create(
-                CultureInfo.InvariantCulture,
-                $"""
-                 OR EXISTS (
-                          SELECT 1
-                          FROM identity.ancestry AS {Prefix}above
-                          WHERE {Prefix}above.resource_type = @{Prefix}type
-                            AND {Prefix}above.resource_id = @{RecordParameter}
-                            AND {Prefix}above.ancestor_type = {Prefix}grant.resource_type
-                            AND {Prefix}above.ancestor_id = {Prefix}grant.resource_id)
-                """);
         }
 
         return new SqlFilter(
@@ -301,16 +291,49 @@ internal sealed class PermissionRule
                 CROSS JOIN LATERAL unnest({Prefix}role.hands_out) AS {Prefix}handed(name)
                 WHERE NOT {Prefix}grant.deny
                   AND {Prefix}scope.deletion_requested_at IS NULL
-                  AND {Prefix}grant.organization = @{Prefix}organization
-                  AND {Prefix}grant.revoked_at IS NULL
-                  AND ({Prefix}grant.expires_at IS NULL OR {Prefix}grant.expires_at > @{Prefix}at)
-                  AND (({Prefix}grant.subject_type = 'user'
-                          AND {Prefix}grant.subject_id = ANY(@{Prefix}accounts))
-                    OR ({Prefix}grant.subject_type = 'group'
-                          AND {Prefix}grant.subject_id = ANY(@{Prefix}groups)))
-                  AND ({Prefix}grant.resource_type IS NULL{covering});
+                  AND {HeldCovering(Prefix + "grant", resource)}
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM identity.grants AS {Prefix}deny
+                      WHERE {Prefix}deny.deny
+                        AND {Prefix}deny.role = {Prefix}grant.role
+                        AND {HeldCovering(Prefix + "deny", resource)});
                 """),
             parameters);
+    }
+
+    // AUTHZ-GRANT-005: a live grant to the principal in the change's organization that
+    // covers the change, across the organization or on its record or a container above
+    // it (an ancestry row of depth 0 is the record itself).
+    private static string HeldCovering(string grant, ResourceReference? resource)
+    {
+        string covering = resource is null
+            ? string.Empty
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+
+                     OR EXISTS (
+                          SELECT 1
+                          FROM identity.ancestry AS {grant}_above
+                          WHERE {grant}_above.resource_type = @{Prefix}type
+                            AND {grant}_above.resource_id = @{RecordParameter}
+                            AND {grant}_above.ancestor_type = {grant}.resource_type
+                            AND {grant}_above.ancestor_id = {grant}.resource_id)
+                """);
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
+            {grant}.organization = @{Prefix}organization
+                  AND {grant}.revoked_at IS NULL
+                  AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
+                  AND (({grant}.subject_type = 'user'
+                          AND {grant}.subject_id = ANY(@{Prefix}accounts))
+                    OR ({grant}.subject_type = 'group'
+                          AND {grant}.subject_id = ANY(@{Prefix}groups)))
+                  AND ({grant}.resource_type IS NULL{covering})
+            """);
     }
 
     /// <summary>

@@ -166,6 +166,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants",
             Decided.Denied),
         (
+            "a grant of a role a role of the caller lists, the caller denied the listing role, by a caller managing grants",
+            Decided.NotAssignable),
+        (
             "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships",
             Decided.NotAssignable),
         (
@@ -1656,12 +1659,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a grant written and then revoked, by a caller managing grants":
                 return await GrantedAndRevokedAsync(deployment, role, caller);
 
-            // AUTHZ-GRANT-005 (D-212): a grant, and a revocation, hand out the role they
-            // name; an allow grant to the caller widens its own access whatever it may hand
-            // out; and a grant of a role carrying system administration needs that
-            // permission, whatever list names the role (OPS-CFG-007).
+            // AUTHZ-GRANT-005 (D-212, D-217): a grant, and a revocation, hand out the role
+            // they name; a deny of the role whose list names it defeats the list; an allow
+            // grant to the caller widens its own access whatever it may hand out; and a
+            // grant of a role carrying system administration needs that permission,
+            // whatever list names the role (OPS-CFG-007).
             case "a grant of a role no role of the caller hands out, by a caller managing grants":
             case "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants":
+            case "a grant of a role a role of the caller lists, the caller denied the listing role, by a caller managing grants":
             case "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants":
             case "an allow grant to the caller itself, of a role the caller hands out":
                 return await HandedOutAsync(deployment, role, caller, scenario);
@@ -2534,10 +2539,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return decided;
     }
 
-    // AUTHZ-GRANT-005 (D-212, D-213): a grant across the organization of a role the managing
-    // role does not list, the revocation of one, a grant to the caller of the role it lists,
-    // or a grant of a role carrying system administration that a role of the caller lists,
-    // on a session that meets the gate.
+    // AUTHZ-GRANT-005 (D-212, D-213, D-217): a grant across the organization of a role the
+    // managing role does not list, the revocation of one, the grant of one a role listing it
+    // is denied the caller, a grant to the caller of the role it lists, or a grant of a role
+    // carrying system administration that a role of the caller lists, on a session that
+    // meets the gate.
     private async Task<Decided> HandedOutAsync(
         Deployment deployment,
         RoleName role,
@@ -2573,6 +2579,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             await deployment.GrantAsync(GrantSubject.Of(caller), listing, null, false, null, null, cancellationToken);
 
             unlisted = administering;
+        }
+
+        if (scenario.Contains("the caller denied the listing role", StringComparison.Ordinal))
+        {
+            RoleName listing = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+
+            await deployment.HandsOutAsync(listing, [unlisted], cancellationToken);
+            await deployment.GrantAsync(GrantSubject.Of(caller), listing, null, false, null, null, cancellationToken);
+            await deployment.GrantAsync(GrantSubject.Of(caller), listing, null, true, null, null, cancellationToken);
         }
 
         bool own = scenario.StartsWith("an allow grant to the caller", StringComparison.Ordinal);
