@@ -26,15 +26,19 @@ internal sealed class OrganizationStatesInMemory : IOrganizationStates
     /// </summary>
     /// <param name="organization">Which organization.</param>
     /// <param name="since">When the window began.</param>
-    /// <param name="members">How many current memberships it has.</param>
+    /// <param name="members">
+    /// How many current memberships it has, the first and every other one begun from an
+    /// invitation.
+    /// </param>
     public void Deletes(OrganizationId organization, DateTimeOffset since, int members = 0)
     {
         _deleting[organization] = new PendingOrganizationDeletion(organization, since);
         _members[organization] =
         [
-            .. Enumerable.Range(0, members).Select(_ => new EndedMembership(
+            .. Enumerable.Range(0, members).Select(index => new EndedMembership(
                 new MembershipId(Guid.CreateVersion7()),
-                new SubjectId(Guid.NewGuid()))),
+                new SubjectId(Guid.NewGuid()),
+                index % 2 is 0 ? new InvitationId(Guid.CreateVersion7()) : null)),
         ];
     }
 

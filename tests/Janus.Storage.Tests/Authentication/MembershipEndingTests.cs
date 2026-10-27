@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Events;
+using Janus.Authentication.Invitations;
 using Janus.Core;
 using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Invitations;
@@ -128,6 +129,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
                 .AttachAsync(
                     subject,
                     organization,
+                    invitation: null,
                     [],
                     [],
                     subject,
@@ -154,10 +156,10 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
 
         Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
-        MembershipId? ended = await ending.EndAsync(subject, organization, at, TestContext.Current.CancellationToken);
+        EndedMembership? ended = await ending.EndAsync(subject, organization, at, TestContext.Current.CancellationToken);
 
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
 
-        return ended;
+        return ended?.Membership;
     }
 }

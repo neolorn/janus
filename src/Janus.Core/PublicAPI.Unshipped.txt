@@ -1866,11 +1866,13 @@ Janus.Core.MembershipChange.Ended = 1 -> Janus.Core.MembershipChange
 Janus.Core.MembershipChanged
 Janus.Core.MembershipChanged.Change.get -> Janus.Core.MembershipChange
 Janus.Core.MembershipChanged.Change.init -> void
-Janus.Core.MembershipChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.MembershipId Membership, out Janus.Core.OrganizationId Organization, out Janus.Core.MembershipChange Change) -> void
+Janus.Core.MembershipChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.MembershipId Membership, out Janus.Core.OrganizationId Organization, out Janus.Core.MembershipChange Change, out Janus.Core.InvitationId? Invitation) -> void
 Janus.Core.MembershipChanged.Equals(Janus.Core.MembershipChanged? other) -> bool
+Janus.Core.MembershipChanged.Invitation.get -> Janus.Core.InvitationId?
+Janus.Core.MembershipChanged.Invitation.init -> void
 Janus.Core.MembershipChanged.Membership.get -> Janus.Core.MembershipId
 Janus.Core.MembershipChanged.Membership.init -> void
-Janus.Core.MembershipChanged.MembershipChanged(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.MembershipId Membership, Janus.Core.OrganizationId Organization, Janus.Core.MembershipChange Change) -> void
+Janus.Core.MembershipChanged.MembershipChanged(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.MembershipId Membership, Janus.Core.OrganizationId Organization, Janus.Core.MembershipChange Change, Janus.Core.InvitationId? Invitation) -> void
 Janus.Core.MembershipChanged.Organization.get -> Janus.Core.OrganizationId
 Janus.Core.MembershipChanged.Organization.init -> void
 Janus.Core.MembershipId

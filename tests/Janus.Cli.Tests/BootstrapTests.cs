@@ -693,6 +693,32 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// IDN-READ-002 AC1 (D-218): a membership bootstrap attaches began from no invitation,
+    /// so neither its row nor its announcement names one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC1_AMembershipBootstrapAttachesNamesNoInvitationAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(
+            (3, 0, 3, 0),
+            await connection.QuerySingleAsync<(int, int, int, int)>(
+                """
+                SELECT
+                    count(*)::int,
+                    count(*) FILTER (WHERE m.invitation IS NOT NULL)::int,
+                    (SELECT count(*)::int FROM identity.events WHERE kind = 'MembershipChanged'),
+                    (SELECT count(*)::int FROM identity.events
+                     WHERE kind = 'MembershipChanged' AND payload->>'Invitation' IS NOT NULL)
+                FROM identity.memberships m
+                JOIN identity.organizations o ON o.id = m.organization
+                WHERE o.administrative
+                """));
+    }
+
+    /// <summary>
     /// OPS-ALERT-001 and OPS-BOOT-001 AC3: that no emergency credential exists is raised
     /// through the alert channels, so the <c>AlertRaised</c> event is written with the
     /// raised row, in bootstrap's transaction.

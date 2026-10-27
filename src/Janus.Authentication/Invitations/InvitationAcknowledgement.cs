@@ -272,6 +272,7 @@ internal sealed class InvitationAcknowledgement(
                 .AttachAsync(
                     invitee,
                     invitation.Organization,
+                    invitation.Id,
                     invitation.Documents,
                     invitation.Roles,
                     invitation.Inviter,
@@ -302,7 +303,8 @@ internal sealed class InvitationAcknowledgement(
                 Key(membership, now),
                 membership,
                 invitation.Organization,
-                MembershipChange.Began)
+                MembershipChange.Began,
+                invitation.Id)
             {
                 Subject = invitee,
             },

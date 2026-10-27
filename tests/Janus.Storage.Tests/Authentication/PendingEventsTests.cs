@@ -382,7 +382,8 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             "membership",
             new MembershipId(Guid.CreateVersion7(Noon)),
             new OrganizationId(Guid.CreateVersion7(Noon)),
-            MembershipChange.Ended),
+            MembershipChange.Ended,
+            new InvitationId(Guid.CreateVersion7(Noon))),
         new ObjectionChanged(Noon, "objection", "profiling", Objecting: true) { Subject = Subject },
         new OrganizationCreated(Noon, "organization-created", new OrganizationId(Guid.CreateVersion7(Noon))) { Actor = Actor },
         new OrganizationDeletionCancelled(Noon, "organization-deletion-cancelled", new OrganizationId(Guid.CreateVersion7(Noon)))

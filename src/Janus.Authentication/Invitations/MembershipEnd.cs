@@ -204,7 +204,7 @@ internal sealed class MembershipEnd(
         // A second end that read the membership before this one committed finds none
         // here, and is answered as the find would answer it.
         if (await memberships.EndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
-            is not MembershipId ended)
+            is not EndedMembership ended)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -227,7 +227,13 @@ internal sealed class MembershipEnd(
 
         List<DomainEvent> announced =
         [
-            new MembershipChanged(now, Key(ended, now), ended, organization, MembershipChange.Ended)
+            new MembershipChanged(
+                now,
+                Key(ended.Membership, now),
+                ended.Membership,
+                organization,
+                MembershipChange.Ended,
+                ended.Invitation)
             {
                 Subject = member,
             },
@@ -247,7 +253,7 @@ internal sealed class MembershipEnd(
         await audit
             .MembershipEndedAsync(
                 organization,
-                ended,
+                ended.Membership,
                 member,
                 stated,
                 acting,
@@ -570,7 +576,13 @@ internal sealed class MembershipEnd(
 
         List<DomainEvent> announced =
         [
-            new MembershipChanged(now, Key(ended.Membership, now), ended.Membership, ended.Organization, MembershipChange.Ended)
+            new MembershipChanged(
+                now,
+                Key(ended.Membership, now),
+                ended.Membership,
+                ended.Organization,
+                MembershipChange.Ended,
+                ended.Invitation)
             {
                 Subject = ended.Member,
             },

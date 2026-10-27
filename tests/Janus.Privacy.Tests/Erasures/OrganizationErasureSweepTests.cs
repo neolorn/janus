@@ -167,7 +167,8 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-MEM-001: every membership the erasure ended is announced as ended, each
-    /// under its own key and naming whose it was, in the erasure's transaction.
+    /// under its own key and naming whose it was and the invitation it began from, if
+    /// any (IDN-READ-002, D-218), in the erasure's transaction.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -190,8 +191,8 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
             Assert.Null(changed.Actor);
         });
         Assert.Equal(
-            _organizations.MembersOf(Acme).Select(ended => (ended.Membership, (SubjectId?)ended.Subject)),
-            announced.Select(changed => (changed.Membership, changed.Subject)));
+            _organizations.MembersOf(Acme).Select(ended => (ended.Membership, (SubjectId?)ended.Subject, ended.Invitation)),
+            announced.Select(changed => (changed.Membership, changed.Subject, changed.Invitation)));
         Assert.Equal(2, announced.Select(changed => changed.IdempotencyKey).Distinct().Count());
     }
 

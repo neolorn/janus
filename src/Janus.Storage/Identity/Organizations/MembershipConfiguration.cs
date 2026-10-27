@@ -1,5 +1,6 @@
 using System;
 using Janus.Core;
+using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -82,6 +83,10 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
 
         builder.Property(membership => membership.EndReason).HasColumnName("end_reason");
 
+        builder.Property(membership => membership.Invitation)
+            .HasColumnName("invitation")
+            .HasConversion(invitation => invitation!.Value.Value, value => new InvitationId(value));
+
         builder.HasOne<AccountRecord>()
             .WithMany()
             .HasForeignKey(membership => membership.Subject)
@@ -94,12 +99,23 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
             .HasConstraintName("fk_memberships_organization")
             .OnDelete(DeleteBehavior.Restrict);
 
+        // IDN-READ-002 (D-218): an invitation row is never deleted, so the one a membership
+        // began from stays to be named.
+        builder.HasOne<InvitationRecord>()
+            .WithMany()
+            .HasForeignKey(membership => membership.Invitation)
+            .HasConstraintName("fk_memberships_invitation")
+            .OnDelete(DeleteBehavior.Restrict);
+
         // An account's memberships are read together, and so are an organization's.
         builder.HasIndex(membership => membership.Subject)
             .HasDatabaseName("ix_memberships_subject");
 
         builder.HasIndex(membership => membership.Organization)
             .HasDatabaseName("ix_memberships_organization");
+
+        builder.HasIndex(membership => membership.Invitation)
+            .HasDatabaseName("ix_memberships_invitation");
 
         // IDN-MEM-002, X3 of D-166: an account holds one current membership of an
         // organization, whatever commits together.

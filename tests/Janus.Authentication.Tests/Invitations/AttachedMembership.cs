@@ -25,4 +25,10 @@ internal sealed record AttachedMembership(
     SubjectId GrantedBy,
     string Reason,
     AccessContext Acting,
-    DateTimeOffset At);
+    DateTimeOffset At)
+{
+    /// <summary>
+    /// The invitation whose acknowledgement began it, or nothing where bootstrap attached it.
+    /// </summary>
+    public InvitationId? Invitation { get; init; }
+}

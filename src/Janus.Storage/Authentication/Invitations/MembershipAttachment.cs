@@ -61,6 +61,7 @@ internal sealed class MembershipAttachment(
     public async ValueTask<Result<MembershipId>> AttachAsync(
         SubjectId subject,
         OrganizationId organization,
+        InvitationId? invitation,
         IReadOnlyList<InvitationDocument> acknowledged,
         IReadOnlyList<RoleName> roles,
         SubjectId grantedBy,
@@ -112,7 +113,8 @@ internal sealed class MembershipAttachment(
                 held,
                 multiple,
                 at,
-                new MembershipAcknowledgement(acknowledged, at))
+                new MembershipAcknowledgement(acknowledged, at),
+                invitation)
             .Match(made => made, error => Withheld<Membership>(error, ref failure));
 
         if (failure is not null)

@@ -489,6 +489,7 @@ internal sealed class DeploymentBootstrap(
                 .AttachAsync(
                     subject,
                     organization,
+                    invitation: null,
                     [],
                     roles,
                     Ungranted,
@@ -507,7 +508,13 @@ internal sealed class DeploymentBootstrap(
 
         return (await events
                 .PublishAsync(
-                    new MembershipChanged(at, Key(membership, at), membership, organization, MembershipChange.Began)
+                    new MembershipChanged(
+                        at,
+                        Key(membership, at),
+                        membership,
+                        organization,
+                        MembershipChange.Began,
+                        Invitation: null)
                     {
                         Subject = subject,
                     },

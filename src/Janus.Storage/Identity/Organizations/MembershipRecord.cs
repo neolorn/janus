@@ -63,4 +63,10 @@ internal sealed class MembershipRecord
     /// The <c>end_reason</c> column: why.
     /// </summary>
     public string? EndReason { get; set; }
+
+    /// <summary>
+    /// The <c>invitation</c> column: the invitation whose acknowledgement began the
+    /// membership, where one did (IDN-READ-002, D-218).
+    /// </summary>
+    public InvitationId? Invitation { get; set; }
 }

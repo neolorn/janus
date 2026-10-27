@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `MembershipChanged` carries `invitation`, the invitation whose acknowledgement began
+  the membership, on its beginning and on its end; a membership bootstrap attached
+  names none. A membership standing before this release is matched to the invitation it
+  began from when the migration runs.
 - The event `SessionEnded`, carrying the session and `reason` (`signedout`, `ended`,
   `revoked`, `account` or `organization`), written for each session ended before its
   expiry: by an administrator's revocation of an account's sessions or of every session,

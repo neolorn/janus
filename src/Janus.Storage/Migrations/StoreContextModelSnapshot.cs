@@ -3425,6 +3425,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("ends_at");
 
+                b.Property<Guid?>("Invitation")
+                    .HasColumnType("uuid")
+                    .HasColumnName("invitation");
+
                 b.Property<Guid>("Organization")
                     .HasColumnType("uuid")
                     .HasColumnName("organization");
@@ -3435,6 +3439,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id")
                     .HasName("pk_memberships");
+
+                b.HasIndex("Invitation")
+                    .HasDatabaseName("ix_memberships_invitation");
 
                 b.HasIndex("Organization")
                     .HasDatabaseName("ix_memberships_organization");
@@ -4686,6 +4693,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Janus.Storage.Identity.Organizations.MembershipRecord", b =>
             {
+                b.HasOne("Janus.Storage.Authentication.Invitations.InvitationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Invitation")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("fk_memberships_invitation");
+
                 b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
                     .WithMany()
                     .HasForeignKey("Organization")
