@@ -484,6 +484,27 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-219): the three roles bootstrap defines are
+    /// read by a host as bootstrap made them, so none is announced as defined.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_TheRolesBootstrapDefinesAreNotAnnouncedAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(
+            (3, 0),
+            await connection.QuerySingleAsync<(int, int)>(
+                """
+                SELECT
+                    (SELECT count(DISTINCT role)::int FROM identity.role_permissions
+                     WHERE role IN ('system-administrator', 'auditor', 'support')),
+                    (SELECT count(*)::int FROM identity.events WHERE kind = 'RoleChanged')
+                """));
+    }
+
+    /// <summary>
     /// IDN-PRIN-001 AC4 and OPS-CFG-005: what bootstrap defines and every value it sets
     /// are recorded under its own named principal with its stated reason, since no
     /// person is signed in to answer for them.
