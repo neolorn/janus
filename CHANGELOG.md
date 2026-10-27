@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host reads another person's account (`IAccounts.ReadAsync`,
+  `GET /admin/accounts/{subject}`) under `account:read`, finds an account by its email
+  address, phone number or username as sign-in reads it (`IAccounts.FindAsync`,
+  `POST /admin/accounts/find`), and reads the contact details it writes to
+  (`IAccounts.ContactAsync`, `GET /admin/accounts/{subject}/contact`) under
+  `contact:read`, which a declared job may hold. Each is asked in the organization named,
+  the administrative organization where none is: asked there it reaches every account,
+  and asked elsewhere only the organization's current members and the data subjects of
+  its records; an account beyond the reach, a deleted one and an unknown subject are
+  answered alike. Each account and contact a person reads counts toward their read
+  volume.
 - `MembershipChanged` carries `invitation`, the invitation whose acknowledgement began
   the membership, on its beginning and on its end; a membership bootstrap attached
   names none. A membership standing before this release is matched to the invitation it

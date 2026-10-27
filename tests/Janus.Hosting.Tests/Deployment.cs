@@ -626,6 +626,16 @@ internal sealed class Deployment : IAsyncDisposable
     public UnitOfWorkInMemory Work { get; } = new();
 
     /// <summary>
+    /// Which accounts each organization reaches (IDN-READ-004).
+    /// </summary>
+    public AccountTiesInMemory Ties { get; } = new();
+
+    /// <summary>
+    /// The records each person was given (OPS-ALERT-005).
+    /// </summary>
+    public ReadVolumeInMemory Volume { get; } = new();
+
+    /// <summary>
     /// The events the operations published.
     /// </summary>
     public EventsInMemory Events { get; }
@@ -1124,6 +1134,9 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        _ = services.AddSingleton<IAccountTies>(Ties);
+        _ = services.AddSingleton<IReadVolume>(Volume);
+        _ = services.AddScoped<AccountReach>();
         _ = services.AddScoped<IAccounts, AccountAdministration>();
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<TextedEnrolments>();

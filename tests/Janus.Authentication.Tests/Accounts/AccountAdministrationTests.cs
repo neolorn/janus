@@ -11,6 +11,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -101,6 +102,15 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 _work,
                 codec: null,
                 _clock),
+            new AccountReach(
+                _gate,
+                _administrative,
+                new OrganizationsInMemory(_memberships),
+                new AccountTiesInMemory()),
+            new IdentifierDirectoryInMemory(),
+            _memberships,
+            Declared,
+            new ReadVolumeInMemory(),
             _work,
             _clock);
 

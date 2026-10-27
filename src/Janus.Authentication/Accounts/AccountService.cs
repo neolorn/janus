@@ -118,7 +118,7 @@ internal sealed class AccountService(
                     codes.ExportedAt,
                     codes.RemindedAt),
             Shown(profile, fields),
-            Shown(preferences)));
+            PreferencesShown.Of(preferences, declarations)));
     }
 
     /// <inheritdoc/>
@@ -308,7 +308,7 @@ internal sealed class AccountService(
         HeldPreferences held = await directory.PreferencesAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(Shown(held));
+        return Result.Success(PreferencesShown.Of(held, declarations));
     }
 
     /// <inheritdoc/>
@@ -742,20 +742,6 @@ internal sealed class AccountService(
             fields.LegalName ? profile.LegalName?.Value : null,
             fields.DateOfBirth ? profile.DateOfBirth : null,
             profile.PhotoUpdatedAt);
-
-    private PreferenceValues Shown(HeldPreferences held)
-    {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (PreferenceDeclaration declaration in declarations.All)
-        {
-            values[declaration.Name] = held.Values.TryGetValue(declaration.Name, out string? set)
-                ? set
-                : declaration.Default;
-        }
-
-        return new PreferenceValues(held.Language, held.TimeZone, values);
-    }
 
     private async ValueTask<Result<Fields>> FieldsAsync(CancellationToken cancellationToken)
     {

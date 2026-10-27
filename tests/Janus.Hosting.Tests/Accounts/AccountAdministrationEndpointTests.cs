@@ -14,7 +14,8 @@ namespace Janus.Hosting.Tests.Accounts;
 
 /// <summary>
 /// The account endpoints of chapter 09 section 8a: an administrator suspends an account
-/// and reactivates it (IDN-LIFE-013, AUTH-SESS-010).
+/// and reactivates it, and a host reads another person's account (IDN-LIFE-013,
+/// AUTH-SESS-010, IDN-READ-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
@@ -307,8 +308,88 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Null(active.EndedAt);
     }
 
+    /// <summary>
+    /// IDN-READ-003 and chapter 09 section 8a (D-218): a holder of the reads in an
+    /// organization reads the account of a person tied to it in the shape the row gives,
+    /// finds it by its email address carried in the body, and reads its contact details.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_003_AnAccountIsReadFoundAndContactedAsync()
+    {
+        var shop = OrganizationId.New(_deployment.Clock);
+        Session member = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId clerk = _deployment.Directory.Created[^1].Subject;
+
+        _deployment.Organizations.Seed(shop);
+        _deployment.Ties.Tie(member.Subject, shop);
+        _deployment.Accounts.Registered(member.Subject, _deployment.Clock.GetUtcNow());
+        _ = _deployment.Identifiers.Verified(member.Subject, IdentifierKind.Email, "ann@example.test");
+        _deployment.Gate.Grant(clerk, shop, Permissions.AccountRead);
+        _deployment.Gate.Grant(clerk, shop, Permissions.ContactRead);
+
+        Answer read = await browser.SendAsync("GET", "/admin/accounts/" + member.Subject.Value + "?organization=" + shop.Value);
+        Answer found = await browser.SendAsync(
+            "POST",
+            "/admin/accounts/find",
+            ("identifier", "Ann@Example.test"),
+            ("organization", shop.Value));
+        Answer contact = await browser.SendAsync("GET", PathOf(member.Subject, "contact?organization=" + shop.Value));
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal(member.Subject.Value, read.Json().GetProperty("subject").GetGuid());
+        Assert.Equal(
+            "ann@example.test",
+            read.Json().GetProperty("identifiers").GetProperty("emails")[0].GetProperty("value").GetString());
+        Assert.Equal(StatusCodes.Status200OK, found.Status);
+        Assert.Equal(member.Subject.Value, found.Json().GetProperty("subject").GetGuid());
+        Assert.Equal(StatusCodes.Status200OK, contact.Status);
+        Assert.Equal("ann@example.test", contact.Text("email"));
+        Assert.Equal("active", contact.Text("state"));
+    }
+
+    /// <summary>
+    /// IDN-READ-004 AC1 and chapter 09 section 8a (D-218): an account beyond the reach of
+    /// the organization asked in is answered 404 in bytes identical to a subject no
+    /// account bears, save the correlation identifier every answer carries; an organization
+    /// that does not read is malformed, naming it, and one
+    /// the deployment does not hold is not found.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_READ_004_AC1_AnAccountBeyondTheReachIsAnsweredInIdenticalBytesAsync()
+    {
+        var shop = OrganizationId.New(_deployment.Clock);
+        Session stranger = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Organizations.Seed(shop);
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, shop, Permissions.ContactRead);
+
+        Answer beyond = await browser.SendAsync("GET", PathOf(stranger.Subject, "contact?organization=" + shop.Value));
+        Answer none = await browser.SendAsync(
+            "GET", PathOf(SubjectId.New(_randomness), "contact?organization=" + shop.Value));
+        Answer unread = await browser.SendAsync("GET", PathOf(stranger.Subject, "contact?organization=shop"));
+        Answer unheld = await browser.SendAsync(
+            "GET", PathOf(stranger.Subject, "contact?organization=" + OrganizationId.New(_deployment.Clock).Value));
+
+        Assert.Equal(StatusCodes.Status404NotFound, beyond.Status);
+        Assert.Equal(none.Status, beyond.Status);
+        Assert.Equal(Without(none), Without(beyond));
+        Assert.Equal(StatusCodes.Status400BadRequest, unread.Status);
+        Assert.Equal("organization", unread.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status404NotFound, unheld.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), unheld.Text("code"));
+    }
+
     private static string PathOf(SubjectId subject, string operation) =>
         "/admin/accounts/" + subject.Value + "/" + operation;
+
+    // The body without the correlation identifier, which differs between any two
+    // requests by design (API-CONV-002 AC2).
+    private static string Without(Answer answer) =>
+        answer.Body.Replace(answer.Text("correlationId"), string.Empty, StringComparison.Ordinal);
 
     private async Task<AccountState?> StateAsync(SubjectId subject) =>
         await _deployment.Accounts.StateAsync(subject, TestContext.Current.CancellationToken);

@@ -135,6 +135,7 @@ internal static class AuthenticationRegistration
         // each of which reads the settings table for what it enforces.
         services.AddScoped<PolicyResolution>();
         services.AddScoped<AdministrativeScope>();
+        services.AddScoped<AccountReach>();
         services.AddSingleton<Argon2idHasher>();
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();

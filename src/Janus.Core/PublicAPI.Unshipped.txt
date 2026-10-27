@@ -84,6 +84,56 @@ Janus.Core.AccountSuspended.By.get -> Janus.Core.SuspensionOrigin
 Janus.Core.AccountSuspended.By.init -> void
 Janus.Core.AccountSuspended.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.SuspensionOrigin By) -> void
 Janus.Core.AccountSuspended.Equals(Janus.Core.AccountSuspended? other) -> bool
+Janus.Core.AccountView
+Janus.Core.AccountView.<Clone>$() -> Janus.Core.AccountView!
+Janus.Core.AccountView.AccountView(Janus.Core.SubjectId Subject, Janus.Core.AccountState State, System.DateTimeOffset CreatedAt, Janus.Core.AccountViewProfile! Profile, Janus.Core.AccountViewIdentifiers! Identifiers, Janus.Core.PreferenceValues! Preferences, System.Collections.Generic.IReadOnlyList<Janus.Core.OrganizationId>! Memberships) -> void
+Janus.Core.AccountView.CreatedAt.get -> System.DateTimeOffset
+Janus.Core.AccountView.CreatedAt.init -> void
+Janus.Core.AccountView.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.AccountState State, out System.DateTimeOffset CreatedAt, out Janus.Core.AccountViewProfile! Profile, out Janus.Core.AccountViewIdentifiers! Identifiers, out Janus.Core.PreferenceValues! Preferences, out System.Collections.Generic.IReadOnlyList<Janus.Core.OrganizationId>! Memberships) -> void
+Janus.Core.AccountView.Equals(Janus.Core.AccountView? other) -> bool
+Janus.Core.AccountView.Identifiers.get -> Janus.Core.AccountViewIdentifiers!
+Janus.Core.AccountView.Identifiers.init -> void
+Janus.Core.AccountView.Memberships.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.OrganizationId>!
+Janus.Core.AccountView.Memberships.init -> void
+Janus.Core.AccountView.Preferences.get -> Janus.Core.PreferenceValues!
+Janus.Core.AccountView.Preferences.init -> void
+Janus.Core.AccountView.Profile.get -> Janus.Core.AccountViewProfile!
+Janus.Core.AccountView.Profile.init -> void
+Janus.Core.AccountView.State.get -> Janus.Core.AccountState
+Janus.Core.AccountView.State.init -> void
+Janus.Core.AccountView.Subject.get -> Janus.Core.SubjectId
+Janus.Core.AccountView.Subject.init -> void
+Janus.Core.AccountViewIdentifier
+Janus.Core.AccountViewIdentifier.<Clone>$() -> Janus.Core.AccountViewIdentifier!
+Janus.Core.AccountViewIdentifier.AccountViewIdentifier(string! Value, bool Verified, bool Primary) -> void
+Janus.Core.AccountViewIdentifier.Deconstruct(out string! Value, out bool Verified, out bool Primary) -> void
+Janus.Core.AccountViewIdentifier.Equals(Janus.Core.AccountViewIdentifier? other) -> bool
+Janus.Core.AccountViewIdentifier.Primary.get -> bool
+Janus.Core.AccountViewIdentifier.Primary.init -> void
+Janus.Core.AccountViewIdentifier.Value.get -> string!
+Janus.Core.AccountViewIdentifier.Value.init -> void
+Janus.Core.AccountViewIdentifier.Verified.get -> bool
+Janus.Core.AccountViewIdentifier.Verified.init -> void
+Janus.Core.AccountViewIdentifiers
+Janus.Core.AccountViewIdentifiers.<Clone>$() -> Janus.Core.AccountViewIdentifiers!
+Janus.Core.AccountViewIdentifiers.AccountViewIdentifiers(System.Collections.Generic.IReadOnlyList<Janus.Core.AccountViewIdentifier!>! Emails, System.Collections.Generic.IReadOnlyList<Janus.Core.AccountViewIdentifier!>! Phones, string? Username) -> void
+Janus.Core.AccountViewIdentifiers.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.AccountViewIdentifier!>! Emails, out System.Collections.Generic.IReadOnlyList<Janus.Core.AccountViewIdentifier!>! Phones, out string? Username) -> void
+Janus.Core.AccountViewIdentifiers.Emails.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.AccountViewIdentifier!>!
+Janus.Core.AccountViewIdentifiers.Emails.init -> void
+Janus.Core.AccountViewIdentifiers.Equals(Janus.Core.AccountViewIdentifiers? other) -> bool
+Janus.Core.AccountViewIdentifiers.Phones.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.AccountViewIdentifier!>!
+Janus.Core.AccountViewIdentifiers.Phones.init -> void
+Janus.Core.AccountViewIdentifiers.Username.get -> string?
+Janus.Core.AccountViewIdentifiers.Username.init -> void
+Janus.Core.AccountViewProfile
+Janus.Core.AccountViewProfile.<Clone>$() -> Janus.Core.AccountViewProfile!
+Janus.Core.AccountViewProfile.AccountViewProfile(string? DisplayName, string? LegalName) -> void
+Janus.Core.AccountViewProfile.Deconstruct(out string? DisplayName, out string? LegalName) -> void
+Janus.Core.AccountViewProfile.DisplayName.get -> string?
+Janus.Core.AccountViewProfile.DisplayName.init -> void
+Janus.Core.AccountViewProfile.Equals(Janus.Core.AccountViewProfile? other) -> bool
+Janus.Core.AccountViewProfile.LegalName.get -> string?
+Janus.Core.AccountViewProfile.LegalName.init -> void
 Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
@@ -613,6 +663,23 @@ Janus.Core.ConsentRecord.SupersededAt.get -> System.DateTimeOffset?
 Janus.Core.ConsentRecord.SupersededAt.init -> void
 Janus.Core.ConsentRecord.WithdrawnAt.get -> System.DateTimeOffset?
 Janus.Core.ConsentRecord.WithdrawnAt.init -> void
+Janus.Core.ContactDetail
+Janus.Core.ContactDetail.<Clone>$() -> Janus.Core.ContactDetail!
+Janus.Core.ContactDetail.ContactDetail(string? DisplayName, string? Email, string? Phone, string? Language, string? TimeZone, Janus.Core.AccountState State) -> void
+Janus.Core.ContactDetail.Deconstruct(out string? DisplayName, out string? Email, out string? Phone, out string? Language, out string? TimeZone, out Janus.Core.AccountState State) -> void
+Janus.Core.ContactDetail.DisplayName.get -> string?
+Janus.Core.ContactDetail.DisplayName.init -> void
+Janus.Core.ContactDetail.Email.get -> string?
+Janus.Core.ContactDetail.Email.init -> void
+Janus.Core.ContactDetail.Equals(Janus.Core.ContactDetail? other) -> bool
+Janus.Core.ContactDetail.Language.get -> string?
+Janus.Core.ContactDetail.Language.init -> void
+Janus.Core.ContactDetail.Phone.get -> string?
+Janus.Core.ContactDetail.Phone.init -> void
+Janus.Core.ContactDetail.State.get -> Janus.Core.AccountState
+Janus.Core.ContactDetail.State.init -> void
+Janus.Core.ContactDetail.TimeZone.get -> string?
+Janus.Core.ContactDetail.TimeZone.init -> void
 Janus.Core.CredentialAuthority
 Janus.Core.CredentialAuthority.<Clone>$() -> Janus.Core.CredentialAuthority!
 Janus.Core.CredentialAuthority.Context.get -> Janus.Core.AccessContext?
@@ -1828,6 +1895,9 @@ Janus.Core.GroupMembershipChanged.SubjectId.get -> System.Guid
 Janus.Core.GroupMembershipChanged.SubjectId.init -> void
 Janus.Core.GroupMembershipChanged.SubjectType.get -> Janus.Core.SubjectType
 Janus.Core.GroupMembershipChanged.SubjectType.init -> void
+Janus.Core.IAccounts.ContactAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ContactDetail!>>
+Janus.Core.IAccounts.FindAsync(Janus.Core.AccessContext! context, string! identifier, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectId>>
+Janus.Core.IAccounts.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, Janus.Core.OrganizationId? organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccountView!>>
 Janus.Core.MailboxState
 Janus.Core.MailboxState.Disabled = 0 -> Janus.Core.MailboxState
 Janus.Core.MailboxState.Enabled = 1 -> Janus.Core.MailboxState
@@ -3213,6 +3283,18 @@ override Janus.Core.AccountSuspended.<Clone>$() -> Janus.Core.AccountSuspended!
 override Janus.Core.AccountSuspended.Equals(object? obj) -> bool
 override Janus.Core.AccountSuspended.GetHashCode() -> int
 override Janus.Core.AccountSuspended.ToString() -> string!
+override Janus.Core.AccountView.Equals(object? obj) -> bool
+override Janus.Core.AccountView.GetHashCode() -> int
+override Janus.Core.AccountView.ToString() -> string!
+override Janus.Core.AccountViewIdentifier.Equals(object? obj) -> bool
+override Janus.Core.AccountViewIdentifier.GetHashCode() -> int
+override Janus.Core.AccountViewIdentifier.ToString() -> string!
+override Janus.Core.AccountViewIdentifiers.Equals(object? obj) -> bool
+override Janus.Core.AccountViewIdentifiers.GetHashCode() -> int
+override Janus.Core.AccountViewIdentifiers.ToString() -> string!
+override Janus.Core.AccountViewProfile.Equals(object? obj) -> bool
+override Janus.Core.AccountViewProfile.GetHashCode() -> int
+override Janus.Core.AccountViewProfile.ToString() -> string!
 override Janus.Core.AlertRaised.<Clone>$() -> Janus.Core.AlertRaised!
 override Janus.Core.AlertRaised.Equals(object? obj) -> bool
 override Janus.Core.AlertRaised.GetHashCode() -> int
@@ -3307,6 +3389,9 @@ override Janus.Core.ConsentedResource.ToString() -> string!
 override Janus.Core.ConsentRecord.Equals(object? obj) -> bool
 override Janus.Core.ConsentRecord.GetHashCode() -> int
 override Janus.Core.ConsentRecord.ToString() -> string!
+override Janus.Core.ContactDetail.Equals(object? obj) -> bool
+override Janus.Core.ContactDetail.GetHashCode() -> int
+override Janus.Core.ContactDetail.ToString() -> string!
 override Janus.Core.CredentialAuthority.Equals(object? obj) -> bool
 override Janus.Core.CredentialAuthority.GetHashCode() -> int
 override Janus.Core.CredentialAuthority.ToString() -> string!
@@ -3860,6 +3945,14 @@ static Janus.Core.AccountRegistered.operator !=(Janus.Core.AccountRegistered? le
 static Janus.Core.AccountRegistered.operator ==(Janus.Core.AccountRegistered? left, Janus.Core.AccountRegistered? right) -> bool
 static Janus.Core.AccountSuspended.operator !=(Janus.Core.AccountSuspended? left, Janus.Core.AccountSuspended? right) -> bool
 static Janus.Core.AccountSuspended.operator ==(Janus.Core.AccountSuspended? left, Janus.Core.AccountSuspended? right) -> bool
+static Janus.Core.AccountView.operator !=(Janus.Core.AccountView? left, Janus.Core.AccountView? right) -> bool
+static Janus.Core.AccountView.operator ==(Janus.Core.AccountView? left, Janus.Core.AccountView? right) -> bool
+static Janus.Core.AccountViewIdentifier.operator !=(Janus.Core.AccountViewIdentifier? left, Janus.Core.AccountViewIdentifier? right) -> bool
+static Janus.Core.AccountViewIdentifier.operator ==(Janus.Core.AccountViewIdentifier? left, Janus.Core.AccountViewIdentifier? right) -> bool
+static Janus.Core.AccountViewIdentifiers.operator !=(Janus.Core.AccountViewIdentifiers? left, Janus.Core.AccountViewIdentifiers? right) -> bool
+static Janus.Core.AccountViewIdentifiers.operator ==(Janus.Core.AccountViewIdentifiers? left, Janus.Core.AccountViewIdentifiers? right) -> bool
+static Janus.Core.AccountViewProfile.operator !=(Janus.Core.AccountViewProfile? left, Janus.Core.AccountViewProfile? right) -> bool
+static Janus.Core.AccountViewProfile.operator ==(Janus.Core.AccountViewProfile? left, Janus.Core.AccountViewProfile? right) -> bool
 static Janus.Core.AlertRaised.operator !=(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AlertRaised.operator ==(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
@@ -4165,6 +4258,8 @@ static Janus.Core.ConsentedResource.operator !=(Janus.Core.ConsentedResource? le
 static Janus.Core.ConsentedResource.operator ==(Janus.Core.ConsentedResource? left, Janus.Core.ConsentedResource? right) -> bool
 static Janus.Core.ConsentRecord.operator !=(Janus.Core.ConsentRecord? left, Janus.Core.ConsentRecord? right) -> bool
 static Janus.Core.ConsentRecord.operator ==(Janus.Core.ConsentRecord? left, Janus.Core.ConsentRecord? right) -> bool
+static Janus.Core.ContactDetail.operator !=(Janus.Core.ContactDetail? left, Janus.Core.ContactDetail? right) -> bool
+static Janus.Core.ContactDetail.operator ==(Janus.Core.ContactDetail? left, Janus.Core.ContactDetail? right) -> bool
 static Janus.Core.CredentialAuthority.Of(Janus.Core.AccessContext! context, Janus.Core.SessionId session) -> Janus.Core.CredentialAuthority!
 static Janus.Core.CredentialAuthority.Of(Janus.Core.EnrolmentSessionId enrolment) -> Janus.Core.CredentialAuthority!
 static Janus.Core.CredentialAuthority.Of(Janus.Core.RegistrationSessionId registration) -> Janus.Core.CredentialAuthority!

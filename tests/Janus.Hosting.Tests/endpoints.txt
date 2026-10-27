@@ -474,6 +474,53 @@ GET /admin/access
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.denied
+POST /admin/accounts/find
+  request application/json
+    identifier: string
+    organization: Guid?
+  200
+    application/json
+      subject: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
+GET /admin/accounts/{subject}
+  200
+    application/json
+      subject: Guid
+      state: AccountState
+      createdAt: DateTimeOffset
+      profile.displayName: string
+      profile.legalName: string
+      identifiers.emails[].value: string
+      identifiers.emails[].verified: boolean
+      identifiers.emails[].primary: boolean
+      identifiers.phones[].value: string
+      identifiers.phones[].verified: boolean
+      identifiers.phones[].primary: boolean
+      identifiers.username: string
+      preferences.language: string
+      preferences.timeZone: string
+      preferences.declared{}: string
+      memberships[]: Guid
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
+GET /admin/accounts/{subject}/contact
+  200
+    application/json
+      displayName: string
+      email: string
+      phone: string
+      language: string
+      timeZone: string
+      state: AccountState
+  400 api.request.malformed
+  401 auth.session.expired
+  403 auth.session.csrfinvalid authz.denied
+  404 identity.account.notfound identity.organization.notfound
 POST /admin/accounts/{subject}/delete/cancel
   204
   400 api.request.malformed
