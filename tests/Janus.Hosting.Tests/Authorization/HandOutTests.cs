@@ -296,7 +296,8 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
     /// <summary>
     /// AUTHZ-GRANT-005 AC6: an actor holding <c>system:administer</c> in the
     /// administrative organization hands out a role no role of its lists, to itself
-    /// included.
+    /// included, and defines a role carrying a permission its grants do not admit and
+    /// handing out a role no role of its lists.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -308,7 +309,9 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
         _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
 
         OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
-        RoleName administering = await deployment.RoleAsync([Permissions.SystemAdminister], cancellationToken);
+        RoleName administering = await deployment.RoleAsync(
+            [Permissions.SystemAdminister, Permissions.RoleManage],
+            cancellationToken);
         RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
         SubjectId actor = await deployment.AccountAsync(cancellationToken);
 
@@ -316,10 +319,15 @@ public sealed class HandOutTests(HostFixture host) : IClassFixture<HostFixture>
         await deployment.GrantAsync(GrantSubject.Of(actor), administering, null, false, null, administrative, cancellationToken);
 
         var held = new Case(deployment, actor, unlisted);
+        var drafted = RoleName.Parse("drafted-" + Guid.NewGuid().ToString("n", CultureInfo.InvariantCulture));
 
         Result<GrantId> own = await GrantedAsync(held, GrantSubject.Of(actor), unlisted);
+        Result<bool> defined = await DefinedAsync(
+            actor,
+            new DefinedRole(drafted, [HostPermissions.Read, HostPermissions.Edit], [unlisted]));
 
         Assert.Null(Code(own));
+        Assert.True(defined.Match(created => created, error => throw new InvalidOperationException(error.Code.ToString())));
     }
 
     /// <summary>
