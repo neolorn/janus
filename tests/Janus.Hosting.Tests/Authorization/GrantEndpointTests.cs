@@ -528,6 +528,7 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     {
         (Browser administrator, SubjectId actor) = await AuthorisedAsync(Administration, Permissions.GrantManage);
         _deployment.Gate.Grant(actor, Branch, Permissions.GrantManage);
+        _deployment.HandOuts.HandsOut(actor, Branch, Reader);
 
         Answer denied = await GrantedAsync(
             administrator,
@@ -1162,6 +1163,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         foreach (Permission permission in permissions)
         {
             _deployment.Gate.Grant(subject, organization, permission);
+        }
+
+        // AUTHZ-GRANT-005 (D-212): one who manages grants here holds a role listing the
+        // roles the tests hand out.
+        if (permissions.Contains(Permissions.GrantManage))
+        {
+            _deployment.HandOuts.HandsOut(subject, organization, Reader);
+            _deployment.HandOuts.HandsOut(subject, organization, SystemAdministrator);
         }
 
         return (browser, subject);

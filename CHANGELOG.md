@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/grants` and `DELETE /admin/grants/{id}` hand out the grant's role: unless the
+  actor holds `system:administer` in the administrative organization, the role must be one
+  a role the actor holds at a scope covering the grant lists in its `handsOut`, or, with
+  `authz.handout.byholding` on, one whose every permission the actor's stored grants admit
+  there, or the change is refused `authz.role.notassignable`; an allow grant to the actor or
+  a group it belongs to, and the revocation of a deny on either, are refused
+  `authz.grant.self`. Each refusal writes nothing and is recorded as a refusal.
 - `authz.handout.byholding` (runtime, off by default; turning it on is loosening) lets an
   actor whose stored grants admit every permission a role carries hand the role out with
   no role of theirs listing it.

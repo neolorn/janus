@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Authorization.Gate;
@@ -33,12 +34,13 @@ namespace Janus.Authorization.Gate;
 /// <param name="consents">What a record's data subject consented to, for the purpose the action serves.</param>
 /// <param name="administrative">Which organization a support role resolves a refusal in.</param>
 /// <param name="suspensions">Whether an organization a job acts for has its deletion requested or is erased.</param>
+/// <param name="configuration">Whether a role is handed out by holding what it carries.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
 /// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-004,
-/// AUTHZ-DERIVE-007, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006, IDN-PRIN-001 and
-/// LIB-SEAM-001.
+/// AUTHZ-DERIVE-007, AUTHZ-GRANT-005, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006,
+/// IDN-PRIN-001 and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -59,7 +61,8 @@ internal sealed class AccessGate(
     IRecordedConsents consents,
     IAdministrativeOrganization administrative,
     IOrganizationSuspensions suspensions,
-    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission
+    IConfigurationStore configuration,
+    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission, IHandOutAdmission
 {
     // PRIV-CONS-001, PRIV-CONS-007: the document that governs a consent whose purpose
     // names none.
@@ -291,6 +294,141 @@ internal sealed class AccessGate(
             await DecidedOnAsync(context, Permissions.GrantManage, organization, cancellationToken).ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212, D-216). A holder of <c>system:administer</c> in
+    /// the administrative organization is admitted, deciding that permission as the single
+    /// check decides it and recording nothing. Otherwise a change that widens the actor's
+    /// own access is refused, whatever the actor may hand out; then each role is admitted
+    /// where a role the actor holds hands it out at a scope covering the change, or, with
+    /// <c>authz.handout.byholding</c> on, where the actor's stored grants admit every
+    /// permission it carries there. A live derivation is never asked, so it admits nothing
+    /// and raises no fault. A refusal is recorded and counted as every refusal is, under
+    /// the permission the change is admitted under.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        HandOut change,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(change);
+
+        // Only a person hands a role out; background work that asks is refused.
+        if (context.Acting is null || IsJob(context))
+        {
+            return await RefusedAsync(
+                context,
+                change.Operation,
+                OrganizationWide,
+                change.Organization,
+                grant: null,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is OrganizationId administering
+            && (await DecidedOnAsync(context, Permissions.SystemAdminister, administering, cancellationToken)
+                .ConfigureAwait(false)).Conferred)
+        {
+            return Result.Success();
+        }
+
+        SubjectSet held = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
+
+        if (change.Widened.Any(holder => Holds(held, holder)))
+        {
+            return Result.Failure(await HandOutRefusedAsync(context, change, ErrorCodes.GrantSelf, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        if (change.Roles.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        IReadOnlySet<RoleName> listed = await evaluator
+            .HandedOutAsync(
+                PermissionRule.ToHandedOut(change.Organization, change.Resource, held, time.GetUtcNow()),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        bool? byHolding = null;
+
+        foreach (DefinedRole role in change.Roles)
+        {
+            if (listed.Contains(role.Name))
+            {
+                continue;
+            }
+
+            byHolding ??= await HandsOutByHoldingAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!byHolding.Value || !await HoldsEveryAsync(context, role, change, cancellationToken).ConfigureAwait(false))
+            {
+                return Result.Failure(await HandOutRefusedAsync(
+                        context,
+                        change,
+                        ErrorCodes.RoleNotAssignable,
+                        cancellationToken)
+                    .ConfigureAwait(false));
+            }
+        }
+
+        return Result.Success();
+    }
+
+    // AUTHZ-GRANT-005: the holder is the actor's account or a group holding it at any
+    // depth.
+    private static bool Holds(SubjectSet held, GrantSubject holder) =>
+        holder.Type is SubjectType.Group
+            ? held.Groups.Contains(holder.Value)
+            : held.Accounts.Contains(holder.Value);
+
+    // OPS-CFG-002: a value that cannot be read leaves the stricter rule.
+    private async ValueTask<bool> HandsOutByHoldingAsync(CancellationToken cancellationToken) =>
+        (await configuration
+            .ReadAsync(Settings.AuthzHandoutByHolding, cancellationToken)
+            .ConfigureAwait(false))
+            .Match(read => read, _ => false);
+
+    // AUTHZ-GRANT-005, D-216: what the stored grant terms decide at the change's scope,
+    // allows less denies through groups and containment, materialised derivations among
+    // them; the host's relationships are not read.
+    private async ValueTask<bool> HoldsEveryAsync(
+        AccessContext context,
+        DefinedRole role,
+        HandOut change,
+        CancellationToken cancellationToken)
+    {
+        foreach (Permission permission in role.Permissions)
+        {
+            CandidateGrant? decided = change.Resource is ResourceReference resource
+                ? (await DecideAsync(context, permission, resource, cancellationToken).ConfigureAwait(false)).Grant
+                : await HoldsAsync(context, permission, change.Organization, cancellationToken).ConfigureAwait(false);
+
+            if (decided is not { Deny: false })
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private async ValueTask<Error> HandOutRefusedAsync(
+        AccessContext context,
+        HandOut change,
+        ErrorCode answered,
+        CancellationToken cancellationToken) =>
+        await RecordedAsync(
+            context,
+            change.Operation,
+            OrganizationWide,
+            change.Organization,
+            grant: null,
+            answered,
+            cancellationToken).ConfigureAwait(false);
 
     // AUTHZ-GATE-006 (D-207): the restriction judged is the acting account's, and a job
     // acts for none, so none is judged for it.
@@ -577,7 +715,7 @@ internal sealed class AccessGate(
         if (await JobRefusedAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<Expression<Func<TResource, bool>>>(
-                await RecordedAsync(context, permission, type, organization, grant: null, cancellationToken)
+                await RecordedAsync(context, permission, type, organization, grant: null, ErrorCodes.Denied, cancellationToken)
                     .ConfigureAwait(false));
         }
 
@@ -622,7 +760,7 @@ internal sealed class AccessGate(
         if (await JobRefusedAsync(context, permission, organization, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<SqlFilter>(
-                await RecordedAsync(context, permission, type, organization, grant: null, cancellationToken)
+                await RecordedAsync(context, permission, type, organization, grant: null, ErrorCodes.Denied, cancellationToken)
                     .ConfigureAwait(false));
         }
 
@@ -1505,7 +1643,7 @@ internal sealed class AccessGate(
         OrganizationId? organization,
         ExplainedGrant? grant,
         CancellationToken cancellationToken) =>
-        Result.Failure(await RecordedAsync(context, permission, type, organization, grant, cancellationToken)
+        Result.Failure(await RecordedAsync(context, permission, type, organization, grant, ErrorCodes.Denied, cancellationToken)
             .ConfigureAwait(false));
 
     // IDN-PRIN-001, CONV-DESIGN-007 (D-206): an organization-scoped principal is a host's
@@ -1636,6 +1774,7 @@ internal sealed class AccessGate(
         ResourceType type,
         OrganizationId? organization,
         ExplainedGrant? grant,
+        ErrorCode answered,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1676,7 +1815,7 @@ internal sealed class AccessGate(
         }
 
         return Error.From(
-            ErrorCodes.Denied,
+            answered,
             "correlation",
             JsonSerializer.SerializeToElement(correlation.Value));
     }
@@ -1710,6 +1849,7 @@ internal sealed class AccessGate(
                 OrganizationWide,
                 organization: null,
                 grant: null,
+                ErrorCodes.Denied,
                 cancellationToken).ConfigureAwait(false);
 
     // AUTHZ-GATE-006: a restriction leaves the account's reading actions and refuses

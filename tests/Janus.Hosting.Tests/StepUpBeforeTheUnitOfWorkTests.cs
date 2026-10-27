@@ -1217,6 +1217,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
         await _deployment.Roles.CreateAsync(Role.Of(Reader, [Permission.Parse("article:read")]), CancellationToken.None);
 
         (Browser administrator, SubjectId subject) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        _deployment.HandOuts.HandsOut(subject, Branch, Reader);
 
         Texted(subject);
 
@@ -1235,6 +1236,7 @@ public sealed class StepUpBeforeTheUnitOfWorkTests : IAsyncLifetime
         await _deployment.Roles.CreateAsync(Role.Of(Reader, [Permission.Parse("article:read")]), CancellationToken.None);
 
         (Browser administrator, SubjectId subject) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        _deployment.HandOuts.HandsOut(subject, Branch, Reader);
         Answer granted = await GrantedAsync(administrator);
 
         Assert.Equal(StatusCodes.Status201Created, granted.Status);

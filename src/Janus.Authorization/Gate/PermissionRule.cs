@@ -235,6 +235,85 @@ internal sealed class PermissionRule
     }
 
     /// <summary>
+    /// The roles the principal may hand out by what it holds: every role named in the
+    /// <c>handsOut</c> of a role it holds through a live allow grant in the organization,
+    /// across the organization or, for a change scoped to a record, on the record or a
+    /// container above it.
+    /// </summary>
+    /// <param name="organization">The organization the change is made in.</param>
+    /// <param name="resource">The record the change is scoped to, or nothing for the whole organization.</param>
+    /// <param name="subjects">Who holds grants for the principal.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <returns>The statement and its parameters, one row per role handed out.</returns>
+    /// <exception cref="ArgumentNullException">The subjects are absent.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GRANT-005 (D-212). A deny takes nothing away from what a role
+    /// hands out: the role is held through the allow, and a grant of an organization whose
+    /// deletion was requested confers nothing, as the view the gate reads holds (IDN-ORG-003).
+    /// In the administrative organization nothing is held by an account with no current
+    /// membership of it (IDN-LIFE-009a).
+    /// </remarks>
+    public static SqlFilter ToHandedOut(
+        OrganizationId organization,
+        ResourceReference? resource,
+        SubjectSet subjects,
+        DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        SubjectSet holding = subjects.WithoutMembership == organization ? SubjectSet.None() : subjects;
+
+        var parameters = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [Prefix + "organization"] = organization.Value,
+            [Prefix + "accounts"] = holding.Accounts,
+            [Prefix + "groups"] = holding.Groups,
+            [Prefix + "at"] = at,
+        };
+
+        string covering = string.Empty;
+
+        if (resource is ResourceReference scoped)
+        {
+            parameters[Prefix + "type"] = scoped.Type.ToString();
+            parameters[RecordParameter] = scoped.Id.ToString();
+            covering = string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                 OR EXISTS (
+                          SELECT 1
+                          FROM identity.ancestry AS {Prefix}above
+                          WHERE {Prefix}above.resource_type = @{Prefix}type
+                            AND {Prefix}above.resource_id = @{RecordParameter}
+                            AND {Prefix}above.ancestor_type = {Prefix}grant.resource_type
+                            AND {Prefix}above.ancestor_id = {Prefix}grant.resource_id)
+                """);
+        }
+
+        return new SqlFilter(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                SELECT DISTINCT {Prefix}handed.name
+                FROM identity.grants AS {Prefix}grant
+                JOIN identity.roles AS {Prefix}role ON {Prefix}role.name = {Prefix}grant.role
+                JOIN identity.organizations AS {Prefix}scope ON {Prefix}scope.id = {Prefix}grant.organization
+                CROSS JOIN LATERAL unnest({Prefix}role.hands_out) AS {Prefix}handed(name)
+                WHERE NOT {Prefix}grant.deny
+                  AND {Prefix}scope.deletion_requested_at IS NULL
+                  AND {Prefix}grant.organization = @{Prefix}organization
+                  AND {Prefix}grant.revoked_at IS NULL
+                  AND ({Prefix}grant.expires_at IS NULL OR {Prefix}grant.expires_at > @{Prefix}at)
+                  AND (({Prefix}grant.subject_type = 'user'
+                          AND {Prefix}grant.subject_id = ANY(@{Prefix}accounts))
+                    OR ({Prefix}grant.subject_type = 'group'
+                          AND {Prefix}grant.subject_id = ANY(@{Prefix}groups)))
+                  AND ({Prefix}grant.resource_type IS NULL{covering});
+                """),
+            parameters);
+    }
+
+    /// <summary>
     /// The rule as a predicate over the host's own rows, for the host to apply to its
     /// own query.
     /// </summary>

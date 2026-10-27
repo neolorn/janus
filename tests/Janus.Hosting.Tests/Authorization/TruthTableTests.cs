@@ -56,6 +56,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         [ErrorCodes.ConsentWrittenRequired] = Decided.ConsentWrittenRequired,
         [ErrorCodes.StepUpRequired] = Decided.StepUpRequired,
         [ErrorCodes.StepUpUnavailable] = Decided.StepUpUnavailable,
+        [ErrorCodes.RoleNotAssignable] = Decided.NotAssignable,
+        [ErrorCodes.GrantSelf] = Decided.WidensOwnAccess,
     };
 
     // The gate a report is judged against: the account is a member of the case's
@@ -149,6 +151,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a role handing itself out defined, on a session that has not proved its gate, by a caller managing roles",
             Decided.StepUpRequired),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
+        ("a grant of a role no role of the caller hands out, by a caller managing grants", Decided.NotAssignable),
+        (
+            "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants",
+            Decided.NotAssignable),
+        ("an allow grant to the caller itself, of a role the caller hands out", Decided.WidensOwnAccess),
         (
             "a grant written and then revoked in another organization, by a system administrator of the administrative organization",
             Decided.Allowed),
@@ -1493,6 +1500,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await deployment.GrantAsync(
             GrantSubject.Of(caller), managing, null, false, null, null, cancellationToken);
 
+        // AUTHZ-GRANT-005 (D-212): the managing role hands out the case's role, so a row
+        // that hands it out is decided by what the row names.
+        await deployment.HandsOutAsync(managing, [role], cancellationToken);
+
         if (scenario.EndsWith("by a restricted caller", StringComparison.Ordinal))
         {
             await deployment.RestrictAsync(caller, cancellationToken);
@@ -1619,6 +1630,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             case "a grant written and then revoked, by a caller managing grants":
                 return await GrantedAndRevokedAsync(deployment, role, caller);
+
+            // AUTHZ-GRANT-005 (D-212): a grant, and a revocation, hand out the role they
+            // name; and an allow grant to the caller widens its own access whatever it may
+            // hand out.
+            case "a grant of a role no role of the caller hands out, by a caller managing grants":
+            case "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants":
+            case "an allow grant to the caller itself, of a role the caller hands out":
+                return await HandedOutAsync(deployment, role, caller, scenario);
 
             case "a grant written and then revoked in another organization, by a system administrator of the administrative organization":
             case "a grant written in another organization, by a system administrator restricted since the gate step":
@@ -2425,6 +2444,53 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                         handsItselfOut ? [RoleName.Parse("drafter")] : []),
                     "A role for the drafters.",
                     cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-005 (D-212): a grant across the organization of a role the managing role
+    // does not list, the revocation of one, or a grant to the caller of the role it lists,
+    // on a session that meets the gate.
+    private async Task<Decided> HandedOutAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGrants grants = services.GetRequiredService<IGrants>();
+
+        if (scenario.StartsWith("a revocation", StringComparison.Ordinal))
+        {
+            GrantId held = await deployment.GrantAsync(
+                GrantSubject.Of(account), unlisted, null, false, null, null, cancellationToken);
+
+            return (await grants.RevokeAsync(context, session, held, "No longer needed.", cancellationToken))
+                .Match(() => Decided.Allowed, Refused);
+        }
+
+        bool own = scenario.StartsWith("an allow grant to the caller", StringComparison.Ordinal);
+
+        return (await grants.GrantAsync(
+                context,
+                session,
+                new GrantRequest(
+                    GrantSubject.Of(own ? caller : account),
+                    own ? role : unlisted,
+                    new ResourceReference(
+                        ResourceType.Parse("organization"),
+                        ResourceId.Parse(deployment.Organization.ToString())),
+                    Deny: false,
+                    ExpiresAt: null,
+                    "The reason the grant was asked for."),
+                cancellationToken))
             .Match(_ => Decided.Allowed, Refused);
     }
 

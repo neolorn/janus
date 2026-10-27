@@ -96,6 +96,7 @@ internal sealed class Deployment : IAsyncDisposable
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
     private readonly KeyRingService _ring;
+    private Janus.Hosting.Tests.Authorization.HandOutInMemory? _handOuts;
 
     // LIB-HOST-001: where a browser holding no session is sent is a declaration no
     // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
@@ -674,6 +675,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authorization.Tests.Gate.GroupsInMemory Groups { get; } = new();
 
     /// <summary>
+    /// Which roles each account hands out, judged over the gate and the groups.
+    /// </summary>
+    public Janus.Hosting.Tests.Authorization.HandOutInMemory HandOuts => _handOuts ??= new(Gate, Groups, Configuration);
+
+    /// <summary>
     /// The changes to roles the deployment wrote down.
     /// </summary>
     public Janus.Authorization.Tests.Roles.RoleAuditInMemory RoleChanges { get; } = new();
@@ -1222,6 +1228,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Gate.IUnscopedRefusal, Janus.Authorization.Tests.Gate.UnscopedRefusalInMemory>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IGrantAdmission>(
             new Janus.Hosting.Tests.Authorization.GrantAdmissionInMemory(Gate));
+        _ = services.AddSingleton<Janus.Authorization.Gate.IHandOutAdmission>(HandOuts);
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();

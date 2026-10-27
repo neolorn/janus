@@ -4242,6 +4242,8 @@ static Janus.Core.ErrorCodes.ResourceInUse.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SubjectErased.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RoleNotAssignable.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GrantSelf.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RoleInUse.get -> Janus.Core.ErrorCode

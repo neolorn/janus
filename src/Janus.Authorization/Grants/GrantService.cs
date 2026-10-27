@@ -18,6 +18,7 @@ namespace Janus.Authorization.Grants;
 /// </summary>
 /// <param name="gate">Whether the caller may read the grants of an organization.</param>
 /// <param name="admission">Whether the caller may manage grants where the grant is scoped.</param>
+/// <param name="handOut">Whether the caller may hand out the role, and does not widen its own access.</param>
 /// <param name="unscoped">The refusal of a grant or a record the deployment holds no row for.</param>
 /// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What granting and revoking ask of the caller's session.</param>
@@ -30,7 +31,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTHZ-GRANT-001 to AUTHZ-GRANT-004, AUTHZ-SCOPE-001 and
+/// Implements LIB-API-005, AUTHZ-GRANT-001 to AUTHZ-GRANT-005, AUTHZ-SCOPE-001 and
 /// OPS-CFG-007. The organization a grant is scoped to is read from the record it is on,
 /// never from the caller, and the grant is admitted there. A role carrying system administration is
 /// granted and revoked only by a system administrator, a deny as much as an allow,
@@ -39,6 +40,7 @@ namespace Janus.Authorization.Grants;
 internal sealed class GrantService(
     IAccessGate gate,
     IGrantAdmission admission,
+    IHandOutAdmission handOut,
     IUnscopedRefusal unscoped,
     AdministrativeScope scope,
     IStepUpGate stepUp,
@@ -123,6 +125,19 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
         }
 
+        if (await HandOutRefusedAsync(
+                context,
+                organization,
+                request.On.Type == OrganizationWide ? null : request.On,
+                role,
+                request.Subject,
+                widens: !request.Deny,
+                cancellationToken).ConfigureAwait(false)
+            is Error notHanded)
+        {
+            return Result.Failure<GrantId>(notHanded);
+        }
+
         if (Unstated(request.Reason) is Error unstated)
         {
             return Result.Failure<GrantId>(unstated);
@@ -198,13 +213,13 @@ internal sealed class GrantService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        if (await AdministeringRefusedAsync(
-                context,
-                await roles.FindAsync(held.Role, cancellationToken).ConfigureAwait(false),
-                cancellationToken).ConfigureAwait(false)
-            is Error administering)
+        Role? named = await roles.FindAsync(held.Role, cancellationToken).ConfigureAwait(false);
+
+        if ((await AdministeringRefusedAsync(context, named, cancellationToken).ConfigureAwait(false)
+                ?? await RevocationHandOutRefusedAsync(context, held, named, cancellationToken).ConfigureAwait(false))
+            is Error judged)
         {
-            return Result.Failure(administering);
+            return Result.Failure(judged);
         }
 
         if (Unstated(reason) is Error unstated)
@@ -244,6 +259,7 @@ internal sealed class GrantService(
         Error? moved = standing is not { Kind: GrantKind.Stored, RevokedAt: null }
             ? Error.From(ErrorCodes.GrantNotFound)
             : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                ?? await RevocationHandOutRefusedAsync(context, standing, role, cancellationToken).ConfigureAwait(false)
                 ?? standing.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error);
 
         if (moved is not null)
@@ -392,6 +408,50 @@ internal sealed class GrantService(
                 .RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
                 .ConfigureAwait(false);
 
+    // AUTHZ-GRANT-005 (D-212): a grant, allow or deny, hands its role out at its scope,
+    // and an allow widens its holder's access.
+    private async ValueTask<Error?> HandOutRefusedAsync(
+        AccessContext context,
+        OrganizationId organization,
+        ResourceReference? on,
+        Role role,
+        GrantSubject holder,
+        bool widens,
+        CancellationToken cancellationToken) =>
+        (await handOut
+            .AdmitAsync(
+                context,
+                new HandOut(Permissions.GrantManage, organization, on, [Defined(role)], widens ? [holder] : []),
+                cancellationToken)
+            .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
+
+    // AUTHZ-GRANT-005 AC5: a revocation is judged as a grant is, and revoking a deny
+    // widens its holder's access; revoking an allow takes access away. A role nobody
+    // can read hands out what it is named.
+    private async ValueTask<Error?> RevocationHandOutRefusedAsync(
+        AccessContext context,
+        Grant grant,
+        Role? role,
+        CancellationToken cancellationToken) =>
+        await HandOutRefusedAsync(
+            context,
+            grant.Organization,
+            Scope(grant),
+            role ?? Role.Of(grant.Role, []),
+            grant.Subject,
+            widens: grant.Deny,
+            cancellationToken).ConfigureAwait(false);
+
+    // The record a grant is on, or nothing for the whole organization.
+    private static ResourceReference? Scope(Grant grant) =>
+        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
+            ? new ResourceReference(type, id)
+            : null;
+
+    private static DefinedRole Defined(Role role) =>
+        new(role.Name, [.. role.Permissions], [.. role.HandsOut]);
+
     private async ValueTask<Result<GrantId>> WrittenAsync(
         AccessContext context,
         Grant grant,
@@ -457,6 +517,14 @@ internal sealed class GrantService(
             : role is null
                 ? Unresolved("role")
                 : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                    ?? await HandOutRefusedAsync(
+                        context,
+                        grant.Organization,
+                        Scope(grant),
+                        role,
+                        grant.Subject,
+                        widens: !grant.Deny,
+                        cancellationToken).ConfigureAwait(false)
                     ?? (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false)
                         ? Error.From(ErrorCodes.GrantDuplicate)
                         : null);

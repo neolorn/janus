@@ -58,6 +58,17 @@ public enum Decided
     StepUpUnavailable,
 
     /// <summary>
+    /// The change is refused, as the caller may not hand out a role it touches
+    /// (<c>authz.role.notassignable</c>).
+    /// </summary>
+    NotAssignable,
+
+    /// <summary>
+    /// The change is refused, as it would widen the caller's own access (<c>authz.grant.self</c>).
+    /// </summary>
+    WidensOwnAccess,
+
+    /// <summary>
     /// The question is the calling code's fault, raised before anything is read.
     /// </summary>
     Raised,

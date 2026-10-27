@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -641,6 +642,71 @@ internal sealed class Deployment(HostFixture fixture)
                 grantedBy = _granter.Value,
                 at = Noon,
                 reason = "The reason the grant was written.",
+            },
+            cancellationToken: cancellationToken));
+
+        return id;
+    }
+
+    /// <summary>
+    /// Sets the roles a role's holders hand out (AUTHZ-GRANT-005).
+    /// </summary>
+    /// <param name="role">Which role.</param>
+    /// <param name="handsOut">The roles it hands out.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task HandsOutAsync(
+        RoleName role,
+        IReadOnlyList<RoleName> handsOut,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(handsOut);
+
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE identity.roles SET hands_out = @handsOut WHERE name = @role;",
+            new { role = role.ToString(), handsOut = handsOut.Select(handed => handed.ToString()).ToArray() },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    /// Writes the grant a materialised derivation keeps for a subject.
+    /// </summary>
+    /// <param name="subject">Who holds it.</param>
+    /// <param name="role">The role the derivation confers.</param>
+    /// <param name="on">The record it is on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grant.</returns>
+    public async Task<GrantId> MaterialisedAsync(
+        GrantSubject subject,
+        RoleName role,
+        ResourceReference on,
+        CancellationToken cancellationToken)
+    {
+        var id = GrantId.New(TimeProvider.System);
+
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.grants
+                (id, subject_type, subject_id, role, organization, resource_type,
+                 resource_id, deny, kind, granted_by, granted_at, reason)
+            VALUES (@id, @subjectType, @subject, @role, @organization, @resourceType,
+                    @resourceId, FALSE, 'materialised', @grantedBy, @at, 'AUTHZ-DERIVE-005');
+            """,
+            new
+            {
+                id = id.Value,
+                subjectType = subject.Type == SubjectType.Group ? "group" : "user",
+                subject = subject.Value,
+                role = role.ToString(),
+                organization = Organization.Value,
+                resourceType = on.Type.ToString(),
+                resourceId = on.Id.ToString(),
+                grantedBy = Guid.Empty,
+                at = Noon,
             },
             cancellationToken: cancellationToken));
 

@@ -70,6 +70,8 @@ internal static class ApiStatus
         [ErrorCodes.ChallengeRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Denied] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Restricted] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.RoleNotAssignable] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.GrantSelf] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PhotoNotEnabled] = StatusCodes.Status403Forbidden,

@@ -51,14 +51,16 @@ internal static class GrantEndpoints
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
                     ErrorCodes.StepUpRequired, ErrorCodes.GrantDuplicate, ErrorCodes.GrantExpired,
-                    ErrorCodes.GrantReasonRequired, ErrorCodes.GrantUnresolved))
+                    ErrorCodes.GrantReasonRequired, ErrorCodes.GrantUnresolved, ErrorCodes.RoleNotAssignable,
+                    ErrorCodes.GrantSelf))
             .Accepts<GrantBody>(MediaTypeNames.Application.Json)
             .Produces<CreatedGrantView>(StatusCodes.Status201Created);
         _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id}", RevokeAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
-                    ErrorCodes.StepUpRequired, ErrorCodes.GrantNotFound, ErrorCodes.GrantReasonRequired)
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantNotFound, ErrorCodes.GrantReasonRequired,
+                    ErrorCodes.RoleNotAssignable, ErrorCodes.GrantSelf)
                 .Binding<GrantId>("id"))
             .Accepts<GrantRevocationBody>(MediaTypeNames.Application.Json)
             .Produces(StatusCodes.Status204NoContent);

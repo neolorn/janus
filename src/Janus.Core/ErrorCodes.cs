@@ -1009,6 +1009,19 @@ public static class ErrorCodes
     public static ErrorCode Restricted { get; } = ErrorCode.Parse("authz.restricted");
 
     /// <summary>
+    /// The actor may not hand out a role the change touches, or a role change reaches
+    /// beyond what the actor may give or hand out. Ask someone who may hand the role out.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-005, D-212.</remarks>
+    public static ErrorCode RoleNotAssignable { get; } = ErrorCode.Parse("authz.role.notassignable");
+
+    /// <summary>
+    /// The change would widen the actor's own access. Ask someone else to make it.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-005, D-212.</remarks>
+    public static ErrorCode GrantSelf { get; } = ErrorCode.Parse("authz.grant.self");
+
+    /// <summary>
     /// A grant or a derivation still names the role, so removing it would take away
     /// what they record. Change the permissions it carries instead.
     /// </summary>
