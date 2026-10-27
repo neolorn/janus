@@ -221,14 +221,18 @@ live, allow or deny, its own or that of a group it belongs to; and ending a memb
 now or at an end set in advance, hands out every role its revocations and removals reach
 (`01` IDN-MEM-001, D-213). Each such change SHALL, beside the admission of
 AUTHZ-SCOPE-001, be refused with 403 `authz.role.notassignable` unless the actor may
-hand out every role it touches. The actor may hand out a role where: - it holds
-`system:administer` in the administrative organization; or - a role it holds, through a
-live allow grant at a scope that covers the change (across the organization, or on the
-grant's resource or an ancestor of it), lists that role among the roles its holders may
-hand out (`handsOut`); or - `authz.handout.byholding` is on (`10` section 4.5a; off by
-default) and the actor's grants admit, at the change's scope, every permission the role
-carries, as the gate's grant terms decide it (allows less denies, through groups and
-containment, derived grants included).
+hand out every role it touches. The actor may hand out a role where:
+- it holds `system:administer` in the administrative organization; or
+- a role it holds, through a live allow grant at a scope that covers the change (across
+  the organization, or on the grant's resource or an ancestor of it), lists that role
+  among the roles its holders may hand out (`handsOut`); or
+- `authz.handout.byholding` is on (`10` section 4.5a; off by default) and the actor's
+  grants admit, at the change's scope, every permission the role carries, as the gate's
+  stored grant terms decide it (allows less denies, through groups and containment,
+  materialised derivations included); a live derivation, whose relationships only the
+  host's sources hold, admits nothing here and is no fault
+  (`authz.derivation.sourcesmissing` is not raised), so the setting never admits more
+  than the actor's stored grants do (D-216).
 
 A role's `handsOut` is a list of role names, set by the host for its own roles, any role
 a deployment holds named: where the role is created or changed (`POST /admin/roles`), and
@@ -257,7 +261,7 @@ admission is (AUTHZ-SCOPE-001, AUTHZ-GATE-006); a refusal writes nothing and is 
 as a refusal (AUTHZ-CONCEAL-004), counting toward `alerting.denials.threshold`; an
 admitted change is recorded as before, with its reason and its step-up.
 
-*Source: D-212, D-213*
+*Source: D-212, D-213, D-216*
 
 Without it, anyone who may manage grants holds every role one step removed, which is
 OPS-CFG-007's reasoning applied to every role. The lists are Kubernetes' `bind` on named
@@ -284,6 +288,9 @@ the record of who gave what, when and why is the control.
 5. A revocation, a deny and a removal from a group are judged as a grant is.
 6. An actor holding `system:administer` in the administrative organization hands out any
    role, to itself included, and changes any role.
+7. With the setting on, an actor admitted to a permission on a record only through a live
+   derivation is refused a role carrying it there with `authz.role.notassignable`, not a
+   fault; one admitted through a materialised derivation hands the role out (D-216).
 
 ---
 

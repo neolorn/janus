@@ -18168,6 +18168,46 @@ judged by the same rule as a controller action, and that case is verified in rev
 
 ---
 
+## D-216 — Round H1 questions 55 and 56: the reason a membership's end records, and what holding admits
+
+**Date:** 2026-10-27 · **Status:** accepted · **Follows from:** D-212, D-213
+
+**TL;DR.** The run under D-212 to D-215 asked two questions, both Tier 2. Ending a
+membership now takes a required `reason`, as every other admin removal does, and each
+record the end writes carries it (55). With `authz.handout.byholding` on, the actor's
+stored grants and materialised derivations count, and a live derivation counts for
+nothing, so the setting never admits more than stored grants do (56).
+
+55. **The reason an immediate end records (Tier 2).** Reading A.
+    `DELETE /admin/organizations/{id}/memberships/{subject}` takes `{ reason }`,
+    required, bounded as API-CONV-002 bounds every free-text field; absent, blank or too
+    long, it is refused with 400 `api.request.malformed` naming `reason` before anything
+    is written. The end's `identity.membership.ended`, and each `authz.grant.revoked`
+    and `authz.group.memberremoved` it writes, carry it. An end set in advance already
+    carries the reason it was set with, which the job records. *Rejected:* a fixed
+    reason such as `IDN-MEM-001` (reading B): an end by a person is a person's decision,
+    and the start principals' fixed reasons are for writes no person makes.
+56. **Holding and a live derivation (Tier 2).** Reading A. The check counts the
+    actor's stored grants and materialised derivations, through groups and containment,
+    allows less denies. A live derivation is evaluated only from the host's relationship
+    sources, which a library operation does not have; it admits nothing to the check,
+    and its type raises no `authz.derivation.sourcesmissing` there. The check so admits
+    less than "derived grants included" said and never more, which is the safe side for
+    a rule that grants. *Rejected:* refusing every change on a type a live derivation
+    reaches through the setting (reading B), which would also refuse an actor whose
+    stored grants alone admit every permission.
+
+The D-213 edit had run AUTHZ-GRANT-005's three hand-out conditions into one paragraph;
+they are a list again. The wording is unchanged save for 56.
+
+**Ledger.** No entry takes a line from this decision.
+
+**Propagated to:** `01` IDN-MEM-001 (the end's reason; criterion 9); `03`
+AUTHZ-GRANT-005 (the third condition; criterion 7); `09` section 8a (the immediate end's
+row); `10` section 4.5a (`authz.handout.byholding`).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -18393,6 +18433,7 @@ judged by the same rule as a controller action, and that case is verified in rev
 | A leaver's access: an end set for the last day, and ending a membership ends its grants | D-213 |
 | The full gate runs in the pipeline, not on the implementer's machine | D-214 |
 | Round H1 questions 53 and 54: a package another brings, and the page case | D-215 |
+| Round H1 questions 55 and 56: the reason a membership's end records, and what holding admits | D-216 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

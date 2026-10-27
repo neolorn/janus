@@ -418,15 +418,16 @@ of which the account holds no current membership. No grant row is removed
 (IDN-PRIN-003). A grant in the administrative organization SHALL confer only while its
 holder holds a current membership of that organization.
 
-*Source: D-002, D-003, D-166, D-202, D-213*
+*Source: D-002, D-003, D-166, D-202, D-213, D-216*
 
 An administrator ends a membership under `membership:manage` in the organization, as the
-`membership:end` step-up action; where the path names no organization the deployment
-holds, the request is refused with `identity.organization.notfound` (404), and where the
-account holds no current membership of the organization, with
-`identity.membership.notfound` (404), each before anything is written (`09` section 8a).
-Ending the reserved account's membership of the administrative organization is refused
-with 403 `authz.denied`, for anyone (OPS-BOOT-002, D-202).
+`membership:end` step-up action, with a `reason` (API-CONV-002, D-216) that each record
+the end writes carries; where the path names no organization the deployment holds, the
+request is refused with `identity.organization.notfound` (404), and where the account
+holds no current membership of the organization, with `identity.membership.notfound`
+(404), each before anything is written (`09` section 8a). Ending the reserved account's
+membership of the administrative organization is refused with 403 `authz.denied`, for
+anyone (OPS-BOOT-002, D-202).
 
 The same administrator may instead set the membership to end at a later instant
 (`endsAt`), move that instant, or cancel it, under the same permission and step-up and
@@ -463,6 +464,9 @@ the host's own relationships is the host's to end (AUTHZ-DERIVE-001).
    instant not after the present is refused with `api.request.invalid` naming `endsAt`.
 8. Ending, or setting the end of, the membership of an account holding a role the actor
    may not hand out is refused with `authz.role.notassignable` and changes nothing.
+9. Ending a membership now without a `reason` is refused with `api.request.malformed`
+   naming `reason`, and it stays current; with one, each revocation and removal the end
+   writes, and its `identity.membership.ended`, carry that reason (D-216).
 
 ---
 

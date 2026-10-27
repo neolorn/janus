@@ -504,7 +504,7 @@ is the empty list.
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `authz.reverselookup.budget` | 2 seconds | R | AUTHZ-SEAM-001, R-A09, D-125 — the migration trigger's measurable bound |
-| `authz.handout.byholding` | `false` | R, boolean; turning it on is loosening | AUTHZ-GRANT-005, D-212: whether an actor whose grants admit every permission a role carries may hand the role out with no role of theirs listing it (Kubernetes' rule); off, only a role whose `handsOut` names it, or `system:administer` in the administrative organization, does |
+| `authz.handout.byholding` | `false` | R, boolean; turning it on is loosening | AUTHZ-GRANT-005, D-212: whether an actor whose grants admit every permission a role carries may hand the role out with no role of theirs listing it (Kubernetes' rule); off, only a role whose `handsOut` names it, or `system:administer` in the administrative organization, does; on, it counts stored grants and materialised derivations, never a live one (D-216) |
 | `derivation.materialised.driftcheck` | `P1D` | R, duration; lengthening is loosening | AUTHZ-DERIVE-005, AUTHZ-GRANT-003, D-161, D-166: how often the drift check re-evaluates every materialised derivation, over the relationship sources the host declares for every declared derivation (LIB-HOST-001), corrects drift and raises `degradation` naming the derivation; it runs as the system principal `derivation-driftcheck` (section 5.29), and a grant it writes records the nil subject as granter with the reason `AUTHZ-DERIVE-005`; each grant it writes or takes back is recorded as `authz.grant.materialised` or `authz.grant.retracted` (section 5.24, D-187) |
 
 ### 4.6 Organizations and lifecycle
