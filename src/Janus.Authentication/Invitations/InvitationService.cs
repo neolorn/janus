@@ -45,6 +45,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="configuration">Where the lifetime and the languages are read.</param>
 /// <param name="audit">Where every issue and revocation is written down.</param>
+/// <param name="reads">Where an organization's members and standing invitations are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the link's token is drawn from.</param>
@@ -78,6 +79,7 @@ internal sealed class InvitationService(
     LandingLinks landing,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
+    OrganizationReads reads,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : IInvitations
@@ -846,6 +848,30 @@ internal sealed class InvitationService(
         string source,
         CancellationToken cancellationToken) =>
         acknowledgement.AcknowledgeAsync(context, invitation, source, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<MemberPage>> MembersAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId? after,
+        int? limit,
+        CancellationToken cancellationToken) =>
+        reads.MembersAsync(context, organization, after, limit, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<MemberSummary>> MemberAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member,
+        CancellationToken cancellationToken) =>
+        reads.MemberAsync(context, organization, member, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyList<StandingInvitation>>> StandingAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        reads.StandingAsync(context, organization, cancellationToken);
 
     private async ValueTask WithdrawnAsync(
         Invitation invitation,

@@ -1257,6 +1257,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IReadAdmission>(
+            new Janus.Authentication.Tests.Organizations.ReadAdmissionInMemory(Gate, Administrative, Memberships));
+        _ = services.AddScoped<Janus.Authentication.Organizations.OrganizationReads>();
         _ = services.AddScoped<IOrganizations>(provider => new Janus.Authentication.Organizations.OrganizationService(
             provider.GetRequiredService<AdministrativeScope>(),
             provider.GetRequiredService<IAdministrativeOrganization>(),
@@ -1270,6 +1273,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.OrganizationReads>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Mime;
 using System.Text.Json;
@@ -15,15 +16,15 @@ using Microsoft.AspNetCore.Routing;
 namespace Janus.Hosting.Organizations;
 
 /// <summary>
-/// The organization administration of chapter 09 section 8a: creating an
-/// organization, requesting its deletion, cancelling the request, reading and
-/// replacing its policy, the domains it locks its members to, the invitations into its
-/// membership, and the end of a membership.
+/// The organization administration of chapter 09 section 8a: reading the organizations
+/// and one of them, creating an organization, requesting its deletion, cancelling the
+/// request, reading and replacing its policy, the domains it locks its members to, its
+/// current members, the invitations into its membership, and the end of a membership.
 /// </summary>
 /// <remarks>
 /// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-006, REG-DOM-001,
-/// IDN-LIFE-009a, IDN-MEM-001, REG-INV-001, REG-MAIL-003, AUTH-STEP-002a, LIB-API-005,
-/// CONV-CODE-006 and CONV-DESIGN-006.
+/// IDN-LIFE-009a, IDN-MEM-001, IDN-READ-001, IDN-READ-002, REG-INV-001, REG-MAIL-003,
+/// AUTH-STEP-002a, LIB-API-005, CONV-CODE-006 and CONV-DESIGN-006.
 /// Each is one line to <see cref="IOrganizations"/>, <see cref="IOrganizationDomains"/>
 /// or <see cref="IInvitations"/>, which judge the permission, the step-up and what the
 /// reason says; a body missing a member it requires is refused before any is called.
@@ -42,6 +43,36 @@ internal static class OrganizationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations", ListAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied))
+            .Produces<OrganizationPageView>();
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}", ReadAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
+                .Binding<OrganizationId>("id"))
+            .Produces<OrganizationSummaryView>();
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/members", MembersAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
+                .Binding<OrganizationId>("id"))
+            .Produces<MemberPageView>();
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/members/{subject}", MemberAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.OrganizationNotFound, ErrorCodes.MembershipNotFound)
+                .Binding<OrganizationId>("id")
+                .Binding<SubjectId>("subject"))
+            .Produces<MemberView>();
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/invitations", StandingAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.OrganizationNotFound)
+                .Binding<OrganizationId>("id"))
+            .Produces<IReadOnlyList<StandingInvitationView>>();
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations", CreateAsync))
             .Declares(EndpointDeclaration
                 .Answering(
@@ -184,6 +215,130 @@ internal static class OrganizationEndpoints
             .Produces(StatusCodes.Status204NoContent);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListAsync(
+        IOrganizations organizations,
+        RequestSession browser,
+        string? after,
+        string? limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(organizations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!Read(after, out OrganizationId? from))
+        {
+            return Answers.Malformed(nameof(after));
+        }
+
+        if (!Read(limit, out int? most))
+        {
+            return Answers.Malformed(nameof(limit));
+        }
+
+        return Answers.Of(
+            await organizations
+                .ListAsync(browser.Asking, from, most, cancellationToken)
+                .ConfigureAwait(false),
+            page => TypedResults.Json(
+                OrganizationPageView.Of(page),
+                OrganizationJson.Default.OrganizationPageView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> ReadAsync(
+        IOrganizations organizations,
+        RequestSession browser,
+        OrganizationId id,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(organizations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await organizations
+                .ReadAsync(browser.Asking, id, cancellationToken)
+                .ConfigureAwait(false),
+            organization => TypedResults.Json(
+                OrganizationSummaryView.Of(organization),
+                OrganizationJson.Default.OrganizationSummaryView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> MembersAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        OrganizationId id,
+        string? after,
+        string? limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        if (!Read(after, out SubjectId? from))
+        {
+            return Answers.Malformed(nameof(after));
+        }
+
+        if (!Read(limit, out int? most))
+        {
+            return Answers.Malformed(nameof(limit));
+        }
+
+        return Answers.Of(
+            await invitations
+                .MembersAsync(browser.Asking, id, from, most, cancellationToken)
+                .ConfigureAwait(false),
+            page => TypedResults.Json(
+                MemberPageView.Of(page),
+                OrganizationJson.Default.MemberPageView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> MemberAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        OrganizationId id,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await invitations
+                .MemberAsync(browser.Asking, id, subject, cancellationToken)
+                .ConfigureAwait(false),
+            member => TypedResults.Json(
+                MemberView.Of(member),
+                OrganizationJson.Default.MemberView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> StandingAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        OrganizationId id,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await invitations
+                .StandingAsync(browser.Asking, id, cancellationToken)
+                .ConfigureAwait(false),
+            standing => TypedResults.Json(
+                [.. standing.Select(StandingInvitationView.Of)],
+                OrganizationJson.Default.IReadOnlyListStandingInvitationView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> CreateAsync(
@@ -668,5 +823,27 @@ internal static class OrganizationEndpoints
         failure = error;
 
         return default!;
+    }
+    // 09 section 8a: where a page begins and how long it is may be left out; one given
+    // that does not read is malformed, and a limit that reads but is out of bounds is
+    // the read's to refuse.
+    private static bool Read<TValue>(string? text, out TValue? read)
+        where TValue : struct, IParsable<TValue>
+    {
+        read = null;
+
+        if (text is null)
+        {
+            return true;
+        }
+
+        if (!TValue.TryParse(text, CultureInfo.InvariantCulture, out TValue value))
+        {
+            return false;
+        }
+
+        read = value;
+
+        return true;
     }
 }

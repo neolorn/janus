@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -6,13 +7,14 @@ namespace Janus.Core;
 
 /// <summary>
 /// The invitations an organization issues into its membership, and the end of a
-/// membership, under <c>membership:manage</c> in that organization.
+/// membership, under <c>membership:manage</c> in that organization; and its members and
+/// standing invitations, read under <c>membership:read</c>.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-009a, IDN-MEM-001, REG-INV-001, REG-MAIL-001,
-/// REG-MAIL-003 and chapter 09 section 8a. An invitation is a time-boxed, single-use
-/// link; issuing one is the <c>invitation:issue</c> step-up action, and roles it
-/// attaches also need <c>grant:manage</c> in the organization.
+/// Implements LIB-API-005, IDN-LIFE-009a, IDN-MEM-001, IDN-READ-002, IDN-READ-004,
+/// REG-INV-001, REG-MAIL-001, REG-MAIL-003 and chapter 09 section 8a. An invitation is
+/// a time-boxed, single-use link; issuing one is the <c>invitation:issue</c> step-up
+/// action, and roles it attaches also need <c>grant:manage</c> in the organization.
 /// </remarks>
 public interface IInvitations
 {
@@ -193,5 +195,63 @@ public interface IInvitations
         OrganizationId organization,
         SubjectId member,
         string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists an organization's current members, one page at a time.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="after">The subject the page begins after, or nothing for the first.</param>
+    /// <param name="limit">At most how many, 1 to 500, or nothing for 100.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The page, ordered by subject, or the refusal: <c>api.request.malformed</c> naming
+    /// <c>limit</c> outside its range, <c>identity.organization.notfound</c> where the
+    /// deployment never held the organization or erased it, and <c>authz.denied</c> where
+    /// <c>membership:read</c> is held neither in it nor in the administrative
+    /// organization, recorded once, naming it.
+    /// </returns>
+    ValueTask<Result<MemberPage>> MembersAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId? after,
+        int? limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads one account's current membership of an organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The member, or the refusal of <see cref="MembersAsync"/>, with
+    /// <c>identity.membership.notfound</c> where the account holds no current membership
+    /// of the organization.
+    /// </returns>
+    ValueTask<Result<MemberSummary>> MemberAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists an organization's standing invitations: issued, and neither acknowledged,
+    /// revoked nor expired.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The invitations, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment never held the organization or erased it, and <c>authz.denied</c> where
+    /// <c>membership:read</c> is held neither in it nor in the administrative
+    /// organization, recorded once, naming it.
+    /// </returns>
+    ValueTask<Result<IReadOnlyList<StandingInvitation>>> StandingAsync(
+        AccessContext context,
+        OrganizationId organization,
         CancellationToken cancellationToken);
 }

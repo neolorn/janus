@@ -17,6 +17,26 @@ against the public contract of LIB-API-001.
   a permission it declares. A permission or type the model does not declare, and an
   organization identifier that is not one, are answered `api.request.malformed` naming
   `permission`, `type` or `id`, with no refusal recorded.
+- A host lists the organizations a caller may read (`IOrganizations.ListAsync`,
+  `GET /admin/organizations`) and reads one (`IOrganizations.ReadAsync`,
+  `GET /admin/organizations/{id}`) under `organization:read`: a holder in the
+  administrative organization lists every organization, any other person the
+  organizations of their current memberships they hold it in, and a declared job its
+  own. The list is ordered by identifier in pages of at most `limit` (1 to 500, 100 by
+  default) after `after`, with `next`; an erased organization is never listed and reads
+  as one never held.
+- A host reads an organization's current members (`IInvitations.MembersAsync`,
+  `GET /admin/organizations/{id}/members`), one account's current membership
+  (`IInvitations.MemberAsync`, `GET /admin/organizations/{id}/members/{subject}`) and
+  the organization's standing invitations (`IInvitations.StandingAsync`,
+  `GET /admin/organizations/{id}/invitations`) under `membership:read`. Each member
+  carries its membership, when it began, the end set in advance and the invitation it
+  began from; each invitation its roles, when it was issued and expires, who issued it
+  and the identifiers it binds. Each member a person reads counts toward their read
+  volume.
+- A read whose path names an organization is admitted where its permission is held in
+  that organization or in the administrative organization, with one refusal, naming
+  the organization the path names, recorded where neither admits it.
 - A host reads the administrative organization's identifier
   (`IOrganizations.AdministrativeAsync`) with no access context, to name its jobs'
   principals and register its records before anyone acts; before bootstrap it answers

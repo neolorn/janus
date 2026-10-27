@@ -9,8 +9,8 @@ namespace Janus.Hosting.Organizations;
 /// reflected over (CONV-CODE-004, CONV-DESIGN-006).
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-006, IDN-LIFE-009a, AUTH-STEP-002a and
-/// API-CONV-002.
+/// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-006, IDN-LIFE-009a, IDN-READ-001,
+/// IDN-READ-002, AUTH-STEP-002a and API-CONV-002.
 /// </remarks>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -25,5 +25,10 @@ namespace Janus.Hosting.Organizations;
 [JsonSerializable(typeof(IReadOnlyList<OrganizationDomainView>))]
 [JsonSerializable(typeof(InvitationBody))]
 [JsonSerializable(typeof(IssuedInvitationView))]
+[JsonSerializable(typeof(OrganizationSummaryView))]
+[JsonSerializable(typeof(OrganizationPageView))]
+[JsonSerializable(typeof(MemberView))]
+[JsonSerializable(typeof(MemberPageView))]
+[JsonSerializable(typeof(IReadOnlyList<StandingInvitationView>))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class OrganizationJson : JsonSerializerContext;

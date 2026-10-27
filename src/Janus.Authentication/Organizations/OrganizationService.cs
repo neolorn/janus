@@ -32,6 +32,7 @@ namespace Janus.Authentication.Organizations;
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it declared none.
 /// </param>
+/// <param name="reads">Where the organizations the caller may read are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -55,6 +56,7 @@ internal sealed class OrganizationService(
     IAlertChannels alerts,
     IEvents events,
     ImageCodec? codec,
+    OrganizationReads reads,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
@@ -643,6 +645,21 @@ internal sealed class OrganizationService(
 
         return Result.Success();
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<OrganizationPage>> ListAsync(
+        AccessContext context,
+        OrganizationId? after,
+        int? limit,
+        CancellationToken cancellationToken) =>
+        reads.ListAsync(context, after, limit, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<OrganizationSummary>> ReadAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        reads.ReadAsync(context, organization, cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask<Result<OrganizationId>> AdministrativeAsync(CancellationToken cancellationToken) =>

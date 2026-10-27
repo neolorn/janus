@@ -64,7 +64,8 @@ internal sealed class AccessGate(
     IAdministrativeOrganization administrative,
     IOrganizationSuspensions suspensions,
     IConfigurationStore configuration,
-    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission, IHandOutAdmission
+    TimeProvider time)
+    : IAccessGate, ISettingsChangeGate, IUnscopedRefusal, IGrantAdmission, IHandOutAdmission, IOrganizationReadAdmission
 {
     // PRIV-CONS-001, PRIV-CONS-007: the document that governs a consent whose purpose
     // names none.
@@ -295,6 +296,120 @@ internal sealed class AccessGate(
             organization,
             await DecidedOnAsync(context, Permissions.GrantManage, organization, cancellationToken).ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements IDN-READ-004, AUTHZ-SCOPE-001 and AUTHZ-SEAM-001 (D-219). In the
+    /// administrative organization, and before bootstrap has marked one, the admission is
+    /// the single check of the permission there. Elsewhere the permission is decided in
+    /// the organization the path names and then in the administrative organization, as
+    /// the single check decides it, recording nothing: one that admits admits the read,
+    /// and where neither does, the single check in the organization the path names
+    /// answers, so its refusal is the one recorded and counted.
+    /// </remarks>
+    public async ValueTask<Result> AdmitAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        Declared(permission);
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is not OrganizationId administering
+            || administering == organization)
+        {
+            return await RequireAsync(context, permission, organization, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await RestrictedPersonAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Restricted));
+        }
+
+        OrganizationDecision held = await DecidedOnAsync(context, permission, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held.Admits)
+        {
+            return await AnsweredAsync(context, permission, organization, held, cancellationToken).ConfigureAwait(false);
+        }
+
+        OrganizationDecision administered = await DecidedOnAsync(context, permission, administering, cancellationToken)
+            .ConfigureAwait(false);
+
+        return administered.Admits
+            ? await AnsweredAsync(context, permission, administering, administered, cancellationToken).ConfigureAwait(false)
+            : await AnsweredAsync(context, permission, organization, held, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements IDN-READ-001 and IDN-READ-004 (D-219). Each organization is decided as
+    /// the single check decides it, recording nothing. A person holding the permission in
+    /// the administrative organization lists every organization; any other person lists
+    /// the organizations of their current memberships the permission is held in, and a
+    /// job its own organization alone. Where none is listed, the single check in the
+    /// administrative organization answers, so its refusal is the one recorded; before
+    /// bootstrap there is no organization to record it in, and the list is refused as a
+    /// scope naming no organization is.
+    /// </remarks>
+    public async ValueTask<Result<ListedOrganizations>> ListedAsync(
+        AccessContext context,
+        Permission permission,
+        IReadOnlyCollection<OrganizationId> memberships,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(memberships);
+        Declared(permission);
+
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false) is not OrganizationId administering)
+        {
+            return Result.Failure<ListedOrganizations>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await RestrictedPersonAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<ListedOrganizations>(Error.From(ErrorCodes.Restricted));
+        }
+
+        OrganizationDecision administered = await DecidedOnAsync(context, permission, administering, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!IsJob(context) && administered.Admits)
+        {
+            return (await AnsweredAsync(context, permission, administering, administered, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(
+                    () => Result.Success(new ListedOrganizations(Every: true, [])),
+                    Result.Failure<ListedOrganizations>);
+        }
+
+        IEnumerable<OrganizationId> candidates = IsJob(context)
+            ? context.Principal?.Organization is OrganizationId own ? [own] : []
+            : memberships.Distinct().OrderBy(candidate => candidate.Value);
+        var listed = new List<OrganizationId>();
+
+        foreach (OrganizationId candidate in candidates)
+        {
+            if ((await DecidedOnAsync(context, permission, candidate, cancellationToken).ConfigureAwait(false)).Admits)
+            {
+                listed.Add(candidate);
+            }
+        }
+
+        if (listed.Count > 0)
+        {
+            return Result.Success(new ListedOrganizations(Every: false, listed));
+        }
+
+        return (await AnsweredAsync(context, permission, administering, administered, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                () => Result.Success(new ListedOrganizations(Every: false, [administering])),
+                Result.Failure<ListedOrganizations>);
     }
 
     /// <inheritdoc/>

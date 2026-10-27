@@ -65,6 +65,19 @@ internal interface IInvitationStore
     ValueTask<IReadOnlyList<Invitation>> ReservingAsync(MailboxId mailbox, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads an organization's standing invitations: neither acknowledged, revoked nor
+    /// expired.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="now">The instant an invitation's expiry is judged at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The invitations, in the order they were issued.</returns>
+    ValueTask<IReadOnlyList<Invitation>> StandingAsync(
+        OrganizationId organization,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a newly issued invitation onto the transaction in progress.
     /// </summary>
     /// <param name="invitation">The invitation.</param>

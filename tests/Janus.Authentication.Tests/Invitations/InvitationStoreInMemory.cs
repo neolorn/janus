@@ -66,6 +66,21 @@ internal sealed class InvitationStoreInMemory : IInvitationStore
             [.. Held.Where(invitation => invitation.Mailbox == mailbox && invitation.Stands)]);
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Invitation>> StandingAsync(
+        OrganizationId organization,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Invitation>>(
+            [
+                .. Held
+                    .Where(invitation => invitation.Organization == organization
+                        && invitation.Stands
+                        && !invitation.HasExpired(now))
+                    .OrderBy(invitation => invitation.IssuedAt)
+                    .ThenBy(invitation => invitation.Id.Value),
+            ]);
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(Invitation invitation, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitation);

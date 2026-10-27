@@ -11,6 +11,7 @@ using Dapper;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
 using Janus.Authorization.Gate;
@@ -450,6 +451,31 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.Denied),
     ];
 
+    // A read naming an organization other than the administrative organization, asked
+    // through the read admission under organization:read: the permission held in the
+    // organization the path names or in the administrative organization admits it,
+    // either recording no refusal, and where neither does one refusal is recorded, naming
+    // the permission in the organization the path names. In the administrative
+    // organization the permission there alone admits. The list answers a holder in the
+    // administrative organization every organization, any other caller the organizations
+    // of its current memberships it holds the permission in, and is refused where it
+    // holds it in none, the one refusal recorded in the administrative organization
+    // (IDN-READ-001, IDN-READ-004 AC5, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, D-219).
+    private static readonly (string Scenario, Decided Decided)[] OrganizationReads =
+    [
+        ("a read of another organization, by a caller holding the permission there", Decided.Allowed),
+        ("a read of another organization, by a caller holding the permission in the administrative organization", Decided.Allowed),
+        ("a read of another organization, by a caller holding the permission in neither", Decided.Denied),
+        (
+            "a read of another organization, by a caller holding the permission in the administrative organization with no membership of it",
+            Decided.Denied),
+        ("a read of the administrative organization, by a caller holding the permission there", Decided.Allowed),
+        ("the list, by a caller holding the permission in the administrative organization", Decided.Allowed),
+        ("the list, by a member of another organization holding the permission there", Decided.Allowed),
+        ("the list, by a caller holding the permission in another organization it is no member of", Decided.Denied),
+        ("the list, by a caller holding the permission nowhere", Decided.Denied),
+    ];
+
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
@@ -504,6 +530,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The admissions' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> AdmissionCases => Read(Admissions);
+
+    /// <summary>
+    /// The organization reads' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> OrganizationReadCases => Read(OrganizationReads);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -761,6 +792,71 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             Assert.Equal(Permissions.GrantManage, recorded?.Permission);
             Assert.Equal(organization, recorded?.Organization);
+        }
+    }
+
+    /// <summary>
+    /// IDN-READ-001 AC1, IDN-READ-004 AC5 (D-219): every organization read decides the way
+    /// the table says through the read admission, a refusal recorded once, naming
+    /// <c>organization:read</c> in the organization the path names, or in the
+    /// administrative organization for the list, and the list naming what it admits.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(OrganizationReadCases))]
+    public async Task IDN_READ_004_AC5_EveryOrganizationReadDecidesTheWayTheTableSaysThroughTheAdmissionAsync(
+        string scenario,
+        Decided decided)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (SubjectId caller, OrganizationId organization, OrganizationId administrative) = await ReadingAsync(scenario);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IOrganizationReadAdmission admission = scope.ServiceProvider.GetRequiredService<IOrganizationReadAdmission>();
+        bool listing = scenario.StartsWith("the list", StringComparison.Ordinal);
+        Result admitted;
+
+        if (listing)
+        {
+            Result<ListedOrganizations> listed = await admission.ListedAsync(
+                context,
+                Permissions.OrganizationRead,
+                await scope.ServiceProvider.GetRequiredService<IMembershipLookup>().OfAsync(caller, cancellationToken),
+                cancellationToken);
+
+            admitted = listed.Match(_ => Result.Success(), Result.Failure);
+
+            listed.Switch(
+                readable =>
+                {
+                    bool every = scenario.EndsWith("in the administrative organization", StringComparison.Ordinal);
+                    IReadOnlyList<OrganizationId> named = every ? [] : [organization];
+
+                    Assert.Equal(every, readable.Every);
+                    Assert.Equal(named, readable.Organizations);
+                },
+                _ => { });
+        }
+        else
+        {
+            admitted = await admission.AdmitAsync(context, Permissions.OrganizationRead, organization, cancellationToken);
+        }
+
+        Assert.Equal(decided, admitted.Match(() => Decided.Allowed, Refused));
+        Assert.Equal(decided is Decided.Denied ? 1 : 0, await GrantRefusalsAsync(context, organization));
+
+        if (admitted.Match<Error?>(() => null, error => error) is Error refusal)
+        {
+            DeniedAccess? recorded = await scope.ServiceProvider.GetRequiredService<IAccessAudit>().FindAsync(
+                new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+                cancellationToken);
+
+            Assert.Equal(Permissions.OrganizationRead, recorded?.Permission);
+            Assert.Equal(listing ? administrative : organization, recorded?.Organization);
         }
     }
 
@@ -3596,6 +3692,54 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         }
 
         return (AccessContext.Of(caller), organization);
+    }
+
+    // IDN-READ-004 (D-219): the caller of an organization read's case, the organization
+    // the path names, other than the administrative organization save where the case
+    // names that, and the administrative organization. The caller holds organization:read
+    // where the case says, as a member of the organization it holds it in save where the
+    // case says it is no member; one holding it in neither or nowhere is a member of the
+    // organization the path names, so membership alone is seen to admit nothing.
+    private async Task<(SubjectId Caller, OrganizationId Organization, OrganizationId Administrative)> ReadingAsync(
+        string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        _ = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        OrganizationId organization = scenario.StartsWith("a read of the administrative organization", StringComparison.Ordinal)
+            ? administrative
+            : deployment.Organization;
+        RoleName reading = await deployment.RoleAsync([Permissions.OrganizationRead], cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+        var holder = GrantSubject.Of(caller);
+        bool held = scenario.EndsWith("there", StringComparison.Ordinal)
+            || scenario.EndsWith("it is no member of", StringComparison.Ordinal);
+        bool administering = scenario.Contains("in the administrative organization", StringComparison.Ordinal);
+
+        if (held)
+        {
+            await deployment.GrantAsync(holder, reading, null, false, null, organization, cancellationToken);
+        }
+
+        if (administering)
+        {
+            await deployment.GrantAsync(holder, reading, null, false, null, administrative, cancellationToken);
+        }
+
+        if (administering && !scenario.EndsWith("with no membership of it", StringComparison.Ordinal))
+        {
+            await deployment.MemberAsync(caller, administrative, cancellationToken);
+        }
+
+        if (!administering && !scenario.EndsWith("it is no member of", StringComparison.Ordinal))
+        {
+            await deployment.MemberAsync(caller, organization, cancellationToken);
+        }
+
+        return (caller, organization, administrative);
     }
 
     // AUTHZ-CONCEAL-004: the refusals a case's caller left recorded: a person's wherever

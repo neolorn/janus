@@ -198,6 +198,8 @@ internal static class AuthenticationRegistration
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
         services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
 
+        services.AddScoped<OrganizationReads>();
+
         // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos is refused where the
         // deployment declared no codec, so what changes a policy takes the codec as it
         // was registered.
@@ -214,6 +216,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IEvents>(),
             provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<OrganizationReads>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -301,6 +304,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<LandingLinks>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<OrganizationReads>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));

@@ -14,6 +14,7 @@ using Janus.Identity.Audit;
 using Janus.Identity.Organizations;
 using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Invitations;
+using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Audit;
@@ -124,6 +125,33 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         Assert.Null(
             Assert.Single(await memberships.FindBySubjectAsync(founding, TestContext.Current.CancellationToken))
                 .Invitation);
+    }
+
+    /// <summary>
+    /// IDN-READ-002 AC1 (D-218): a member who joined through an invitation is listed with
+    /// that invitation, and one attached with none, as bootstrap attaches it, with none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_READ_002_AC1_AMemberIsListedWithTheInvitationItJoinedThroughAsync()
+    {
+        SubjectId invited = await _deployment.AccountAsync(Noon);
+        SubjectId founding = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        InvitationId invitation = await IssuedAsync(organization, inviter);
+
+        _ = await AttachAsync(invited, organization, [], [], inviter, multiple: false, invitation);
+        _ = await AttachAsync(founding, organization, [], [], inviter, multiple: false);
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<MemberSummary> members = await new OrganizationDirectory(reading, new OrganizationStore(reading))
+            .MemberPageAsync(organization, after: null, 10, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new Dictionary<SubjectId, InvitationId?> { [invited] = invitation, [founding] = null },
+            members.ToDictionary(member => member.Subject, member => member.Invitation));
     }
 
     /// <summary>

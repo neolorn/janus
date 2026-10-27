@@ -80,6 +80,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly LegalDocumentsInMemory _documents = new();
     private readonly DomainStoreInMemory _domains = new();
     private readonly InvitationStoreInMemory _invitations = new();
+    private readonly ReadVolumeInMemory _volume = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly MailboxStoreInMemory _mailboxes = new();
@@ -2673,6 +2674,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private ValueTask<Result<int>> PassAsync() =>
         Ends().EndDueAsync(Ender, TestContext.Current.CancellationToken);
 
+    private OrganizationReads Reads =>
+        new(new ReadAdmissionInMemory(_gate, _administrative, _memberships), _organizations, _invitations, _volume, _clock);
+
     private InvitationService Serving(IMailServer? server)
     {
         PolicyResolution policies = Policies;
@@ -2719,6 +2723,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             Landing.Links,
             _configuration,
             _audit,
+            Reads,
             _work,
             _clock,
             _randomness);

@@ -5,7 +5,8 @@ namespace Janus.Core;
 
 /// <summary>
 /// The organizations of the deployment, created, suspended for deletion and restored
-/// under <c>organization:manage</c> in the administrative organization.
+/// under <c>organization:manage</c> in the administrative organization, and read under
+/// <c>organization:read</c>.
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, AUTH-STEP-002a,
@@ -122,6 +123,45 @@ public interface IOrganizations
         OrganizationId organization,
         PolicyOverride replacement,
         string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists the organizations the caller may read, one page at a time.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="after">The identifier the page begins after, or nothing for the first.</param>
+    /// <param name="limit">At most how many, 1 to 500, or nothing for 100.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The page, ordered by identifier, the erased organizations left out: every
+    /// organization for a holder of <c>organization:read</c> in the administrative
+    /// organization, the organizations of a person's current memberships the permission
+    /// is held in, and a job's own organization. Or the refusal:
+    /// <c>api.request.malformed</c> naming <c>limit</c> outside its range, and
+    /// <c>authz.denied</c> for a caller holding the permission nowhere, recorded in the
+    /// administrative organization.
+    /// </returns>
+    ValueTask<Result<OrganizationPage>> ListAsync(
+        AccessContext context,
+        OrganizationId? after,
+        int? limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads one organization.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The organization, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment never held it or erased it, and <c>authz.denied</c> where
+    /// <c>organization:read</c> is held neither in it nor in the administrative
+    /// organization, recorded once, naming it.
+    /// </returns>
+    ValueTask<Result<OrganizationSummary>> ReadAsync(
+        AccessContext context,
+        OrganizationId organization,
         CancellationToken cancellationToken);
 
     /// <summary>

@@ -11,6 +11,7 @@ using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Invitations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -52,6 +53,8 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
     private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private readonly InvitationStoreInMemory _invitations = new();
+    private readonly ReadVolumeInMemory _volume = new();
     private readonly OrganizationsInMemory _organizations;
     private readonly SubjectId _administrator;
 
@@ -107,6 +110,12 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
                 _events,
                 _events,
                 new ImageCodecInMemory().Declared,
+                new OrganizationReads(
+                    new ReadAdmissionInMemory(_gate, _administrative, _memberships),
+                    _organizations,
+                    _invitations,
+                    _volume,
+                    _clock),
                 _work,
                 _clock);
         }

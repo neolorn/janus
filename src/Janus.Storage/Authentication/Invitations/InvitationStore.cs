@@ -112,6 +112,26 @@ internal sealed class InvitationStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Invitation>> StandingAsync(
+        OrganizationId organization,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        List<InvitationRecord> records = await context.Invitations
+            .AsNoTracking()
+            .Where(invitation => invitation.Organization == organization
+                && invitation.RevokedAt == null
+                && invitation.AcknowledgedAt == null
+                && invitation.ExpiresAt > now)
+            .OrderBy(invitation => invitation.IssuedAt)
+            .ThenBy(invitation => invitation.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return await ReadAsync(records, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(Invitation invitation, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitation);
