@@ -173,6 +173,35 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async ValueTask MembershipEndedAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        string reason,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.MembershipEnded,
+                    at,
+                    principal,
+                    member,
+                    organization,
+                    new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+                    {
+                        ["membership"] = JsonSerializer.SerializeToElement(membership.Value),
+                        ["reason"] = JsonSerializer.SerializeToElement(reason),
+                        ["endSetBy"] = JsonSerializer.SerializeToElement(endSetBy.ToString()),
+                    }),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask MembershipEndSetAsync(
         OrganizationId organization,
         MembershipId membership,

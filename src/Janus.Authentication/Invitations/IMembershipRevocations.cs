@@ -46,7 +46,7 @@ internal interface IMembershipRevocations
     /// <param name="member">Whose membership ended.</param>
     /// <param name="organization">Of which organization.</param>
     /// <param name="administrative">Whether the organization administers the deployment.</param>
-    /// <param name="actor">Who ended it, or set the end the job carries out.</param>
+    /// <param name="actor">Who ended it.</param>
     /// <param name="reason">Why.</param>
     /// <param name="breakGlassReason">
     /// The reason given at the use of the break-glass credential, where the end was made
@@ -63,6 +63,32 @@ internal interface IMembershipRevocations
         SubjectId actor,
         string reason,
         string? breakGlassReason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Revokes the grants an end set in advance reaches at its instant and takes the
+    /// account out of the groups it reaches, inside the transaction the job's pass runs in;
+    /// each grant carries the nil revoker and each record is the job's, naming the
+    /// administrator who set the end (IDN-MEM-001, D-217).
+    /// </summary>
+    /// <param name="member">Whose membership ended.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="administrative">Whether the organization administers the deployment.</param>
+    /// <param name="principal">The principal carrying the end out.</param>
+    /// <param name="endSetBy">The administrator who set the end.</param>
+    /// <param name="reason">The reason the end was set with.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of revoking and removing.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask RevokeAsync(
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        string reason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

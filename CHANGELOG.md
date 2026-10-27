@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The background job `membership-ends` ends a membership at the first pass after the
+  instant an administrator set, as an end now would, without judging it again; its
+  records carry the job's principal, `details.endSetBy` naming that administrator and
+  the reason they gave, and a grant it revokes carries the nil subject as revoker.
 - Ending a membership revokes the account's allow grants only: its deny grants stand,
   since revoking one would lift what it defeats, and the end is judged on the roles of
   the allows it revokes and of every grant the groups it leaves reach.

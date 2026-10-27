@@ -17,7 +17,8 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Invitations;
 
 /// <summary>
-/// The end of a membership by an administrator: the membership ends, the allow grants a
+/// The end of a membership by an administrator, now or, through the job
+/// <c>membership-ends</c>, at the instant they set: the membership ends, the allow grants a
 /// person gave the account there are revoked and the account leaves the organization's
 /// groups, and where it gave the account a corporate address the address and its mailbox
 /// are retired and the personal email becomes the primary.
@@ -37,8 +38,8 @@ namespace Janus.Authentication.Invitations;
 /// <param name="work">The one transaction the end runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REG-MAIL-003, IDN-MEM-001, INT-MAIL-006a, OPS-BOOT-002 and chapter 09
-/// section 8a (D-213, D-216). The account's state is left as it is: suspension is a
+/// Implements REG-MAIL-003, IDN-MEM-001, INT-MAIL-006a, INF-BG-002, OPS-BOOT-002 and
+/// chapter 09 section 8a (D-213, D-216, D-217). The account's state is left as it is: suspension is a
 /// separate step of offboarding. Everything is written in one transaction, so no instant
 /// exists at which the account holds no primary email, or holds a grant of an
 /// organization it no longer belongs to.
@@ -274,6 +275,46 @@ internal sealed class MembershipEnd(
     }
 
     /// <summary>
+    /// Runs one pass of the job <c>membership-ends</c>: each membership whose end, set in
+    /// advance, the clock has reached is ended as the administrator who set it would have
+    /// ended it, in one transaction per membership.
+    /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
+    /// <param name="cancellationToken">Abandons the pass.</param>
+    /// <returns>How many memberships the pass ended, or the refusal that stopped it.</returns>
+    /// <exception cref="ArgumentException">
+    /// A person is asking, or the principal may not sweep what has expired.
+    /// </exception>
+    /// <remarks>
+    /// IDN-MEM-001 (D-213, D-217): the end was judged when it was set, so the pass does not
+    /// ask the hand-out rule, and it ends whatever grants and groups the account then
+    /// holds. Each record is the job's, under its principal, naming the administrator who
+    /// set the end and the reason they gave.
+    /// </remarks>
+    public async ValueTask<Result<int>> EndDueAsync(AccessContext context, CancellationToken cancellationToken)
+    {
+        SystemPrincipal principal = Sweeping(context);
+        DateTimeOffset now = time.GetUtcNow();
+        SubjectId? reserved = await emergency.FindAsync(cancellationToken).ConfigureAwait(false);
+        int ended = 0;
+
+        foreach (MembershipEndDue due in await memberships.DueAsync(now, cancellationToken).ConfigureAwait(false))
+        {
+            Result<int> done = await EndedAsync(principal, due, reserved, now, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (done.Match<Error?>(_ => null, error => error) is Error refusal)
+            {
+                return Result.Failure<int>(refusal);
+            }
+
+            ended += done.Match(count => count, _ => 0);
+        }
+
+        return Result.Success(ended);
+    }
+
+    /// <summary>
     /// Sets an account's membership of an organization to end at a later instant, or
     /// moves the instant set.
     /// </summary>
@@ -468,6 +509,112 @@ internal sealed class MembershipEnd(
         return Result.Success();
     }
 
+    // INF-BG-002 AC1: the pass runs as a named principal that may sweep what has
+    // expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
+
+    private async ValueTask<Result<int>> EndedAsync(
+        SystemPrincipal principal,
+        MembershipEndDue due,
+        SubjectId? reserved,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (await directory.FindAsync(due.Organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Success(0);
+        }
+
+        // OPS-BOOT-002, IDN-MEM-001 (D-202): the reserved account's membership of the
+        // administrative organization is kept for anyone, the job included.
+        if (standing.IsAdministrative && reserved == due.Member)
+        {
+            return Result.Success(0);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
+
+        // D-166 X3: an end moved, cancelled or carried out since the pass read its list
+        // is followed as it now stands, and nothing is written.
+        if (await memberships.EndDueAsync(due.Member, due.Organization, now, cancellationToken).ConfigureAwait(false)
+            is not MembershipEndDue ended)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success(0);
+        }
+
+        await revocations
+            .RevokeAsync(
+                ended.Member,
+                ended.Organization,
+                standing.IsAdministrative,
+                principal,
+                ended.SetBy,
+                ended.Reason,
+                now,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        List<DomainEvent> announced =
+        [
+            new MembershipChanged(now, Key(ended.Membership, now), ended.Membership, ended.Organization, MembershipChange.Ended)
+            {
+                Subject = ended.Member,
+            },
+        ];
+
+        // REG-MAIL-003: as for an end now; the pass answers no request, so a notice it
+        // sends carries no source.
+        if (standing.IsAdministrative
+            && await mailboxes.HeldByAsync(ended.Member, cancellationToken).ConfigureAwait(false) is Mailbox mailbox)
+        {
+            announced.AddRange(await RetiredAsync(ended.Member, mailbox, now, source: null, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        await audit
+            .MembershipEndedAsync(
+                ended.Organization,
+                ended.Membership,
+                ended.Member,
+                ended.Reason,
+                principal,
+                ended.SetBy,
+                now,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (DomainEvent happened in announced)
+        {
+            if ((await events.PublishAsync(happened, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<int>(unpublished);
+            }
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<int>(notCommitted);
+        }
+
+        return Result.Success(1);
+    }
+
     // CONV-DESIGN-002 AC3: the organization the path names is where the gate is asked,
     // and resolving it, read alone, is part of the gate step.
     private async ValueTask<OrganizationId?> ScopeOfAsync(
@@ -502,7 +649,7 @@ internal sealed class MembershipEnd(
         SubjectId member,
         Mailbox mailbox,
         DateTimeOffset now,
-        string source,
+        string? source,
         CancellationToken cancellationToken)
     {
         // D-166 X3: as for the corporate address's taking on.
@@ -553,7 +700,7 @@ internal sealed class MembershipEnd(
     private async ValueTask<int> TellAsync(
         IReadOnlyList<HeldIdentifier> reached,
         SubjectId member,
-        string source,
+        string? source,
         CancellationToken cancellationToken)
     {
         string? settled = await identifiers.LanguageAsync(member, cancellationToken).ConfigureAwait(false);

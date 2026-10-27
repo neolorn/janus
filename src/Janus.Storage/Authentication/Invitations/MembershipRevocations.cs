@@ -30,7 +30,9 @@ namespace Janus.Storage.Authentication.Invitations;
 /// derivation wrote or materialised is the host's data speaking, so it stands, and so does
 /// a deny grant to the account. A revocation hands out its grant's role at the grant's
 /// scope, and leaving a group hands out every role the group reaches, allow or deny; none
-/// widens the actor's own access, since none of the allow grants it reaches remains.
+/// widens the actor's own access, since none of the allow grants it reaches remains. An end
+/// the job <c>membership-ends</c> carries out is not judged again, since it was judged when
+/// set; its grants carry the nil revoker and its records are the job's.
 /// </remarks>
 internal sealed class MembershipRevocations(
     IMembershipStore memberships,
@@ -107,6 +109,79 @@ internal sealed class MembershipRevocations(
     {
         ArgumentNullException.ThrowIfNull(reason);
 
+        await RevokeAsync(
+                member,
+                organization,
+                administrative,
+                actor,
+                reason,
+                at,
+                (held, cancellation) => grantAudit.RevokedAsync(held, breakGlassReason, cancellation),
+                (group, cancellation) => groupAudit.MemberRemovedAsync(
+                    group,
+                    GrantSubject.Of(member),
+                    reason,
+                    actor,
+                    breakGlassReason,
+                    at,
+                    cancellation),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RevokeAsync(
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        string reason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        // D-217: the job's revocation carries the nil subject as revoker, as a record's
+        // removal does (AUTHZ-INHERIT-002).
+        await RevokeAsync(
+                member,
+                organization,
+                administrative,
+                revoker: default,
+                reason,
+                at,
+                (held, cancellation) => grantAudit.RevokedAsync(held, principal, endSetBy, cancellation),
+                (group, cancellation) => groupAudit.MemberRemovedAsync(
+                    group,
+                    GrantSubject.Of(member),
+                    reason,
+                    principal,
+                    endSetBy,
+                    at,
+                    cancellation),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // The record a grant is on, or nothing for the whole organization.
+    private static ResourceReference? Scope(Grant grant) =>
+        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
+            ? new ResourceReference(type, id)
+            : null;
+
+    private async ValueTask RevokeAsync(
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        SubjectId revoker,
+        string reason,
+        DateTimeOffset at,
+        Func<Grant, CancellationToken, ValueTask> revoked,
+        Func<Group, CancellationToken, ValueTask> removed,
+        CancellationToken cancellationToken)
+    {
         Reach reach = await ReachedAsync(member, organization, administrative, at, cancellationToken)
             .ConfigureAwait(false);
 
@@ -121,11 +196,11 @@ internal sealed class MembershipRevocations(
                 continue;
             }
 
-            held.Revoke(actor, at, reason)
+            held.Revoke(revoker, at, reason)
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-            await grantAudit.RevokedAsync(held, breakGlassReason, cancellationToken).ConfigureAwait(false);
+            await revoked(held, cancellationToken).ConfigureAwait(false);
         }
 
         // D-166 X3: the groups of each organization are held as a change of members holds
@@ -144,18 +219,10 @@ internal sealed class MembershipRevocations(
 
                 await groups.RemoveMemberAsync(group.Id, GrantSubject.Of(member), cancellationToken)
                     .ConfigureAwait(false);
-                await groupAudit
-                    .MemberRemovedAsync(group, GrantSubject.Of(member), reason, actor, breakGlassReason, at, cancellationToken)
-                    .ConfigureAwait(false);
+                await removed(group, cancellationToken).ConfigureAwait(false);
             }
         }
     }
-
-    // The record a grant is on, or nothing for the whole organization.
-    private static ResourceReference? Scope(Grant grant) =>
-        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
-            ? new ResourceReference(type, id)
-            : null;
 
     // IDN-MEM-001 (D-213): the organization itself, and, for the administrative
     // organization, every other the account holds no current membership of.

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Tests.Authorization;
@@ -275,6 +276,155 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
 
         Assert.Equal((null, null, null, null), await EndSetAsync(member, organization));
         Assert.Equal(1, await EndsRecordedAsync(administrator, organization, withInstant: false));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC7 (D-213, D-217): a membership set to end stays current until the
+    /// instant and is ended at the job's first pass after it, its allow grant revoked with
+    /// the nil subject as revoker and the reason given, its group left and its deny grant
+    /// standing; every record the pass writes carries the nil subject in both identities,
+    /// the principal <c>membership-ends</c> with its reason, and the administrator who set
+    /// the end and the reason they gave.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AC7_TheJobEndsAMembershipAtItsInstantUnderItsPrincipalAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Authorization.Deployment(host);
+
+        RoleName managing = await deployment.BeginAsync([Permissions.MembershipManage], cancellationToken);
+        RoleName reading = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+        RoleName withheld = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+        OrganizationId organization = deployment.Organization;
+        SubjectId administrator = await deployment.AccountAsync(cancellationToken);
+        SubjectId member = await deployment.AccountAsync(cancellationToken);
+        GroupId group = await deployment.GroupAsync(cancellationToken);
+        DateTimeOffset endsAt = Authorization.Deployment.Noon.AddDays(30);
+
+        await deployment.HandsOutAsync(managing, [reading], cancellationToken);
+        await deployment.MemberAsync(administrator, organization, cancellationToken);
+        await deployment.MemberAsync(member, organization, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(administrator),
+            managing,
+            null,
+            false,
+            null,
+            organization,
+            cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(group), reading, null, false, null, organization, cancellationToken);
+        await deployment.JoinAsync(group, GrantSubject.Of(member), cancellationToken);
+
+        GrantId held = await deployment.GrantAsync(
+            GrantSubject.Of(member),
+            reading,
+            null,
+            false,
+            null,
+            organization,
+            cancellationToken);
+
+        SessionId session = await SteppedUpAsync(administrator);
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            Result set = await scope.ServiceProvider.GetRequiredService<IInvitations>()
+                .SetMembershipEndAsync(
+                    AccessContext.Of(administrator),
+                    session,
+                    organization,
+                    member,
+                    endsAt,
+                    Why,
+                    cancellationToken);
+
+            Assert.True(set.Match(() => true, _ => false));
+        }
+
+        // The deny is granted after the end was set, of a role the administrator does not
+        // hand out: the pass ends what the account then holds, unjudged.
+        GrantId denied = await deployment.GrantAsync(
+            GrantSubject.Of(member),
+            withheld,
+            null,
+            true,
+            null,
+            organization,
+            cancellationToken);
+
+        await PassAsync(endsAt.AddSeconds(-1));
+
+        Assert.Null((await EndSetAsync(member, organization)).EndedAt);
+        Assert.Equal(1, await StandingAsync(held));
+
+        await PassAsync(endsAt.AddSeconds(1));
+
+        Assert.Equal(
+            endsAt.AddSeconds(1).ToUnixTimeMilliseconds(),
+            (await EndSetAsync(member, organization)).EndedAt?.ToUnixTimeMilliseconds());
+        Assert.Equal(0, await StandingAsync(held));
+        Assert.Equal((Guid.Empty, Why), await RevocationAsync(held));
+        Assert.Equal(1, await StandingAsync(denied));
+        Assert.Equal(0, await GroupsHoldingAsync(member, group));
+        Assert.Equal(1, await RecordedByTheJobAsync("authz.grant.revoked", administrator, member, organization));
+        Assert.Equal(1, await RecordedByTheJobAsync("authz.group.memberremoved", administrator, member, organization));
+        Assert.Equal(1, await RecordedByTheJobAsync("identity.membership.ended", administrator, member, organization));
+    }
+
+    // One pass of the job membership-ends, run at the instant given.
+    private async Task PassAsync(DateTimeOffset at)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        MembershipEnd ends = ActivatorUtilities.CreateInstance<MembershipEnd>(scope.ServiceProvider, new FixedTime(at));
+        Result<int> pass = await ends.EndDueAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment("membership-ends", "IDN-MEM-001", SystemOperation.ExpirySweep)),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(pass.Match(_ => true, _ => false));
+    }
+
+    // Who revoked the grant's row, and with what reason.
+    private async Task<(Guid? RevokedBy, string? Reason)> RevocationAsync(GrantId grant)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<(Guid?, string?)>(new CommandDefinition(
+            "SELECT revoked_by, revocation_reason FROM identity.grants WHERE id = @id;",
+            new { id = grant.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The records of one action the job wrote in the organization concerning the member:
+    // the nil subject in both identities, its principal and reason, and the administrator
+    // who set the end with the reason they gave.
+    private async Task<int> RecordedByTheJobAsync(
+        string action,
+        SubjectId administrator,
+        SubjectId member,
+        OrganizationId organization)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = @action AND organization = @organization AND subject = @member
+              AND acting_subject = @nil AND effective_subject = @nil
+              AND principal = 'membership-ends' AND principal_reason = 'IDN-MEM-001'
+              AND details ->> 'endSetBy' = @administrator AND details ->> 'reason' = @reason
+            """,
+            new
+            {
+                action,
+                organization = organization.Value,
+                member = member.Value,
+                nil = Guid.Empty,
+                administrator = administrator.Value.ToString(),
+                reason = Why,
+            },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     // The end set on the account's membership of the organization, as its row carries it.

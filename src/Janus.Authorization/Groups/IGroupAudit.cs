@@ -102,4 +102,26 @@ internal interface IGroupAudit
         string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an account the job <c>membership-ends</c> took out of a group at an end set
+    /// in advance, under its principal, naming the administrator who set the end
+    /// (IDN-MEM-001, D-217).
+    /// </summary>
+    /// <param name="group">The group that lost it.</param>
+    /// <param name="member">The account that left.</param>
+    /// <param name="reason">The reason the end was set with.</param>
+    /// <param name="principal">The principal that took it out.</param>
+    /// <param name="endSetBy">The administrator who set the end.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MemberRemovedAsync(
+        Group group,
+        GrantSubject member,
+        string reason,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

@@ -75,6 +75,21 @@ internal sealed class MembershipStore(StoreContext context) : IMembershipStore
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Membership>> FindEndsDueAsync(
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        List<MembershipRecord> records = await context.Memberships
+            .Where(membership => membership.EndedAt == null && membership.EndsAt <= at)
+            .OrderBy(membership => membership.EndsAt)
+            .ThenBy(membership => membership.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Read(records);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Membership membership, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(membership);

@@ -98,6 +98,29 @@ internal sealed class MembershipRevocationsInMemory(
         }
     }
 
+    /// <inheritdoc/>
+    public async ValueTask RevokeAsync(
+        SubjectId member,
+        OrganizationId organization,
+        bool administrative,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        string reason,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        foreach (Held held in await ReachedAsync(member, organization, administrative, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            _ = _held.Remove(held);
+            Revoked.Add(new Revocation(held.Member, held.Organization, held.Role.Name, default, reason, at)
+            {
+                Principal = principal,
+                EndSetBy = endSetBy,
+            });
+        }
+    }
+
     private async ValueTask<IReadOnlyList<Held>> ReachedAsync(
         SubjectId member,
         OrganizationId organization,
@@ -119,7 +142,7 @@ internal sealed class MembershipRevocationsInMemory(
     /// <param name="Member">Whose.</param>
     /// <param name="Organization">Where.</param>
     /// <param name="Role">Of which role.</param>
-    /// <param name="Actor">Who ended the membership.</param>
+    /// <param name="Actor">Who ended the membership, or the nil subject for the job.</param>
     /// <param name="Reason">The end's reason.</param>
     /// <param name="At">When.</param>
     internal sealed record Revocation(
@@ -128,7 +151,18 @@ internal sealed class MembershipRevocationsInMemory(
         RoleName Role,
         SubjectId Actor,
         string Reason,
-        DateTimeOffset At);
+        DateTimeOffset At)
+    {
+        /// <summary>
+        /// The principal that carried out an end set in advance, where one did.
+        /// </summary>
+        public SystemPrincipal? Principal { get; init; }
+
+        /// <summary>
+        /// The administrator who set the end the principal carried out, where one did.
+        /// </summary>
+        public SubjectId? EndSetBy { get; init; }
+    }
 
     private sealed record Held(SubjectId Member, OrganizationId Organization, DefinedRole Role);
 }

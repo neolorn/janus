@@ -95,6 +95,44 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
         return current.Id;
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<MembershipEndDue>> DueAsync(
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        [
+            .. (await memberships.FindEndsDueAsync(at, cancellationToken).ConfigureAwait(false))
+                .Select(Due)
+                .OfType<MembershipEndDue>(),
+        ];
+
+    /// <inheritdoc/>
+    public async ValueTask<MembershipEndDue?> EndDueAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        // D-166 X3: the end is read again under the row's lock, so one moved or cancelled
+        // since the pass read its list is carried out as it now stands.
+        if (await HeldAsync(subject, organization, cancellationToken).ConfigureAwait(false) is not Membership current
+            || current.EndSet is not { } set
+            || set.At > at)
+        {
+            return null;
+        }
+
+        current.End(at);
+
+        await memberships.RecordAsync(current, cancellationToken).ConfigureAwait(false);
+
+        return Due(current);
+    }
+
+    private static MembershipEndDue? Due(Membership membership) =>
+        membership.EndSet is { } set
+            ? new MembershipEndDue(membership.Id, membership.Subject, membership.Organization, set.SetBy, set.Reason)
+            : null;
+
     private async ValueTask<Membership?> HeldAsync(
         SubjectId subject,
         OrganizationId organization,

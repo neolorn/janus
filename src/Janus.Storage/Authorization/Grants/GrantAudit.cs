@@ -96,6 +96,42 @@ internal sealed class GrantAudit(IAuditStore records, TimeProvider time) : IGran
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentException">The grant is not revoked.</exception>
+    public async ValueTask RevokedAsync(
+        Grant revoked,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(revoked);
+        ArgumentNullException.ThrowIfNull(principal);
+
+        if (revoked is not { RevokedAt: DateTimeOffset at, RevocationReason: string reason })
+        {
+            throw new ArgumentException("Only a revoked grant is recorded as revoked.", nameof(revoked));
+        }
+
+        Dictionary<string, JsonElement> details = Details(revoked, reason);
+
+        // D-217: the job's record names the administrator who set the end it carried out.
+        details["endSetBy"] = JsonSerializer.SerializeToElement(endSetBy.ToString());
+
+        await records
+            .AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.GrantRevoked,
+                    at,
+                    principal,
+                    Holder(revoked),
+                    revoked.Organization,
+                    details),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     // Chapter 10 section 5.24 (D-206): a group is no data subject, so a grant it holds
     // concerns no account.
     private static SubjectId? Holder(Grant grant) =>

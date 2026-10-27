@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
 using Janus.Authorization.Gate;
@@ -171,6 +172,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         (
             "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships",
             Decided.NotAssignable),
+        (
+            "the end of a membership at the instant a caller managing memberships set, reaching a role no role of the caller hands out, by the job membership-ends",
+            Decided.Allowed),
         (
             "a member added to a group holding a role no role of the caller hands out, by a caller managing groups",
             Decided.NotAssignable),
@@ -1676,6 +1680,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships":
                 return await EndHandedOutAsync(deployment, caller);
 
+            // IDN-MEM-001 (D-213, D-217): an end set in advance was judged when it was set,
+            // so the job carries it out on whatever the account then holds, unjudged.
+            case "the end of a membership at the instant a caller managing memberships set, reaching a role no role of the caller hands out, by the job membership-ends":
+                return await EndCarriedOutAsync(deployment, caller);
+
             // AUTHZ-GRANT-005 (D-212): a change of members hands out every role the group
             // reaches; adding the caller widens its own access, and so does taking it out
             // of a group that reaches a deny.
@@ -2653,6 +2662,74 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 cancellationToken: cancellationToken)));
 
         return decided;
+    }
+
+    // IDN-MEM-001 (D-213, D-217): the end of a membership the caller set while the account
+    // held only a role the caller's role lists, carried out by the job's pass after the
+    // account was given a role no role of the caller hands out; an end carried out leaves
+    // the membership ended and both grants revoked.
+    private async Task<Decided> EndCarriedOutAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        RoleName listed = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        RoleName unlisted = await deployment.RoleAsync([HostPermissions.Read], cancellationToken);
+        RoleName ending = await deployment.RoleAsync([Permissions.MembershipManage], cancellationToken);
+        DateTimeOffset endsAt = Deployment.Noon.AddDays(30);
+
+        await deployment.HandsOutAsync(ending, [listed], cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(caller), ending, null, false, null, null, cancellationToken);
+        await deployment.MemberAsync(account, deployment.Organization, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(account), listed, null, false, null, null, cancellationToken);
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IServiceProvider services = scope.ServiceProvider;
+            SessionId session = await SteppedUpAsync(services, caller);
+
+            Result set = await services.GetRequiredService<IInvitations>()
+                .SetMembershipEndAsync(
+                    AccessContext.Of(caller),
+                    session,
+                    deployment.Organization,
+                    account,
+                    endsAt,
+                    "The contract ends.",
+                    cancellationToken);
+
+            Assert.True(set.Match(() => true, _ => false));
+        }
+
+        await deployment.GrantAsync(GrantSubject.Of(account), unlisted, null, false, null, null, cancellationToken);
+
+        Decided decided;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            decided = (await ActivatorUtilities
+                    .CreateInstance<MembershipEnd>(scope.ServiceProvider, new FixedTime(endsAt.AddSeconds(1)))
+                    .EndDueAsync(
+                        AccessContext.Of(
+                            SystemPrincipal.ForDeployment("membership-ends", "IDN-MEM-001", SystemOperation.ExpirySweep)),
+                        cancellationToken))
+                .Match(_ => Decided.Allowed, Refused);
+        }
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        bool carried = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM identity.memberships
+                WHERE subject = @account AND organization = @organization AND ended_at IS NOT NULL)
+            AND NOT EXISTS (
+                SELECT 1 FROM identity.grants
+                WHERE subject_type = 'user' AND subject_id = @account AND revoked_at IS NULL)
+            """,
+            new { account = account.Value, organization = deployment.Organization.Value },
+            cancellationToken: cancellationToken));
+
+        return carried ? decided : Decided.Denied;
     }
 
     // AUTHZ-GRANT-005 (D-212): a member added to a group holding a role the managing role

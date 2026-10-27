@@ -73,6 +73,30 @@ internal sealed class GrantAuditInMemory : IGrantAudit
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public ValueTask RevokedAsync(
+        Grant revoked,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(revoked);
+        ArgumentNullException.ThrowIfNull(principal);
+
+        _changes.Add(new GrantChange(
+            AuditActions.GrantRevoked,
+            revoked.Id,
+            revoked.Subject,
+            null,
+            revoked.RevocationReason ?? throw new ArgumentException("The grant is not revoked.", nameof(revoked)))
+        {
+            Principal = principal.Name,
+            EndSetBy = endSetBy,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// One grant as it was recorded.
     /// </summary>
@@ -98,5 +122,10 @@ internal sealed class GrantAuditInMemory : IGrantAudit
         /// was written or revoked in the session it opened, or nothing.
         /// </summary>
         public string? BreakGlassReason { get; init; }
+
+        /// <summary>
+        /// The administrator who set the end a system principal carried out, where one did.
+        /// </summary>
+        public SubjectId? EndSetBy { get; init; }
     }
 }

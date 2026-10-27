@@ -163,6 +163,15 @@ internal static class BackgroundJobs
                     .SweepAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
+            "membership-ends",
+            "IDN-MEM-001",
+            SystemOperation.ExpirySweep,
+            Settings.SweepInterval,
+            async (services, context, cancellationToken) => Done(
+                await services.GetRequiredService<MembershipEnd>()
+                    .EndDueAsync(context, cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
             "outbox",
             "IDN-LIFE-003a",
             SystemOperation.Delivery,

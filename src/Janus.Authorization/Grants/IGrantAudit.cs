@@ -52,4 +52,19 @@ internal interface IGrantAudit
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
     ValueTask RevokedAsync(Grant revoked, string? breakGlassReason, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a grant the job <c>membership-ends</c> revoked at an end set in advance,
+    /// under its principal, naming the administrator who set the end (IDN-MEM-001, D-217).
+    /// </summary>
+    /// <param name="revoked">The grant, revoked, carrying the nil revoker, its instant and the end's reason.</param>
+    /// <param name="principal">The principal that revoked it.</param>
+    /// <param name="endSetBy">The administrator who set the end.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RevokedAsync(
+        Grant revoked,
+        SystemPrincipal principal,
+        SubjectId endSetBy,
+        CancellationToken cancellationToken);
 }

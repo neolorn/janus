@@ -115,6 +115,49 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
             : null;
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<MembershipEndDue>> DueAsync(
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        List<MembershipEndDue> due = [];
+
+        foreach (((SubjectId subject, OrganizationId organization), SetEnd set) in _set
+            .Where(entry => entry.Value.At <= at)
+            .OrderBy(entry => entry.Value.At))
+        {
+            if (await FindAsync(subject, organization, cancellationToken).ConfigureAwait(false) is MembershipId held)
+            {
+                due.Add(new MembershipEndDue(held, subject, organization, set.SetBy, set.Reason));
+            }
+        }
+
+        return due;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<MembershipEndDue?> EndDueAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Ending?.Invoke();
+
+        if (EndSetOn(subject, organization) is not { } set || set.At > at || !lookup.Leave(subject, organization))
+        {
+            return ValueTask.FromResult<MembershipEndDue?>(null);
+        }
+
+        var membership = new MembershipId(Guid.CreateVersion7(at));
+
+        _ = _set.Remove((subject, organization));
+        Ended.Add(new EndedMembership(membership, subject, organization, at));
+
+        return ValueTask.FromResult<MembershipEndDue?>(
+            new MembershipEndDue(membership, subject, organization, set.SetBy, set.Reason));
+    }
+
     /// <summary>
     /// An end set in advance.
     /// </summary>
