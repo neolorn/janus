@@ -164,6 +164,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("an allow grant to the caller itself, of a role the caller hands out", Decided.WidensOwnAccess),
         (
             "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants",
+            Decided.Denied),
+        (
+            "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships",
             Decided.NotAssignable),
         (
             "a member added to a group holding a role no role of the caller hands out, by a caller managing groups",
@@ -1655,13 +1658,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
             // AUTHZ-GRANT-005 (D-212): a grant, and a revocation, hand out the role they
             // name; an allow grant to the caller widens its own access whatever it may hand
-            // out; and a role carrying system administration is handed out by no list
-            // (OPS-CFG-007).
+            // out; and a grant of a role carrying system administration needs that
+            // permission, whatever list names the role (OPS-CFG-007).
             case "a grant of a role no role of the caller hands out, by a caller managing grants":
             case "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants":
             case "a grant of a role carrying system administration that a role of the caller lists, by a caller managing grants":
             case "an allow grant to the caller itself, of a role the caller hands out":
                 return await HandedOutAsync(deployment, role, caller, scenario);
+
+            // AUTHZ-GRANT-005 (D-212, D-213): an end hands out every role its revocations
+            // reach, and a role carrying system administration is handed out by no list.
+            case "an end of a membership reaching a role carrying system administration that a role of the caller lists, by a caller managing memberships":
+                return await EndHandedOutAsync(deployment, caller);
 
             // AUTHZ-GRANT-005 (D-212): a change of members hands out every role the group
             // reaches; adding the caller widens its own access, and so does taking it out
@@ -2583,6 +2591,53 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     "The reason the grant was asked for."),
                 cancellationToken))
             .Match(_ => Decided.Allowed, Refused);
+    }
+
+    // AUTHZ-GRANT-005 (D-213): the end of a membership whose account holds, across the
+    // organization, a role carrying system administration that the caller's role lists,
+    // on a session that meets the gate; a refused end leaves the membership current.
+    private async Task<Decided> EndHandedOutAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        RoleName administering = await deployment.RoleAsync([Permissions.SystemAdminister], cancellationToken);
+        RoleName ending = await deployment.RoleAsync([Permissions.MembershipManage], cancellationToken);
+
+        await deployment.HandsOutAsync(ending, [administering], cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(caller), ending, null, false, null, null, cancellationToken);
+        await deployment.MemberAsync(account, deployment.Organization, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(account), administering, null, false, null, null, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+
+        Decided decided = (await services.GetRequiredService<IInvitations>()
+                .EndMembershipAsync(
+                    AccessContext.Of(caller),
+                    session,
+                    deployment.Organization,
+                    account,
+                    "The contract ended.",
+                    "198.51.100.7",
+                    cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            decided != Decided.Allowed,
+            await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM identity.memberships
+                    WHERE subject = @account AND organization = @organization AND ended_at IS NULL)
+                """,
+                new { account = account.Value, organization = deployment.Organization.Value },
+                cancellationToken: cancellationToken)));
+
+        return decided;
     }
 
     // AUTHZ-GRANT-005 (D-212): a member added to a group holding a role the managing role
