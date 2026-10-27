@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -54,9 +55,12 @@ internal interface IMembershipRevocations
     /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of revoking and removing.</returns>
+    /// <returns>
+    /// The events announcing each change made, which the end publishes in its transaction
+    /// (chapter 10 section 5b, D-218).
+    /// </returns>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
-    ValueTask RevokeAsync(
+    ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,
@@ -80,9 +84,12 @@ internal interface IMembershipRevocations
     /// <param name="reason">The reason the end was set with.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of revoking and removing.</returns>
+    /// <returns>
+    /// The events announcing each change made, which the end publishes in its transaction
+    /// (chapter 10 section 5b, D-218).
+    /// </returns>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
-    ValueTask RevokeAsync(
+    ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,

@@ -142,6 +142,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a member a group already holds added again, by a caller managing groups", Decided.Allowed),
         ("a member a group does not hold taken out, by a caller managing groups", Decided.Allowed),
         (
+            "a member added to and taken out of a group, each announced in its transaction, by a caller managing groups",
+            Decided.Allowed),
+        (
             "a member added to a group, on a session that has not proved its gate, by a caller managing groups",
             Decided.StepUpRequired),
         (
@@ -1724,6 +1727,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a member a group does not hold taken out, by a caller managing groups":
                 return await MemberChangedAsync(deployment, caller, held: false);
 
+            // Chapter 10 section 5b (D-218): announcing a change decides nothing of it; a
+            // member is added and taken out as before, each change announced.
+            case "a member added to and taken out of a group, each announced in its transaction, by a caller managing groups":
+                return await MemberAnnouncedAsync(deployment, caller);
+
             // CONV-DESIGN-002 (D-207): a change of members and a role's definition judge
             // their step-up before their unit of work begins, after every refusal it must
             // follow; a session that has not proved the gate is refused as before.
@@ -2444,6 +2452,56 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(held ? 1 : 0, members);
 
         return decided;
+    }
+
+    // Chapter 10 section 5b (D-218): an account added to a group and taken out of it, on
+    // a session that meets the gate, by a caller managing groups; each change is admitted
+    // as before, and announced once as GroupMembershipChanged in the transaction that
+    // makes it, naming the account as its subject.
+    private async Task<Decided> MemberAnnouncedAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        var member = GrantSubject.Of(account);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGroups groups = services.GetRequiredService<IGroups>();
+
+        GroupId group = (await groups.CreateAsync(
+                context,
+                deployment.Organization,
+                "Reviewers",
+                "A group for the reviewers.",
+                cancellationToken))
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        var outcomes = new List<Decided>
+        {
+            (await groups.AddMemberAsync(context, session, group, member, "Joined the reviewers.", cancellationToken))
+                .Match(() => Decided.Allowed, Refused),
+            (await groups.RemoveMemberAsync(context, session, group, member, "Left the reviewers.", cancellationToken))
+                .Match(() => Decided.Allowed, Refused),
+        };
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            ["added", "removed"],
+            await connection.QueryAsync<string>(new CommandDefinition(
+                """
+                SELECT payload->>'Change' FROM identity.events
+                WHERE kind = 'GroupMembershipChanged' AND payload->>'SubjectId' = @account
+                  AND payload->>'IdempotencyKey' LIKE @key
+                ORDER BY 1
+                """,
+                new { account = account.Value.ToString(), key = "group-member-%:" + group.Value + ":%" },
+                cancellationToken: cancellationToken)));
+
+        return outcomes.Distinct().Single();
     }
 
     // AUTHZ-GROUP-001, OPS-CFG-007: a member added to a group, or one the group holds

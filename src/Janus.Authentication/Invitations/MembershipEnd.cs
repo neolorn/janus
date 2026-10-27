@@ -212,8 +212,8 @@ internal sealed class MembershipEnd(
         }
 
         // IDN-MEM-001 (D-213): in the transaction that ends the membership, recorded with
-        // the end's reason and actor.
-        await revocations
+        // the end's reason and actor, and announced with it.
+        IReadOnlyList<DomainEvent> revoked = await revocations
             .RevokeAsync(
                 member,
                 organization,
@@ -232,6 +232,8 @@ internal sealed class MembershipEnd(
                 Subject = member,
             },
         ];
+
+        announced.AddRange(revoked);
 
         // The mailboxes are the administrative organization's, so only the end of that
         // membership takes one back; another the account ends leaves it in place.
@@ -554,7 +556,7 @@ internal sealed class MembershipEnd(
             return Result.Success(0);
         }
 
-        await revocations
+        IReadOnlyList<DomainEvent> revoked = await revocations
             .RevokeAsync(
                 ended.Member,
                 ended.Organization,
@@ -573,6 +575,8 @@ internal sealed class MembershipEnd(
                 Subject = ended.Member,
             },
         ];
+
+        announced.AddRange(revoked);
 
         // REG-MAIL-003: as for an end now; the pass answers no request, so a notice it
         // sends carries no source.

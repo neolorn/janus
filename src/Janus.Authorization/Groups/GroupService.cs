@@ -25,6 +25,7 @@ namespace Janus.Authorization.Groups;
 /// <param name="emergency">Which account joins no group.</param>
 /// <param name="handOut">Whether the caller may hand out the roles a change of members reaches.</param>
 /// <param name="audit">Where every change is written down.</param>
+/// <param name="events">Where every change of members is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -45,6 +46,7 @@ internal sealed class GroupService(
     IEmergencyAccount emergency,
     IHandOutAdmission handOut,
     IGroupAudit audit,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time) : IGroups
 {
@@ -335,6 +337,14 @@ internal sealed class GroupService(
             .MemberAddedAsync(held!, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
+        if (await AnnouncedAsync(held!, member, GroupMembershipChange.Added, context, cancellationToken).ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -432,6 +442,14 @@ internal sealed class GroupService(
             .MemberRemovedAsync(held!, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
+        if (await AnnouncedAsync(held!, member, GroupMembershipChange.Removed, context, cancellationToken).ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -440,6 +458,25 @@ internal sealed class GroupService(
 
         return Result.Success();
     }
+
+    // Chapter 10 section 5b (D-218): the change is announced in its transaction, with the
+    // person who acted as the context gives them.
+    private async ValueTask<Error?> AnnouncedAsync(
+        Group group,
+        GrantSubject member,
+        GroupMembershipChange change,
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        (await events
+            .PublishAsync(
+                GroupMembershipChanges.Of(group, member, change, time.GetUtcNow()) with
+                {
+                    Actor = context.Acting,
+                    Effective = context.Effective,
+                },
+                cancellationToken)
+            .ConfigureAwait(false))
+        .Match(() => (Error?)null, error => error);
 
     // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
     private static string? Stated(string text) =>

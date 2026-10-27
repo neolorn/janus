@@ -147,6 +147,7 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(0, await GroupsHoldingAsync(member, group));
         Assert.Equal(1, await RecordedAsync("authz.grant.revoked", administrator, organization));
         Assert.Equal(1, await RecordedAsync("authz.group.memberremoved", administrator, organization));
+        Assert.Equal(1, await LeftAnnouncedAsync(member, group));
         Assert.Equal(1, await RecordedAsync("identity.membership.ended", administrator, organization));
     }
 
@@ -369,6 +370,7 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(0, await GroupsHoldingAsync(member, group));
         Assert.Equal(1, await RecordedByTheJobAsync("authz.grant.revoked", administrator, member, organization));
         Assert.Equal(1, await RecordedByTheJobAsync("authz.group.memberremoved", administrator, member, organization));
+        Assert.Equal(1, await LeftAnnouncedAsync(member, group));
         Assert.Equal(1, await RecordedByTheJobAsync("identity.membership.ended", administrator, member, organization));
     }
 
@@ -515,6 +517,23 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
             WHERE group_id = @group AND member_type = 'user' AND member_id = @account
             """,
             new { group = group.Value, account = account.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The announcements that the account was taken out of the group, as the rows of the
+    // events table (LIB-API-001, chapter 10 section 5b).
+    private async Task<int> LeftAnnouncedAsync(SubjectId account, GroupId group)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'GroupMembershipChanged' AND payload->>'Change' = 'removed'
+              AND payload->>'SubjectType' = 'user' AND payload->>'SubjectId' = @account
+              AND payload->>'IdempotencyKey' LIKE @key
+            """,
+            new { account = account.Value.ToString(), key = "group-member-removed:" + group.Value + ":%" },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 

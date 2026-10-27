@@ -97,7 +97,7 @@ internal sealed class MembershipRevocations(
     }
 
     /// <inheritdoc/>
-    public async ValueTask RevokeAsync(
+    public async ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,
@@ -109,7 +109,7 @@ internal sealed class MembershipRevocations(
     {
         ArgumentNullException.ThrowIfNull(reason);
 
-        await RevokeAsync(
+        return await RevokeAsync(
                 member,
                 organization,
                 administrative,
@@ -130,7 +130,7 @@ internal sealed class MembershipRevocations(
     }
 
     /// <inheritdoc/>
-    public async ValueTask RevokeAsync(
+    public async ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,
@@ -145,7 +145,7 @@ internal sealed class MembershipRevocations(
 
         // D-217: the job's revocation carries the nil subject as revoker, as a record's
         // removal does (AUTHZ-INHERIT-002).
-        await RevokeAsync(
+        return await RevokeAsync(
                 member,
                 organization,
                 administrative,
@@ -171,7 +171,7 @@ internal sealed class MembershipRevocations(
             ? new ResourceReference(type, id)
             : null;
 
-    private async ValueTask RevokeAsync(
+    private async ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,
@@ -184,6 +184,10 @@ internal sealed class MembershipRevocations(
     {
         Reach reach = await ReachedAsync(member, organization, administrative, at, cancellationToken)
             .ConfigureAwait(false);
+
+        // Chapter 10 section 5b (D-218): each change is handed back to be announced in the
+        // end's transaction.
+        List<DomainEvent> announced = [];
 
         // D-166 X3: each grant is read again under its row's lock, in one order, so a
         // revocation at the same moment leaves it to the one that came first.
@@ -220,9 +224,19 @@ internal sealed class MembershipRevocations(
                 await groups.RemoveMemberAsync(group.Id, GrantSubject.Of(member), cancellationToken)
                     .ConfigureAwait(false);
                 await removed(group, cancellationToken).ConfigureAwait(false);
+                announced.Add(Announced(
+                    GroupMembershipChanges.Of(group, GrantSubject.Of(member), GroupMembershipChange.Removed, at),
+                    revoker));
             }
         }
+
+        return announced;
     }
+
+    // The person who ended the membership acted; the job, which carries the nil revoker,
+    // is no person.
+    private static DomainEvent Announced(DomainEvent raised, SubjectId revoker) =>
+        revoker == default ? raised : raised with { Actor = revoker, Effective = revoker };
 
     // IDN-MEM-001 (D-213): the organization itself, and, for the administrative
     // organization, every other the account holds no current membership of.

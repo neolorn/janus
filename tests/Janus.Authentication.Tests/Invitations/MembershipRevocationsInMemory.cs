@@ -80,7 +80,7 @@ internal sealed class MembershipRevocationsInMemory(
     }
 
     /// <inheritdoc/>
-    public async ValueTask RevokeAsync(
+    public async ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,
@@ -96,10 +96,12 @@ internal sealed class MembershipRevocationsInMemory(
             _ = _held.Remove(held);
             Revoked.Add(new Revocation(held.Member, held.Organization, held.Role.Name, actor, reason, at));
         }
+
+        return [];
     }
 
     /// <inheritdoc/>
-    public async ValueTask RevokeAsync(
+    public async ValueTask<IReadOnlyList<DomainEvent>> RevokeAsync(
         SubjectId member,
         OrganizationId organization,
         bool administrative,
@@ -119,6 +121,8 @@ internal sealed class MembershipRevocationsInMemory(
                 EndSetBy = endSetBy,
             });
         }
+
+        return [];
     }
 
     private async ValueTask<IReadOnlyList<Held>> ReachedAsync(

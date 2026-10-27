@@ -291,6 +291,7 @@ public sealed class VocabularyContractTests
     [Fact]
     public void LIB_API_001_TheChangesTheEventsCarryAreTheContract()
     {
+        Assert.Equal(["added", "removed"], WireNames<GroupMembershipChange>());
         Assert.Equal(["began", "ended"], WireNames<MembershipChange>());
         Assert.Equal(["changed", "defined", "removed"], WireNames<RoleChange>());
     }
@@ -386,6 +387,7 @@ public sealed class VocabularyContractTests
             typeof(PreferenceKind),
             typeof(SendKind),
             typeof(RegistrationStep),
+            typeof(GroupMembershipChange),
             typeof(MembershipChange),
             typeof(RoleChange),
         ];

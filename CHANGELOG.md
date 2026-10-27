@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The event `GroupMembershipChanged`, carrying the group, its organization, the member
+  and `change` (`added` or `removed`), written when an administrator adds a member to a
+  group or takes one out, and when the end of a membership takes the account out of the
+  organization's groups; an account member is the event's subject.
 - The event `RoleChanged`, carrying the role and `change` (`defined`, `changed` or
   `removed`), written when an administrator defines, changes or removes a role and when
   a declared role is seeded.

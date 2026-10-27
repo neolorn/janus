@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -100,6 +101,43 @@ public sealed class GroupEndpointTests : IAsyncLifetime
                 Assert.Equal(User, change.Member);
                 Assert.Equal(actor, change.Actor);
             });
+    }
+
+    /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): an account added to a group and taken
+    /// out of it is announced as <c>GroupMembershipChanged</c> at each, <c>added</c> then
+    /// <c>removed</c>, in the transaction that makes the change, naming the group, its
+    /// organization and the account as the subject, with the administrator who acted. A
+    /// group added to a group names no subject.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_001_AMemberAddedAndTakenOutOfAGroupIsAnnouncedAtEachAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        GroupId counter = Id(await CreatedAsync(administrator, "Counter"));
+
+        _ = await AddedAsync(administrator, tellers, User);
+        _ = await MemberRemovedAsync(administrator, tellers, User);
+        _ = await AddedAsync(administrator, counter, GrantSubject.Of(tellers));
+
+        IReadOnlyList<GroupMembershipChanged> announced = _deployment.Events.Of<GroupMembershipChanged>();
+
+        Assert.Collection(
+            announced,
+            added => Assert.Equal(
+                (tellers, GroupMembershipChange.Added, SubjectType.User, Holder, (SubjectId?)new SubjectId(Holder)),
+                (added.Group, added.Change, added.SubjectType, added.SubjectId, added.Subject)),
+            removed => Assert.Equal(
+                (tellers, GroupMembershipChange.Removed, SubjectType.User, Holder, (SubjectId?)new SubjectId(Holder)),
+                (removed.Group, removed.Change, removed.SubjectType, removed.SubjectId, removed.Subject)),
+            nested => Assert.Equal(
+                (counter, GroupMembershipChange.Added, SubjectType.Group, tellers.Value, (SubjectId?)null),
+                (nested.Group, nested.Change, nested.SubjectType, nested.SubjectId, nested.Subject)));
+        Assert.All(announced, one => Assert.Equal((Branch, (SubjectId?)actor), (one.Organization, one.Actor)));
+        Assert.All(announced, one => Assert.Contains(one, _deployment.Events.PublishedInTransaction));
+        Assert.Equal(3, announced.Select(one => one.IdempotencyKey).Distinct(StringComparer.Ordinal).Count());
     }
 
     /// <summary>
