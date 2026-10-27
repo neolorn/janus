@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Ending a membership revokes the account's allow grants only: its deny grants stand,
+  since revoking one would lift what it defeats, and the end is judged on the roles of
+  the allows it revokes and of every grant the groups it leaves reach.
 - A deny of a role defeats the roles it hands out: a role's `handsOut` counts only where
   no live deny of that role to the actor, or to a group the actor belongs to, covers the
   change, across the organization or on the change's record or a container above it.

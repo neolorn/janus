@@ -26,11 +26,11 @@ namespace Janus.Storage.Authentication.Invitations;
 /// <param name="groupAudit">Where each removal is written down.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-MEM-001, AUTHZ-GRANT-005 and CONV-LAYOUT-001 (D-213). A grant a
-/// derivation wrote or materialised is the host's data speaking, so it stands. A
-/// revocation hands out its grant's role at the grant's scope, and leaving a group hands
-/// out every role the group reaches; none widens the actor's own access, since none of
-/// the grants it reaches remains.
+/// Implements IDN-MEM-001, AUTHZ-GRANT-005 and CONV-LAYOUT-001 (D-213, D-217). A grant a
+/// derivation wrote or materialised is the host's data speaking, so it stands, and so does
+/// a deny grant to the account. A revocation hands out its grant's role at the grant's
+/// scope, and leaving a group hands out every role the group reaches, allow or deny; none
+/// widens the actor's own access, since none of the allow grants it reaches remains.
 /// </remarks>
 internal sealed class MembershipRevocations(
     IMembershipStore memberships,
@@ -179,8 +179,10 @@ internal sealed class MembershipRevocations(
         IReadOnlyList<Grant> named = await grants.NamingAsync(member, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<Group> holding = await groups.HoldingAsync(member, cancellationToken).ConfigureAwait(false);
 
+        // D-217: a deny grant to the account stands, since revoking it would lift what it
+        // defeats; an end only takes access away.
         return new Reach(
-            [.. named.Where(grant => grant.Kind is GrantKind.Stored && grant.IsLive(at) && Reached(grant.Organization))],
+            [.. named.Where(grant => grant.Kind is GrantKind.Stored && !grant.Deny && grant.IsLive(at) && Reached(grant.Organization))],
             [.. holding.Where(group => Reached(group.Organization))]);
     }
 

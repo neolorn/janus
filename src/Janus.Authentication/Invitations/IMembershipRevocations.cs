@@ -9,11 +9,12 @@ namespace Janus.Authentication.Invitations;
 /// The grants an ended membership revokes and the groups it takes the account out of.
 /// </summary>
 /// <remarks>
-/// Implements IDN-MEM-001, AUTHZ-GRANT-005 and CONV-LAYOUT-001 (D-213). The grants and
-/// groups are the authorization area's; this is what ending a membership asks of them. The
-/// end reaches the account's live grants a person gave in the organization and the
-/// organization's groups naming the account; for the administrative organization, the
-/// same in every organization the account holds no current membership of.
+/// Implements IDN-MEM-001, AUTHZ-GRANT-005 and CONV-LAYOUT-001 (D-213, D-217). The grants
+/// and groups are the authorization area's; this is what ending a membership asks of them.
+/// The end reaches the account's live allow grants a person gave in the organization, its
+/// deny grants standing, and the organization's groups naming the account; for the
+/// administrative organization, the same in every organization the account holds no
+/// current membership of.
 /// </remarks>
 internal interface IMembershipRevocations
 {

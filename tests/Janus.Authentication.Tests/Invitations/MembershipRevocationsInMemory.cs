@@ -10,7 +10,7 @@ using Janus.Core;
 namespace Janus.Authentication.Tests.Invitations;
 
 /// <summary>
-/// The grants a person gave an account, held in memory per organization: an ended
+/// The allow grants a person gave an account, held in memory per organization: an ended
 /// membership revokes those of its organization, and for the administrative organization
 /// those of every organization the account no longer belongs to, each judged by the
 /// hand-out rule (IDN-MEM-001, AUTHZ-GRANT-005, D-213).

@@ -77,10 +77,12 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// IDN-MEM-001 AC3, AC9, D-213, D-216: after a membership of an organization ends,
-    /// the grant a person made to the account there is revoked with the end's reason, the
-    /// account is in none of the organization's groups, a grant a derivation materialised
-    /// stands, and every record the end wrote carries the reason.
+    /// IDN-MEM-001 AC3, AC9, D-213, D-216, D-217: after a membership of an organization
+    /// ends, the allow grant a person made to the account there is revoked with the end's
+    /// reason, the account is in none of the organization's groups, a deny grant to the
+    /// account and a grant a derivation materialised stand, and every record the end wrote
+    /// carries the reason. The end is judged on the allows it revokes, so a deny of a role
+    /// the administrator does not hand out refuses nothing.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -91,6 +93,7 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
 
         RoleName managing = await deployment.BeginAsync([Permissions.MembershipManage], cancellationToken);
         RoleName reading = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+        RoleName withheld = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
         OrganizationId organization = deployment.Organization;
         SubjectId administrator = await deployment.AccountAsync(cancellationToken);
         SubjectId member = await deployment.AccountAsync(cancellationToken);
@@ -125,12 +128,21 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
             reading,
             workspace,
             cancellationToken);
+        GrantId denied = await deployment.GrantAsync(
+            GrantSubject.Of(member),
+            withheld,
+            null,
+            true,
+            null,
+            organization,
+            cancellationToken);
 
         Assert.Null(await EndedAsync(administrator, organization, member));
 
         Assert.Equal(0, await StandingAsync(held));
         Assert.Equal(Why, await RevocationReasonAsync(held));
         Assert.Equal(1, await StandingAsync(materialised));
+        Assert.Equal(1, await StandingAsync(denied));
         Assert.Equal(0, await GroupsHoldingAsync(member, group));
         Assert.Equal(1, await RecordedAsync("authz.grant.revoked", administrator, organization));
         Assert.Equal(1, await RecordedAsync("authz.group.memberremoved", administrator, organization));

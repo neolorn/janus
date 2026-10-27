@@ -114,12 +114,12 @@ public interface IInvitations
 
     /// <summary>
     /// Ends an account's membership of the organization; the account and its state
-    /// persist. In the same operation the grants a person gave the account in the
-    /// organization are revoked and the account leaves the organization's groups, and for
-    /// the administrative organization the same in every organization the account holds
-    /// no current membership of (IDN-MEM-001); where the membership gave the account a
-    /// corporate address, the address and its mailbox are retired and the personal email
-    /// becomes the primary (REG-MAIL-003).
+    /// persist. In the same operation the allow grants a person gave the account in the
+    /// organization are revoked, its deny grants standing, and the account leaves the
+    /// organization's groups, and for the administrative organization the same in every
+    /// organization the account holds no current membership of (IDN-MEM-001); where the
+    /// membership gave the account a corporate address, the address and its mailbox are
+    /// retired and the personal email becomes the primary (REG-MAIL-003).
     /// </summary>
     /// <param name="context">Who is ending it.</param>
     /// <param name="session">The session the step-up is judged on.</param>

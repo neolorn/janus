@@ -17,10 +17,10 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Invitations;
 
 /// <summary>
-/// The end of a membership by an administrator: the membership ends, the grants a person
-/// gave the account there are revoked and the account leaves the organization's groups,
-/// and where it gave the account a corporate address the address and its mailbox are
-/// retired and the personal email becomes the primary.
+/// The end of a membership by an administrator: the membership ends, the allow grants a
+/// person gave the account there are revoked and the account leaves the organization's
+/// groups, and where it gave the account a corporate address the address and its mailbox
+/// are retired and the personal email becomes the primary.
 /// </summary>
 /// <param name="gate">The one place a permission is evaluated.</param>
 /// <param name="stepUp">What judges the session against the <c>membership:end</c> gate.</param>
