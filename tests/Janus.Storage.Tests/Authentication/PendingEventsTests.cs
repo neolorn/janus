@@ -341,6 +341,23 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             Noon.AddDays(7)),
         new DeviceVerified(Noon, "device", new DeviceId(Guid.CreateVersion7(Noon))) { Subject = Subject },
         new ErasureRequested(Noon, "erasure", ErasureReason.MinorTakedown) { Subject = Subject },
+        new GrantChanged(
+            Noon,
+            "grant",
+            new GrantId(Guid.CreateVersion7(Noon)),
+            GrantKind.Materialised,
+            SubjectType.User,
+            Subject.Value,
+            "editor",
+            Deny: false,
+            new OrganizationId(Guid.CreateVersion7(Noon)),
+            "document",
+            "d-1",
+            GrantChange.Made)
+        {
+            Subject = Subject,
+            Actor = Actor,
+        },
         new GroupMembershipChanged(
             Noon,
             "group-member",

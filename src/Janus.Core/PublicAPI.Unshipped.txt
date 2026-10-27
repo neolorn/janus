@@ -1784,6 +1784,33 @@ Janus.Core.MailboxPush.State.init -> void
 Janus.Core.FormerMailbox
 Janus.Core.FormerMailbox.Replace = 1 -> Janus.Core.FormerMailbox
 Janus.Core.FormerMailbox.Transfer = 0 -> Janus.Core.FormerMailbox
+Janus.Core.GrantChange
+Janus.Core.GrantChange.Made = 0 -> Janus.Core.GrantChange
+Janus.Core.GrantChange.Revoked = 1 -> Janus.Core.GrantChange
+Janus.Core.GrantChanged
+Janus.Core.GrantChanged.Change.get -> Janus.Core.GrantChange
+Janus.Core.GrantChanged.Change.init -> void
+Janus.Core.GrantChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.GrantId Grant, out Janus.Core.GrantKind Kind, out Janus.Core.SubjectType SubjectType, out System.Guid SubjectId, out string! Role, out bool Deny, out Janus.Core.OrganizationId Organization, out string! ResourceType, out string! ResourceId, out Janus.Core.GrantChange Change) -> void
+Janus.Core.GrantChanged.Deny.get -> bool
+Janus.Core.GrantChanged.Deny.init -> void
+Janus.Core.GrantChanged.Equals(Janus.Core.GrantChanged? other) -> bool
+Janus.Core.GrantChanged.Grant.get -> Janus.Core.GrantId
+Janus.Core.GrantChanged.Grant.init -> void
+Janus.Core.GrantChanged.GrantChanged(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.GrantId Grant, Janus.Core.GrantKind Kind, Janus.Core.SubjectType SubjectType, System.Guid SubjectId, string! Role, bool Deny, Janus.Core.OrganizationId Organization, string! ResourceType, string! ResourceId, Janus.Core.GrantChange Change) -> void
+Janus.Core.GrantChanged.Kind.get -> Janus.Core.GrantKind
+Janus.Core.GrantChanged.Kind.init -> void
+Janus.Core.GrantChanged.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.GrantChanged.Organization.init -> void
+Janus.Core.GrantChanged.ResourceId.get -> string!
+Janus.Core.GrantChanged.ResourceId.init -> void
+Janus.Core.GrantChanged.ResourceType.get -> string!
+Janus.Core.GrantChanged.ResourceType.init -> void
+Janus.Core.GrantChanged.Role.get -> string!
+Janus.Core.GrantChanged.Role.init -> void
+Janus.Core.GrantChanged.SubjectId.get -> System.Guid
+Janus.Core.GrantChanged.SubjectId.init -> void
+Janus.Core.GrantChanged.SubjectType.get -> Janus.Core.SubjectType
+Janus.Core.GrantChanged.SubjectType.init -> void
 Janus.Core.GroupMembershipChange
 Janus.Core.GroupMembershipChange.Added = 0 -> Janus.Core.GroupMembershipChange
 Janus.Core.GroupMembershipChange.Removed = 1 -> Janus.Core.GroupMembershipChange
@@ -3395,6 +3422,10 @@ override Janus.Core.GeneratedRecoveryCodes.ToString() -> string!
 override Janus.Core.GeneratorEnrolment.Equals(object? obj) -> bool
 override Janus.Core.GeneratorEnrolment.GetHashCode() -> int
 override Janus.Core.GeneratorEnrolment.ToString() -> string!
+override Janus.Core.GrantChanged.<Clone>$() -> Janus.Core.GrantChanged!
+override Janus.Core.GrantChanged.Equals(object? obj) -> bool
+override Janus.Core.GrantChanged.GetHashCode() -> int
+override Janus.Core.GrantChanged.ToString() -> string!
 override Janus.Core.GrantId.GetHashCode() -> int
 override Janus.Core.GrantId.ToString() -> string!
 override Janus.Core.GrantRequest.Equals(object? obj) -> bool
@@ -3772,6 +3803,7 @@ override sealed Janus.Core.CredentialRestored.Equals(Janus.Core.DomainEvent? oth
 override sealed Janus.Core.CredentialSuspended.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ErasureRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
+override sealed Janus.Core.GrantChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.GroupMembershipChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -4386,6 +4418,8 @@ static Janus.Core.GeneratedRecoveryCodes.operator !=(Janus.Core.GeneratedRecover
 static Janus.Core.GeneratedRecoveryCodes.operator ==(Janus.Core.GeneratedRecoveryCodes? left, Janus.Core.GeneratedRecoveryCodes? right) -> bool
 static Janus.Core.GeneratorEnrolment.operator !=(Janus.Core.GeneratorEnrolment? left, Janus.Core.GeneratorEnrolment? right) -> bool
 static Janus.Core.GeneratorEnrolment.operator ==(Janus.Core.GeneratorEnrolment? left, Janus.Core.GeneratorEnrolment? right) -> bool
+static Janus.Core.GrantChanged.operator !=(Janus.Core.GrantChanged? left, Janus.Core.GrantChanged? right) -> bool
+static Janus.Core.GrantChanged.operator ==(Janus.Core.GrantChanged? left, Janus.Core.GrantChanged? right) -> bool
 static Janus.Core.GrantId.New(System.TimeProvider! time) -> Janus.Core.GrantId
 static Janus.Core.GrantId.operator !=(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
 static Janus.Core.GrantId.operator ==(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool

@@ -2213,9 +2213,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-MEM-001 AC3 (D-213): ending a membership revokes, with the end's reason and
-    /// actor, what a person gave the account in the organization and nothing beyond it;
-    /// ending one of the administrative organization revokes too what the account holds
-    /// where it is no member, and leaves what it holds where it still is.
+    /// actor, what a person gave the account in the organization and nothing beyond it,
+    /// announcing each revocation in the end's transaction (D-218); ending one of the
+    /// administrative organization revokes too what the account holds where it is no
+    /// member, and leaves what it holds where it still is.
     /// </summary>
     [Fact]
     public async Task IDN_MEM_001_AC3_AnEndRevokesWhatItReachesWithItsReasonAsync()
@@ -2240,6 +2241,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         MembershipRevocationsInMemory.Revocation revoked = Assert.Single(_revocations.Revoked);
 
         Assert.Equal((Customer, _inviter, Why), (revoked.Organization, revoked.Actor, revoked.Reason));
+
+        GrantChanged announced = Assert.Single(_events.Of<GrantChanged>());
+
+        Assert.Equal(
+            (GrantChange.Revoked, Customer, "clerk", (SubjectId?)holder, (SubjectId?)_inviter),
+            (announced.Change, announced.Organization, announced.Role, announced.Subject, announced.Actor));
         Assert.Equal([clerk.Name], _revocations.HeldBy(holder, Staff));
         Assert.Equal([clerk.Name], _revocations.HeldBy(holder, elsewhere));
 

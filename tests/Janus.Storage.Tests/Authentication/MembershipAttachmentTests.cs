@@ -4,11 +4,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Events;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Identity.Audit;
 using Janus.Identity.Organizations;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Roles;
@@ -126,6 +128,39 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// LIB-API-001, chapter 10 section 5b (D-218): each grant an acknowledgement writes is
+    /// announced once as <c>GrantChanged</c> <c>made</c> in its transaction, across the
+    /// organization, naming the holder as subject and the person acknowledging as actor.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_API_001_EachGrantAnAcknowledgementWritesIsAnnouncedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        await RoleAsync();
+
+        _ = await AttachAsync(subject, organization, [], [Clerk, Clerk], inviter, multiple: false);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            ("made", "clerk", "organization", organization.ToString(), subject.Value),
+            await connection.QuerySingleAsync<(string, string, string, string, Guid)>(new CommandDefinition(
+                """
+                SELECT payload->>'Change', payload->>'Role', payload->>'ResourceType', payload->>'ResourceId',
+                       CAST(payload->'Actor'->>'Value' AS uuid)
+                FROM identity.events
+                WHERE kind = 'GrantChanged' AND payload->>'SubjectId' = @subject
+                  AND CAST(payload->'Subject'->>'Value' AS uuid) = @holder
+                """,
+                new { subject = subject.Value.ToString(), holder = subject.Value },
+                cancellationToken: TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// REG-INV-001: a role the account already holds across the organization is not
     /// granted a second time; the grant it held stands as it was.
     /// </summary>
@@ -202,7 +237,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        Result<MembershipId> refused = await Attachment(writing).AttachAsync(
+        Result<MembershipId> refused = await Attachment(writing, work).AttachAsync(
             subject,
             second,
             [],
@@ -246,7 +281,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         await held.BeginAsync(cancellationToken);
         await raced.BeginAsync(cancellationToken);
 
-        Result<MembershipId> attached = await Attachment(holding).AttachAsync(
+        Result<MembershipId> attached = await Attachment(holding, held).AttachAsync(
             subject,
             first,
             [],
@@ -258,7 +293,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
             Noon,
             cancellationToken);
 
-        Task<Result<MembershipId>> waiting = Attachment(racing)
+        Task<Result<MembershipId>> waiting = Attachment(racing, raced)
             .AttachAsync(
                 subject,
                 second,
@@ -369,13 +404,14 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private MembershipAttachment Attachment(StoreContext context) =>
+    private MembershipAttachment Attachment(StoreContext context, UnitOfWork work) =>
         new(
             new MembershipStore(context),
             new GrantStore(context, new DataConnections(context)),
             new GrantAudit(
                 new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness),
                 TimeProvider.System),
+            new EventOutbox(new PendingEvents(context), work),
             new DataConnections(context),
             TimeProvider.System);
 
@@ -414,7 +450,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        MembershipId attached = (await Attachment(writing).AttachAsync(
+        MembershipId attached = (await Attachment(writing, work).AttachAsync(
                 subject,
                 organization,
                 documents,

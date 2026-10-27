@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Janus.Authentication.Events;
 using Janus.Core;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Identity.Accounts;
@@ -120,6 +122,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
                     new GrantAudit(
                         new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness),
                         TimeProvider.System),
+                    new EventOutbox(new PendingEvents(writing), work),
                     new DataConnections(writing),
                     TimeProvider.System)
                 .AttachAsync(

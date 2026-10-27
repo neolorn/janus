@@ -19,6 +19,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="grants">Where the rows the derivation was precomputed into are read and written.</param>
 /// <param name="declared">Where a relationship's rows are read through the source the host declared.</param>
 /// <param name="audit">Where each grant a refresh writes or takes back is recorded.</param>
+/// <param name="events">Where each grant a refresh writes or takes back is announced.</param>
 /// <param name="work">The caller's transaction, which the refresh joins.</param>
 /// <param name="sessions">Whether a request is served on the calling flow, which a system principal's refresh is refused in.</param>
 /// <param name="time">The clock liveness is read against.</param>
@@ -43,6 +44,7 @@ internal sealed class DerivationMaterialiser(
     IGrantStore grants,
     IRelationshipSources declared,
     IAccessAudit audit,
+    IEvents events,
     IUnitOfWork work,
     ISessionGates sessions,
     TimeProvider time) : IDerivationMaterialiser
@@ -266,7 +268,7 @@ internal sealed class DerivationMaterialiser(
 
         foreach (Materialised each in refreshing.Following)
         {
-            DerivationRefresh changed = await ReconcileAsync(
+            Result<DerivationRefresh> reconciled = await ReconcileAsync(
                 each,
                 on,
                 registered.Organization,
@@ -274,8 +276,21 @@ internal sealed class DerivationMaterialiser(
                 refreshing,
                 cancellationToken).ConfigureAwait(false);
 
-            written += changed.Written;
-            revoked += changed.Revoked;
+            if (reconciled.Match<Error?>(
+                    changed =>
+                    {
+                        written += changed.Written;
+                        revoked += changed.Revoked;
+
+                        return null;
+                    },
+                    error => error)
+                is Error unannounced)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<DerivationRefresh>(unannounced);
+            }
         }
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -284,7 +299,7 @@ internal sealed class DerivationMaterialiser(
                 Result.Failure<DerivationRefresh>);
     }
 
-    private async ValueTask<DerivationRefresh> ReconcileAsync(
+    private async ValueTask<Result<DerivationRefresh>> ReconcileAsync(
         Materialised following,
         ResourceReference on,
         OrganizationId organization,
@@ -298,7 +313,7 @@ internal sealed class DerivationMaterialiser(
 
         if (beneath.Count == 0)
         {
-            return new DerivationRefresh(0, 0);
+            return Result.Success(new DerivationRefresh(0, 0));
         }
 
         DateTimeOffset at = time.GetUtcNow();
@@ -323,7 +338,12 @@ internal sealed class DerivationMaterialiser(
             Revoked(grant, refreshing.Granter, at, refreshing.Reason);
 
             await grants.RecordAsync(grant, cancellationToken).ConfigureAwait(false);
-            await CorrectedAsync(refreshing, grant, retracted: true, at, cancellationToken).ConfigureAwait(false);
+            if (await CorrectedAsync(refreshing, grant, retracted: true, at, cancellationToken).ConfigureAwait(false)
+                is Error retractionUnannounced)
+            {
+                return Result.Failure<DerivationRefresh>(retractionUnannounced);
+            }
+
             revoked++;
         }
 
@@ -341,19 +361,25 @@ internal sealed class DerivationMaterialiser(
                 Grant grant = Written(following, organization, holder, record, refreshing, at);
 
                 await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
-                await CorrectedAsync(refreshing, grant, retracted: false, at, cancellationToken).ConfigureAwait(false);
+                if (await CorrectedAsync(refreshing, grant, retracted: false, at, cancellationToken).ConfigureAwait(false)
+                    is Error unannounced)
+                {
+                    return Result.Failure<DerivationRefresh>(unannounced);
+                }
 
                 written++;
             }
         }
 
-        return new DerivationRefresh(written, revoked);
+        return Result.Success(new DerivationRefresh(written, revoked));
     }
 
     // AUTHZ-GRANT-003 AC5 and AC6, AUTHZ-DERIVE-005: a grant a refresh writes or takes
     // back is recorded in the refresh's transaction, naming who called it: a person as
     // acting identity, a system principal by its name and stated reason (D-187, D-207).
-    private async ValueTask CorrectedAsync(
+    // It is announced there too, naming the person where one called it (chapter 10
+    // section 5b, D-218).
+    private async ValueTask<Error?> CorrectedAsync(
         Refreshing refreshing,
         Grant grant,
         bool retracted,
@@ -378,6 +404,17 @@ internal sealed class DerivationMaterialiser(
                     at),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        return (await events
+                .PublishAsync(
+                    GrantChanges.Of(grant, retracted ? GrantChange.Revoked : GrantChange.Made, at) with
+                    {
+                        Actor = calling.Acting,
+                        Effective = calling.Effective,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
     }
 
     private Grant Written(

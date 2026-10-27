@@ -18,6 +18,7 @@ namespace Janus.Storage.Authentication.Invitations;
 /// <param name="memberships">Where the account's memberships are read and the new one written.</param>
 /// <param name="grants">Where the grants are written.</param>
 /// <param name="audit">Where each grant written is written down.</param>
+/// <param name="events">Where each grant written is announced.</param>
 /// <param name="connections">The connection and transaction the operation holds.</param>
 /// <param name="time">The clock the identifiers are drawn from.</param>
 /// <remarks>
@@ -32,6 +33,7 @@ internal sealed class MembershipAttachment(
     IMembershipStore memberships,
     IGrantStore grants,
     IGrantAudit audit,
+    IEvents events,
     DataConnections connections,
     TimeProvider time) : IMembershipAttachment
 {
@@ -155,6 +157,22 @@ internal sealed class MembershipAttachment(
             {
                 await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
                 await RecordedAsync(grant, acting, cancellationToken).ConfigureAwait(false);
+
+                // Chapter 10 section 5b (D-218): naming the person acknowledging, where one
+                // acted.
+                if ((await events
+                        .PublishAsync(
+                            GrantChanges.Of(grant, GrantChange.Made, at) with
+                            {
+                                Actor = acting.Acting,
+                                Effective = acting.Effective,
+                            },
+                            cancellationToken)
+                        .ConfigureAwait(false))
+                    .Match<Error?>(() => null, error => error) is Error unannounced)
+                {
+                    return Result.Failure<MembershipId>(unannounced);
+                }
             }
         }
 

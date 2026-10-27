@@ -396,7 +396,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         await using var reversal = new UnitOfWork(reversing);
 
         await erasure.BeginAsync(cancellationToken);
-        _ = await Eraser(erasing).EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken);
+        _ = await Eraser(erasing, erasure).EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken);
 
         await reversal.BeginAsync(cancellationToken);
 
@@ -442,7 +442,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await erasure.BeginAsync(cancellationToken);
 
-        Task<Erasure> erased = Eraser(erasing)
+        Task<Erasure> erased = Eraser(erasing, erasure)
             .EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken)
             .AsTask();
 
@@ -606,13 +606,14 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     private AccountStates States(StoreContext context) =>
         new(new AccountStore(context), Sessions(context));
 
-    private SubjectEraser Eraser(StoreContext context) =>
+    private SubjectEraser Eraser(StoreContext context, UnitOfWork work) =>
         new(
             context,
             Sessions(context),
             new ConfigurationStore(context, new DataConnections(context)),
             new DataConnections(context),
-            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness));
+            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new EventOutbox(new PendingEvents(context), work));
 
     // The second transaction is waiting on the account row the first holds, as the
     // database itself reports it, so the case lets the first commit only then.

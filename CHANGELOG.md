@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The event `GrantChanged`, carrying the grant, its kind, holder, role, whether it denies,
+  its organization and record, and `change` (`made` or `revoked`), written whenever a
+  grant is made or revoked: by an administrator, by an acknowledged invitation or
+  bootstrap, by a materialised derivation's refresh, by a record's removal, by a
+  membership's end and by an erasure; an account holder is the event's subject.
 - The event `GroupMembershipChanged`, carrying the group, its organization, the member
   and `change` (`added` or `removed`), written when an administrator adds a member to a
   group or takes one out, and when the end of a membership takes the account out of the

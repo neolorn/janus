@@ -205,6 +205,7 @@ internal sealed class MembershipRevocations(
 
             await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
             await revoked(held, cancellationToken).ConfigureAwait(false);
+            announced.Add(Announced(GrantChanges.Of(held, GrantChange.Revoked, at), revoker));
         }
 
         // D-166 X3: the groups of each organization are held as a change of members holds

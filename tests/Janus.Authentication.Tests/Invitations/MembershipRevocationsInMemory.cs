@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -90,14 +91,17 @@ internal sealed class MembershipRevocationsInMemory(
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        List<DomainEvent> announced = [];
+
         foreach (Held held in await ReachedAsync(member, organization, administrative, cancellationToken)
             .ConfigureAwait(false))
         {
             _ = _held.Remove(held);
             Revoked.Add(new Revocation(held.Member, held.Organization, held.Role.Name, actor, reason, at));
+            announced.Add(Announced(held, at) with { Actor = actor, Effective = actor });
         }
 
-        return [];
+        return announced;
     }
 
     /// <inheritdoc/>
@@ -111,6 +115,8 @@ internal sealed class MembershipRevocationsInMemory(
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        List<DomainEvent> announced = [];
+
         foreach (Held held in await ReachedAsync(member, organization, administrative, cancellationToken)
             .ConfigureAwait(false))
         {
@@ -120,9 +126,34 @@ internal sealed class MembershipRevocationsInMemory(
                 Principal = principal,
                 EndSetBy = endSetBy,
             });
+            announced.Add(Announced(held, at));
         }
 
-        return [];
+        return announced;
+    }
+
+    // Chapter 10 section 5b (D-218): the grant revoked, across its organization, as the
+    // stores announce it.
+    private static GrantChanged Announced(Held held, DateTimeOffset at)
+    {
+        var grant = new GrantId(Guid.CreateVersion7(at));
+
+        return new GrantChanged(
+            at,
+            string.Create(CultureInfo.InvariantCulture, $"grant-revoked:{grant.Value}@{at.UtcTicks}"),
+            grant,
+            GrantKind.Stored,
+            SubjectType.User,
+            held.Member.Value,
+            held.Role.Name.ToString(),
+            Deny: false,
+            held.Organization,
+            "organization",
+            held.Organization.ToString(),
+            GrantChange.Revoked)
+        {
+            Subject = held.Member,
+        };
     }
 
     private async ValueTask<IReadOnlyList<Held>> ReachedAsync(

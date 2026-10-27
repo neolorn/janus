@@ -18,6 +18,7 @@ namespace Janus.Authorization.Resources;
 /// <param name="holders">Which subjects hold an account.</param>
 /// <param name="grants">Where the grants naming a removed record are revoked.</param>
 /// <param name="audit">Where each revocation a removal makes is written down.</param>
+/// <param name="events">Where each revocation a removal makes is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -35,6 +36,7 @@ internal sealed class ResourceService(
     IAccountHolders holders,
     IGrantStore grants,
     IGrantAudit audit,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time) : IResources
 {
@@ -239,6 +241,16 @@ internal sealed class ResourceService(
 
             await grants.RecordAsync(named, cancellationToken).ConfigureAwait(false);
             await audit.RevokedAsync(named, breakGlassReason: null, cancellationToken).ConfigureAwait(false);
+
+            // Chapter 10 section 5b (D-218): the host removes the record, so no person acted.
+            if ((await events.PublishAsync(GrantChanges.Of(named, GrantChange.Revoked, now), cancellationToken)
+                    .ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error unannounced)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure(unannounced);
+            }
         }
 
         await resources.RemoveAsync(resource, cancellationToken).ConfigureAwait(false);

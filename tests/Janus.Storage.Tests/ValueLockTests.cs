@@ -5,10 +5,12 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Events;
 using Janus.Authentication.Registration;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.Erasures;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sessions;
@@ -67,7 +69,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
         Task<bool> TermsStepAsync(TaskCompletionSource? held) =>
             DecidedAsync(
-                context => Registration(context).LockValuesAsync(
+                (context, _) => Registration(context).LockValuesAsync(
                     [(IdentifierKind.Email, canonical)],
                     TestContext.Current.CancellationToken),
                 context => RegisteredAsync(context, registering, entered, canonical),
@@ -75,7 +77,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
         Task<bool> AddAsync(TaskCompletionSource? held) =>
             DecidedAsync(
-                context => Directory(context).LockValuesAsync(
+                (context, _) => Directory(context).LockValuesAsync(
                     [(IdentifierKind.Email, canonical)],
                     TestContext.Current.CancellationToken),
                 context => AddedAsync(context, adding, entered, canonical),
@@ -109,7 +111,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
         Task<bool> VerifiedAsync(SubjectId subject, TaskCompletionSource? held) =>
             DecidedAsync(
-                context => Directory(context).LockValuesAsync(
+                (context, _) => Directory(context).LockValuesAsync(
                     [(IdentifierKind.Email, canonical)],
                     TestContext.Current.CancellationToken),
                 context => AddedAsync(context, subject, entered, canonical),
@@ -144,7 +146,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
         var holding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         Task<bool> removal = DecidedAsync(
-            context => Directory(context).LockValuesAsync(
+            (context, _) => Directory(context).LockValuesAsync(
                 [(IdentifierKind.Email, canonical)],
                 TestContext.Current.CancellationToken),
             async context =>
@@ -162,7 +164,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             holding);
         _ = await Task.WhenAny(holding.Task, removal);
         Task<bool> add = DecidedAsync(
-            context => Directory(context).LockValuesAsync(
+            (context, _) => Directory(context).LockValuesAsync(
                 [(IdentifierKind.Email, canonical)],
                 TestContext.Current.CancellationToken),
             context => AddedAsync(context, adding, entered, canonical));
@@ -330,7 +332,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
         }
 
         Task<bool> erasure = DecidedAsync(
-            async context => _ = await Eraser(context).EraseAsync(
+            async (context, work) => _ = await Eraser(context, work).EraseAsync(
                 erased,
                 ErasureReason.ErasureRequest,
                 Noon,
@@ -339,7 +341,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             holding);
         _ = await Task.WhenAny(holding.Task, erasure);
         Task<bool> choice = DecidedAsync(
-            context => Directory(context).LockValuesAsync(
+            (context, _) => Directory(context).LockValuesAsync(
                 [(IdentifierKind.Username, username.Value)],
                 TestContext.Current.CancellationToken),
             context => ChosenAsync(context, choosing, username));
@@ -372,7 +374,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
         Task<bool> ChoiceAsync(SubjectId subject, TaskCompletionSource? held) =>
             DecidedAsync(
-                context => Directory(context).LockValuesAsync(
+                (context, _) => Directory(context).LockValuesAsync(
                     [(IdentifierKind.Username, username.Value)],
                     TestContext.Current.CancellationToken),
                 context => ChosenAsync(context, subject, username),
@@ -443,7 +445,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
         Task<bool> AddAsync(SubjectId subject, int current, TaskCompletionSource? held) =>
             DecidedAsync(
-                context => Directory(context, Ring(current)).LockValuesAsync(
+                (context, _) => Directory(context, Ring(current)).LockValuesAsync(
                     [(IdentifierKind.Email, canonical)],
                     TestContext.Current.CancellationToken),
                 context => AddedAsync(context, subject, entered, canonical, Ring(current)),
@@ -489,7 +491,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
     // that lock. The one handed a signal holds its lock until the database reports
     // another transaction waiting on a value's lock, and commits only then.
     private async Task<bool> DecidedAsync(
-        Func<StoreContext, ValueTask> locked,
+        Func<StoreContext, UnitOfWork, ValueTask> locked,
         Func<StoreContext, Task<bool>> decided,
         TaskCompletionSource? holding = null)
     {
@@ -500,7 +502,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
         Assert.True((await work.BeginAsync(cancellationToken)).Match(_ => true, _ => false));
 
-        await locked(context);
+        await locked(context, work);
 
         if (holding is not null)
         {
@@ -784,11 +786,12 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
             new PreferenceStore(context, _deployment.Ring, _deployment.Randomness));
 
-    private SubjectEraser Eraser(StoreContext context) =>
+    private SubjectEraser Eraser(StoreContext context, UnitOfWork work) =>
         new(
             context,
             new SessionStore(context, _deployment.Ring, _deployment.Randomness),
             new ConfigurationStore(context, new DataConnections(context)),
             new DataConnections(context),
-            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness));
+            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new EventOutbox(new PendingEvents(context), work));
 }

@@ -28,6 +28,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
 /// <param name="emergency">Which account is granted nothing further.</param>
 /// <param name="audit">Where each grant written or revoked is written down.</param>
+/// <param name="events">Where each grant written or revoked is announced.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -50,6 +51,7 @@ internal sealed class GrantService(
     IResourceStore resources,
     IEmergencyAccount emergency,
     IGrantAudit audit,
+    IEvents events,
     IUnitOfWork work,
     TimeProvider time) : IGrants
 {
@@ -273,6 +275,14 @@ internal sealed class GrantService(
 
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await audit.RevokedAsync(held, context.BreakGlassReason, cancellationToken).ConfigureAwait(false);
+
+        if (await AnnouncedAsync(held, GrantChange.Revoked, context, cancellationToken).ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unannounced);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -543,6 +553,14 @@ internal sealed class GrantService(
             .CreatedAsync(grant, grant.GrantedBy, context.BreakGlassReason, cancellationToken)
             .ConfigureAwait(false);
 
+        if (await AnnouncedAsync(grant, GrantChange.Made, context, cancellationToken).ConfigureAwait(false)
+            is Error unannounced)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GrantId>(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -551,6 +569,24 @@ internal sealed class GrantService(
 
         return Result.Success(grant.Id);
     }
+
+    // Chapter 10 section 5b (D-218): in the transaction that makes the change, naming
+    // who acted.
+    private async ValueTask<Error?> AnnouncedAsync(
+        Grant grant,
+        GrantChange change,
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        (await events
+            .PublishAsync(
+                GrantChanges.Of(grant, change, time.GetUtcNow()) with
+                {
+                    Actor = context.Acting,
+                    Effective = context.Effective,
+                },
+                cancellationToken)
+            .ConfigureAwait(false))
+        .Match(() => (Error?)null, error => error);
 
     private async ValueTask<Error?> SteppedUpAsync(
         SubjectId acting,

@@ -164,6 +164,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             "a role defined, changed and removed, each announced in its transaction, by a caller managing roles",
             Decided.Allowed),
         ("a grant written and then revoked, by a caller managing grants", Decided.Allowed),
+        (
+            "a grant written and then revoked, each announced in its transaction, by a caller managing grants",
+            Decided.Allowed),
         ("a grant of a role no role of the caller hands out, by a caller managing grants", Decided.NotAssignable),
         (
             "a revocation of a grant of a role no role of the caller hands out, by a caller managing grants",
@@ -1676,6 +1679,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a grant written and then revoked, by a caller managing grants":
                 return await GrantedAndRevokedAsync(deployment, role, caller);
 
+            // Chapter 10 section 5b (D-218): announcing a change decides nothing of it; a
+            // grant is written and revoked as before, each change announced.
+            case "a grant written and then revoked, each announced in its transaction, by a caller managing grants":
+                return await GrantedAndRevokedAsync(deployment, role, caller, announced: true);
+
             // AUTHZ-GRANT-005 (D-212, D-217): a grant, and a revocation, hand out the role
             // they name; a deny of the role whose list names it defeats the list; an allow
             // grant to the caller widens its own access whatever it may hand out; and a
@@ -2917,9 +2925,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // AUTHZ-GRANT-001, AUTHZ-GRANT-003 AC6 (D-206): a grant across the organization to
     // another account, written and revoked by a caller managing grants there on a session
-    // that meets the gate. Recording each in the trail decides nothing, so the row
-    // restates the decision the two operations make.
-    private async Task<Decided> GrantedAndRevokedAsync(Deployment deployment, RoleName role, SubjectId caller)
+    // that meets the gate. Recording each in the trail decides nothing, and nor does
+    // announcing each as GrantChanged in the transaction that makes it (D-218), so the
+    // row restates the decision the two operations make.
+    private async Task<Decided> GrantedAndRevokedAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        bool announced = false)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         SubjectId account = await deployment.AccountAsync(cancellationToken);
@@ -2950,13 +2963,27 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             return Refused(refused);
         }
 
-        return (await grants.RevokeAsync(
-                context,
-                session,
-                written.Match(grant => grant, _ => default),
-                "No longer needed.",
-                cancellationToken))
+        GrantId grant = written.Match(made => made, _ => default);
+        Decided decided = (await grants.RevokeAsync(context, session, grant, "No longer needed.", cancellationToken))
             .Match(() => Decided.Allowed, Refused);
+
+        if (announced)
+        {
+            await using NpgsqlConnection connection = await host.OpenAsync();
+
+            Assert.Equal(
+                ["made", "revoked"],
+                await connection.QueryAsync<string>(new CommandDefinition(
+                    """
+                    SELECT payload->>'Change' FROM identity.events
+                    WHERE kind = 'GrantChanged' AND payload->>'IdempotencyKey' LIKE @key
+                    ORDER BY 1
+                    """,
+                    new { key = "grant-%:" + grant.Value + "@%" },
+                    cancellationToken: cancellationToken)));
+        }
+
+        return decided;
     }
 
     // AUTHZ-SCOPE-001 AC4, AUTHZ-GATE-006 AC3 (D-207, D-208): a grant across an
